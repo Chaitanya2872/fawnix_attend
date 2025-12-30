@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>API Test Page</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        input, button { margin: 5px 0; padding: 5px; width: 200px; }
+        pre { background: #f4f4f4; padding: 10px; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <h2>API Test Page</h2>
+
+    <!-- Input your API base URL here -->
+    <label>API Base URL:</label>
+    <input type="text" id="baseUrl" placeholder=" https://8ddca0cb94c9.ngrok-free.app/api" style="width: 300px;" value="https://8ddca0cb94c9.ngrok-free.app/api">
+
+    <h3>Request OTP</h3>
+    <input type="text" id="empCodeOtp" placeholder="Enter Employee Code" value="2872">
+    <button onclick="requestOtp()">Request OTP</button>
+    <pre id="otpResponse"></pre>
+
+    <h3>Verify OTP</h3>
+    <input type="text" id="empCodeVerify" placeholder="Enter Employee Code" value="2872">
+    <input type="text" id="otpCode" placeholder="Enter OTP">
+    <button onclick="verifyOtp()">Verify OTP</button>
+    <pre id="verifyResponse"></pre>
+
+    <script>
+        function getBaseUrl() {
+            return document.getElementById('baseUrl').value;
+        }
+
+        async function requestOtp() {
+            const baseUrl = getBaseUrl();
+            const empCode = document.getElementById('empCodeOtp').value;
+            try {
+                const response = await fetch(`${baseUrl}/auth/request-otp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ emp_code: empCode })
+                });
+                const data = await response.json();
+                document.getElementById('otpResponse').textContent = JSON.stringify(data, null, 2);
+            } catch (err) {
+                document.getElementById('otpResponse').textContent = 'Error: ' + err;
+            }
+        }
+
+        async function verifyOtp() {
+            const baseUrl = getBaseUrl();
+            const empCode = document.getElementById('empCodeVerify').value;
+            const otp = document.getElementById('otpCode').value;
+            try {
+                const response = await fetch(`${baseUrl}/api/auth/verify-otp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ emp_code: empCode, otp: otp })
+                });
+                const data = await response.json();
+                document.getElementById('verifyResponse').textContent = JSON.stringify(data, null, 2);
+            } catch (err) {
+                document.getElementById('verifyResponse').textContent = 'Error: ' + err;
+            }
+        }
+    </script>
+</body>
+</html>

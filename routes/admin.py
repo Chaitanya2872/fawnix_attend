@@ -4,11 +4,36 @@ Administrative endpoints
 """
 
 from flask import Blueprint, jsonify
+from middleware.auth_middleware import token_required
+from middleware.admin_middleware import hr_or_devtester_required
+from services import admin_service
+from datetime import datetime, date, time
 
 admin_bp = Blueprint('admin', __name__)
 
 
-@admin_bp.route('/stats', methods=['GET'])
-def stats():
-    """Get statistics - placeholder"""
-    return jsonify({"message": "Admin statistics"}), 200
+def serialize_row(row):
+    result = {}
+    for key, value in row.items():
+        if isinstance(value, (datetime, date, time)):
+            result[key] = value.isoformat()
+        else:
+            result[key] = value
+    return result
+
+
+@admin_bp.route('/employees', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_employees(current_user):
+    """
+    Get all employees
+    Accessible only by HR and DevTester
+    """
+    employees = admin_service.get_all_employees()
+
+    return jsonify({
+        "success": True,
+        "count": len(employees),
+        "data": [serialize_row(emp) for emp in employees]
+    }), 200

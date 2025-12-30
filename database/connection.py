@@ -1,22 +1,74 @@
 """
 Database Connection and Initialization
-PostgreSQL connection management
+PostgreSQL connection management with connection pooling
 """
 
 import psycopg2
+from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from config import Config
 import logging
+from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
+
+# ==========================================
+# CONNECTION POOL
+# ==========================================
+
+connection_pool = None
+
+
+def initialize_connection_pool(min_conn=2, max_conn=10):
+    """Initialize PostgreSQL connection pool"""
+    global connection_pool
+    
+    try:
+        connection_pool = psycopg2.pool.SimpleConnectionPool(
+            min_conn,
+            max_conn,
+            host=Config.DATABASE_HOST,
+            port=Config.DATABASE_PORT,
+            database=Config.DATABASE_NAME,
+            user=Config.DATABASE_USER,
+            password=Config.DATABASE_PASSWORD,
+            cursor_factory=RealDictCursor
+        )
+        
+        if connection_pool:
+            logger.info(f"✅ Connection pool created (min={min_conn}, max={max_conn})")
+            return True
+        else:
+            logger.error("❌ Failed to create connection pool")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ Error creating connection pool: {e}")
+        return False
+
+
+def close_connection_pool():
+    """Close all connections in the pool"""
+    global connection_pool
+    
+    if connection_pool:
+        connection_pool.closeall()
+        logger.info("✅ Connection pool closed")
 
 
 def get_db_connection():
     """
-    Get database connection with RealDictCursor
-    Returns connection object
+    Get database connection from pool (or create new one)
+    Returns connection object with RealDictCursor
     """
     try:
+        # Try to get from pool first
+        if connection_pool:
+            conn = connection_pool.getconn()
+            if conn:
+                return conn
+        
+        # Fallback: Create direct connection
         conn = psycopg2.connect(
             host=Config.DATABASE_HOST,
             port=Config.DATABASE_PORT,
@@ -26,20 +78,62 @@ def get_db_connection():
             cursor_factory=RealDictCursor
         )
         return conn
+        
     except Exception as e:
         logger.error(f"Database connection error: {e}")
         raise
 
 
+def return_connection(conn):
+    """Return connection to pool"""
+    if connection_pool and conn:
+        connection_pool.putconn(conn)
+    elif conn:
+        conn.close()
+
+
+@contextmanager
+def get_db_cursor():
+    """
+    Context manager for database operations
+    Auto-handles connection and cursor lifecycle
+    
+    Usage:
+        with get_db_cursor() as cursor:
+            cursor.execute("SELECT * FROM table")
+            results = cursor.fetchall()
+    """
+    conn = None
+    cursor = None
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        yield cursor
+        conn.commit()
+        
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        logger.error(f"❌ Database operation error: {e}")
+        raise
+        
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            return_connection(conn)
+
+
 def init_database():
-    """Initialize all database tables"""
+    """Initialize all database tables - safe for existing employees table"""
     conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
         logger.info("Initializing database tables...")
         
-        # ==================== STEP 1: INDEPENDENT TABLES ====================
+        # ==================== INDEPENDENT TABLES ====================
         
         # 1. Shifts table
         cursor.execute("""
@@ -62,6 +156,7 @@ def init_database():
                 ('Night Shift', '22:00:00', '07:00:00', 9.0)
             ON CONFLICT (shift_name) DO NOTHING
         """)
+        
         logger.info("✓ Shifts table ready")
         
         # 2. Organization holidays
@@ -74,9 +169,10 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        
         logger.info("✓ Organization holidays table ready")
         
-        # 3. Add columns to employees if missing
+        # 3. Add shift_id to employees if column doesn't exist
         cursor.execute("""
             DO $$ 
             BEGIN
@@ -87,21 +183,27 @@ def init_database():
                     ALTER TABLE employees ADD COLUMN emp_shift_id INTEGER 
                     REFERENCES shifts(shift_id) DEFAULT 1;
                 END IF;
-                
+            END $$;
+        """)
+        
+        # 4. Add joining_date to employees if column doesn't exist
+        cursor.execute("""
+            DO $$ 
+            BEGIN
                 IF NOT EXISTS (
                     SELECT 1 FROM information_schema.columns 
                     WHERE table_name='employees' AND column_name='emp_joining_date'
                 ) THEN
-                    ALTER TABLE employees ADD COLUMN emp_joining_date DATE 
-                    DEFAULT CURRENT_DATE;
+                    ALTER TABLE employees ADD COLUMN emp_joining_date DATE DEFAULT '2024-01-01';
                 END IF;
             END $$;
         """)
-        logger.info("✓ Employees table columns updated")
         
-        # ==================== STEP 2: TABLES WITHOUT FK ====================
+        logger.info("✓ Employees table updated with shift_id and joining_date")
         
-        # 4. Users table (NO FK YET)
+        # ==================== TABLES WITH FOREIGN KEYS ====================
+        
+        # 5. Users table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 emp_code VARCHAR(50) PRIMARY KEY,
@@ -112,9 +214,26 @@ def init_database():
                 last_login TIMESTAMP
             )
         """)
-        logger.info("✓ Users table created")
         
-        # 5. OTP codes (NO FK YET)
+        # Add foreign key only if it doesn't exist
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.table_constraints 
+                    WHERE constraint_name = 'users_emp_code_fkey'
+                    AND table_name = 'users'
+                ) THEN
+                    ALTER TABLE users 
+                    ADD CONSTRAINT users_emp_code_fkey 
+                    FOREIGN KEY (emp_code) REFERENCES employees(emp_code) ON DELETE CASCADE;
+                END IF;
+            END $$;
+        """)
+        
+        logger.info("✓ Users table ready")
+        
+        # 6. OTP codes
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS otp_codes (
                 id SERIAL PRIMARY KEY,
@@ -126,9 +245,25 @@ def init_database():
                 attempts INTEGER DEFAULT 0
             )
         """)
-        logger.info("✓ OTP codes table created")
         
-        # 6. Attendance (no FK - uses email)
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.table_constraints 
+                    WHERE constraint_name = 'otp_codes_emp_code_fkey'
+                    AND table_name = 'otp_codes'
+                ) THEN
+                    ALTER TABLE otp_codes 
+                    ADD CONSTRAINT otp_codes_emp_code_fkey 
+                    FOREIGN KEY (emp_code) REFERENCES employees(emp_code) ON DELETE CASCADE;
+                END IF;
+            END $$;
+        """)
+        
+        logger.info("✓ OTP codes table ready")
+        
+        # 7. Attendance (no foreign keys - uses email)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS attendance (
                 id SERIAL PRIMARY KEY,
@@ -148,9 +283,10 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        logger.info("✓ Attendance table created")
         
-        # 7. Activities (no FK - uses email)
+        logger.info("✓ Attendance table ready")
+        
+        # 8. Activities (no foreign keys - uses email)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS activities (
                 id SERIAL PRIMARY KEY,
@@ -170,9 +306,10 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        logger.info("✓ Activities table created")
         
-        # 8. Leaves (NO FK YET)
+        logger.info("✓ Activities table ready")
+        
+        # 9. Leaves
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS leaves (
                 id SERIAL PRIMARY KEY,
@@ -199,9 +336,25 @@ def init_database():
                 CHECK (duration IN ('full_day', 'first_half', 'second_half'))
             )
         """)
-        logger.info("✓ Leaves table created")
         
-        # 9. Comp-offs (NO FK YET)
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.table_constraints 
+                    WHERE constraint_name = 'leaves_emp_code_fkey'
+                    AND table_name = 'leaves'
+                ) THEN
+                    ALTER TABLE leaves 
+                    ADD CONSTRAINT leaves_emp_code_fkey 
+                    FOREIGN KEY (emp_code) REFERENCES employees(emp_code) ON DELETE CASCADE;
+                END IF;
+            END $$;
+        """)
+        
+        logger.info("✓ Leaves table ready")
+        
+        # 10. Comp-offs
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS comp_offs (
                 id SERIAL PRIMARY KEY,
@@ -223,65 +376,14 @@ def init_database():
                 CHECK (status IN ('pending', 'validated', 'approved', 'rejected'))
             )
         """)
-        logger.info("✓ Comp-offs table created")
         
-        # ==================== STEP 3: ADD FOREIGN KEYS (SAFELY) ====================
-        
-        # Add FK to users table
         cursor.execute("""
             DO $$
             BEGIN
                 IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint 
-                    WHERE conname = 'users_emp_code_fkey'
-                ) THEN
-                    ALTER TABLE users 
-                    ADD CONSTRAINT users_emp_code_fkey 
-                    FOREIGN KEY (emp_code) REFERENCES employees(emp_code) ON DELETE CASCADE;
-                END IF;
-            END $$;
-        """)
-        logger.info("✓ Users FK added")
-        
-        # Add FK to otp_codes table
-        cursor.execute("""
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint 
-                    WHERE conname = 'otp_codes_emp_code_fkey'
-                ) THEN
-                    ALTER TABLE otp_codes 
-                    ADD CONSTRAINT otp_codes_emp_code_fkey 
-                    FOREIGN KEY (emp_code) REFERENCES employees(emp_code) ON DELETE CASCADE;
-                END IF;
-            END $$;
-        """)
-        logger.info("✓ OTP codes FK added")
-        
-        # Add FK to leaves table
-        cursor.execute("""
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint 
-                    WHERE conname = 'leaves_emp_code_fkey'
-                ) THEN
-                    ALTER TABLE leaves 
-                    ADD CONSTRAINT leaves_emp_code_fkey 
-                    FOREIGN KEY (emp_code) REFERENCES employees(emp_code) ON DELETE CASCADE;
-                END IF;
-            END $$;
-        """)
-        logger.info("✓ Leaves FK added")
-        
-        # Add FK to comp_offs table
-        cursor.execute("""
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint 
-                    WHERE conname = 'comp_offs_emp_code_fkey'
+                    SELECT 1 FROM information_schema.table_constraints 
+                    WHERE constraint_name = 'comp_offs_emp_code_fkey'
+                    AND table_name = 'comp_offs'
                 ) THEN
                     ALTER TABLE comp_offs 
                     ADD CONSTRAINT comp_offs_emp_code_fkey 
@@ -289,9 +391,10 @@ def init_database():
                 END IF;
             END $$;
         """)
-        logger.info("✓ Comp-offs FK added")
         
-        # ==================== STEP 4: CREATE INDEXES ====================
+        logger.info("✓ Comp-offs table ready")
+        
+        # ==================== CREATE INDEXES ====================
         
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_shifts_active ON shifts(is_active)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_holidays_date ON organization_holidays(holiday_date)")
@@ -307,9 +410,7 @@ def init_database():
         
         conn.commit()
         
-        logger.info("=" * 70)
-        logger.info("✓ Database initialization successful!")
-        logger.info("=" * 70)
+        logger.info("✓ Database tables and indexes created successfully")
         
     except Exception as e:
         conn.rollback()
@@ -319,7 +420,7 @@ def init_database():
         raise
     finally:
         cursor.close()
-        conn.close()
+        return_connection(conn)
 
 
 class DatabaseConnection:
@@ -344,13 +445,23 @@ class DatabaseConnection:
         if self.cursor:
             self.cursor.close()
         if self.conn:
-            self.conn.close()
+            return_connection(self.conn)
         
-        return False
+        return False  # Don't suppress exceptions
 
 
 def execute_query(query: str, params: tuple = None, fetch_one: bool = False):
-    """Execute a database query"""
+    """
+    Execute a database query
+    
+    Args:
+        query: SQL query string
+        params: Query parameters
+        fetch_one: If True, return single row, else return all rows
+    
+    Returns:
+        Query results
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -371,4 +482,4 @@ def execute_query(query: str, params: tuple = None, fetch_one: bool = False):
         raise
     finally:
         cursor.close()
-        conn.close()
+        return_connection(conn)

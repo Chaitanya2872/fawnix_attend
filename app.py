@@ -40,6 +40,7 @@ from routes.attendance import attendance_bp
 from routes.activities import activities_bp
 from routes.leaves import leaves_bp
 from routes.admin import admin_bp
+from routes.tracking import tracking_bp
 
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(users_bp, url_prefix='/api/users')
@@ -47,6 +48,7 @@ app.register_blueprint(attendance_bp, url_prefix='/api/attendance')
 app.register_blueprint(activities_bp, url_prefix='/api/activities')
 app.register_blueprint(admin_bp, url_prefix='/api/admin')
 app.register_blueprint(leaves_bp, url_prefix='/api/leaves')
+app.register_blueprint(tracking_bp, url_prefix='/api/tracking')
 
 
 @app.route('/')

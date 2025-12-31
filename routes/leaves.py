@@ -164,3 +164,44 @@ def balance(current_user):
         "success": True,
         "data": balance
     }), 200
+
+
+@leaves_bp.route('/holidays', methods=['GET'])
+@token_required
+def get_holidays(current_user):
+    """
+    Get organization holidays for a given year
+    
+    Query Params:
+    - year: year (required)
+    
+    Example: /api/leaves/holidays?year=2026
+    """
+    from services.leaves_service import get_organization_holidays
+    
+    try:
+        year = request.args.get('year', type=int)
+        
+        if not year:
+            return jsonify({
+                "success": False,
+                "message": "year query parameter is required"
+            }), 400
+        
+        holidays = get_organization_holidays(year)
+        
+        return jsonify({
+            "success": True,
+            "year": year,
+            "holidays": holidays,
+            "count": len(holidays)
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Error in get_holidays: {e}")
+        print(traceback.format_exc())
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500

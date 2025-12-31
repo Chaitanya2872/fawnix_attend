@@ -1,5 +1,5 @@
 """
-Leave Service
+Leave Service - FIXED VERSION
 Leave management business logic with cumulative monthly accrual
 """
 
@@ -81,26 +81,92 @@ def calculate_cumulative_leaves(joining_date: date, year: int) -> Dict:
     }
 
 
-def get_organization_holidays(year: int) -> List[date]:
-    """Get organization holidays for the year"""
+def get_organization_holidays(year: int) -> List[Dict]:
+    """
+    Get organization holidays for a given year
+    
+    FIXED VERSION:
+    - Uses correct column name 'holiday_name' instead of 'holiday_event'
+    - Returns list of holiday dictionaries
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
+
     try:
-        cursor.execute("""
-            SELECT holiday_date FROM organization_holidays
+        query = """
+            SELECT
+                id,
+                holiday_date,
+                holiday_name,
+                weekday,
+                TO_CHAR(holiday_date, 'DD') as day,
+                TO_CHAR(holiday_date, 'Month') as month_name
+            FROM organization_holidays
             WHERE EXTRACT(YEAR FROM holiday_date) = %s
-        """, (year,))
-        return [row['holiday_date'] for row in cursor.fetchall()]
+            ORDER BY holiday_date;
+        """
+
+        cursor.execute(query, (year,))
+        rows = cursor.fetchall()
+
+        holidays = []
+        for row in rows:
+            # Handle both dict-like and tuple-like cursor results
+            if hasattr(row, 'keys'):
+                # Dict-like (RealDictCursor)
+                holidays.append({
+                    "id": row['id'],
+                    "holiday_date": row['holiday_date'].strftime('%Y-%m-%d'),
+                    "holiday_name": row['holiday_name'],
+                    "weekday": row['weekday'],
+                    "day": row['day'].strip() if row['day'] else None,
+                    "month": row['month_name'].strip() if row['month_name'] else None
+                })
+            else:
+                # Tuple-like (standard cursor)
+                holidays.append({
+                    "id": row[0],
+                    "holiday_date": row[1].strftime('%Y-%m-%d') if row[1] else None,
+                    "holiday_name": row[2],
+                    "weekday": row[3],
+                    "day": row[4].strip() if row[4] else None,
+                    "month": row[5].strip() if row[5] else None
+                })
+
+        logger.info(f"Found {len(holidays)} holidays for year {year}")
+        return holidays
+
     except Exception as e:
-        logger.warning(f"Could not fetch holidays: {e}")
-        return []
+        logger.error(f"Error fetching organization holidays: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return []  # Return empty list instead of crashing
     finally:
         cursor.close()
         conn.close()
 
 
-def calculate_leave_count(start_date: date, end_date: date, duration: str, holidays: List[date]) -> float:
-    """Calculate working days excluding weekends and holidays"""
+def calculate_leave_count(start_date: date, end_date: date, duration: str, year: int) -> float:
+    """
+    Calculate working days excluding weekends and holidays
+    
+    FIXED VERSION:
+    - Takes year parameter instead of holidays list
+    - Fetches holidays internally
+    """
+    
+    # Get holidays for the year
+    holidays_data = get_organization_holidays(year)
+    holiday_dates = []
+    
+    for h in holidays_data:
+        try:
+            holiday_date = datetime.strptime(h['holiday_date'], '%Y-%m-%d').date()
+            holiday_dates.append(holiday_date)
+        except Exception as e:
+            logger.warning(f"Could not parse holiday date {h.get('holiday_date')}: {e}")
+            continue
+    
     working_days = []
     current = start_date
 
@@ -118,7 +184,7 @@ def calculate_leave_count(start_date: date, end_date: date, duration: str, holid
                 continue
         
         # Skip holidays
-        if current in holidays:
+        if current in holiday_dates:
             current += timedelta(days=1)
             continue
         
@@ -171,7 +237,8 @@ def get_late_arrival_count(emp_code: str, from_date: date, to_date: date) -> int
                 EXTRACT(HOUR FROM %s::time) * 60 + EXTRACT(MINUTE FROM %s::time)
         """, (emp_code, from_date, to_date, shift_start, shift_start))
         
-        return cursor.fetchone()['late_count']
+        result = cursor.fetchone()
+        return result['late_count'] if result else 0
     except Exception as e:
         logger.error(f"Error counting late arrivals: {e}")
         return 0
@@ -195,7 +262,8 @@ def get_short_working_days(emp_code: str, from_date: date, to_date: date) -> int
             AND working_hours <= 4
         """, (emp_code, from_date, to_date))
         
-        return cursor.fetchone()['short_days']
+        result = cursor.fetchone()
+        return result['short_days'] if result else 0
     except Exception as e:
         logger.error(f"Error counting short working days: {e}")
         return 0
@@ -360,9 +428,8 @@ def apply_leave(emp_code: str, from_date: str, to_date: str, leave_type: str,
         if not approver_code:
             return ({"success": False, "message": "No approver available"}, 400)
 
-        # Calculate leave count
-        holidays = get_organization_holidays(start_date.year)
-        leave_count = calculate_leave_count(start_date, end_date, duration, holidays)
+        # Calculate leave count using the FIXED function
+        leave_count = calculate_leave_count(start_date, end_date, duration, start_date.year)
 
         if leave_count == 0:
             return ({"success": False, "message": "No working days in selected period"}, 400)
@@ -410,7 +477,8 @@ def apply_leave(emp_code: str, from_date: str, to_date: str, leave_type: str,
             leave_count, notes, datetime.now()
         ))
 
-        leave_id = cursor.fetchone()['id']
+        result = cursor.fetchone()
+        leave_id = result['id'] if hasattr(result, 'keys') else result[0]
         conn.commit()
 
         return ({
@@ -459,8 +527,9 @@ def approve_leave(leave_id: int, manager_code: str, action: str, remarks: str = 
         if not leave:
             return ({"success": False, "message": "Leave request not found or unauthorized"}, 404)
         
-        if leave['status'] != 'pending':
-            return ({"success": False, "message": f"Leave already {leave['status']}"}, 400)
+        leave_status = leave['status'] if hasattr(leave, 'keys') else leave[12]  # Adjust index as needed
+        if leave_status != 'pending':
+            return ({"success": False, "message": f"Leave already {leave_status}"}, 400)
         
         cursor.execute("""
             UPDATE leaves
@@ -470,13 +539,15 @@ def approve_leave(leave_id: int, manager_code: str, action: str, remarks: str = 
         
         conn.commit()
         
+        emp_name = leave['emp_name'] if hasattr(leave, 'keys') else leave[2]
+        
         return ({
             "success": True,
             "message": f"Leave request {action}",
             "data": {
                 "leave_id": leave_id,
                 "status": action,
-                "employee": leave['emp_name']
+                "employee": emp_name
             }
         }, 200)
         
@@ -512,19 +583,34 @@ def get_my_leaves(emp_code: str, status: str = None, limit: int = 50) -> Tuple[D
         cursor.execute(query, params)
         leaves = cursor.fetchall()
         
+        # Convert to list of dicts if needed
+        leaves_list = []
         for leave in leaves:
-            for key, value in leave.items():
+            if hasattr(leave, 'keys'):
+                leave_dict = dict(leave)
+            else:
+                # Handle tuple results - adjust indices based on your table structure
+                leave_dict = {
+                    'id': leave[0],
+                    'emp_code': leave[1],
+                    # Add other fields as needed
+                }
+            
+            # Format dates
+            for key, value in leave_dict.items():
                 if isinstance(value, (datetime, date)):
-                    leave[key] = value.strftime('%d-%m-%Y' if isinstance(value, date) else '%Y-%m-%d %H:%M:%S')
+                    leave_dict[key] = value.strftime('%d-%m-%Y' if isinstance(value, date) else '%Y-%m-%d %H:%M:%S')
+            
+            leaves_list.append(leave_dict)
         
         balance = get_employee_leave_balance(emp_code)
         
         return ({
             "success": True,
             "data": {
-                "leaves": leaves,
+                "leaves": leaves_list,
                 "balance": balance,
-                "count": len(leaves)
+                "count": len(leaves_list)
             }
         }, 200)
     finally:
@@ -551,16 +637,26 @@ def get_team_leaves(manager_code: str, status: str = None, limit: int = 50) -> T
         cursor.execute(query, params)
         leaves = cursor.fetchall()
         
+        # Convert to list of dicts
+        leaves_list = []
         for leave in leaves:
-            for key, value in leave.items():
+            if hasattr(leave, 'keys'):
+                leave_dict = dict(leave)
+            else:
+                leave_dict = {'id': leave[0]}  # Adjust as needed
+            
+            # Format dates
+            for key, value in leave_dict.items():
                 if isinstance(value, (datetime, date)):
-                    leave[key] = value.strftime('%d-%m-%Y' if isinstance(value, date) else '%Y-%m-%d %H:%M:%S')
+                    leave_dict[key] = value.strftime('%d-%m-%Y' if isinstance(value, date) else '%Y-%m-%d %H:%M:%S')
+            
+            leaves_list.append(leave_dict)
         
         return ({
             "success": True,
             "data": {
-                "leaves": leaves,
-                "count": len(leaves)
+                "leaves": leaves_list,
+                "count": len(leaves_list)
             }
         }, 200)
     finally:

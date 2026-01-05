@@ -1,0 +1,53 @@
+name: Deploy Fawnix Attend to EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:   # allows manual re-run
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository (for workflow context only)
+        uses: actions/checkout@v4
+
+      - name: Deploy latest main branch to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: root
+          key: ${{ secrets.EC2_SSH_KEY }}
+          timeout: 300s
+          script: |
+            set -e
+
+            echo "======================================"
+            echo "🚀 Starting Fawnix Attend Deployment"
+            echo "======================================"
+
+            echo "📂 Moving to project directory"
+            cd /root/fawnix_attend
+
+            echo "🔄 Fetching latest code from GitHub"
+            git fetch origin
+
+            echo "🧹 Resetting to latest main branch"
+            git checkout main
+            git reset --hard origin/main
+
+            echo "🐳 Stopping existing containers"
+            docker compose down
+
+            echo "🐳 Building & starting containers"
+            docker compose up -d --build
+
+            echo "📦 Docker status:"
+            docker compose ps
+
+            echo "======================================"
+            echo "✅ Deployment completed successfully"
+            echo "======================================"

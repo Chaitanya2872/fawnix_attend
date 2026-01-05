@@ -1,11 +1,12 @@
 """
 Enhanced Attendance Service
-Version 2.0 - With field visit integration and auto-cleanup
+Version 2.1 - With field visit integration, auto-cleanup, and comp-off calculation
 """
 
 from datetime import datetime, timedelta, date
 from database.connection import get_db_connection
 from services.geocoding_service import get_address_from_coordinates
+from services.compoff_service import calculate_and_record_compoff  # ✅ NEW IMPORT
 import logging
 
 logger = logging.getLogger(__name__)
@@ -86,7 +87,11 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
 
 
 def clock_out(emp_email: str, lat: str, lon: str):
-    """Clock out employee with auto-cleanup"""
+    """
+    Clock out employee with auto-cleanup and comp-off calculation
+    
+    ✅ NEW: Now automatically calculates and records comp-offs
+    """
     location = f"{lat}, {lon}" if lat and lon else ''
     address = get_address_from_coordinates(lat, lon) if lat and lon else ''
     
@@ -115,6 +120,7 @@ def clock_out(emp_email: str, lat: str, lon: str):
         
         duration = logout_time - login_time
         hours = duration.total_seconds() / 3600
+        work_date = record['date']
         
         # 🧹 AUTO-CLEANUP: End all active activities
         cursor.execute("""
@@ -160,9 +166,47 @@ def clock_out(emp_email: str, lat: str, lon: str):
         
         conn.commit()
         
+        # ✅ NEW: Calculate and record comp-off (if eligible)
+        # Get employee code from email
+        cursor.execute("""
+            SELECT emp_code, emp_full_name 
+            FROM employees 
+            WHERE emp_email = %s
+        """, (emp_email,))
+        
+        emp_result = cursor.fetchone()
+        comp_off_result = None
+        
+        if emp_result:
+            emp_code = emp_result['emp_code']
+            emp_name = emp_result['emp_full_name']
+            
+            try:
+                # This will automatically:
+                # 1. Check if working/non-working day
+                # 2. Check if second clock-in (for working days)
+                # 3. Calculate comp-off if eligible
+                # 4. Create overtime record
+                comp_off_result = calculate_and_record_compoff(
+                    attendance_id=attendance_id,
+                    emp_code=emp_code,
+                    emp_email=emp_email,
+                    emp_name=emp_name,
+                    work_date=work_date,
+                    working_hours=round(hours, 2)
+                )
+            except Exception as e:
+                logger.error(f"⚠️ Comp-off calculation failed (non-critical): {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                # Don't fail the clock-out if comp-off calculation fails
+        
         logger.info(f"✅ Clock out successful: {emp_email}")
         logger.info(f"   - Ended {len(ended_activities)} activities")
         logger.info(f"   - Ended {len(ended_field_visits)} field visits")
+        
+        if comp_off_result:
+            logger.info(f"   - Comp-off earned: {comp_off_result['comp_off_days']} days ({comp_off_result['extra_hours']:.2f}h extra)")
         
         # Parse login coordinates
         login_coords = record.get('login_location', '').split(', ')
@@ -192,6 +236,22 @@ def clock_out(emp_email: str, lat: str, lon: str):
             }
         }
         
+        # ✅ NEW: Include comp-off info in response
+        if comp_off_result:
+            response_data["comp_off"] = {
+                "earned": True,
+                "comp_off_days": comp_off_result['comp_off_days'],
+                "extra_hours": comp_off_result['extra_hours'],
+                "overtime_id": comp_off_result['overtime_id'],
+                "expires_at": comp_off_result['expires_at'],
+                "message": f"You've earned {comp_off_result['comp_off_days']} day{'s' if comp_off_result['comp_off_days'] > 1 else ''} comp-off!"
+            }
+        else:
+            response_data["comp_off"] = {
+                "earned": False,
+                "message": "No comp-off earned for this session"
+            }
+        
         return ({
             "success": True,
             "message": "Clock out successful. All active sessions ended.",
@@ -201,6 +261,8 @@ def clock_out(emp_email: str, lat: str, lon: str):
     except Exception as e:
         conn.rollback()
         logger.error(f"❌ Clock out error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return ({"success": False, "message": str(e)}, 500)
     finally:
         cursor.close()

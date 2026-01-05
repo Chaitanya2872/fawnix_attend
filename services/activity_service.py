@@ -76,7 +76,7 @@ def start_activity(emp_email: str, emp_name: str, activity_type: str,
         
         # Process destinations for branch visits
         destinations_json = None
-        if destinations and isinstance(destinations, list) and activity_type == ActivityType.BRANCH_VISIT:
+        if destinations and isinstance(destinations, list) and activity_type in [ActivityType.BRANCH_VISIT, ActivityType.FIELD_VISIT]:
             enriched_destinations = []
             for idx, dest in enumerate(destinations):
                 dest_lat = dest.get('lat', '')

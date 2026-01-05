@@ -46,38 +46,16 @@ def is_employee_on_leave(emp_code: str) -> bool:
 
 def calculate_cumulative_leaves(joining_date: date, year: int) -> Dict:
     """
-    Monthly cumulative accrual:
-    - 1.5 leaves per month
-    - Split as 1 Casual + 0.5 Sick
-    - Accrues each month until current month
+    SIMPLIFIED: Fixed 18 leaves per year for everyone
+    - 12 Casual leaves (max)
+    - 6 Sick leaves (max)
+    - Total = 18 leaves
+    - Default allocation regardless of joining date or current month
     """
-    today = date.today()
-
-    if joining_date > today:
-        return {'casual': 0, 'sick': 0, 'months': 0}
-
-    # If employee joined before this year, start from January
-    start_month = joining_date.month if joining_date.year == year else 1
-    
-    # Only accrue until current month
-    end_month = today.month if year == today.year else 12
-
-    months = 0.0
-    for month in range(start_month, end_month + 1):
-        # If this is joining month, check if joined before/after 15th
-        if joining_date.year == year and month == joining_date.month:
-            months += 1 if joining_date.day <= 15 else 0.5
-        else:
-            months += 1
-
-    # Calculate accrued leaves
-    casual = min(round(months * 1, 2), 12)  # 1 casual per month, max 12
-    sick = min(round(months * 0.5, 2), 6)   # 0.5 sick per month, max 6
-
     return {
-        'casual': casual,
-        'sick': sick,
-        'months': months
+        'casual': 12,
+        'sick': 6,
+        'months': 12  # Keep for compatibility
     }
 
 
@@ -330,13 +308,13 @@ def get_employee_leave_balance(emp_code: str) -> Dict:
         # Calculate accrued leaves based on months worked
         accrued = calculate_cumulative_leaves(joining_date, year)
 
-        # Get used leaves this year
+        # Get used (approved) leaves this year — pending requests do not reduce balance
         cursor.execute("""
             SELECT leave_type, SUM(leave_count) AS used
             FROM leaves
             WHERE emp_code = %s
               AND EXTRACT(YEAR FROM from_date) = %s
-              AND status IN ('approved', 'pending')
+              AND status = 'approved'
             GROUP BY leave_type
         """, (emp_code, year))
 
@@ -354,10 +332,11 @@ def get_employee_leave_balance(emp_code: str) -> Dict:
                 'remaining': accrued['sick'] - used.get('sick', 0)
             },
             '_info': {
-                'accrual_type': 'cumulative',
+                'accrual_type': 'fixed',
                 'months_counted': accrued['months'],
+                'total_leaves': 18,
                 'joining_date': joining_date.strftime('%d-%m-%Y'),
-                'note': f"Accrued {accrued['months']} months @ 1.5 leaves/month"
+                'note': 'Fixed 18 leaves per year (12 Casual + 6 Sick)'
             }
         }
 

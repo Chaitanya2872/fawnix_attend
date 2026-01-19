@@ -54,3 +54,29 @@ def get_all_employees():
     finally:
         cursor.close()
         conn.close()
+        
+def get_all_attendance_records():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT
+                a.record_id,
+                a.emp_code,
+                e.emp_full_name,
+                a.date,
+                a.check_in,
+                a.check_out,
+                a.total_hours,
+                a.status
+            FROM attendance_records a
+            JOIN employees e ON a.emp_code = e.emp_code
+            ORDER BY a.date DESC, e.emp_full_name
+        """)
+
+        return cursor.fetchall()
+
+    finally:
+        cursor.close()
+        conn.close()

@@ -37,3 +37,20 @@ def get_employees(current_user):
         "count": len(employees),
         "data": [serialize_row(emp) for emp in employees]
     }), 200
+    
+
+@admin_bp.route('/attendance', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_attendance(current_user):
+    """
+    Get attendance records
+    Accessible only by HR and DevTester
+    """
+    attendance_records = admin_service.get_all_attendance_records()
+
+    return jsonify({
+        "success": True,
+        "count": len(attendance_records),
+        "data": [serialize_row(record) for record in attendance_records]
+    }), 200

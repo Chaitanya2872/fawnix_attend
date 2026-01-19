@@ -47,6 +47,7 @@ from routes.leaves import leaves_bp
 from routes.admin import admin_bp
 from routes.tracking import tracking_bp
 from routes.compoff import compoff_bp
+from routes.attendance_exceptions import exceptions_bp
 
 # ✨ NEW ROUTES - Location Reports, Distance Monitoring, Approvals
 from routes.location import location_report_bp
@@ -62,6 +63,7 @@ app.register_blueprint(admin_bp, url_prefix='/api/admin')
 app.register_blueprint(leaves_bp, url_prefix='/api/leaves')
 app.register_blueprint(tracking_bp, url_prefix='/api/tracking')
 app.register_blueprint(compoff_bp, url_prefix='/api/compoff')
+app.register_blueprint(exceptions_bp, url_prefix='/api/attendance-exceptions')
 
 # ✨ Register new blueprints
 app.register_blueprint(location_report_bp, url_prefix='/api/reports')

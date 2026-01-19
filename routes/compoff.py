@@ -5,7 +5,7 @@ API endpoints for overtime tracking and comp-off management
 
 from flask import Blueprint, request, jsonify
 from middleware.auth_middleware import token_required
-from services.compoff_service import (
+from services.CompLeaveService import (
     get_employee_overtime_records,
     request_compoff,
     get_my_compoff_requests,
@@ -251,7 +251,7 @@ def team_requests(current_user):
     - List of team members' comp-off requests
     - Approval level and priority indicators
     """
-    from services.compoff_service import get_team_compoff_requests
+    from services.CompLeaveService import get_team_compoff_requests
     
     status = request.args.get('status')
     limit = request.args.get('limit', 50, type=int)
@@ -322,7 +322,7 @@ def statistics(current_user):
     - Year-to-date summary
     - Utilization rate
     """
-    from services.compoff_service import get_compoff_statistics
+    from services.CompLeaveService import get_compoff_statistics
     
     year = request.args.get('year', type=int)
     month = request.args.get('month', type=int)

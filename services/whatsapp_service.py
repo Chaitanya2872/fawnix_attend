@@ -170,3 +170,81 @@ def send_notification(phone_number: str, message: str, template_name: str = None
     except Exception as e:
         logger.error(f"WhatsApp notification error: {e}")
         return False
+    
+def _format_phone(phone: str) -> str:
+    phone = phone.replace("+", "").replace("-", "").replace(" ", "").strip()
+    if len(phone) == 10:
+        phone = "91" + phone
+    return phone
+
+
+def send_leave_notification(
+    phone_number: str,
+    title: str,
+    employee_name: str,
+    message: str,
+    from_date: str,
+    to_date: str
+) -> bool:
+    """
+    Send WhatsApp leave notification
+    """
+
+    try:
+        if not Config.WHATSAPP_TOKEN or not Config.PHONE_NUMBER_ID:
+            logger.info(f"""
+            DEV MODE WHATSAPP
+            TITLE : {title}
+            NAME  : {employee_name}
+            MSG   : {message}
+            FROM  : {from_date}
+            TO    : {to_date}
+            """)
+            return True
+
+        url = f"https://graph.facebook.com/v19.0/{Config.PHONE_NUMBER_ID}/messages"
+
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": _format_phone(phone_number),
+            "type": "template",
+            "template": {
+                "name": "fawnix_notification",
+                "language": {"code": "en_US"},
+                "components": [
+                    {
+                        "type": "header",
+                        "parameters": [
+                            {"type": "text", "text": title}
+                        ]
+                    },
+                    {
+                        "type": "body",
+                        "parameters": [
+                            {"type": "text", "text": employee_name},  # {{2}}
+                            {"type": "text", "text": message},        # {{3}}
+                            {"type": "text", "text": from_date},      # {{4}}
+                            {"type": "text", "text": to_date}         # {{5}}
+                        ]
+                    }
+                ]
+            }
+        }
+
+        headers = {
+            "Authorization": f"Bearer {Config.WHATSAPP_TOKEN}",
+            "Content-Type": "application/json"
+        }
+
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
+
+        if response.status_code == 200:
+            logger.info("WhatsApp message sent")
+            return True
+
+        logger.error(f"WhatsApp error {response.status_code}: {response.text}")
+        return False
+
+    except Exception:
+        logger.exception("WhatsApp send failed")
+        return False

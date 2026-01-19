@@ -5,6 +5,7 @@ Manager approval system for late arrival and early leave requests
 
 from datetime import datetime
 from database.connection import get_db_connection
+from services.leaves_service import is_employee_on_leave
 from typing import Dict, Tuple
 import logging
 
@@ -26,7 +27,7 @@ def request_late_arrival_approval(emp_code: str, activity_id: int,
     cursor = conn.cursor()
     
     try:
-        # Get employee and manager info
+        # Get employee, manager and informing manager info
         cursor.execute("""
             SELECT 
                 e.emp_code,
@@ -34,9 +35,13 @@ def request_late_arrival_approval(emp_code: str, activity_id: int,
                 e.emp_email,
                 e.emp_manager,
                 m.emp_full_name as manager_name,
-                m.emp_email as manager_email
+                m.emp_email as manager_email,
+                e.emp_informing_manager,
+                im.emp_full_name as informing_name,
+                im.emp_email as informing_email
             FROM employees e
             LEFT JOIN employees m ON e.emp_manager = m.emp_code
+            LEFT JOIN employees im ON e.emp_informing_manager = im.emp_code
             WHERE e.emp_code = %s
         """, (emp_code,))
         
@@ -44,10 +49,21 @@ def request_late_arrival_approval(emp_code: str, activity_id: int,
         
         if not emp:
             return ({"success": False, "message": "Employee not found"}, 404)
-        
-        if not emp.get('emp_manager'):
-            return ({"success": False, "message": "No manager assigned"}, 400)
-        
+
+        approver_code = emp.get('emp_manager')
+        approver_email = emp.get('manager_email')
+        approver_name = emp.get('manager_name')
+
+        # If manager is on leave, fallback to informing manager
+        if approver_code and is_employee_on_leave(approver_code):
+            logger.info(f"Manager {approver_code} is on leave, using informing manager")
+            approver_code = emp.get('emp_informing_manager')
+            approver_email = emp.get('informing_email')
+            approver_name = emp.get('informing_name')
+
+        if not approver_code:
+            return ({"success": False, "message": "No approver available"}, 400)
+
         # Get activity details
         cursor.execute("""
             SELECT * FROM activities
@@ -81,8 +97,8 @@ def request_late_arrival_approval(emp_code: str, activity_id: int,
             emp['emp_code'],
             emp['emp_full_name'],
             emp['emp_email'],
-            emp['emp_manager'],
-            emp['manager_email'],
+            approver_code,
+            approver_email,
             'late_arrival',
             activity['date'],
             reason,
@@ -113,8 +129,8 @@ def request_late_arrival_approval(emp_code: str, activity_id: int,
             "data": {
                 "approval_id": approval_id,
                 "activity_id": activity_id,
-                "manager": emp['manager_name'],
-                "manager_email": emp['manager_email'],
+                "manager": approver_name,
+                "manager_email": approver_email,
                 "status": "pending"
             }
         }, 201)
@@ -145,7 +161,7 @@ def request_early_leave_approval(emp_code: str, activity_id: int,
     cursor = conn.cursor()
     
     try:
-        # Get employee and manager info
+        # Get employee, manager and informing manager info
         cursor.execute("""
             SELECT 
                 e.emp_code,
@@ -153,9 +169,13 @@ def request_early_leave_approval(emp_code: str, activity_id: int,
                 e.emp_email,
                 e.emp_manager,
                 m.emp_full_name as manager_name,
-                m.emp_email as manager_email
+                m.emp_email as manager_email,
+                e.emp_informing_manager,
+                im.emp_full_name as informing_name,
+                im.emp_email as informing_email
             FROM employees e
             LEFT JOIN employees m ON e.emp_manager = m.emp_code
+            LEFT JOIN employees im ON e.emp_informing_manager = im.emp_code
             WHERE e.emp_code = %s
         """, (emp_code,))
         
@@ -163,10 +183,21 @@ def request_early_leave_approval(emp_code: str, activity_id: int,
         
         if not emp:
             return ({"success": False, "message": "Employee not found"}, 404)
-        
-        if not emp.get('emp_manager'):
-            return ({"success": False, "message": "No manager assigned"}, 400)
-        
+
+        approver_code = emp.get('emp_manager')
+        approver_email = emp.get('manager_email')
+        approver_name = emp.get('manager_name')
+
+        # If manager is on leave, fallback to informing manager
+        if approver_code and is_employee_on_leave(approver_code):
+            logger.info(f"Manager {approver_code} is on leave, using informing manager")
+            approver_code = emp.get('emp_informing_manager')
+            approver_email = emp.get('informing_email')
+            approver_name = emp.get('informing_name')
+
+        if not approver_code:
+            return ({"success": False, "message": "No approver available"}, 400)
+
         # Get activity details
         cursor.execute("""
             SELECT * FROM activities

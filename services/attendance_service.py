@@ -1,19 +1,32 @@
 """
-Enhanced Attendance Service
-Version 2.1 - With field visit integration, auto-cleanup, and comp-off calculation
+Updated Attendance Service
+Version 3.0 - With late arrival auto-detection and early leave validation
+
+NEW FEATURES:
+✅ Auto-detects late arrival on clock-in
+✅ Validates early leave approval before clock-out
+✅ No more late_arrival/early_leave activities
 """
 
 from datetime import datetime, timedelta, date
 from database.connection import get_db_connection
 from services.geocoding_service import get_address_from_coordinates
-from services.compoff_service import calculate_and_record_compoff  # ✅ NEW IMPORT
+from services.CompLeaveService import calculate_and_record_compoff
+from services.attendance_exceptions_service import (
+    auto_detect_late_arrival,
+    check_early_leave_approval
+)
 import logging
 
 logger = logging.getLogger(__name__)
 
 
 def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
-    """Clock in employee with session guard"""
+    """
+    Clock in employee with late arrival auto-detection
+    
+    NEW: Automatically detects if employee is late and returns detection info
+    """
     location = f"{lat}, {lon}" if lat and lon else ''
     address = get_address_from_coordinates(lat, lon) if lat and lon else ''
     
@@ -57,28 +70,54 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
         ))
         
         attendance_id = cursor.fetchone()['id']
+        
+        # Get emp_code for late arrival detection
+        cursor.execute("""
+            SELECT emp_code FROM employees WHERE emp_email = %s
+        """, (emp_email,))
+        
+        emp_result = cursor.fetchone()
+        emp_code = emp_result['emp_code'] if emp_result else None
+        
         conn.commit()
         
         logger.info(f"✅ Clock in successful: {emp_email} - Attendance ID: {attendance_id}")
         
+        response_data = {
+            "attendance_id": attendance_id,
+            "login_time": login_time.strftime('%Y-%m-%d %H:%M:%S'),
+            "location": {
+                "coordinates": location,
+                "latitude": lat,
+                "longitude": lon,
+                "address": address
+            }
+        }
+        
+        # ✅ NEW: Auto-detect late arrival
+        late_arrival_info = None
+        if emp_code:
+            late_arrival_info = auto_detect_late_arrival(emp_code, attendance_id, login_time)
+            
+            if late_arrival_info:
+                response_data['late_arrival'] = late_arrival_info
+                logger.warning(f"🚨 Late arrival detected: {emp_email} - {late_arrival_info['late_by_minutes']} minutes")
+        
+        message = "Clock in successful"
+        if late_arrival_info:
+            message += f". You are {late_arrival_info['late_by_minutes']} minutes late."
+        
         return ({
             "success": True,
-            "message": "Clock in successful",
-            "data": {
-                "attendance_id": attendance_id,
-                "login_time": login_time.strftime('%Y-%m-%d %H:%M:%S'),
-                "location": {
-                    "coordinates": location,
-                    "latitude": lat,
-                    "longitude": lon,
-                    "address": address
-                }
-            }
+            "message": message,
+            "data": response_data
         }, 201)
 
     except Exception as e:
         conn.rollback()
         logger.error(f"❌ Clock in error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return ({"success": False, "message": str(e)}, 500)
 
     finally:
@@ -88,9 +127,9 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
 
 def clock_out(emp_email: str, lat: str, lon: str):
     """
-    Clock out employee with auto-cleanup and comp-off calculation
+    Clock out employee with early leave validation
     
-    ✅ NEW: Now automatically calculates and records comp-offs
+    NEW: Validates if employee has approved early leave exception before allowing early clock-out
     """
     location = f"{lat}, {lon}" if lat and lon else ''
     address = get_address_from_coordinates(lat, lon) if lat and lon else ''
@@ -121,6 +160,64 @@ def clock_out(emp_email: str, lat: str, lon: str):
         duration = logout_time - login_time
         hours = duration.total_seconds() / 3600
         work_date = record['date']
+        
+        # ✅ NEW: Check for early leave validation
+        # Get employee's shift end time
+        cursor.execute("""
+             SELECT 
+        e.emp_code,
+        e.emp_shift_id,
+        s.shift_end_time
+    FROM employees e
+    LEFT JOIN shifts s ON s.shift_id = e.emp_shift_id
+    WHERE e.emp_email = %s
+        """, (emp_email,))
+        
+        emp_info = cursor.fetchone()
+        
+        if emp_info:
+            emp_code = emp_info['emp_code']
+            shift_end = emp_info['shift_end_time']
+            
+            # If no custom shift time, get from shift table
+            if not shift_end and emp_info['emp_shift_id']:
+                cursor.execute("""
+                    SELECT shift_end_time FROM shifts 
+                    WHERE shift_id = %s
+                """, (emp_info['emp_shift_id'],))
+                
+                shift_result = cursor.fetchone()
+                if shift_result:
+                    shift_end = shift_result['shift_end_time']
+            
+            # Check if clocking out early
+            if shift_end:
+                current_time = logout_time.time()
+                
+                # Convert shift_end to time object if string
+                if isinstance(shift_end, str):
+                    shift_end = datetime.strptime(shift_end, '%H:%M:%S').time()
+                
+                # If clocking out before shift end time
+                if current_time < shift_end:
+                    logger.info(f"⚠️ Early clock-out detected for {emp_email}")
+                    
+                    # Check for early leave approval
+                    is_approved, approval_message = check_early_leave_approval(attendance_id)
+                    
+                    if not is_approved:
+                        return ({
+                            "success": False,
+                            "message": f"Early clock-out not allowed. {approval_message}",
+                            "data": {
+                                "current_time": current_time.strftime('%H:%M'),
+                                "shift_end_time": shift_end.strftime('%H:%M'),
+                                "early_by_minutes": int((datetime.combine(datetime.today(), shift_end) - 
+                                                       datetime.combine(datetime.today(), current_time)).total_seconds() / 60)
+                            }
+                        }, 403)
+                    
+                    logger.info(f"✅ Early leave approved for {emp_email}")
         
         # 🧹 AUTO-CLEANUP: End all active activities
         cursor.execute("""
@@ -166,47 +263,27 @@ def clock_out(emp_email: str, lat: str, lon: str):
         
         conn.commit()
         
-        # ✅ NEW: Calculate and record comp-off (if eligible)
-        # Get employee code from email
-        cursor.execute("""
-            SELECT emp_code, emp_full_name 
-            FROM employees 
-            WHERE emp_email = %s
-        """, (emp_email,))
-        
-        emp_result = cursor.fetchone()
+        # ✅ Calculate and record comp-off (if eligible)
         comp_off_result = None
-        
-        if emp_result:
-            emp_code = emp_result['emp_code']
-            emp_name = emp_result['emp_full_name']
-            
+        if emp_info:
             try:
-                # This will automatically:
-                # 1. Check if working/non-working day
-                # 2. Check if second clock-in (for working days)
-                # 3. Calculate comp-off if eligible
-                # 4. Create overtime record
                 comp_off_result = calculate_and_record_compoff(
                     attendance_id=attendance_id,
                     emp_code=emp_code,
                     emp_email=emp_email,
-                    emp_name=emp_name,
+                    emp_name=record['employee_name'],
                     work_date=work_date,
                     working_hours=round(hours, 2)
                 )
             except Exception as e:
                 logger.error(f"⚠️ Comp-off calculation failed (non-critical): {e}")
-                import traceback
-                logger.error(traceback.format_exc())
-                # Don't fail the clock-out if comp-off calculation fails
         
         logger.info(f"✅ Clock out successful: {emp_email}")
         logger.info(f"   - Ended {len(ended_activities)} activities")
         logger.info(f"   - Ended {len(ended_field_visits)} field visits")
         
         if comp_off_result:
-            logger.info(f"   - Comp-off earned: {comp_off_result['comp_off_days']} days ({comp_off_result['extra_hours']:.2f}h extra)")
+            logger.info(f"   - Comp-off earned: {comp_off_result['comp_off_days']} days")
         
         # Parse login coordinates
         login_coords = record.get('login_location', '').split(', ')
@@ -236,7 +313,7 @@ def clock_out(emp_email: str, lat: str, lon: str):
             }
         }
         
-        # ✅ NEW: Include comp-off info in response
+        # Include comp-off info in response
         if comp_off_result:
             response_data["comp_off"] = {
                 "earned": True,
@@ -267,6 +344,9 @@ def clock_out(emp_email: str, lat: str, lon: str):
     finally:
         cursor.close()
         conn.close()
+
+
+# Other functions remain the same (get_attendance_status, get_attendance_history, get_day_summary)
 
 
 def get_attendance_status(emp_email: str):

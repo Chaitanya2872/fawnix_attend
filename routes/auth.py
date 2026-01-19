@@ -11,7 +11,8 @@ from services.auth_service import (
     rotate_refresh_token,
     revoke_refresh_token,
     revoke_all_user_tokens,
-    get_user_active_sessions
+    get_user_active_sessions,
+    cleanup_expired_tokens
 )
 from database.connection import get_db_connection
 from middleware.auth_middleware import token_required
@@ -444,8 +445,6 @@ def cleanup_tokens(current_user):
             "success": False,
             "message": "Admin access required"
         }), 403
-    
-    from services.auth_service_with_refresh import cleanup_expired_tokens
     
     deleted_count = cleanup_expired_tokens()
     

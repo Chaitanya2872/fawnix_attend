@@ -130,6 +130,7 @@ def clock_out(emp_email: str, lat: str, lon: str):
     Clock out employee with early leave validation
     
     NEW: Validates if employee has approved early leave exception before allowing early clock-out
+    NEW: Checks if employee was already auto clocked out
     """
     location = f"{lat}, {lon}" if lat and lon else ''
     address = get_address_from_coordinates(lat, lon) if lat and lon else ''
@@ -161,16 +162,55 @@ def clock_out(emp_email: str, lat: str, lon: str):
         hours = duration.total_seconds() / 3600
         work_date = record['date']
         
-        # ✅ NEW: Check for early leave validation
+        # ✅ NEW: Check if already auto clocked out
+        if record.get('auto_clocked_out'):
+            logger.info(f"⚠️ Employee {emp_email} already auto clocked out at {record['logout_time']}")
+            
+            # Parse login coordinates
+            login_coords = record.get('login_location', '').split(', ')
+            login_lat = login_coords if len(login_coords) > 0 else ''
+            login_lon = login_coords if len(login_coords) > 1 else ''
+            
+            # Parse logout coordinates
+            logout_coords = record.get('logout_location', '').split(', ')
+            logout_lat = logout_coords if len(logout_coords) > 0 else ''
+            logout_lon = logout_coords if len(logout_coords) > 1 else ''
+            
+            return ({
+                "success": False,
+                "message": "Employee already auto clocked out at shift end time",
+                "data": {
+                    "attendance_id": attendance_id,
+                    "login_time": record['login_time'].strftime('%Y-%m-%d %H:%M:%S') if isinstance(record['login_time'], datetime) else record['login_time'],
+                    "logout_time": record['logout_time'].strftime('%Y-%m-%d %H:%M:%S') if isinstance(record['logout_time'], datetime) else record['logout_time'],
+                    "working_hours": float(record['working_hours'] or 0),
+                    "auto_clocked_out": True,
+                    "auto_clockout_reason": record.get('auto_clockout_reason', ''),
+                    "login_location": {
+                        "coordinates": record.get('login_location', ''),
+                        "latitude": login_lat,
+                        "longitude": login_lon,
+                        "address": record.get('login_address', '')
+                    },
+                    "logout_location": {
+                        "coordinates": record.get('logout_location', ''),
+                        "latitude": logout_lat,
+                        "longitude": logout_lon,
+                        "address": record.get('logout_address', '')
+                    }
+                }
+            }, 400)
+        
+        # ✅ Check for early leave validation
         # Get employee's shift end time
         cursor.execute("""
-             SELECT 
-        e.emp_code,
-        e.emp_shift_id,
-        s.shift_end_time
-    FROM employees e
-    LEFT JOIN shifts s ON s.shift_id = e.emp_shift_id
-    WHERE e.emp_email = %s
+            SELECT 
+                e.emp_code,
+                e.emp_shift_id,
+                s.shift_end_time
+            FROM employees e
+            LEFT JOIN shifts s ON s.shift_id = e.emp_shift_id
+            WHERE e.emp_email = %s
         """, (emp_email,))
         
         emp_info = cursor.fetchone()
@@ -213,7 +253,7 @@ def clock_out(emp_email: str, lat: str, lon: str):
                                 "current_time": current_time.strftime('%H:%M'),
                                 "shift_end_time": shift_end.strftime('%H:%M'),
                                 "early_by_minutes": int((datetime.combine(datetime.today(), shift_end) - 
-                                                       datetime.combine(datetime.today(), current_time)).total_seconds() / 60)
+                                                   datetime.combine(datetime.today(), current_time)).total_seconds() / 60)
                             }
                         }, 403)
                     
@@ -287,8 +327,8 @@ def clock_out(emp_email: str, lat: str, lon: str):
         
         # Parse login coordinates
         login_coords = record.get('login_location', '').split(', ')
-        login_lat = login_coords[0] if len(login_coords) > 0 else ''
-        login_lon = login_coords[1] if len(login_coords) > 1 else ''
+        login_lat = login_coords if len(login_coords) > 0 else ''
+        login_lon = login_coords if len(login_coords) > 1 else ''
         
         response_data = {
             "attendance_id": attendance_id,

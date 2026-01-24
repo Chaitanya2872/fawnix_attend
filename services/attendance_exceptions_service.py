@@ -210,13 +210,14 @@ def request_late_arrival_exception(emp_code: str, attendance_id: int,
         if cursor.fetchone():
             return ({"success": False, "message": "Late arrival exception already submitted"}, 400)
         
-        # Calculate late duration
-        login_time = attendance['login_time']
+        # Get shift times to determine planned arrival time
         shift_start, _ = get_employee_shift_times(emp_code)
         
         if not shift_start:
             return ({"success": False, "message": "Shift time not configured"}, 400)
         
+        # Calculate late duration
+        login_time = attendance['login_time']
         login_time_only = login_time.time() if isinstance(login_time, datetime) else login_time
         login_datetime = datetime.combine(datetime.today(), login_time_only)
         shift_datetime = datetime.combine(datetime.today(), shift_start)
@@ -225,7 +226,7 @@ def request_late_arrival_exception(emp_code: str, attendance_id: int,
         if late_by_minutes <= 0:
             return ({"success": False, "message": "Not marked as late arrival"}, 400)
         
-        # Create exception record
+        # Create exception record with planned arrival time
         cursor.execute("""
             INSERT INTO attendance_exceptions (
                 emp_code,
@@ -235,6 +236,7 @@ def request_late_arrival_exception(emp_code: str, attendance_id: int,
                 exception_type,
                 exception_date,
                 exception_time,
+                planned_arrival_time,  # New field
                 late_by_minutes,
                 reason,
                 notes,
@@ -242,7 +244,7 @@ def request_late_arrival_exception(emp_code: str, attendance_id: int,
                 manager_email,
                 status,
                 requested_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             emp_code,
@@ -252,6 +254,7 @@ def request_late_arrival_exception(emp_code: str, attendance_id: int,
             'late_arrival',
             attendance['date'],
             login_time_only,
+            shift_start,  # Planned arrival time
             late_by_minutes,
             reason,
             notes,
@@ -276,6 +279,7 @@ def request_late_arrival_exception(emp_code: str, attendance_id: int,
                 "late_by_minutes": late_by_minutes,
                 "shift_start_time": shift_start.strftime('%H:%M'),
                 "actual_login_time": login_time_only.strftime('%H:%M'),
+                "planned_arrival_time": shift_start.strftime('%H:%M'),  # New field in response
                 "manager": emp_info['approver_name'],
                 "manager_email": emp_info['approver_email'],
                 "status": "pending"

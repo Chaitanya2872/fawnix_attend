@@ -27,10 +27,8 @@ def get_employee_shift_times(emp_code: str) -> Tuple[Optional[time], Optional[ti
     try:
         cursor.execute("""
             SELECT 
-                e.shift_start_time,
-                e.shift_end_time,
-                s.shift_start_time as default_shift_start,
-                s.shift_end_time as default_shift_end
+                s.shift_start_time,
+                s.shift_end_time
             FROM employees e
             LEFT JOIN shifts s ON e.emp_shift_id = s.shift_id
             WHERE e.emp_code = %s
@@ -40,9 +38,9 @@ def get_employee_shift_times(emp_code: str) -> Tuple[Optional[time], Optional[ti
         if not result:
             return None, None
         
-        # Use employee's custom shift times, fallback to default shift
-        start_time = result['shift_start_time'] or result.get('default_shift_start')
-        end_time = result['shift_end_time'] or result.get('default_shift_end')
+        # Get shift times from the shift table
+        start_time = result.get('shift_start_time')
+        end_time = result.get('shift_end_time')
         
         # Convert to time objects if they're strings
         if isinstance(start_time, str):

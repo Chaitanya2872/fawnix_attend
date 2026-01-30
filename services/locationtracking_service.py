@@ -115,6 +115,70 @@ def get_active_activities():
         conn.close()
 
 
+def auto_track_active_activities():
+    """
+    🚀 AUTOMATIC GPS TRACKING (runs every 3 minutes)
+    
+    Periodically tracks all active activities from the database.
+    This is called by the APScheduler job.
+    
+    NOTE: For this to work properly, the mobile app needs to send
+    GPS coordinates every 3 minutes via the track_location endpoint.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Get all active activities
+        cursor.execute("""
+            SELECT id, employee_email, activity_type, start_time
+            FROM activities
+            WHERE status = 'active'
+            ORDER BY start_time DESC
+        """)
+        
+        activities = cursor.fetchall()
+        
+        if not activities:
+            logger.debug("ℹ️ No active activities to track")
+            return
+        
+        logger.info(f"📍 GPS Tracking Check: {len(activities)} active activities")
+        
+        # Note: This is a scheduler job that checks for active activities
+        # The actual location data must be sent by the mobile app via /track endpoint
+        # For continuous tracking to work:
+        # 1. Mobile app must have GPS enabled
+        # 2. Mobile app sends location every 3 minutes to /api/activities/track
+        # 3. Server saves these to location_tracking table
+        
+        activity_ids = [a['id'] for a in activities]
+        
+        # Log summary of what's being tracked
+        for activity in activities:
+            cursor.execute("""
+                SELECT COUNT(*) as count FROM location_tracking
+                WHERE activity_id = %s
+            """, (activity['id'],))
+            
+            tracking_count = cursor.fetchone()['count']
+            logger.debug(f"   Activity {activity['id']}: {activity['activity_type']} - {tracking_count} tracking points")
+        
+        return {
+            "status": "checking",
+            "active_activities": len(activities),
+            "activity_ids": activity_ids
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Auto track error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def get_tracking_history(activity_id):
     """Get all tracking points for an activity"""
     conn = get_db_connection()

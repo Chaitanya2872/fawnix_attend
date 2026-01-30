@@ -10,6 +10,7 @@ from services.activity_service import (
     mark_destination_visited, get_activity_route,
     start_break, end_break
 )
+from services.locationtracking_service import track_location
 
 activities_bp = Blueprint('activities', __name__)
 
@@ -225,4 +226,54 @@ def end_break_route(current_user):
         }), 400
     
     result = end_break(break_id)
+    return jsonify(result[0]), result[1]
+
+
+@activities_bp.route('/track', methods=['POST'])
+@token_required
+def track(current_user):
+    """
+    📍 Track GPS location for active activity (called every 3 minutes by mobile app)
+    
+    This endpoint receives GPS coordinates from the mobile app and saves them
+    to the location_tracking table for continuous tracking.
+    
+    Request Body:
+        {
+            "activity_id": 123,           // required - ID of active activity
+            "latitude": "17.385044",      // required
+            "longitude": "78.486671"      // required
+        }
+    
+    Tracking Enabled For:
+        - branch_visit
+        - field_visit
+        - Any location-based activity
+    
+    Flow:
+        1. Mobile app starts activity (initial location saved)
+        2. Every 3 minutes, mobile app sends GPS via this endpoint
+        3. Server saves each tracking point to location_tracking table
+        4. When activity ends, distance is calculated from all points
+    """
+    data = request.get_json()
+    
+    activity_id = data.get('activity_id')
+    latitude = data.get('latitude', '')
+    longitude = data.get('longitude', '')
+    
+    if not activity_id or not latitude or not longitude:
+        return jsonify({
+            "success": False,
+            "message": "activity_id, latitude, and longitude are required"
+        }), 400
+    
+    result = track_location(
+        activity_id,
+        current_user['emp_email'],
+        latitude,
+        longitude,
+        tracking_type='auto'
+    )
+    
     return jsonify(result[0]), result[1]

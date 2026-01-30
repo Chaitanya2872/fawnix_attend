@@ -1,7 +1,7 @@
 """
 Employee Management System - Monolithic Application
 Main Flask Application Entry Point
-UPDATED: Added Location Reports, Distance Monitoring, Activity Approvals, and Refresh Token System
+FIXED: Proper auto clockout integration
 """
 
 from flask import Flask, jsonify
@@ -80,35 +80,38 @@ app.register_blueprint(location_report_bp, url_prefix='/api/reports')
 app.register_blueprint(distance_bp, url_prefix='/api/distance')
 app.register_blueprint(approvals_bp, url_prefix='/api/approvals')
 
+
+# ==========================================
+# ✅ FIXED: Auto Clockout Job
+# ==========================================
 def auto_clockout_job():
-    from database.connection import get_db_connection
+    """
+    Scheduled job wrapper that calls the proper auto clockout service
+    """
+    from services.auto_clockout_service import auto_clockout_all_active_sessions
+    
     logger.info("⏰ Auto clockout job triggered")
-
+    
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-
-        cur.execute("""
-            UPDATE attendance
-            SET
-                logout_time = NOW(),
-                status = 'auto_logged_out',
-                working_hours = EXTRACT(EPOCH FROM (NOW() - login_time)) / 3600
-            WHERE
-                status = 'logged_in'
-                AND login_time::date = CURRENT_DATE
-        """)
-
-        affected = cur.rowcount
-        conn.commit()
-
-        logger.info(f"✅ Auto clocked out {affected} employees")
-
-        cur.close()
-        conn.close()
-
+        # Call the proper service function
+        result = auto_clockout_all_active_sessions()
+        
+        if result['success']:
+            logger.info(f"✅ {result['message']} - {result['auto_clocked_out']} employees")
+        else:
+            logger.warning(f"⚠️ {result['message']}")
+            
+        return result
+        
     except Exception as e:
-        logger.error(f"❌ Auto clockout failed: {e}")
+        logger.error(f"❌ Auto clockout job failed: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return {
+            "success": False,
+            "message": str(e),
+            "auto_clocked_out": 0
+        }
 
 
 @app.route('/')
@@ -116,13 +119,14 @@ def index():
     """Root endpoint"""
     return jsonify({
         'service': 'Employee Management System',
-        'version': '2.0.0',  # Updated version
+        'version': '2.0.0',
         'architecture': 'monolithic',
         'new_features': [
             'Refresh Token System (7 days)',
             'Location Reports (Daily/Weekly)',
             'Distance Monitoring (Smart 1km checks)',
-            'Activity Approvals (Late Arrival/Early Leave)'
+            'Activity Approvals (Late Arrival/Early Leave)',
+            'Auto Clock-out with Activity Cleanup'
         ],
         'endpoints': {
             'auth': '/api/auth',
@@ -133,9 +137,9 @@ def index():
             'leaves': '/api/leaves',
             'tracking': '/api/tracking',
             'compoff': '/api/compoff',
-            'reports': '/api/reports',      # NEW
-            'distance': '/api/distance',    # NEW
-            'approvals': '/api/approvals'   # NEW
+            'reports': '/api/reports',
+            'distance': '/api/distance',
+            'approvals': '/api/approvals'
         },
         'docs': '/api/docs',
         'health': '/health'
@@ -163,7 +167,8 @@ def health_check():
                 'refresh_tokens': 'active',
                 'location_reports': 'active',
                 'distance_monitoring': 'active',
-                'activity_approvals': 'active'
+                'activity_approvals': 'active',
+                'auto_clockout': 'active'
             }
         }), 200
     except Exception as e:
@@ -217,42 +222,36 @@ def api_docs():
                 'GET /api/reports/weekly': '✨ NEW: Weekly location summary'
             },
             'distance_monitoring': {
-                'POST /api/distance/check': '✨ NEW: Check distance from clock-in (smart 1km monitoring)',
-                'GET /api/distance/alerts': '✨ NEW: Get active distance alerts',
-                'POST /api/distance/clear/{attendance_id}': '✨ NEW: Clear distance alert'
+                'POST /api/distance/check': '✨ NEW: Check if employee moved >1km (smart detection)',
+                'GET /api/distance/alerts': '✨ NEW: Get distance alerts for employee',
+                'POST /api/distance/clear/{id}': '✨ NEW: Clear/acknowledge distance alert'
             },
             'activity_approvals': {
                 'POST /api/approvals/late-arrival/request': '✨ NEW: Request late arrival approval',
                 'POST /api/approvals/early-leave/request': '✨ NEW: Request early leave approval',
-                'POST /api/approvals/approve': '✨ NEW: Approve/reject request (Manager)',
-                'GET /api/approvals/my-requests': '✨ NEW: Get employee approval requests',
-                'GET /api/approvals/team-requests': '✨ NEW: Get team approval requests (Manager)'
+                'POST /api/approvals/approve': '✨ NEW: Approve/reject attendance exception',
+                'GET /api/approvals/my-requests': '✨ NEW: Get my approval requests',
+                'GET /api/approvals/team-requests': '✨ NEW: Get team requests (managers only)'
             },
             'leaves': {
-                'GET /api/leaves': 'Get leave requests',
-                'POST /api/leaves': 'Create leave request',
-                'PUT /api/leaves/{id}': 'Update leave request',
-                'DELETE /api/leaves/{id}': 'Cancel leave request'
+                'GET /api/leaves': 'Get leave history',
+                'POST /api/leaves': 'Apply for leave',
+                'PUT /api/leaves/{id}': 'Update leave status'
             },
             'compoff': {
-                'GET /api/compoff': 'Get comp-off requests',
-                'POST /api/compoff': 'Create comp-off request'
+                'GET /api/compoff': 'Get comp-off balance',
+                'POST /api/compoff': 'Request comp-off'
             },
             'admin': {
-                'POST /api/admin/assign-role': 'Assign role to user (ADMIN)',
-                'GET /api/admin/stats': 'Get system statistics (ADMIN)',
-                'POST /api/admin/users/{emp_code}/activate': 'Activate user (ADMIN)',
-                'POST /api/admin/users/{emp_code}/deactivate': 'Deactivate user (ADMIN)'
+                'POST /api/admin/assign-role': 'Assign role to user',
+                'GET /api/admin/stats': 'Get system statistics'
+            },
+            'tracking': {
+                'POST /api/tracking/location': 'Update location',
+                'GET /api/tracking/history': 'Get tracking history'
             }
         },
-        'authentication': 'Bearer JWT token in Authorization header',
-        'token_system': {
-            'access_token': '30 minutes (short-lived)',
-            'refresh_token': '7 days (long-lived, revokable)',
-            'rotation': 'Automatic token rotation on refresh for security'
-        },
-        'roles': ['admin', 'manager', 'hr', 'cmd', 'employee'],
-        'new_features': {
+        'new_features_v2': {
             'refresh_tokens': {
                 'description': 'Secure token refresh with 7-day expiration',
                 'endpoints': ['/api/auth/refresh', '/api/auth/sessions']
@@ -268,6 +267,16 @@ def api_docs():
             'activity_approvals': {
                 'description': 'Manager approval system for late arrivals and early leaves',
                 'endpoints': ['/api/approvals/late-arrival/request', '/api/approvals/approve']
+            },
+            'auto_clockout': {
+                'description': 'Automatic clock-out at 6:30 PM with activity cleanup and comp-off calculation',
+                'schedule': 'Daily at 6:30 PM IST',
+                'features': [
+                    'Auto-closes all active activities',
+                    'Auto-closes all active field visits',
+                    'Calculates comp-off eligibility',
+                    'Marks records with auto_clocked_out flag'
+                ]
             }
         }
     }), 200
@@ -325,6 +334,18 @@ def features():
                         'POST /api/approvals/early-leave/request',
                         'POST /api/approvals/approve'
                     ]
+                },
+                {
+                    'name': 'Auto Clock-out',
+                    'description': 'Automatic clock-out at 6:30 PM with cleanup',
+                    'status': 'active',
+                    'schedule': 'Daily at 6:30 PM IST',
+                    'features': [
+                        'Activity cleanup',
+                        'Field visit cleanup',
+                        'Comp-off calculation',
+                        'Auto-clockout flagging'
+                    ]
                 }
             ]
         }
@@ -344,7 +365,7 @@ def after_request(response):
     response.headers['X-Service'] = 'employee-management-system'
     response.headers['X-Version'] = '2.0.0'
     response.headers['X-Architecture'] = 'monolithic'
-    response.headers['X-Features'] = 'refresh-tokens,location-reports,distance-monitoring,approvals'
+    response.headers['X-Features'] = 'refresh-tokens,location-reports,distance-monitoring,approvals,auto-clockout'
     return response
 
 
@@ -358,6 +379,7 @@ with app.app_context():
     logger.info("  ✓ Location Reports (Daily/Weekly)")
     logger.info("  ✓ Distance Monitoring (Smart 1km checks)")
     logger.info("  ✓ Activity Approvals (Late Arrival/Early Leave)")
+    logger.info("  ✓ Auto Clock-out (6:30 PM with cleanup)")
     
     logger.info("\n🔧 Initializing database...")
     try:
@@ -428,18 +450,27 @@ with app.app_context():
     
     logger.info("\n" + "=" * 80)
 
+
 def start_scheduler():
+    """
+    Initialize and start the APScheduler for auto clockout
+    
+    ✅ FIXED: Now runs at 6:30 PM daily instead of every 5 minutes
+    """
     scheduler = BackgroundScheduler(timezone="Asia/Kolkata")
 
+    # ✅ Schedule auto clockout at 6:30 PM daily
     scheduler.add_job(
         auto_clockout_job,
-        CronTrigger(minute="*/5"),  # every 5 minutes
+        CronTrigger(hour=18, minute=30),  # 6:30 PM daily
         id="auto_clockout_job",
-        replace_existing=True
+        replace_existing=True,
+        misfire_grace_time=300  # Allow 5 minutes grace period
     )
 
     scheduler.start()
-    logger.info("🟢 APScheduler started (auto clockout enabled)")
+    logger.info("🟢 APScheduler started")
+    logger.info("⏰ Auto clockout scheduled: Daily at 6:30 PM IST")
 
 
 if __name__ == '__main__':
@@ -460,8 +491,10 @@ if __name__ == '__main__':
     logger.info("   • Daily/weekly location reports")
     logger.info("   • Smart distance monitoring (1km checks)")
     logger.info("   • Manager approval workflows")
-    logger.info("   • Multi-device session management\n")
+    logger.info("   • Multi-device session management")
+    logger.info("   • Auto clock-out at 6:30 PM with cleanup\n")
     
+    # Start scheduler (only in main process, not in reloader)
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not Config.DEBUG:
         start_scheduler()
 

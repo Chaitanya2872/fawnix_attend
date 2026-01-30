@@ -173,6 +173,23 @@ def start_activity(emp_email: str, emp_name: str, activity_type: str,
         ))
         
         activity_id = cursor.fetchone()['id']
+        
+        # ✅ ENABLE GPS MODE: Save initial location immediately
+        tracking_id = None
+        if lat and lon:
+            cursor.execute("""
+                INSERT INTO location_tracking (
+                    activity_id, employee_email, location, address,
+                    tracked_at, tracking_type
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (
+                activity_id, emp_email, location, address,
+                start_time, 'initial'
+            ))
+            tracking_id = cursor.fetchone()['id']
+            logger.info(f"📍 Initial GPS location saved: Tracking ID={tracking_id}")
+        
         conn.commit()
         
         logger.info(f"✅ Activity started: ID={activity_id}, Type={activity_type}, Attendance={attendance_id}")
@@ -194,6 +211,9 @@ def start_activity(emp_email: str, emp_name: str, activity_type: str,
             response_data['field_visit_id'] = field_visit_id
             response_data['tracking_enabled'] = True
             response_data['tracking_interval'] = '3 minutes'
+        
+        if tracking_id:
+            response_data['initial_tracking_id'] = tracking_id
         
         if destinations_json:
             response_data['destinations'] = json.loads(destinations_json)

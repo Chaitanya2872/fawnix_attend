@@ -13,13 +13,15 @@ from middleware.error_handler import register_error_handlers
 from middleware.logging_middleware import setup_logging
 import logging
 import os
-import time
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from datetime import datetime, time
+import time
+from datetime import datetime
+
 
 os.environ["TZ"] = "Asia/Kolkata"
-time.tzset()
+if hasattr(time, 'tzset'):
+    time.tzset()
 
 # Initialize Flask app
 app = Flask(__name__)

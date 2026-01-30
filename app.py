@@ -12,6 +12,11 @@ from middleware.auth_middleware import setup_auth_middleware
 from middleware.error_handler import register_error_handlers
 from middleware.logging_middleware import setup_logging
 import logging
+import os
+import time
+
+os.environ["TZ"] = "Asia/Kolkata"
+time.tzset()
 
 # Initialize Flask app
 app = Flask(__name__)

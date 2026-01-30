@@ -14,6 +14,9 @@ from middleware.logging_middleware import setup_logging
 import logging
 import os
 import time
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+from datetime import datetime, time
 
 os.environ["TZ"] = "Asia/Kolkata"
 time.tzset()
@@ -74,6 +77,36 @@ app.register_blueprint(exceptions_bp, url_prefix='/api/attendance-exceptions')
 app.register_blueprint(location_report_bp, url_prefix='/api/reports')
 app.register_blueprint(distance_bp, url_prefix='/api/distance')
 app.register_blueprint(approvals_bp, url_prefix='/api/approvals')
+
+def auto_clockout_job():
+    from database.connection import get_db_connection
+    logger.info("⏰ Auto clockout job triggered")
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute("""
+            UPDATE attendance
+            SET
+                logout_time = NOW(),
+                status = 'auto_logged_out',
+                working_hours = EXTRACT(EPOCH FROM (NOW() - login_time)) / 3600
+            WHERE
+                status = 'logged_in'
+                AND login_time::date = CURRENT_DATE
+        """)
+
+        affected = cur.rowcount
+        conn.commit()
+
+        logger.info(f"✅ Auto clocked out {affected} employees")
+
+        cur.close()
+        conn.close()
+
+    except Exception as e:
+        logger.error(f"❌ Auto clockout failed: {e}")
 
 
 @app.route('/')
@@ -393,6 +426,19 @@ with app.app_context():
     
     logger.info("\n" + "=" * 80)
 
+def start_scheduler():
+    scheduler = BackgroundScheduler(timezone="Asia/Kolkata")
+
+    scheduler.add_job(
+        auto_clockout_job,
+        CronTrigger(minute="*/5"),  # every 5 minutes
+        id="auto_clockout_job",
+        replace_existing=True
+    )
+
+    scheduler.start()
+    logger.info("🟢 APScheduler started (auto clockout enabled)")
+
 
 if __name__ == '__main__':
     port = Config.PORT
@@ -413,6 +459,10 @@ if __name__ == '__main__':
     logger.info("   • Smart distance monitoring (1km checks)")
     logger.info("   • Manager approval workflows")
     logger.info("   • Multi-device session management\n")
+    
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not Config.DEBUG:
+        start_scheduler()
+
     
     app.run(
         host='0.0.0.0',

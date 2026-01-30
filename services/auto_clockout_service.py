@@ -8,7 +8,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Configuration
-AUTO_CLOCKOUT_TIME = time(23, 32, 0)  # 11:15 PM (TESTING) # 6:30 PM
+AUTO_CLOCKOUT_TIME = time(23, 46, 0)  # 11:15 PM (TESTING) # 6:30 PM
 AUTO_CLOCKOUT_LOCATION = "Auto Clock-Out Location"  # Default location
 
 def auto_clockout_all_active_sessions():

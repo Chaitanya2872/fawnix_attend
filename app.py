@@ -462,7 +462,7 @@ def start_scheduler():
     # ✅ Schedule auto clockout at 6:30 PM daily
     scheduler.add_job(
         auto_clockout_job,
-        CronTrigger(hour=18, minute=30),  # 6:30 PM daily
+        CronTrigger(hour=0, minute=25),  # 6:30 PM daily
         id="auto_clockout_job",
         replace_existing=True,
         misfire_grace_time=300  # Allow 5 minutes grace period

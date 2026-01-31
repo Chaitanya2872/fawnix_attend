@@ -517,8 +517,6 @@ if __name__ == '__main__':
     logger.info("   • Auto clock-out at 12:30 AM (TESTING) / 6:30 PM (PRODUCTION)\n")
     
     # Start scheduler (only in main process, not in reloader)
-    if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not Config.DEBUG:
-        start_scheduler()
 
     
     app.run(
@@ -526,3 +524,9 @@ if __name__ == '__main__':
         port=port,
         debug=debug
     )
+    
+if os.environ.get("RUN_SCHEDULER", "true") == "true":
+    try:
+        start_scheduler()
+    except Exception as e:
+        logger.error(f"Failed to start scheduler: {e}")

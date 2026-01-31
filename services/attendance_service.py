@@ -6,6 +6,7 @@ NEW FEATURES:
 ✅ Auto-detects late arrival on clock-in
 ✅ Validates early leave approval before clock-out
 ✅ No more late_arrival/early_leave activities
+✅ Saturday half-day second clock-in automatically recorded as comp-off
 """
 
 from datetime import datetime, timedelta, date
@@ -19,6 +20,26 @@ from services.attendance_exceptions_service import (
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def is_saturday_halfday(check_date: date) -> bool:
+    """
+    Check if given date is a Saturday half-day (1st, 3rd, or 5th Saturday of month)
+    
+    Returns True if date is 1st, 3rd, or 5th Saturday
+    """
+    if check_date.weekday() != 5:  # 5 = Saturday
+        return False
+    
+    # Get the day of month
+    day_of_month = check_date.day
+    
+    # Calculate which Saturday of the month this is
+    # Saturdays fall on: 1-7, 8-14, 15-21, 22-28, 29-31
+    saturday_occurrence = (day_of_month - 1) // 7 + 1
+    
+    # Saturday half-days are 1st, 3rd, 5th Saturdays
+    return saturday_occurrence in [1, 3, 5]
 
 
 def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
@@ -53,8 +74,26 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
                 }
             }, 400)
 
-        # ✅ Normal clock-in flow
+        # ✅ Check for Saturday half-day second clock-in (Comp-off)
         login_time = datetime.now()
+        login_date = login_time.date()
+        
+        if is_saturday_halfday(login_date):
+            # Check if already has a clocked-out session today
+            cursor.execute("""
+                SELECT id, login_time, logout_time, working_hours
+                FROM attendance
+                WHERE employee_email = %s AND date = %s AND logout_time IS NOT NULL
+                LIMIT 1
+            """, (emp_email, login_date))
+            
+            previous_session = cursor.fetchone()
+            
+            if previous_session:
+                # This is a second clock-in on Saturday half-day - should be recorded as comp-off
+                logger.info(f"📅 Saturday half-day detected for {emp_email} - Second clock-in will be recorded as comp-off")
+        
+        # ✅ Normal clock-in flow
         
         cursor.execute("""
             INSERT INTO attendance (
@@ -78,6 +117,29 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
         
         emp_result = cursor.fetchone()
         emp_code = emp_result['emp_code'] if emp_result else None
+        
+        # ✅ Check if this is second clock-in on Saturday half-day for comp-off
+        is_halfday_compoff = False
+        if is_saturday_halfday(login_date):
+            cursor.execute("""
+                SELECT id, login_time, logout_time, working_hours
+                FROM attendance
+                WHERE employee_email = %s AND date = %s AND logout_time IS NOT NULL
+                LIMIT 1
+            """, (emp_email, login_date))
+            
+            previous_session = cursor.fetchone()
+            
+            if previous_session:
+                # Mark this attendance as comp-off session
+                cursor.execute("""
+                    UPDATE attendance
+                    SET is_compoff_session = true
+                    WHERE id = %s
+                """, (attendance_id,))
+                
+                is_halfday_compoff = True
+                logger.info(f"📅 Saturday half-day comp-off session registered: {emp_email}")
         
         conn.commit()
         
@@ -104,7 +166,10 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
                 logger.warning(f"🚨 Late arrival detected: {emp_email} - {late_arrival_info['late_by_minutes']} minutes")
         
         message = "Clock in successful"
-        if late_arrival_info:
+        if is_halfday_compoff:
+            message = "✨ Saturday half-day comp-off session started"
+            response_data['is_compoff_session'] = True
+        elif late_arrival_info:
             message += f". You are {late_arrival_info['late_by_minutes']} minutes late."
         
         return ({

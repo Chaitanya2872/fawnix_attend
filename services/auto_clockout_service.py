@@ -16,8 +16,46 @@ logger = logging.getLogger(__name__)
 # ==========================================
 # ✅ FIXED: Configuration
 # ==========================================
-AUTO_CLOCKOUT_TIME = time(7, 45, 0)  # 12:30 AM (TESTING) - Change to time(18, 30, 0) for 6:30 PM production
+WEEKDAY_CLOCKOUT_TIME = time(18, 30, 0)  # 6:30 PM (Mon-Fri)
+SATURDAY_HALFDAY_CLOCKOUT_TIME = time(13, 0, 0)  # 1:00 PM (Saturday half-days)
 AUTO_CLOCKOUT_LOCATION = "Auto Clock-Out Location"  # Default location
+
+# Saturday half-day configuration
+# 1st, 3rd, 5th Saturday are half days
+SATURDAY_HALFDAY_WEEKENDS = [1, 3, 5]  # 1st, 3rd, 5th occurrence
+
+
+def is_saturday_halfday(check_date: date) -> bool:
+    """
+    Check if given date is a Saturday half-day (1st, 3rd, or 5th Saturday of month)
+    
+    Returns True if date is 1st, 3rd, or 5th Saturday
+    """
+    if check_date.weekday() != 5:  # 5 = Saturday
+        return False
+    
+    # Get the day of month
+    day_of_month = check_date.day
+    
+    # Calculate which Saturday of the month this is
+    # Saturdays fall on: 1-7, 8-14, 15-21, 22-28, 29-31
+    saturday_occurrence = (day_of_month - 1) // 7 + 1
+    
+    return saturday_occurrence in SATURDAY_HALFDAY_WEEKENDS
+
+
+def get_auto_clockout_time(check_date: date) -> time:
+    """
+    Get the appropriate auto-clockout time based on day of week
+    
+    Returns:
+        time object: 6:30 PM for weekdays, 1:00 PM for Saturday half-days
+    """
+    if is_saturday_halfday(check_date):
+        logger.info(f"📅 {check_date.strftime('%A, %B %d')} is Saturday half-day - Using {SATURDAY_HALFDAY_CLOCKOUT_TIME.strftime('%H:%M')} auto-clockout")
+        return SATURDAY_HALFDAY_CLOCKOUT_TIME
+    else:
+        return WEEKDAY_CLOCKOUT_TIME
 
 def auto_clockout_all_active_sessions():
     """
@@ -37,16 +75,20 @@ def auto_clockout_all_active_sessions():
         current_time = datetime.now()
         current_date = current_time.date()
         
-        logger.info(f"⏰ Auto clock-out job running at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        logger.info(f"⏰ Configured auto-clockout time: {AUTO_CLOCKOUT_TIME}")
-        logger.info(f"⏰ Current time: {current_time.time()}")
+        # ✅ Get the appropriate auto-clockout time for this date
+        auto_clockout_time = get_auto_clockout_time(current_date)
         
-        # Only run if current time is past configured AUTO_CLOCKOUT_TIME
-        if current_time.time() < AUTO_CLOCKOUT_TIME:
-            logger.info(f"⏰ Auto clock-out skipped - current time {current_time.time()} is before {AUTO_CLOCKOUT_TIME}")
+        logger.info(f"⏰ Auto clock-out job running at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"⏰ Today: {current_date.strftime('%A, %B %d, %Y')}")
+        logger.info(f"⏰ Configured auto-clockout time: {auto_clockout_time.strftime('%H:%M:%S')}")
+        logger.info(f"⏰ Current time: {current_time.time().strftime('%H:%M:%S')}")
+        
+        # Only run if current time is past configured auto_clockout_time
+        if current_time.time() < auto_clockout_time:
+            logger.info(f"⏰ Auto clock-out skipped - current time {current_time.time().strftime('%H:%M:%S')} is before {auto_clockout_time.strftime('%H:%M:%S')}")
             return {
                 "success": False,
-                "message": f"Auto clock-out only runs after {AUTO_CLOCKOUT_TIME.strftime('%H:%M:%S')}",
+                "message": f"Auto clock-out only runs after {auto_clockout_time.strftime('%H:%M:%S')}",
                 "auto_clocked_out": 0
             }
         
@@ -94,8 +136,8 @@ def auto_clockout_all_active_sessions():
                 
                 logger.info(f"🔄 Processing auto clock-out for {emp_email} (attendance_id: {attendance_id})")
                 
-                # Set logout time to configured AUTO_CLOCKOUT_TIME
-                logout_datetime = datetime.combine(current_date, AUTO_CLOCKOUT_TIME)
+                # Set logout time to configured auto_clockout_time
+                logout_datetime = datetime.combine(current_date, auto_clockout_time)
                 
                 # Use login location for logout (same as login)
                 logout_location = session.get('login_location', '')
@@ -162,11 +204,9 @@ def auto_clockout_all_active_sessions():
                     logout_address,
                     round(working_hours, 2),
                     'logged_out',
-                    f'Auto clocked-out at {AUTO_CLOCKOUT_TIME.strftime("%H:%M:%S")}',
+                    f'Auto clocked-out at {auto_clockout_time.strftime("%H:%M:%S")}',
                     attendance_id
                 ))
-                
-                logger.info(f"  ✅ Updated attendance record")
                 
                 # ✅ Calculate comp-off if eligible
                 comp_off_result = None

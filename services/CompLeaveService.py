@@ -111,7 +111,7 @@ def get_shift_hours(emp_code: str) -> Tuple[Optional[float], Optional[float]]:
     s.shift_start_time,
     s.shift_end_time
 FROM employees e
-JOIN shifts s ON e.shift_id = s.id
+JOIN shifts s ON e.emp_shift_id = s.shift_id
 WHERE e.emp_code = %s;
         """, (emp_code,))
         

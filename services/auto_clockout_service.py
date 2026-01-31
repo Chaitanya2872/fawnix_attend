@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # ==========================================
 # ✅ FIXED: Configuration
 # ==========================================
-AUTO_CLOCKOUT_TIME = time(7, 5, 0)  # 12:30 AM (TESTING) - Change to time(18, 30, 0) for 6:30 PM production
+AUTO_CLOCKOUT_TIME = time(7, 45, 0)  # 12:30 AM (TESTING) - Change to time(18, 30, 0) for 6:30 PM production
 AUTO_CLOCKOUT_LOCATION = "Auto Clock-Out Location"  # Default location
 
 def auto_clockout_all_active_sessions():

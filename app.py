@@ -481,7 +481,7 @@ def start_scheduler():
     # Change to hour=18, minute=30 for 6:30 PM production
     scheduler.add_job(
         auto_clockout_job,
-        CronTrigger(hour=7, minute=5),  # 12:30 AM daily (TESTING)
+        CronTrigger(hour=7, minute=45),  # 12:30 AM daily (TESTING)
         id="auto_clockout_job",
         replace_existing=True,
         misfire_grace_time=300  # Allow 5 minutes grace period

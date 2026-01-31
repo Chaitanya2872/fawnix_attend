@@ -364,10 +364,15 @@ def end_activity(activity_id: int, lat: str, lon: str):
         
         # Include destinations if available
         if activity.get('destinations'):
-            try:
-                response_data['destinations'] = json.loads(activity['destinations'])
-            except:
-                pass
+            dests = activity['destinations']
+            # Support both JSON string (from DB) and already-parsed list
+            if isinstance(dests, str):
+                try:
+                    response_data['destinations'] = json.loads(dests)
+                except Exception:
+                    response_data['destinations'] = dests
+            else:
+                response_data['destinations'] = dests
         
         return ({
             "success": True,

@@ -107,14 +107,12 @@ def get_shift_hours(emp_code: str) -> Tuple[Optional[float], Optional[float]]:
     
     try:
         cursor.execute("""
-            SELECT 
-                e.shift_start_time,
-                e.shift_end_time,
-                s.shift_start_time as default_shift_start,
-                s.shift_end_time as default_shift_end
-            FROM employees e
-            LEFT JOIN shifts s ON e.emp_shift_id = s.shift_id
-            WHERE e.emp_code = %s
+            SELECT
+    s.shift_start_time,
+    s.shift_end_time
+FROM employees e
+JOIN shifts s ON e.shift_id = s.id
+WHERE e.emp_code = %s;
         """, (emp_code,))
         
         result = cursor.fetchone()

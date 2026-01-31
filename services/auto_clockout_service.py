@@ -1,7 +1,7 @@
 # services/auto_clockout_service.py
 """
 Auto Clock-out Service
-Automatically clocks out employees at shift end time (6:30 PM)
+Automatically clocks out employees at shift end time
 Includes activity/field visit cleanup and comp-off calculation
 """
 
@@ -16,12 +16,12 @@ logger = logging.getLogger(__name__)
 # ==========================================
 # ✅ FIXED: Configuration
 # ==========================================
-AUTO_CLOCKOUT_TIME = time(0, 25, 0)  # 6:30 PM (PRODUCTION)
+AUTO_CLOCKOUT_TIME = time(6, 18, 0)  # 12:30 AM (TESTING) - Change to time(18, 30, 0) for 6:30 PM production
 AUTO_CLOCKOUT_LOCATION = "Auto Clock-Out Location"  # Default location
 
 def auto_clockout_all_active_sessions():
     """
-    Scheduled job that auto clocks out all employees who are still logged in after 6:30 PM
+    Scheduled job that auto clocks out all employees who are still logged in after configured time
     
     Features:
     - Auto-closes all active activities
@@ -37,12 +37,16 @@ def auto_clockout_all_active_sessions():
         current_time = datetime.now()
         current_date = current_time.date()
         
-        # Only run if current time is past 6:30 PM
+        logger.info(f"⏰ Auto clock-out job running at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"⏰ Configured auto-clockout time: {AUTO_CLOCKOUT_TIME}")
+        logger.info(f"⏰ Current time: {current_time.time()}")
+        
+        # Only run if current time is past configured AUTO_CLOCKOUT_TIME
         if current_time.time() < AUTO_CLOCKOUT_TIME:
             logger.info(f"⏰ Auto clock-out skipped - current time {current_time.time()} is before {AUTO_CLOCKOUT_TIME}")
             return {
                 "success": False,
-                "message": "Auto clock-out only runs after 6:30 PM",
+                "message": f"Auto clock-out only runs after {AUTO_CLOCKOUT_TIME.strftime('%H:%M:%S')}",
                 "auto_clocked_out": 0
             }
         
@@ -63,10 +67,11 @@ def auto_clockout_all_active_sessions():
             LEFT JOIN shifts s ON e.emp_shift_id = s.shift_id
             WHERE a.logout_time IS NULL
               AND a.date = %s
-              AND a.login_time::time < %s
-        """, (current_date, AUTO_CLOCKOUT_TIME))
+        """, (current_date,))
         
         active_sessions = cursor.fetchall()
+        
+        logger.info(f"📊 Found {len(active_sessions) if active_sessions else 0} active sessions")
         
         if not active_sessions:
             logger.info("✅ No active sessions to auto clock-out")
@@ -87,7 +92,9 @@ def auto_clockout_all_active_sessions():
                 login_time = session['login_time']
                 work_date = session['date']
                 
-                # Set logout time to 6:30 PM
+                logger.info(f"🔄 Processing auto clock-out for {emp_email} (attendance_id: {attendance_id})")
+                
+                # Set logout time to configured AUTO_CLOCKOUT_TIME
                 logout_datetime = datetime.combine(current_date, AUTO_CLOCKOUT_TIME)
                 
                 # Use login location for logout (same as login)
@@ -95,14 +102,17 @@ def auto_clockout_all_active_sessions():
                 
                 # ✅ FIXED: Parse coordinates correctly
                 coords = logout_location.split(', ') if logout_location else ['', '']
-                lat = coords[0] if len(coords) > 0 else ''  # ✅ Fixed: was just 'coords'
-                lon = coords[1] if len(coords) > 1 else ''  # ✅ Fixed: was just 'coords'
+                lat = coords[0] if len(coords) > 0 else ''
+                lon = coords[1] if len(coords) > 1 else ''
                 
                 logout_address = get_address_from_coordinates(lat, lon) if lat and lon else AUTO_CLOCKOUT_LOCATION
                 
                 # Calculate working hours
                 duration = logout_datetime - login_time
                 working_hours = duration.total_seconds() / 3600
+                
+                logger.info(f"  📍 Logout location: {logout_location}")
+                logger.info(f"  ⏱️  Working hours: {working_hours:.2f}h")
                 
                 # 🧹 AUTO-CLEANUP: End all active activities
                 cursor.execute("""
@@ -117,6 +127,7 @@ def auto_clockout_all_active_sessions():
                 """, (logout_datetime, logout_datetime, attendance_id))
                 
                 activities_closed = cursor.rowcount
+                logger.info(f"  🧹 Closed {activities_closed} active activities")
                 
                 # 🧹 AUTO-CLEANUP: End all active field visits
                 cursor.execute("""
@@ -131,6 +142,7 @@ def auto_clockout_all_active_sessions():
                 """, (logout_datetime, logout_datetime, attendance_id))
                 
                 field_visits_closed = cursor.rowcount
+                logger.info(f"  🧹 Closed {field_visits_closed} active field visits")
                 
                 # Update attendance record with auto clock-out flag
                 cursor.execute("""
@@ -150,9 +162,11 @@ def auto_clockout_all_active_sessions():
                     logout_address,
                     round(working_hours, 2),
                     'logged_out',
-                    'Auto clocked-out at shift end time (6:30 PM)',
+                    f'Auto clocked-out at {AUTO_CLOCKOUT_TIME.strftime("%H:%M:%S")}',
                     attendance_id
                 ))
+                
+                logger.info(f"  ✅ Updated attendance record")
                 
                 # ✅ Calculate comp-off if eligible
                 comp_off_result = None
@@ -166,8 +180,9 @@ def auto_clockout_all_active_sessions():
                             work_date=work_date,
                             working_hours=round(working_hours, 2)
                         )
+                        logger.info(f"  💰 Comp-off calculated: {comp_off_result.get('comp_off_days', 0)} days")
                     except Exception as e:
-                        logger.error(f"⚠️ Comp-off calculation failed for {emp_email}: {e}")
+                        logger.error(f"  ⚠️ Comp-off calculation failed for {emp_email}: {e}")
                 
                 auto_clocked_out.append({
                     "attendance_id": attendance_id,

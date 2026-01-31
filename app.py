@@ -1,7 +1,7 @@
 """
 Employee Management System - Monolithic Application
 Main Flask Application Entry Point
-FIXED: Proper auto clockout integration
+FIXED: Proper auto clockout integration with 12:30 AM testing schedule
 """
 
 from flask import Flask, jsonify
@@ -90,23 +90,36 @@ def auto_clockout_job():
     """
     from services.auto_clockout_service import auto_clockout_all_active_sessions
     
-    logger.info("⏰ Auto clockout job triggered")
+    logger.info("=" * 80)
+    logger.info("⏰ AUTO CLOCKOUT JOB TRIGGERED")
+    logger.info(f"⏰ Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("=" * 80)
     
     try:
         # Call the proper service function
         result = auto_clockout_all_active_sessions()
         
         if result['success']:
-            logger.info(f"✅ {result['message']} - {result['auto_clocked_out']} employees")
+            logger.info(f"✅ AUTO CLOCKOUT SUCCESS: {result['message']}")
+            logger.info(f"📊 Employees processed: {result['auto_clocked_out']}")
+            if result.get('details'):
+                for detail in result['details']:
+                    logger.info(f"   • {detail['employee_name']} ({detail['employee_email']})")
+                    logger.info(f"     Working hours: {detail['working_hours']}h")
+                    logger.info(f"     Activities closed: {detail['activities_closed']}")
+                    logger.info(f"     Field visits closed: {detail['field_visits_closed']}")
         else:
-            logger.warning(f"⚠️ {result['message']}")
-            
+            logger.warning(f"⚠️ AUTO CLOCKOUT SKIPPED: {result['message']}")
+        
+        logger.info("=" * 80)
         return result
         
     except Exception as e:
-        logger.error(f"❌ Auto clockout job failed: {e}")
+        logger.error("=" * 80)
+        logger.error(f"❌ AUTO CLOCKOUT JOB FAILED: {e}")
         import traceback
         logger.error(traceback.format_exc())
+        logger.error("=" * 80)
         return {
             "success": False,
             "message": str(e),
@@ -169,6 +182,11 @@ def health_check():
                 'distance_monitoring': 'active',
                 'activity_approvals': 'active',
                 'auto_clockout': 'active'
+            },
+            'auto_clockout': {
+                'enabled': True,
+                'schedule': '12:30 AM daily (TESTING)',
+                'production_schedule': '6:30 PM daily'
             }
         }), 200
     except Exception as e:
@@ -269,8 +287,8 @@ def api_docs():
                 'endpoints': ['/api/approvals/late-arrival/request', '/api/approvals/approve']
             },
             'auto_clockout': {
-                'description': 'Automatic clock-out at 6:30 PM with activity cleanup and comp-off calculation',
-                'schedule': 'Daily at 6:30 PM IST',
+                'description': 'Automatic clock-out with activity cleanup and comp-off calculation',
+                'schedule': '12:30 AM daily (TESTING) - 6:30 PM (PRODUCTION)',
                 'features': [
                     'Auto-closes all active activities',
                     'Auto-closes all active field visits',
@@ -337,9 +355,9 @@ def features():
                 },
                 {
                     'name': 'Auto Clock-out',
-                    'description': 'Automatic clock-out at 6:30 PM with cleanup',
+                    'description': 'Automatic clock-out with cleanup',
                     'status': 'active',
-                    'schedule': 'Daily at 6:30 PM IST',
+                    'schedule': '12:30 AM daily (TESTING) - 6:30 PM (PRODUCTION)',
                     'features': [
                         'Activity cleanup',
                         'Field visit cleanup',
@@ -379,7 +397,7 @@ with app.app_context():
     logger.info("  ✓ Location Reports (Daily/Weekly)")
     logger.info("  ✓ Distance Monitoring (Smart 1km checks)")
     logger.info("  ✓ Activity Approvals (Late Arrival/Early Leave)")
-    logger.info("  ✓ Auto Clock-out (6:30 PM with cleanup)")
+    logger.info("  ✓ Auto Clock-out (12:30 AM TESTING / 6:30 PM PRODUCTION)")
     
     logger.info("\n🔧 Initializing database...")
     try:
@@ -455,22 +473,26 @@ def start_scheduler():
     """
     Initialize and start the APScheduler for auto clockout
     
-    ✅ FIXED: Now runs at 6:30 PM daily instead of every 5 minutes
+    ✅ FIXED: Now runs at 12:30 AM daily for testing (6:30 PM for production)
     """
     scheduler = BackgroundScheduler(timezone="Asia/Kolkata")
 
-    # ✅ Schedule auto clockout at 6:30 PM daily
+    # ✅ Schedule auto clockout at 12:30 AM daily (TESTING)
+    # Change to hour=18, minute=30 for 6:30 PM production
     scheduler.add_job(
         auto_clockout_job,
-        CronTrigger(hour=0, minute=25),  # 6:30 PM daily
+        CronTrigger(hour=6, minute=18),  # 12:30 AM daily (TESTING)
         id="auto_clockout_job",
         replace_existing=True,
         misfire_grace_time=300  # Allow 5 minutes grace period
     )
 
     scheduler.start()
-    logger.info("🟢 APScheduler started")
-    logger.info("⏰ Auto clockout scheduled: Daily at 6:30 PM IST")
+    logger.info("=" * 80)
+    logger.info("🟢 APScheduler started successfully")
+    logger.info("⏰ Auto clockout scheduled: Daily at 12:30 AM IST (TESTING)")
+    logger.info("⚠️  For PRODUCTION, change to: hour=18, minute=30 (6:30 PM)")
+    logger.info("=" * 80)
 
 
 if __name__ == '__main__':
@@ -492,7 +514,7 @@ if __name__ == '__main__':
     logger.info("   • Smart distance monitoring (1km checks)")
     logger.info("   • Manager approval workflows")
     logger.info("   • Multi-device session management")
-    logger.info("   • Auto clock-out at 6:30 PM with cleanup\n")
+    logger.info("   • Auto clock-out at 12:30 AM (TESTING) / 6:30 PM (PRODUCTION)\n")
     
     # Start scheduler (only in main process, not in reloader)
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not Config.DEBUG:

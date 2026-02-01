@@ -291,23 +291,28 @@ def clock_out(emp_email: str, lat: str, lon: str):
                 # If clocking out before shift end time
                 if current_time < shift_end:
                     logger.info(f"⚠️ Early clock-out detected for {emp_email}")
-                    
-                    # Check for early leave approval
-                    is_approved, approval_message = check_early_leave_approval(attendance_id)
-                    
-                    if not is_approved:
-                        return ({
-                            "success": False,
-                            "message": f"Early clock-out not allowed. {approval_message}",
-                            "data": {
-                                "current_time": current_time.strftime('%H:%M'),
-                                "shift_end_time": shift_end.strftime('%H:%M'),
-                                "early_by_minutes": int((datetime.combine(datetime.today(), shift_end) - 
-                                                   datetime.combine(datetime.today(), current_time)).total_seconds() / 60)
-                            }
-                        }, 403)
-                    
-                    logger.info(f"✅ Early leave approved for {emp_email}")
+
+                    # If this attendance is a comp-off session, allow clock-out at any time
+                    is_compoff = record.get('is_compoff_session') or record.get('is_compoff')
+                    if is_compoff:
+                        logger.info(f"✅ Comp-off session - early clock-out allowed for {emp_email}")
+                    else:
+                        # Check for early leave approval
+                        is_approved, approval_message = check_early_leave_approval(attendance_id)
+
+                        if not is_approved:
+                            return ({
+                                "success": False,
+                                "message": f"Early clock-out not allowed. {approval_message}",
+                                "data": {
+                                    "current_time": current_time.strftime('%H:%M'),
+                                    "shift_end_time": shift_end.strftime('%H:%M'),
+                                    "early_by_minutes": int((datetime.combine(datetime.today(), shift_end) - 
+                                                       datetime.combine(datetime.today(), current_time)).total_seconds() / 60)
+                                }
+                            }, 403)
+
+                        logger.info(f"✅ Early leave approved for {emp_email}")
         
         # 🧹 AUTO-CLEANUP: End all active activities
         cursor.execute("""

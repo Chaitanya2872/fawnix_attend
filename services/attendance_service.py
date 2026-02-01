@@ -292,10 +292,18 @@ def clock_out(emp_email: str, lat: str, lon: str):
                 if current_time < shift_end:
                     logger.info(f"⚠️ Early clock-out detected for {emp_email}")
 
-                    # If this attendance is a comp-off session, allow clock-out at any time
-                    is_compoff = record.get('is_compoff_session') or record.get('is_compoff')
+                    # If this attendance is a comp-off session, or the work day is a non-working day,
+                    # allow early clock-out at any time
+                    wd = work_date
+                    if isinstance(wd, str):
+                        try:
+                            wd = datetime.strptime(wd, '%Y-%m-%d').date()
+                        except Exception:
+                            wd = work_date
+
+                    is_compoff = record.get('is_compoff_session') or record.get('is_compoff') or (not is_working_day(wd, emp_code))
                     if is_compoff:
-                        logger.info(f"✅ Comp-off session - early clock-out allowed for {emp_email}")
+                        logger.info(f"✅ Comp-off session or non-working day - early clock-out allowed for {emp_email}")
                     else:
                         # Check for early leave approval
                         is_approved, approval_message = check_early_leave_approval(attendance_id)

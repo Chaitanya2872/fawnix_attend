@@ -182,6 +182,26 @@ def calculate_and_record_compoff(attendance_id: int, emp_code: str,
             # Non-working day (weekend/holiday): FIRST clock-in itself eligible
             logger.info(f"✅ Non-working day ({work_date.strftime('%A')}) - First clock-in eligible for comp-off")
         
+        # ✅ Fetch existing overtime records for this employee
+        cursor.execute("""
+            SELECT id, overtime_id, comp_off_days, status, expires_at
+            FROM overtime_records
+            WHERE emp_code = %s 
+              AND status IN ('eligible', 'approved')
+              AND expires_at > NOW()
+            ORDER BY work_date DESC
+            LIMIT 10
+        """, (emp_code,))
+        
+        existing_records = cursor.fetchall()
+        
+        if existing_records:
+            logger.info(f"📊 Found {len(existing_records)} existing overtime records for {emp_email}")
+            for rec in existing_records:
+                logger.info(f"   - Overtime ID: {rec['id']}, Comp-off: {rec['comp_off_days']} days, Status: {rec['status']}, Expires: {rec['expires_at']}")
+        else:
+            logger.info(f"📊 No existing overtime records found for {emp_email}")
+        
         # ✅ Get shift hours to calculate standard working hours
         shift_start, shift_end = get_shift_hours(emp_code)
         if shift_start and shift_end:
@@ -246,7 +266,17 @@ def calculate_and_record_compoff(attendance_id: int, emp_code: str,
             "overtime_id": overtime_id,
             "comp_off_days": comp_off_days,
             "extra_hours": extra_hours,
-            "expires_at": expires_at.strftime('%Y-%m-%d')
+            "expires_at": expires_at.strftime('%Y-%m-%d'),
+            "existing_overtime_records": len(existing_records),
+            "eligible_records": [
+                {
+                    "overtime_id": rec['id'],
+                    "comp_off_days": rec['comp_off_days'],
+                    "status": rec['status'],
+                    "expires_at": rec['expires_at'].strftime('%Y-%m-%d') if isinstance(rec['expires_at'], date) else str(rec['expires_at'])
+                }
+                for rec in existing_records
+            ] if existing_records else []
         }
         
     except Exception as e:

@@ -156,14 +156,16 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
             }
         }
         
-        # ✅ NEW: Auto-detect late arrival
+        # ✅ Skip late arrival detection for comp-off sessions
         late_arrival_info = None
-        if emp_code:
+        if not is_halfday_compoff and emp_code:
             late_arrival_info = auto_detect_late_arrival(emp_code, attendance_id, login_time)
             
             if late_arrival_info:
                 response_data['late_arrival'] = late_arrival_info
                 logger.warning(f"🚨 Late arrival detected: {emp_email} - {late_arrival_info['late_by_minutes']} minutes")
+        elif is_halfday_compoff:
+            logger.info(f"✅ Late arrival check skipped for comp-off session: {emp_email}")
         
         message = "Clock in successful"
         if is_halfday_compoff:

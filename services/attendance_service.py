@@ -6,13 +6,14 @@ NEW FEATURES:
 ✅ Auto-detects late arrival on clock-in
 ✅ Validates early leave approval before clock-out
 ✅ No more late_arrival/early_leave activities
-✅ Saturday half-day second clock-in automatically recorded as comp-off
+✅ Second clock-in on any non-working day automatically recorded as comp-off
+  (holidays, Sundays, 2nd/4th Saturdays, and 1st/3rd/5th Saturdays)
 """
 
 from datetime import datetime, timedelta, date
 from database.connection import get_db_connection
 from services.geocoding_service import get_address_from_coordinates
-from services.CompLeaveService import calculate_and_record_compoff
+from services.CompLeaveService import calculate_and_record_compoff, is_working_day
 from services.attendance_exceptions_service import (
     auto_detect_late_arrival,
     check_early_leave_approval
@@ -20,26 +21,6 @@ from services.attendance_exceptions_service import (
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def is_saturday_halfday(check_date: date) -> bool:
-    """
-    Check if given date is a Saturday half-day (1st, 3rd, or 5th Saturday of month)
-    
-    Returns True if date is 1st, 3rd, or 5th Saturday
-    """
-    if check_date.weekday() != 5:  # 5 = Saturday
-        return False
-    
-    # Get the day of month
-    day_of_month = check_date.day
-    
-    # Calculate which Saturday of the month this is
-    # Saturdays fall on: 1-7, 8-14, 15-21, 22-28, 29-31
-    saturday_occurrence = (day_of_month - 1) // 7 + 1
-    
-    # Saturday half-days are 1st, 3rd, 5th Saturdays
-    return saturday_occurrence in [1, 3, 5]
 
 
 def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
@@ -74,11 +55,25 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
                 }
             }, 400)
 
-        # ✅ Check for Saturday half-day second clock-in (Comp-off)
+        # ✅ Check for NON-WORKING day second clock-in (Comp-off)
+        # Non-working days: Sundays, Holidays, 2nd/4th Saturdays
         login_time = datetime.now()
         login_date = login_time.date()
         
-        if is_saturday_halfday(login_date):
+        # Get emp_code first for working day check
+        cursor.execute("""
+            SELECT emp_code FROM employees WHERE emp_email = %s
+        """, (emp_email,))
+        
+        emp_result = cursor.fetchone()
+        emp_code = emp_result['emp_code'] if emp_result else None
+        
+        # Check if it's a non-working day
+        is_nonworking = False
+        if emp_code:
+            is_nonworking = not is_working_day(login_date, emp_code)
+        
+        if is_nonworking:
             # Check if already has a clocked-out session today
             cursor.execute("""
                 SELECT id, login_time, logout_time, working_hours
@@ -90,8 +85,20 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
             previous_session = cursor.fetchone()
             
             if previous_session:
-                # This is a second clock-in on Saturday half-day - should be recorded as comp-off
-                logger.info(f"📅 Saturday half-day detected for {emp_email} - Second clock-in will be recorded as comp-off")
+                # On non-working days, only first clock-in is allowed
+                logger.warning(f"❌ Non-working day ({login_date.strftime('%A')}) - Second clock-in not allowed for {emp_email}")
+                return ({
+                    "success": False,
+                    "message": f"On non-working days ({login_date.strftime('%A')}), only ONE clock-in per day is allowed. You already clocked out at {previous_session['logout_time'].strftime('%H:%M:%S')}.",
+                    "data": {
+                        "reason": "non_working_day_single_clockin_only",
+                        "day_type": "non_working_day",
+                        "day_of_week": login_date.strftime('%A'),
+                        "previous_logout_time": previous_session['logout_time'].strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                }, 400)
+            else:
+                logger.info(f"📅 Non-working day ({login_date.strftime('%A')}) detected for {emp_email} - First clock-in allowed, will be eligible for comp-off")
         
         # ✅ Normal clock-in flow
         
@@ -110,36 +117,12 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
         
         attendance_id = cursor.fetchone()['id']
         
-        # Get emp_code for late arrival detection
-        cursor.execute("""
-            SELECT emp_code FROM employees WHERE emp_email = %s
-        """, (emp_email,))
+        # ✅ No need to mark comp-off session on non-working days
+        # First clock-in on non-working days is automatically eligible for comp-off
+        is_compoff_session = is_nonworking  # Mark as comp-off eligible since it's a non-working day
         
-        emp_result = cursor.fetchone()
-        emp_code = emp_result['emp_code'] if emp_result else None
-        
-        # ✅ Check if this is second clock-in on Saturday half-day for comp-off
-        is_halfday_compoff = False
-        if is_saturday_halfday(login_date):
-            cursor.execute("""
-                SELECT id, login_time, logout_time, working_hours
-                FROM attendance
-                WHERE employee_email = %s AND date = %s AND logout_time IS NOT NULL
-                LIMIT 1
-            """, (emp_email, login_date))
-            
-            previous_session = cursor.fetchone()
-            
-            if previous_session:
-                # Mark this attendance as comp-off session
-                cursor.execute("""
-                    UPDATE attendance
-                    SET is_compoff_session = true
-                    WHERE id = %s
-                """, (attendance_id,))
-                
-                is_halfday_compoff = True
-                logger.info(f"📅 Saturday half-day comp-off session registered: {emp_email}")
+        if is_compoff_session:
+            logger.info(f"📅 Non-working day comp-off eligible session registered: {emp_email} on {login_date.strftime('%A')}")
         
         conn.commit()
         
@@ -156,20 +139,20 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
             }
         }
         
-        # ✅ Skip late arrival detection for comp-off sessions
+        # ✅ Skip late arrival detection for comp-off eligible sessions (non-working days)
         late_arrival_info = None
-        if not is_halfday_compoff and emp_code:
+        if not is_compoff_session and emp_code:
             late_arrival_info = auto_detect_late_arrival(emp_code, attendance_id, login_time)
             
             if late_arrival_info:
                 response_data['late_arrival'] = late_arrival_info
                 logger.warning(f"🚨 Late arrival detected: {emp_email} - {late_arrival_info['late_by_minutes']} minutes")
-        elif is_halfday_compoff:
-            logger.info(f"✅ Late arrival check skipped for comp-off session: {emp_email}")
+        elif is_compoff_session:
+            logger.info(f"✅ Late arrival check skipped for non-working day: {emp_email}")
         
         message = "Clock in successful"
-        if is_halfday_compoff:
-            message = "✨ Saturday half-day comp-off session started"
+        if is_compoff_session:
+            message = f"✨ Non-working day ({login_date.strftime('%A')}) - Eligible for comp-off"
             response_data['is_compoff_session'] = True
         elif late_arrival_info:
             message += f". You are {late_arrival_info['late_by_minutes']} minutes late."
@@ -428,6 +411,8 @@ def clock_out(emp_email: str, lat: str, lon: str):
                 "extra_hours": comp_off_result['extra_hours'],
                 "overtime_id": comp_off_result['overtime_id'],
                 "expires_at": comp_off_result['expires_at'],
+                "existing_overtime_records": comp_off_result.get('existing_overtime_records', 0),
+                "eligible_records": comp_off_result.get('eligible_records', []),
                 "message": f"You've earned {comp_off_result['comp_off_days']} day{'s' if comp_off_result['comp_off_days'] > 1 else ''} comp-off!"
             }
         else:

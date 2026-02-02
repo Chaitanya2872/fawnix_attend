@@ -558,7 +558,7 @@ def request_compoff(emp_code: str, overtime_record_ids: List[int],
         
         emp_email = emp['emp_email']
         emp_name = emp['emp_full_name']
-        manager_code = emp['emp_manager_code']
+        manager_code = emp['emp_manager']
         
         # Fetch manager email
         manager_email = None

@@ -291,6 +291,142 @@ def calculate_and_record_compoff(attendance_id: int, emp_code: str,
 
 
 # =========================
+# TRIGGER: Auto-calculate Comp-off on API Call
+# =========================
+
+def trigger_compoff_calculation(emp_code: str) -> Tuple[Dict, int]:
+    """
+    Manually trigger comp-off calculation for an employee
+    Called automatically when overtime records API is accessed
+    
+    This function:
+    1. Finds all attendance records without overtime records
+    2. Calculates comp-off days based on extra hours
+    3. Creates overtime_records entries
+    4. Marks them as eligible for comp-off request
+    
+    Returns: Success status and number of records updated
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Step 1: Find all attendance records for this employee that logged out but have no overtime record
+        cursor.execute("""
+            SELECT 
+                a.id as attendance_id,
+                a.employee_code,
+                a.employee_email,
+                a.employee_name,
+                a.date as work_date,
+                EXTRACT(DOW FROM a.date) as day_of_week,
+                EXTRACT(ISODOW FROM a.date) as iso_day,
+                a.checkin_time,
+                a.checkout_time,
+                EXTRACT(EPOCH FROM (a.checkout_time - a.checkin_time)) / 3600.0 as actual_hours
+            FROM attendance a
+            WHERE a.employee_code = %s
+              AND a.checkout_time IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM overtime_records 
+                  WHERE attendance_id = a.id
+              )
+            ORDER BY a.date DESC
+            LIMIT 100
+        """, (emp_code,))
+        
+        attendance_records = cursor.fetchall()
+        records_created = 0
+        records_updated = 0
+        
+        for att_rec in attendance_records:
+            work_date = att_rec['work_date']
+            actual_hours = att_rec['actual_hours'] or 0
+            
+            # Step 2: Check if it's a working day
+            is_working = is_working_day(work_date, emp_code)
+            
+            # Step 3: Get standard shift hours for this employee
+            shift_info = get_shift_hours(emp_code)
+            standard_hours = shift_info[0] or 8.0
+            
+            # Calculate extra hours
+            extra_hours = max(0, actual_hours - standard_hours)
+            
+            # Step 4: Calculate comp-off days based on extra hours
+            if extra_hours >= COMPOFF_THRESHOLD_FULL_DAY:  # >= 6 hours
+                comp_off_days = 1.0
+            elif extra_hours >= COMPOFF_THRESHOLD_HALF_DAY:  # >= 3 hours
+                comp_off_days = 0.5
+            else:
+                comp_off_days = 0.0
+            
+            # Step 5: Only create overtime record if on a working day with extra hours
+            if is_working and comp_off_days > 0:
+                expires_at = work_date + timedelta(days=COMPOFF_EXPIRY_DAYS)
+                recording_deadline = work_date + timedelta(days=COMPOFF_RECORDING_WINDOW_DAYS)
+                
+                # Check if overtime record already exists
+                cursor.execute("""
+                    SELECT id FROM overtime_records 
+                    WHERE attendance_id = %s
+                    LIMIT 1
+                """, (att_rec['attendance_id'],))
+                
+                if not cursor.fetchone():
+                    # Create new overtime record
+                    cursor.execute("""
+                        INSERT INTO overtime_records (
+                            emp_code, emp_email, emp_name,
+                            attendance_id, work_date, day_of_week,
+                            standard_hours, actual_hours, extra_hours,
+                            comp_off_days, status,
+                            expires_at, recording_deadline,
+                            created_at, updated_at
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    """, (
+                        att_rec['employee_code'],
+                        att_rec['employee_email'],
+                        att_rec['employee_name'],
+                        att_rec['attendance_id'],
+                        work_date,
+                        att_rec['day_of_week'],
+                        standard_hours,
+                        actual_hours,
+                        extra_hours,
+                        comp_off_days,
+                        'eligible',
+                        expires_at,
+                        recording_deadline
+                    ))
+                    records_created += 1
+        
+        conn.commit()
+        
+        return ({
+            "success": True,
+            "message": f"Comp-off trigger executed successfully",
+            "data": {
+                "employee_code": emp_code,
+                "records_created": records_created,
+                "records_processed": len(attendance_records)
+            }
+        }, 200)
+        
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"❌ Error triggering comp-off calculation for {emp_code}: {e}")
+        return ({
+            "success": False,
+            "message": f"Error during comp-off trigger: {str(e)}"
+        }, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =========================
 # GET: Overtime Records
 # =========================
 

@@ -6,6 +6,7 @@ API endpoints for overtime tracking and comp-off management
 from flask import Blueprint, request, jsonify
 from middleware.auth_middleware import token_required
 from services.CompLeaveService import (
+    trigger_compoff_calculation,
     get_employee_overtime_records,
     request_compoff,
     get_my_compoff_requests,
@@ -23,6 +24,11 @@ def overtime_records(current_user):
     """
     Get employee's overtime records
     
+    AUTOMATICALLY TRIGGERS: Comp-off calculation on every API call
+    - Scans recent attendance records
+    - Calculates comp-off days based on extra hours
+    - Creates overtime records if missing
+    
     Query Params:
     - status: eligible, requested, approved, rejected, expired, utilized (optional)
     - limit: number of records (default: 50)
@@ -30,9 +36,15 @@ def overtime_records(current_user):
     Returns:
     - List of overtime records with comp-off days
     - Summary of eligible, pending, and approved comp-offs
+    - Trigger execution summary
     
     Example: /api/compoff/overtime-records?status=eligible&limit=20
     """
+    # STEP 1: TRIGGER comp-off calculation automatically
+    trigger_result = trigger_compoff_calculation(current_user['emp_code'])
+    trigger_data = trigger_result[0] if trigger_result[1] == 200 else None
+    
+    # STEP 2: Get overtime records after trigger
     status = request.args.get('status')
     limit = request.args.get('limit', 50, type=int)
     
@@ -42,7 +54,13 @@ def overtime_records(current_user):
         limit
     )
     
-    return jsonify(result[0]), result[1]
+    # STEP 3: Merge trigger info with records response
+    response_data = result[0]
+    if trigger_data and 'data' in response_data:
+        response_data['data']['trigger_info'] = trigger_data.get('data', {})
+    
+    return jsonify(response_data), result[1]
+
 
 
 @compoff_bp.route('/request', methods=['POST'])

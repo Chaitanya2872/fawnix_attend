@@ -548,7 +548,7 @@ def request_compoff(emp_code: str, overtime_record_ids: List[int],
         
         # ✅ Fetch employee info
         cursor.execute("""
-            SELECT emp_email, emp_full_name, emp_manager_code
+            SELECT emp_email, emp_full_name, emp_manager
             FROM employees WHERE emp_code = %s
         """, (emp_code,))
         

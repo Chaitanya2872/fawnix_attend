@@ -121,6 +121,24 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
         # First clock-in on non-working days is automatically eligible for comp-off
         is_compoff_session = is_nonworking  # Mark as comp-off eligible since it's a non-working day
         
+        # On working days, comp-off starts from SECOND completed session in the same date
+        if not is_compoff_session and emp_code:
+            cursor.execute("""
+                SELECT COUNT(*) as cnt
+                FROM attendance
+                WHERE employee_email = %s AND date = %s AND logout_time IS NOT NULL
+            """, (emp_email, login_date))
+            count_row = cursor.fetchone()
+            prev_completed = int(count_row['cnt'] or 0) if count_row else 0
+            if prev_completed >= 1:
+                # Mark this new session as comp-off session
+                cursor.execute("""
+                    UPDATE attendance SET is_compoff_session = TRUE
+                    WHERE id = %s
+                """, (attendance_id,))
+                is_compoff_session = True
+                logger.info(f"📅 Working day second session -> comp-off eligible: {emp_email} on {login_date.strftime('%A')}")
+        
         if is_compoff_session:
             logger.info(f"📅 Non-working day comp-off eligible session registered: {emp_email} on {login_date.strftime('%A')}")
         

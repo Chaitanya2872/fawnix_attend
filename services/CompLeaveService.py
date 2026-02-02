@@ -155,12 +155,13 @@ def calculate_and_record_compoff(attendance_id: int, emp_code: str,
     Calculate comp-off eligibility and create record
     
     Business Rules:
-    1. WORKING DAYS: Comp-off from SECOND clock-in onwards
-    2. NON-WORKING DAYS (weekends/holidays): Comp-off from FIRST clock-in
-    3. > 3 hours = 0.5 day comp-off
-    4. > 6 hours = 1 day comp-off
-    5. Must be recorded within 30 days
-    6. Expires after 90 days
+    1. If is_compoff_session = TRUE → ALWAYS eligible for comp-off
+    2. WORKING DAYS: Comp-off from SECOND clock-in onwards (auto-marked as is_compoff_session)
+    3. NON-WORKING DAYS (weekends/holidays): Comp-off from FIRST clock-in (auto-marked as is_compoff_session)
+    4. > 3 hours = 0.5 day comp-off
+    5. > 6 hours = 1 day comp-off
+    6. Must be recorded within 30 days
+    7. Expires after 90 days
     
     Called automatically during clock-out
     """
@@ -168,19 +169,35 @@ def calculate_and_record_compoff(attendance_id: int, emp_code: str,
     cursor = conn.cursor()
     
     try:
-        # ✅ RULE 1 & 2: Check eligibility based on day type
+        # ✅ FIRST: Check if this attendance is marked as comp-off session
+        cursor.execute("""
+            SELECT is_compoff_session FROM attendance WHERE id = %s
+        """, (attendance_id,))
+        
+        att_result = cursor.fetchone()
+        is_compoff_session = att_result['is_compoff_session'] if att_result else False
+        
+        # ✅ RULE: Check eligibility based on is_compoff_session flag
         is_working = is_working_day(work_date, emp_code)
         clock_in_count = count_clock_ins_on_date(emp_email, work_date)
         
-        if is_working:
-            # Working day: Need SECOND clock-in for comp-off
-            if clock_in_count < 2:
-                logger.info(f"No comp-off: First clock-in on working day for {emp_email}")
-                return None
-            logger.info(f"✅ Working day - Second clock-in detected, checking comp-off eligibility")
+        if not is_compoff_session:
+            # If not marked as comp-off session, fall back to old logic
+            if is_working:
+                # Working day: Need SECOND clock-in for comp-off
+                if clock_in_count < 2:
+                    logger.info(f"No comp-off: First clock-in on working day for {emp_email}")
+                    return None
+                logger.info(f"✅ Working day - Second clock-in detected, checking comp-off eligibility")
+            else:
+                # Non-working day (weekend/holiday): FIRST clock-in itself eligible
+                logger.info(f"✅ Non-working day ({work_date.strftime('%A')}) - First clock-in eligible for comp-off")
         else:
-            # Non-working day (weekend/holiday): FIRST clock-in itself eligible
-            logger.info(f"✅ Non-working day ({work_date.strftime('%A')}) - First clock-in eligible for comp-off")
+            # is_compoff_session = TRUE → This session is eligible for comp-off!
+            if is_working:
+                logger.info(f"✅ Working day - is_compoff_session=TRUE (second+ clock-in), eligible for comp-off")
+            else:
+                logger.info(f"✅ Non-working day ({work_date.strftime('%A')}) - is_compoff_session=TRUE, eligible for comp-off")
         
         # ✅ Fetch existing overtime records for this employee
         cursor.execute("""

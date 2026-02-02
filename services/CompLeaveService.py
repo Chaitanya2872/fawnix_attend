@@ -537,7 +537,7 @@ def request_compoff(emp_code: str, overtime_record_ids: List[int],
     1. All records must be 'eligible'
     2. Records must not be expired
     3. Records must be within 30-day recording window
-    4. If > 3 comp-offs in current month, requires CMD approval
+    4. If > 3 comp-offs in current month, requires CMD
     """
     conn = get_db_connection()
     cursor = conn.cursor()

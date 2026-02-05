@@ -58,6 +58,7 @@ from routes.admin import admin_bp
 from routes.tracking import tracking_bp
 from routes.compoff import compoff_bp
 from routes.attendance_exceptions import exceptions_bp
+from routes.holidays import holidays_bp
 
 # ✨ NEW ROUTES - Location Reports, Distance Monitoring, Approvals
 from routes.location import location_report_bp
@@ -79,8 +80,7 @@ app.register_blueprint(exceptions_bp, url_prefix='/api/attendance-exceptions')
 app.register_blueprint(location_report_bp, url_prefix='/api/reports')
 app.register_blueprint(distance_bp, url_prefix='/api/distance')
 app.register_blueprint(approvals_bp, url_prefix='/api/approvals')
-
-
+app.register_blueprint(holidays_bp, url_prefix = '/api/holidays')
 # ==========================================
 # ✅ FIXED: Auto Clockout Job
 # ==========================================

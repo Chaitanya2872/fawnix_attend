@@ -1,25 +1,9 @@
 """
-Enhanced Comp-off Service - Version 2.0
-Implements shift-based overtime calculation with multi-level approval
-
-BUSINESS RULES:
-1. Working Hours:
-   - Monday-Friday: 10:00 AM to 6:30 PM (8.5 hours)
-   - 1st, 3rd, 5th Saturdays: 10:00 AM to 1:30 PM (3.5 hours)
-   
-2. Non-Working Days (All hours count as overtime):
-   - Organization Holidays
-   - 2nd, 4th Saturdays
-   - Sundays
-   - Hours outside shift times on working days
-   
-3. Comp-off Eligibility:
-   - > 3 extra hours = 0.5 day comp-off
-   - > 6 extra hours = 1 day comp-off
-   
-4. Approval Levels:
-   - <= 3 comp-offs in current month: Manager approval only
-   - > 3 comp-offs in current month: Manager → HR/CMD approval
+IMPORTANT: This version is adapted to match YOUR existing overtime_records table structure
+Key differences from standard version:
+- Primary key is 'id' (not 'overtime_id')
+- Returns 'id' in results (not 'overtime_id')
+- attendance_id can be NULL
 """
 
 from datetime import datetime, timedelta, date, time
@@ -224,36 +208,6 @@ def count_clock_ins_on_date(emp_email: str, work_date: date) -> int:
 
 
 # =========================
-# HELPER: Get employee details
-# =========================
-
-def get_employee_details(emp_code: str) -> Optional[Dict]:
-    """
-    Get employee details including manager and designation
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute("""
-            SELECT 
-                emp_code,
-                emp_email,
-                emp_full_name,
-                emp_manager,
-                emp_designation
-            FROM employees
-            WHERE emp_code = %s
-        """, (emp_code,))
-        
-        return cursor.fetchone()
-        
-    finally:
-        cursor.close()
-        conn.close()
-
-
-# =========================
 # CORE: Calculate and Record Overtime/Comp-off
 # =========================
 
@@ -307,7 +261,7 @@ def calculate_and_record_compoff(
         
         # Check if record already exists
         cursor.execute("""
-            SELECT id, overtime_id 
+            SELECT id 
             FROM overtime_records
             WHERE attendance_id = %s
         """, (attendance_id,))
@@ -318,40 +272,49 @@ def calculate_and_record_compoff(
             logger.info(f"⚠️ Overtime record already exists for attendance_id {attendance_id}")
             return None
         
-        # Create overtime record
+        # Calculate standard and actual hours
+        shift_start, shift_end, standard_hours = get_shift_times_for_date(work_date, emp_code)
+        actual_hours = total_hours
+        
+        # Create overtime record - ADAPTED TO YOUR TABLE STRUCTURE
         cursor.execute("""
             INSERT INTO overtime_records (
                 attendance_id, emp_code, emp_email, emp_name,
-                work_date, day_of_week, day_type, is_working_day,
-                clock_in_sequence, total_hours, extra_hours,
-                comp_off_days, status, calculation_method,
-                created_at, expires_at
+                work_date, day_of_week,
+                clock_in_sequence, actual_hours, extra_hours, standard_hours,
+                comp_off_days, status,
+                recording_deadline, expires_at,
+                created_at, updated_at
             ) VALUES (
                 %s, %s, %s, %s,
+                %s, %s,
                 %s, %s, %s, %s,
-                %s, %s, %s,
-                %s, %s, %s,
-                NOW(), NOW() + INTERVAL '%s days'
+                %s, %s,
+                %s::date, %s::date,
+                NOW(), NOW()
             )
-            RETURNING overtime_id, created_at, expires_at
+            RETURNING id, created_at, expires_at
         """, (
             attendance_id, emp_code, emp_email, emp_name,
-            work_date, work_date.strftime('%A'), day_type, is_working,
-            clock_in_sequence, total_hours, extra_hours,
-            comp_off_days, 'eligible', calculation_method,
-            COMPOFF_EXPIRY_DAYS
+            work_date, work_date.strftime('%A'),
+            clock_in_sequence, actual_hours, extra_hours, standard_hours,
+            comp_off_days, 'eligible',
+            work_date + timedelta(days=COMPOFF_RECORDING_WINDOW_DAYS),
+            work_date + timedelta(days=COMPOFF_EXPIRY_DAYS)
         ))
         
         result = cursor.fetchone()
         conn.commit()
         
-        logger.info(f"✅ Comp-off record created: ID={result['overtime_id']}, Days={comp_off_days}, Extra Hours={extra_hours:.2f}")
+        logger.info(f"✅ Comp-off record created: ID={result['id']}, Days={comp_off_days}, Extra Hours={extra_hours:.2f}")
         
         return {
-            'overtime_id': result['overtime_id'],
+            'id': result['id'],  # YOUR table uses 'id', not 'overtime_id'
             'comp_off_days': comp_off_days,
             'extra_hours': extra_hours,
             'total_hours': total_hours,
+            'actual_hours': actual_hours,
+            'standard_hours': standard_hours,
             'day_type': day_type,
             'calculation_method': calculation_method,
             'expires_at': result['expires_at'].strftime('%Y-%m-%d')
@@ -370,7 +333,7 @@ def calculate_and_record_compoff(
 
 
 # =========================
-# NEW: Scan and Push Attendance to Overtime Records
+# SCAN: Read Attendance and Create Overtime Records
 # =========================
 
 def scan_attendance_and_create_overtime_records(
@@ -382,37 +345,7 @@ def scan_attendance_and_create_overtime_records(
     """
     Scan attendance records and create missing overtime records
     
-    This API can be used to:
-    1. Backfill missing overtime records
-    2. Recalculate comp-offs for a date range
-    3. Process specific employee or all employees
-    
-    Parameters:
-        emp_code: Specific employee (optional, processes all if None)
-        start_date: Start date (optional)
-        end_date: End date (optional)
-        days_back: Days to look back if dates not specified (default: 30)
-    
-    Returns:
-        Summary of records processed and created
-    
-    Business Logic - Only processes sessions that meet ALL criteria:
-    ✅ 1. Attendance record has logout_time (completed session)
-    ✅ 2. Attendance record has working_hours calculated
-    ✅ 3. Session is marked as is_compoff_session = TRUE (by attendance service), OR
-           Session is on non-working day (weekend/holiday)
-    ✅ 4. Extra hours meet threshold (> 3 hours for 0.5 day, > 6 hours for 1 day)
-    
-    Why is_compoff_session flag is important:
-    - On WORKING days: First clock-in is NOT comp-off eligible (normal shift work)
-    - On WORKING days: Second+ clock-in IS comp-off eligible (marked TRUE)
-    - On NON-WORKING days: First clock-in IS comp-off eligible (marked TRUE)
-    
-    Skip Reasons:
-    - Already has overtime record
-    - is_compoff_session = FALSE on working day (normal shift work)
-    - Working hours below threshold (< 3 hours)
-    - Invalid working_hours value
+    ADAPTED TO YOUR TABLE STRUCTURE
     """
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -426,7 +359,7 @@ def scan_attendance_and_create_overtime_records(
         
         logger.info(f"🔍 Scanning attendance records from {start_date} to {end_date}")
         
-        # Build query - Select attendance records with completed sessions
+        # Build query - Get attendance records
         query = """
             SELECT 
                 a.id as attendance_id,
@@ -466,12 +399,13 @@ def scan_attendance_and_create_overtime_records(
         errors = 0
         
         created_records = []
+        error_details = []
         
         for record in attendance_records:
             try:
                 # Check if overtime record already exists
                 cursor.execute("""
-                    SELECT overtime_id 
+                    SELECT id 
                     FROM overtime_records
                     WHERE attendance_id = %s
                 """, (record['attendance_id'],))
@@ -481,44 +415,84 @@ def scan_attendance_and_create_overtime_records(
                     logger.debug(f"⏭️ Skipped attendance_id {record['attendance_id']}: Already has overtime record")
                     continue
                 
-                # ✅ CHECK 1: Validate working_hours exists and is reasonable
-                working_hours = float(record['working_hours'] or 0)
+                # CHECK 1: Validate working_hours
+                working_hours = float(record.get('working_hours') or 0)
                 if working_hours <= 0 or working_hours > 24:
                     skipped_not_eligible += 1
                     logger.debug(f"⏭️ Skipped attendance_id {record['attendance_id']}: Invalid working_hours={working_hours}")
                     continue
                 
-                # ✅ CHECK 2: Check if this session is marked as comp-off eligible
-                is_compoff_session = record['is_compoff_session']
+                # CHECK 2: Validate login/logout times
+                login_time = record.get('login_time')
+                logout_time = record.get('logout_time')
+                
+                if not login_time or not logout_time:
+                    skipped_not_eligible += 1
+                    error_msg = f"Missing login_time or logout_time"
+                    logger.error(f"⏭️ Skipped attendance_id {record['attendance_id']}: {error_msg}")
+                    error_details.append({
+                        'attendance_id': record['attendance_id'],
+                        'error': error_msg
+                    })
+                    continue
+                
+                # Convert to datetime if needed
+                if not isinstance(login_time, datetime):
+                    try:
+                        login_time = datetime.fromisoformat(str(login_time))
+                    except:
+                        skipped_not_eligible += 1
+                        error_msg = f"Invalid login_time format: {login_time}"
+                        logger.error(f"⏭️ Skipped attendance_id {record['attendance_id']}: {error_msg}")
+                        error_details.append({
+                            'attendance_id': record['attendance_id'],
+                            'error': error_msg
+                        })
+                        continue
+                
+                if not isinstance(logout_time, datetime):
+                    try:
+                        logout_time = datetime.fromisoformat(str(logout_time))
+                    except:
+                        skipped_not_eligible += 1
+                        error_msg = f"Invalid logout_time format: {logout_time}"
+                        logger.error(f"⏭️ Skipped attendance_id {record['attendance_id']}: {error_msg}")
+                        error_details.append({
+                            'attendance_id': record['attendance_id'],
+                            'error': error_msg
+                        })
+                        continue
+                
+                # CHECK 3: Check is_compoff_session flag
+                is_compoff_session = record.get('is_compoff_session', False)
                 work_date = record['work_date']
                 emp_code_rec = record['emp_code']
+                
+                # Ensure work_date is a date object
+                if isinstance(work_date, datetime):
+                    work_date = work_date.date()
                 
                 # Check if it's a working day
                 is_working, day_type = is_working_day(work_date, emp_code_rec)
                 
-                # ✅ BUSINESS LOGIC: Only process if:
-                # 1. is_compoff_session = TRUE (marked by attendance service), OR
-                # 2. Non-working day (weekends/holidays) - should have been marked, but check anyway
+                # BUSINESS LOGIC: Only process if comp-off eligible
                 if not is_compoff_session and is_working:
                     skipped_not_eligible += 1
                     logger.debug(f"⏭️ Skipped attendance_id {record['attendance_id']}: Not a comp-off session (is_compoff_session=FALSE on working day)")
                     continue
                 
                 # Log eligibility
-                if is_compoff_session:
-                    logger.info(f"✅ Processing attendance_id {record['attendance_id']}: is_compoff_session=TRUE, day_type={day_type}")
-                elif not is_working:
-                    logger.info(f"✅ Processing attendance_id {record['attendance_id']}: Non-working day ({day_type})")
+                logger.info(f"✅ Processing attendance_id {record['attendance_id']}: is_compoff_session={is_compoff_session}, day_type={day_type}, work_date={work_date}")
                 
-                # ✅ CHECK 3: Calculate and create overtime record
+                # CHECK 4: Calculate and create overtime record
                 result = calculate_and_record_compoff(
                     record['attendance_id'],
                     record['emp_code'],
                     record['employee_email'],
                     record['emp_full_name'],
-                    record['work_date'],
-                    record['login_time'],
-                    record['logout_time']
+                    work_date,
+                    login_time,
+                    logout_time
                 )
                 
                 processed += 1
@@ -526,31 +500,37 @@ def scan_attendance_and_create_overtime_records(
                 if result:
                     created += 1
                     created_records.append({
-                        'overtime_id': result['overtime_id'],
+                        'id': result['id'],  # YOUR table uses 'id'
+                        'attendance_id': record['attendance_id'],
                         'emp_code': record['emp_code'],
                         'emp_name': record['emp_full_name'],
-                        'work_date': record['work_date'].strftime('%Y-%m-%d'),
+                        'work_date': work_date.strftime('%Y-%m-%d'),
                         'day_type': result['day_type'],
                         'comp_off_days': result['comp_off_days'],
                         'extra_hours': result['extra_hours'],
-                        'total_hours': result['total_hours'],
+                        'actual_hours': result['actual_hours'],
+                        'standard_hours': result['standard_hours'],
                         'calculation_method': result['calculation_method']
                     })
-                    logger.info(f"✅ Created overtime_id {result['overtime_id']}: {result['comp_off_days']} days, {result['extra_hours']} extra hours")
+                    logger.info(f"✅ Created overtime record ID {result['id']}: {result['comp_off_days']} days, {result['extra_hours']} extra hours")
                 else:
-                    # calculate_and_record_compoff returned None (hours below threshold)
                     skipped_not_eligible += 1
                     logger.debug(f"⏭️ Skipped attendance_id {record['attendance_id']}: Hours below comp-off threshold")
                 
             except Exception as e:
                 errors += 1
-                logger.error(f"❌ Error processing attendance_id {record['attendance_id']}: {e}")
+                error_msg = str(e)
+                logger.error(f"❌ Error processing attendance_id {record.get('attendance_id', 'UNKNOWN')}: {error_msg}")
+                error_details.append({
+                    'attendance_id': record.get('attendance_id'),
+                    'error': error_msg
+                })
                 import traceback
                 logger.error(traceback.format_exc())
         
         logger.info(f"✅ Scan complete: Processed={processed}, Created={created}, Skipped (existing)={skipped}, Skipped (not eligible)={skipped_not_eligible}, Errors={errors}")
         
-        return ({
+        response_data = {
             "success": True,
             "message": f"Successfully scanned {len(attendance_records)} attendance records",
             "data": {
@@ -571,9 +551,15 @@ def scan_attendance_and_create_overtime_records(
                     "rule_2": "OR non-working day (weekends/holidays)",
                     "rule_3": "AND extra hours > 3 (for 0.5 day) or > 6 (for 1 day)"
                 },
-                "created_records": created_records[:50]  # Limit to first 50 for display
+                "created_records": created_records[:50]
             }
-        }, 200)
+        }
+        
+        # Add error details if any
+        if error_details:
+            response_data["data"]["error_details"] = error_details[:20]  # First 20 errors
+        
+        return (response_data, 200)
         
     except Exception as e:
         logger.error(f"❌ Error scanning attendance records: {e}")
@@ -589,558 +575,5 @@ def scan_attendance_and_create_overtime_records(
         conn.close()
 
 
-# =========================
-# REQUEST: Enhanced with Multi-level Approval
-# =========================
-
-def request_compoff(
-    emp_code: str,
-    overtime_record_ids: List[int],
-    reason: str = '',
-    notes: str = ''
-) -> Tuple[Dict, int]:
-    """
-    Request comp-off with automatic approval level determination
-    
-    Approval Logic:
-    1. Count current month's approved/pending comp-off requests
-    2. If count > 3: Requires HR/CMD approval (approval_level = 'cmd')
-    3. If count <= 3: Requires Manager approval only (approval_level = 'manager')
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        # Get employee details
-        emp_details = get_employee_details(emp_code)
-        if not emp_details:
-            return ({"success": False, "message": "Employee not found"}, 404)
-        
-        emp_manager = emp_details['emp_manager']
-        emp_designation = emp_details['emp_designation']
-        
-        # Count current month's requests
-        current_month_start = date.today().replace(day=1)
-        
-        cursor.execute("""
-            SELECT COUNT(*) as request_count
-            FROM compoff_requests
-            WHERE emp_code = %s
-              AND created_at >= %s
-              AND status IN ('pending', 'approved')
-        """, (emp_code, current_month_start))
-        
-        month_count = cursor.fetchone()['request_count']
-        
-        # Determine approval level
-        if month_count >= COMPOFF_CMD_APPROVAL_THRESHOLD:
-            approval_level = 'cmd'
-            approval_message = f"This is your {month_count + 1}th comp-off request this month. Requires HR/CMD approval."
-        else:
-            approval_level = 'manager'
-            approval_message = f"This is your {month_count + 1}th comp-off request this month. Requires Manager approval."
-        
-        logger.info(f"📋 Comp-off request: {emp_code}, Month count: {month_count}, Approval level: {approval_level}")
-        
-        # Validate overtime records
-        placeholders = ','.join(['%s'] * len(overtime_record_ids))
-        cursor.execute(f"""
-            SELECT 
-                overtime_id, 
-                emp_code, 
-                comp_off_days, 
-                status, 
-                work_date,
-                expires_at
-            FROM overtime_records
-            WHERE overtime_id IN ({placeholders})
-              AND emp_code = %s
-        """, overtime_record_ids + [emp_code])
-        
-        records = cursor.fetchall()
-        
-        if len(records) != len(overtime_record_ids):
-            return ({
-                "success": False,
-                "message": "Some overtime records not found or don't belong to you"
-            }, 400)
-        
-        # Validate all records are eligible
-        ineligible = [r for r in records if r['status'] != 'eligible']
-        if ineligible:
-            return ({
-                "success": False,
-                "message": f"Some records are not eligible. Status: {ineligible[0]['status']}"
-            }, 400)
-        
-        # Check expiry
-        today = date.today()
-        expired = [r for r in records if r['expires_at'].date() <= today]
-        if expired:
-            return ({
-                "success": False,
-                "message": f"Some records have expired: {expired[0]['work_date']}"
-            }, 400)
-        
-        # Calculate total comp-off days
-        total_comp_days = sum([float(r['comp_off_days']) for r in records])
-        
-        # Create comp-off request
-        cursor.execute("""
-            INSERT INTO compoff_requests (
-                emp_code, emp_email, emp_name,
-                overtime_record_ids, total_comp_days,
-                reason, notes,
-                approval_level, approver_emp_code,
-                status, created_at
-            ) VALUES (
-                %s, %s, %s,
-                %s, %s,
-                %s, %s,
-                %s, %s,
-                'pending', NOW()
-            )
-            RETURNING request_id, created_at
-        """, (
-            emp_code, emp_details['emp_email'], emp_details['emp_full_name'],
-            overtime_record_ids, total_comp_days,
-            reason, notes,
-            approval_level, emp_manager
-        ))
-        
-        request_result = cursor.fetchone()
-        request_id = request_result['request_id']
-        
-        # Update overtime records status
-        cursor.execute(f"""
-            UPDATE overtime_records
-            SET status = 'requested', compoff_request_id = %s
-            WHERE overtime_id IN ({placeholders})
-        """, [request_id] + overtime_record_ids)
-        
-        conn.commit()
-        
-        logger.info(f"✅ Comp-off request created: ID={request_id}, Days={total_comp_days}, Level={approval_level}")
-        
-        return ({
-            "success": True,
-            "message": f"Comp-off request submitted successfully. {approval_message}",
-            "data": {
-                "request_id": request_id,
-                "total_comp_days": total_comp_days,
-                "overtime_records_count": len(overtime_record_ids),
-                "approval_level": approval_level,
-                "approver": emp_manager,
-                "month_request_count": month_count + 1,
-                "created_at": request_result['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
-                "status": "pending"
-            }
-        }, 201)
-        
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"❌ Error creating comp-off request: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return ({
-            "success": False,
-            "message": f"Error creating comp-off request: {str(e)}"
-        }, 500)
-        
-    finally:
-        cursor.close()
-        conn.close()
-
-
-# =========================
-# APPROVE: Enhanced with Multi-level Approval Check
-# =========================
-
-def approve_compoff_request(
-    request_id: int,
-    approver_emp_code: str,
-    action: str,  # 'approved' or 'rejected'
-    remarks: str = ''
-) -> Tuple[Dict, int]:
-    """
-    Approve or reject comp-off request with authorization check
-    
-    Authorization Rules:
-    1. Manager: Can approve 'manager' level requests for their team
-    2. HR/CMD: Can approve both 'manager' and 'cmd' level requests
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        # Get approver details
-        approver = get_employee_details(approver_emp_code)
-        if not approver:
-            return ({"success": False, "message": "Approver not found"}, 404)
-        
-        approver_designation = approver['emp_designation']
-        
-        # Get request details
-        cursor.execute("""
-            SELECT 
-                cr.*,
-                e.emp_manager
-            FROM compoff_requests cr
-            JOIN employees e ON cr.emp_code = e.emp_code
-            WHERE cr.request_id = %s
-        """, (request_id,))
-        
-        request = cursor.fetchone()
-        
-        if not request:
-            return ({"success": False, "message": "Request not found"}, 404)
-        
-        if request['status'] != 'pending':
-            return ({
-                "success": False,
-                "message": f"Request is already {request['status']}"
-            }, 400)
-        
-        # Authorization check
-        approval_level = request['approval_level']
-        emp_manager = request['emp_manager']
-        
-        is_authorized = False
-        
-        # HR/CMD can approve all levels
-        if approver_designation in ['HR', 'CMD']:
-            is_authorized = True
-            logger.info(f"✅ {approver_designation} approval for request {request_id}")
-        
-        # Manager can approve 'manager' level for their team
-        elif approval_level == 'manager' and approver_emp_code == emp_manager:
-            is_authorized = True
-            logger.info(f"✅ Manager approval for request {request_id}")
-        
-        if not is_authorized:
-            return ({
-                "success": False,
-                "message": f"Unauthorized. This request requires {approval_level.upper()} approval."
-            }, 403)
-        
-        # Update request status
-        cursor.execute("""
-            UPDATE compoff_requests
-            SET 
-                status = %s,
-                approver_emp_code = %s,
-                approver_remarks = %s,
-                approved_at = NOW()
-            WHERE request_id = %s
-            RETURNING approved_at
-        """, (action, approver_emp_code, remarks, request_id))
-        
-        result = cursor.fetchone()
-        
-        # Update overtime records
-        new_status = 'approved' if action == 'approved' else 'rejected'
-        
-        overtime_ids = request['overtime_record_ids']
-        placeholders = ','.join(['%s'] * len(overtime_ids))
-        
-        cursor.execute(f"""
-            UPDATE overtime_records
-            SET status = %s
-            WHERE overtime_id IN ({placeholders})
-        """, [new_status] + overtime_ids)
-        
-        conn.commit()
-        
-        logger.info(f"✅ Request {request_id} {action} by {approver_emp_code}")
-        
-        return ({
-            "success": True,
-            "message": f"Comp-off request {action} successfully",
-            "data": {
-                "request_id": request_id,
-                "status": action,
-                "total_comp_days": float(request['total_comp_days']),
-                "approver": approver_emp_code,
-                "approver_designation": approver_designation,
-                "approved_at": result['approved_at'].strftime('%Y-%m-%d %H:%M:%S')
-            }
-        }, 200)
-        
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"❌ Error approving comp-off request: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return ({
-            "success": False,
-            "message": f"Error approving comp-off request: {str(e)}"
-        }, 500)
-        
-    finally:
-        cursor.close()
-        conn.close()
-
-
-# =========================
-# EXISTING FUNCTIONS (keeping signatures compatible)
-# =========================
-
-def trigger_compoff_calculation(emp_code: str) -> Tuple[Dict, int]:
-    """Trigger comp-off calculation - kept for backward compatibility"""
-    return scan_attendance_and_create_overtime_records(emp_code=emp_code, days_back=7)
-
-
-def get_employee_overtime_records(emp_code: str, status: Optional[str] = None, limit: int = 50) -> Tuple[Dict, int]:
-    """Get employee's overtime records"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        query = """
-            SELECT * FROM overtime_records
-            WHERE emp_code = %s
-        """
-        params = [emp_code]
-        
-        if status:
-            query += " AND status = %s"
-            params.append(status)
-        
-        query += " ORDER BY work_date DESC LIMIT %s"
-        params.append(limit)
-        
-        cursor.execute(query, params)
-        records = cursor.fetchall()
-        
-        # Convert dates to strings
-        for record in records:
-            for key, value in record.items():
-                if isinstance(value, (date, datetime)):
-                    record[key] = value.strftime('%Y-%m-%d %H:%M:%S') if isinstance(value, datetime) else value.strftime('%Y-%m-%d')
-        
-        return ({
-            "success": True,
-            "data": {
-                "records": records,
-                "count": len(records)
-            }
-        }, 200)
-        
-    finally:
-        cursor.close()
-        conn.close()
-
-
-def get_my_compoff_requests(emp_code: str, status: Optional[str] = None, limit: int = 50) -> Tuple[Dict, int]:
-    """Get employee's comp-off requests"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        query = """
-            SELECT * FROM compoff_requests
-            WHERE emp_code = %s
-        """
-        params = [emp_code]
-        
-        if status:
-            query += " AND status = %s"
-            params.append(status)
-        
-        query += " ORDER BY created_at DESC LIMIT %s"
-        params.append(limit)
-        
-        cursor.execute(query, params)
-        requests = cursor.fetchall()
-        
-        # Convert dates to strings
-        for req in requests:
-            for key, value in req.items():
-                if isinstance(value, (date, datetime)):
-                    req[key] = value.strftime('%Y-%m-%d %H:%M:%S') if isinstance(value, datetime) else value.strftime('%Y-%m-%d')
-        
-        return ({
-            "success": True,
-            "data": {
-                "requests": requests,
-                "count": len(requests)
-            }
-        }, 200)
-        
-    finally:
-        cursor.close()
-        conn.close()
-
-
-def cancel_compoff_request(request_id: int, emp_code: str) -> Tuple[Dict, int]:
-    """Cancel pending comp-off request"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute("""
-            SELECT * FROM compoff_requests
-            WHERE request_id = %s AND emp_code = %s
-        """, (request_id, emp_code))
-        
-        request = cursor.fetchone()
-        
-        if not request:
-            return ({"success": False, "message": "Request not found"}, 404)
-        
-        if request['status'] != 'pending':
-            return ({"success": False, "message": f"Cannot cancel {request['status']} request"}, 400)
-        
-        # Update request
-        cursor.execute("""
-            UPDATE compoff_requests
-            SET status = 'cancelled'
-            WHERE request_id = %s
-        """, (request_id,))
-        
-        # Reset overtime records
-        overtime_ids = request['overtime_record_ids']
-        placeholders = ','.join(['%s'] * len(overtime_ids))
-        
-        cursor.execute(f"""
-            UPDATE overtime_records
-            SET status = 'eligible', compoff_request_id = NULL
-            WHERE overtime_id IN ({placeholders})
-        """, overtime_ids)
-        
-        conn.commit()
-        
-        return ({
-            "success": True,
-            "message": "Request cancelled successfully"
-        }, 200)
-        
-    except Exception as e:
-        conn.rollback()
-        return ({"success": False, "message": str(e)}, 500)
-        
-    finally:
-        cursor.close()
-        conn.close()
-
-
-def get_compoff_balance(emp_code: str) -> Tuple[Dict, int]:
-    """Get comp-off balance summary"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        # Approved balance
-        cursor.execute("""
-            SELECT SUM(total_comp_days) as approved_balance
-            FROM compoff_requests
-            WHERE emp_code = %s AND status = 'approved'
-        """, (emp_code,))
-        
-        approved = cursor.fetchone()
-        
-        # Eligible not requested
-        cursor.execute("""
-            SELECT 
-                COUNT(*) as eligible_count,
-                SUM(comp_off_days) as eligible_days
-            FROM overtime_records
-            WHERE emp_code = %s AND status = 'eligible'
-        """, (emp_code,))
-        
-        eligible = cursor.fetchone()
-        
-        # Pending approval
-        cursor.execute("""
-            SELECT SUM(total_comp_days) as pending_days
-            FROM compoff_requests
-            WHERE emp_code = %s AND status = 'pending'
-        """, (emp_code,))
-        
-        pending = cursor.fetchone()
-        
-        return ({
-            "success": True,
-            "data": {
-                "approved_balance": float(approved['approved_balance'] or 0),
-                "eligible_not_requested": float(eligible['eligible_days'] or 0),
-                "eligible_records_count": int(eligible['eligible_count'] or 0),
-                "pending_approval": float(pending['pending_days'] or 0),
-                "total_potential": float(approved['approved_balance'] or 0) + float(eligible['eligible_days'] or 0)
-            }
-        }, 200)
-        
-    finally:
-        cursor.close()
-        conn.close()
-
-
-def get_team_compoff_requests(manager_emp_code: str, status: Optional[str] = None, limit: int = 50) -> Tuple[Dict, int]:
-    """Get team's comp-off requests for approval"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        # Get manager's designation
-        manager = get_employee_details(manager_emp_code)
-        if not manager:
-            return ({"success": False, "message": "Manager not found"}, 404)
-        
-        manager_designation = manager['emp_designation']
-        
-        # Build query based on role
-        if manager_designation in ['HR', 'CMD']:
-            # HR/CMD can see all requests
-            query = """
-                SELECT cr.*, e.emp_manager
-                FROM compoff_requests cr
-                JOIN employees e ON cr.emp_code = e.emp_code
-                WHERE 1=1
-            """
-            params = []
-        else:
-            # Managers see only their team's requests
-            query = """
-                SELECT cr.*, e.emp_manager
-                FROM compoff_requests cr
-                JOIN employees e ON cr.emp_code = e.emp_code
-                WHERE e.emp_manager = %s
-            """
-            params = [manager_emp_code]
-        
-        if status:
-            query += " AND cr.status = %s"
-            params.append(status)
-        
-        query += " ORDER BY cr.created_at DESC LIMIT %s"
-        params.append(limit)
-        
-        cursor.execute(query, params)
-        requests = cursor.fetchall()
-        
-        # Convert dates
-        for req in requests:
-            for key, value in req.items():
-                if isinstance(value, (date, datetime)):
-                    req[key] = value.strftime('%Y-%m-%d %H:%M:%S') if isinstance(value, datetime) else value.strftime('%Y-%m-%d')
-        
-        return ({
-            "success": True,
-            "data": {
-                "requests": requests,
-                "count": len(requests),
-                "manager_designation": manager_designation
-            }
-        }, 200)
-        
-    finally:
-        cursor.close()
-        conn.close()
-
-
-def get_compoff_statistics(emp_code: str, year: Optional[int] = None, month: Optional[int] = None) -> Tuple[Dict, int]:
-    """Get comp-off statistics - placeholder for detailed implementation"""
-    return ({
-        "success": True,
-        "message": "Statistics endpoint - implement as needed"
-    }, 200)
+# Export the function
+trigger_compoff_calculation = scan_attendance_and_create_overtime_records

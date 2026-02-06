@@ -395,6 +395,24 @@ def scan_attendance_and_create_overtime_records(
     
     Returns:
         Summary of records processed and created
+    
+    Business Logic - Only processes sessions that meet ALL criteria:
+    ✅ 1. Attendance record has logout_time (completed session)
+    ✅ 2. Attendance record has working_hours calculated
+    ✅ 3. Session is marked as is_compoff_session = TRUE (by attendance service), OR
+           Session is on non-working day (weekend/holiday)
+    ✅ 4. Extra hours meet threshold (> 3 hours for 0.5 day, > 6 hours for 1 day)
+    
+    Why is_compoff_session flag is important:
+    - On WORKING days: First clock-in is NOT comp-off eligible (normal shift work)
+    - On WORKING days: Second+ clock-in IS comp-off eligible (marked TRUE)
+    - On NON-WORKING days: First clock-in IS comp-off eligible (marked TRUE)
+    
+    Skip Reasons:
+    - Already has overtime record
+    - is_compoff_session = FALSE on working day (normal shift work)
+    - Working hours below threshold (< 3 hours)
+    - Invalid working_hours value
     """
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -408,7 +426,7 @@ def scan_attendance_and_create_overtime_records(
         
         logger.info(f"🔍 Scanning attendance records from {start_date} to {end_date}")
         
-        # Build query
+        # Build query - Select attendance records with completed sessions
         query = """
             SELECT 
                 a.id as attendance_id,
@@ -416,11 +434,14 @@ def scan_attendance_and_create_overtime_records(
                 a.login_time,
                 a.logout_time,
                 a.date as work_date,
+                a.working_hours,
+                COALESCE(a.is_compoff_session, FALSE) as is_compoff_session,
                 e.emp_code,
                 e.emp_full_name
             FROM attendance a
             JOIN employees e ON a.employee_email = e.emp_email
             WHERE a.logout_time IS NOT NULL
+              AND a.working_hours IS NOT NULL
               AND a.date BETWEEN %s AND %s
         """
         
@@ -441,6 +462,7 @@ def scan_attendance_and_create_overtime_records(
         processed = 0
         created = 0
         skipped = 0
+        skipped_not_eligible = 0
         errors = 0
         
         created_records = []
@@ -456,9 +478,39 @@ def scan_attendance_and_create_overtime_records(
                 
                 if cursor.fetchone():
                     skipped += 1
+                    logger.debug(f"⏭️ Skipped attendance_id {record['attendance_id']}: Already has overtime record")
                     continue
                 
-                # Calculate and create overtime record
+                # ✅ CHECK 1: Validate working_hours exists and is reasonable
+                working_hours = float(record['working_hours'] or 0)
+                if working_hours <= 0 or working_hours > 24:
+                    skipped_not_eligible += 1
+                    logger.debug(f"⏭️ Skipped attendance_id {record['attendance_id']}: Invalid working_hours={working_hours}")
+                    continue
+                
+                # ✅ CHECK 2: Check if this session is marked as comp-off eligible
+                is_compoff_session = record['is_compoff_session']
+                work_date = record['work_date']
+                emp_code_rec = record['emp_code']
+                
+                # Check if it's a working day
+                is_working, day_type = is_working_day(work_date, emp_code_rec)
+                
+                # ✅ BUSINESS LOGIC: Only process if:
+                # 1. is_compoff_session = TRUE (marked by attendance service), OR
+                # 2. Non-working day (weekends/holidays) - should have been marked, but check anyway
+                if not is_compoff_session and is_working:
+                    skipped_not_eligible += 1
+                    logger.debug(f"⏭️ Skipped attendance_id {record['attendance_id']}: Not a comp-off session (is_compoff_session=FALSE on working day)")
+                    continue
+                
+                # Log eligibility
+                if is_compoff_session:
+                    logger.info(f"✅ Processing attendance_id {record['attendance_id']}: is_compoff_session=TRUE, day_type={day_type}")
+                elif not is_working:
+                    logger.info(f"✅ Processing attendance_id {record['attendance_id']}: Non-working day ({day_type})")
+                
+                # ✅ CHECK 3: Calculate and create overtime record
                 result = calculate_and_record_compoff(
                     record['attendance_id'],
                     record['emp_code'],
@@ -478,15 +530,25 @@ def scan_attendance_and_create_overtime_records(
                         'emp_code': record['emp_code'],
                         'emp_name': record['emp_full_name'],
                         'work_date': record['work_date'].strftime('%Y-%m-%d'),
+                        'day_type': result['day_type'],
                         'comp_off_days': result['comp_off_days'],
-                        'extra_hours': result['extra_hours']
+                        'extra_hours': result['extra_hours'],
+                        'total_hours': result['total_hours'],
+                        'calculation_method': result['calculation_method']
                     })
+                    logger.info(f"✅ Created overtime_id {result['overtime_id']}: {result['comp_off_days']} days, {result['extra_hours']} extra hours")
+                else:
+                    # calculate_and_record_compoff returned None (hours below threshold)
+                    skipped_not_eligible += 1
+                    logger.debug(f"⏭️ Skipped attendance_id {record['attendance_id']}: Hours below comp-off threshold")
                 
             except Exception as e:
                 errors += 1
                 logger.error(f"❌ Error processing attendance_id {record['attendance_id']}: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
         
-        logger.info(f"✅ Scan complete: Processed={processed}, Created={created}, Skipped={skipped}, Errors={errors}")
+        logger.info(f"✅ Scan complete: Processed={processed}, Created={created}, Skipped (existing)={skipped}, Skipped (not eligible)={skipped_not_eligible}, Errors={errors}")
         
         return ({
             "success": True,
@@ -500,8 +562,14 @@ def scan_attendance_and_create_overtime_records(
                     "total_attendance_records": len(attendance_records),
                     "processed": processed,
                     "created": created,
-                    "skipped": skipped,
+                    "skipped_existing": skipped,
+                    "skipped_not_eligible": skipped_not_eligible,
                     "errors": errors
+                },
+                "eligibility_rules": {
+                    "rule_1": "is_compoff_session = TRUE (marked during clock-in)",
+                    "rule_2": "OR non-working day (weekends/holidays)",
+                    "rule_3": "AND extra hours > 3 (for 0.5 day) or > 6 (for 1 day)"
                 },
                 "created_records": created_records[:50]  # Limit to first 50 for display
             }

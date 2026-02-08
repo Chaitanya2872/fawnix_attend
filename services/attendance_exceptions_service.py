@@ -684,7 +684,25 @@ def get_team_exceptions(manager_code: str, status: str = None,
 # VALIDATION HELPERS
 # =========================
 
-def check_early_leave_approval(attendance_id: int) -> Tuple[bool, str]:
+def _coerce_time(value):
+    """Normalize DB time values (time/datetime/str) into a time object."""
+    if value is None:
+        return None
+    if isinstance(value, time):
+        return value
+    if isinstance(value, datetime):
+        return value.time()
+    if isinstance(value, str):
+        for fmt in ('%H:%M:%S', '%H:%M'):
+            try:
+                return datetime.strptime(value, fmt).time()
+            except ValueError:
+                continue
+    return None
+
+
+def check_early_leave_approval(attendance_id: int, current_time: Optional[time] = None,
+                               enforce_planned_time: bool = False) -> Tuple[bool, str]:
     """
     Check if employee has approved early leave for given attendance
     
@@ -721,13 +739,13 @@ def check_early_leave_approval(attendance_id: int) -> Tuple[bool, str]:
             return (False, "Early leave request was rejected. Cannot clock out early.")
         
         if exception['status'] == 'approved':
-            # Check if clocking out at or after planned time
-            planned_time = exception['planned_leave_time']
-            current_time = datetime.now().time()
-            
-            if current_time < planned_time:
+            # Optional: enforce planned leave time if required
+            planned_time = _coerce_time(exception.get('planned_leave_time'))
+            if current_time is None:
+                current_time = datetime.now().time()
+            if enforce_planned_time and planned_time and current_time < planned_time:
                 return (False, f"You can only clock out after {planned_time.strftime('%H:%M')}")
-            
+
             return (True, "Early leave approved")
         
         return (False, "Invalid exception status")

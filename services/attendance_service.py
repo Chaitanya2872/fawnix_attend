@@ -70,8 +70,10 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
         
         # Check if it's a non-working day
         is_nonworking = False
+        day_type = None
         if emp_code:
-            is_nonworking = not is_working_day(login_date, emp_code)
+            is_working, day_type = is_working_day(login_date, emp_code)
+            is_nonworking = not is_working
         
         if is_nonworking:
             # Check if already has a clocked-out session today
@@ -319,12 +321,22 @@ def clock_out(emp_email: str, lat: str, lon: str):
                         except Exception:
                             wd = work_date
 
-                    is_compoff = record.get('is_compoff_session') or record.get('is_compoff') or (not is_working_day(wd, emp_code))
-                    if is_compoff:
-                        logger.info(f"✅ Comp-off session or non-working day - early clock-out allowed for {emp_email}")
+                    is_working, day_type = is_working_day(wd, emp_code)
+                    is_nonworking_day = not is_working
+                    is_compoff_session = bool(record.get('is_compoff_session') or record.get('is_compoff'))
+
+                    if is_nonworking_day:
+                        logger.info(f"✅ Non-working day ({day_type}) - early clock-out allowed for {emp_email}")
                     else:
+                        if is_compoff_session:
+                            logger.info(f"⚠️ Working-day comp-off session - early leave approval required for {emp_email}")
+
                         # Check for early leave approval
-                        is_approved, approval_message = check_early_leave_approval(attendance_id)
+                        is_approved, approval_message = check_early_leave_approval(
+                            attendance_id,
+                            current_time=current_time,
+                            enforce_planned_time=False
+                        )
 
                         if not is_approved:
                             return ({

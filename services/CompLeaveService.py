@@ -700,7 +700,7 @@ def get_employee_details(emp_code: str) -> Optional[Dict]:
                 emp_code,
                 emp_email,
                 emp_full_name,
-                emp_manager_code,
+                emp_manager AS emp_manager_code,
                 emp_designation
             FROM employees
             WHERE emp_code = %s
@@ -908,7 +908,7 @@ def approve_compoff_request(
         cursor.execute("""
             SELECT 
                 cr.*,
-                e.emp_manager_code
+                e.emp_manager AS emp_manager_code
             FROM compoff_requests cr
             JOIN employees e ON cr.emp_code = e.emp_code
             WHERE cr.request_id = %s
@@ -1148,7 +1148,7 @@ def get_team_compoff_requests(manager_emp_code: str, status: Optional[str] = Non
         if manager_designation in ['HR', 'CMD']:
             # HR/CMD can see all requests
             query = """
-                SELECT cr.*, e.emp_manager_code
+                SELECT cr.*, e.emp_manager AS emp_manager_code
                 FROM compoff_requests cr
                 JOIN employees e ON cr.emp_code = e.emp_code
                 WHERE 1=1
@@ -1157,10 +1157,10 @@ def get_team_compoff_requests(manager_emp_code: str, status: Optional[str] = Non
         else:
             # Managers see only their team's requests
             query = """
-                SELECT cr.*, e.emp_manager_code
+                SELECT cr.*, e.emp_manager AS emp_manager_code
                 FROM compoff_requests cr
                 JOIN employees e ON cr.emp_code = e.emp_code
-                WHERE e.emp_manager_code = %s
+                WHERE e.emp_manager = %s
             """
             params = [manager_emp_code]
         

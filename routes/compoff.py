@@ -449,14 +449,6 @@ def team_requests(current_user):
     status = request.args.get('status')
     limit = request.args.get('limit', 50, type=int)
     
-    # Check if user is a manager or admin
-    user_role = current_user.get('emp_designation', '').upper()
-    if user_role not in ['MANAGER', 'HR', 'CMD', 'ADMIN']:
-        return jsonify({
-            "success": False,
-            "message": "Unauthorized. Manager access required."
-        }), 403
-    
     result = get_team_compoff_requests(
         current_user['emp_code'],
         status,

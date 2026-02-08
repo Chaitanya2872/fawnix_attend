@@ -37,7 +37,12 @@ def token_required(f):
             
             try:
                 cursor.execute("""
-                    SELECT u.*, e.emp_full_name, e.emp_email
+                    SELECT 
+                        u.*, 
+                        e.emp_full_name, 
+                        e.emp_email,
+                        e.emp_designation,
+                        e.emp_manager
                     FROM users u
                     JOIN employees e ON u.emp_code = e.emp_code
                     WHERE u.emp_code = %s

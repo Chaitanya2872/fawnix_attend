@@ -327,10 +327,9 @@ def clock_out(emp_email: str, lat: str, lon: str):
 
                     if is_nonworking_day:
                         logger.info(f"✅ Non-working day ({day_type}) - early clock-out allowed for {emp_email}")
+                    elif is_compoff_session:
+                        logger.info(f"✅ Comp-off session - early clock-out allowed for {emp_email}")
                     else:
-                        if is_compoff_session:
-                            logger.info(f"⚠️ Working-day comp-off session - early leave approval required for {emp_email}")
-
                         # Check for early leave approval
                         is_approved, approval_message = check_early_leave_approval(
                             attendance_id,

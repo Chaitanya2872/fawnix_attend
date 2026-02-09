@@ -89,3 +89,83 @@ def get_all_day_summary(current_user):
     response, status_code = admin_service.get_all_day_summary(target_date)
 
     return jsonify(response), status_code
+
+
+@admin_bp.route('/activities', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_all_activities(current_user):
+    """
+    Get activities for all employees
+    Optional query params:
+    - limit: number of records (default: 100)
+    - type: activity_type filter (optional)
+    - include_tracking: true/false (default: true) for field visit tracking points
+    - include_activity_tracking: true/false (default: true) for activity GPS points
+    """
+    limit = request.args.get('limit', default=100, type=int)
+    activity_type = request.args.get('type')
+    include_tracking = request.args.get('include_tracking', default='true')
+    include_tracking = str(include_tracking).lower() in ['1', 'true', 'yes']
+    include_activity_tracking = request.args.get('include_activity_tracking', default='true')
+    include_activity_tracking = str(include_activity_tracking).lower() in ['1', 'true', 'yes']
+
+    response, status_code = admin_service.get_all_activities(
+        limit=limit,
+        activity_type=activity_type,
+        include_tracking=include_tracking,
+        include_activity_tracking=include_activity_tracking
+    )
+
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/leaves', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_all_leaves(current_user):
+    """
+    Get leave requests for all employees
+    Optional query params:
+    - limit: number of records (default: 100)
+    - status: pending/approved/rejected/cancelled (optional)
+    - emp_code: filter by employee code (optional)
+    - from_date: YYYY-MM-DD (optional)
+    - to_date: YYYY-MM-DD (optional)
+    """
+    limit = request.args.get('limit', default=100, type=int)
+    status = request.args.get('status')
+    emp_code = request.args.get('emp_code')
+    from_date_str = request.args.get('from_date')
+    to_date_str = request.args.get('to_date')
+
+    from_date = None
+    to_date = None
+
+    if from_date_str:
+        try:
+            from_date = datetime.strptime(from_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid from_date format. Use YYYY-MM-DD"
+            }), 400
+
+    if to_date_str:
+        try:
+            to_date = datetime.strptime(to_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid to_date format. Use YYYY-MM-DD"
+            }), 400
+
+    response, status_code = admin_service.get_all_leaves(
+        limit=limit,
+        status=status,
+        emp_code=emp_code,
+        from_date=from_date,
+        to_date=to_date
+    )
+
+    return jsonify(response), status_code

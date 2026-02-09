@@ -273,3 +273,205 @@ def get_all_day_summary(target_date: date = None):
     finally:
         cursor.close()
         conn.close()
+
+
+def get_all_activities(limit: int = 100, activity_type: str = None,
+                       include_tracking: bool = True, include_activity_tracking: bool = True):
+    """Get activities for all employees (optionally include field visit + activity GPS tracking points)"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        query = """
+            SELECT 
+                a.*,
+                fv.id as field_visit_id,
+                fv.visit_type as field_visit_type,
+                fv.purpose as field_visit_purpose,
+                fv.start_time as field_visit_start_time,
+                fv.end_time as field_visit_end_time,
+                fv.start_latitude,
+                fv.start_longitude,
+                fv.end_latitude,
+                fv.end_longitude,
+                fv.start_address as field_visit_start_address,
+                fv.end_address as field_visit_end_address,
+                fv.total_distance_km,
+                fv.duration_minutes as field_visit_duration_minutes,
+                fv.status as field_visit_status
+            FROM activities a
+            LEFT JOIN field_visits fv ON a.field_visit_id = fv.id
+        """
+        params = []
+
+        if activity_type:
+            query += " WHERE a.activity_type = %s"
+            params.append(activity_type)
+
+        query += " ORDER BY a.start_time DESC LIMIT %s"
+        params.append(limit)
+
+        cursor.execute(query, params)
+        activities = cursor.fetchall()
+
+        # Convert datetime and parse coordinates
+        for activity in activities:
+            for key, value in activity.items():
+                if isinstance(value, datetime):
+                    activity[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+
+            # Parse start coordinates
+            start_coords = activity.get('start_location', '').split(', ')
+            activity['start_lat'] = start_coords[0] if len(start_coords) > 0 else ''
+            activity['start_lon'] = start_coords[1] if len(start_coords) > 1 else ''
+
+            # Parse end coordinates
+            end_location = activity.get('end_location', '')
+            if end_location:
+                end_coords = end_location.split(', ')
+                activity['end_lat'] = end_coords[0] if len(end_coords) > 0 else ''
+                activity['end_lon'] = end_coords[1] if len(end_coords) > 1 else ''
+
+            # Parse destinations JSON
+            if activity.get('destinations'):
+                try:
+                    import json
+                    activity['destinations'] = json.loads(activity['destinations'])
+                except Exception:
+                    pass
+
+        # Include all field visit tracking points if requested
+        if include_tracking:
+            field_visit_ids = [a['field_visit_id'] for a in activities if a.get('field_visit_id')]
+            if field_visit_ids:
+                cursor.execute("""
+                    SELECT *
+                    FROM field_visit_tracking
+                    WHERE field_visit_id = ANY(%s)
+                    ORDER BY tracked_at ASC
+                """, (field_visit_ids,))
+
+                points = cursor.fetchall()
+
+                tracking_by_visit = {}
+                for point in points:
+                    for key, value in point.items():
+                        if isinstance(value, datetime):
+                            point[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+                    tracking_by_visit.setdefault(point['field_visit_id'], []).append(point)
+
+                for activity in activities:
+                    fvid = activity.get('field_visit_id')
+                    if fvid:
+                        activity['field_visit_tracking'] = tracking_by_visit.get(fvid, [])
+                        activity['field_visit_tracking_count'] = len(activity['field_visit_tracking'])
+
+        # Include activity GPS tracking points (location_tracking) if requested
+        if include_activity_tracking:
+            activity_ids = [a['id'] for a in activities if a.get('id')]
+            if activity_ids:
+                cursor.execute("""
+                    SELECT *
+                    FROM location_tracking
+                    WHERE activity_id = ANY(%s)
+                    ORDER BY tracked_at ASC
+                """, (activity_ids,))
+
+                points = cursor.fetchall()
+
+                tracking_by_activity = {}
+                for point in points:
+                    for key, value in point.items():
+                        if isinstance(value, datetime):
+                            point[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+
+                    # Derive latitude/longitude from location string if missing
+                    coords = (point.get('location') or '').split(', ')
+                    if coords and len(coords) >= 2:
+                        point.setdefault('latitude', coords[0])
+                        point.setdefault('longitude', coords[1])
+
+                    tracking_by_activity.setdefault(point['activity_id'], []).append(point)
+
+                for activity in activities:
+                    aid = activity.get('id')
+                    if aid:
+                        activity['activity_tracking'] = tracking_by_activity.get(aid, [])
+                        activity['activity_tracking_count'] = len(activity['activity_tracking'])
+
+        return ({
+            "success": True,
+            "data": {
+                "activities": activities,
+                "count": len(activities),
+                "include_tracking": include_tracking,
+                "include_activity_tracking": include_activity_tracking
+            }
+        }, 200)
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_all_leaves(limit: int = 100, status: str = None, emp_code: str = None,
+                   from_date: date = None, to_date: date = None):
+    """Get leave requests for all employees"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        query = """
+            SELECT 
+                l.*,
+                e.emp_full_name,
+                e.emp_email,
+                e.emp_designation,
+                e.emp_manager
+            FROM leaves l
+            LEFT JOIN employees e ON l.emp_code = e.emp_code
+            WHERE 1=1
+        """
+        params = []
+
+        if status:
+            query += " AND l.status = %s"
+            params.append(status)
+
+        if emp_code:
+            query += " AND l.emp_code = %s"
+            params.append(emp_code)
+
+        if from_date:
+            query += " AND l.from_date >= %s"
+            params.append(from_date)
+
+        if to_date:
+            query += " AND l.to_date <= %s"
+            params.append(to_date)
+
+        query += " ORDER BY l.applied_at DESC LIMIT %s"
+        params.append(limit)
+
+        cursor.execute(query, params)
+        leaves = cursor.fetchall()
+
+        # Convert datetime/date to strings
+        for leave in leaves:
+            for key, value in leave.items():
+                if isinstance(value, datetime):
+                    leave[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+                elif isinstance(value, date):
+                    leave[key] = value.strftime('%Y-%m-%d')
+
+        return ({
+            "success": True,
+            "data": {
+                "leaves": leaves,
+                "count": len(leaves)
+            }
+        }, 200)
+
+    finally:
+        cursor.close()
+        conn.close()

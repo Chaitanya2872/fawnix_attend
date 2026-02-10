@@ -119,11 +119,23 @@ def list_activities(current_user):
     Query Params:
         limit: Number of records (default: 50)
         type: Filter by activity type (optional)
+        include_tracking: true/false (default: true) for field visit tracking points
+        include_activity_tracking: true/false (default: true) for activity GPS points
     """
     limit = request.args.get('limit', 50, type=int)
     activity_type = request.args.get('type')
+    include_tracking = request.args.get('include_tracking', default='true')
+    include_tracking = str(include_tracking).lower() in ['1', 'true', 'yes']
+    include_activity_tracking = request.args.get('include_activity_tracking', default='true')
+    include_activity_tracking = str(include_activity_tracking).lower() in ['1', 'true', 'yes']
     
-    result = get_activities(current_user['emp_email'], limit, activity_type)
+    result = get_activities(
+        current_user['emp_email'],
+        limit,
+        activity_type,
+        include_tracking=include_tracking,
+        include_activity_tracking=include_activity_tracking
+    )
     return jsonify(result[0]), result[1]
 
 

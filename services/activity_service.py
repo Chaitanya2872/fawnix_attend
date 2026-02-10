@@ -284,18 +284,29 @@ def end_activity(activity_id: int, lat: str, lon: str):
         duration = int((end_time - start_time).total_seconds() / 60)
         field_visit_id = activity.get('field_visit_id')
         
-        # Get tracking points count if field visit exists
+        # Get tracking points count from BOTH tables
         tracking_count = 0
         total_distance = 0
         
+        # ✅ FIX: Count from location_tracking (where /track endpoint saves data)
+        cursor.execute("""
+            SELECT COUNT(*) as count FROM location_tracking
+            WHERE activity_id = %s
+        """, (activity_id,))
+        
+        lt_result = cursor.fetchone()
+        tracking_count = lt_result['count'] if lt_result else 0
+        
         if field_visit_id:
+            # Also count from field_visit_tracking (destination checkpoints)
             cursor.execute("""
                 SELECT COUNT(*) as count FROM field_visit_tracking
                 WHERE field_visit_id = %s
             """, (field_visit_id,))
             
-            result = cursor.fetchone()
-            tracking_count = result['count'] if result else 0
+            fvt_result = cursor.fetchone()
+            fvt_count = fvt_result['count'] if fvt_result else 0
+            tracking_count += fvt_count
             
             # End the field visit
             cursor.execute("""
@@ -391,8 +402,9 @@ def end_activity(activity_id: int, lat: str, lon: str):
         conn.close()
 
 
-def get_activities(emp_email: str, limit: int = 50, activity_type: str = None):
-    """Get activities with full details including field visit info"""
+def get_activities(emp_email: str, limit: int = 50, activity_type: str = None,
+                   include_tracking: bool = True, include_activity_tracking: bool = True):
+    """Get activities with full details including field visit info and tracking data"""
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -402,8 +414,10 @@ def get_activities(emp_email: str, limit: int = 50, activity_type: str = None):
                 a.*,
                 fv.id as field_visit_id,
                 fv.total_distance_km,
+                (SELECT COUNT(*) FROM location_tracking 
+                 WHERE activity_id = a.id) as activity_tracking_points,
                 (SELECT COUNT(*) FROM field_visit_tracking 
-                 WHERE field_visit_id = fv.id) as tracking_points
+                 WHERE field_visit_id = fv.id) as field_tracking_points
             FROM activities a
             LEFT JOIN field_visits fv ON a.field_visit_id = fv.id
             WHERE a.employee_email = %s
@@ -426,6 +440,12 @@ def get_activities(emp_email: str, limit: int = 50, activity_type: str = None):
                 if isinstance(value, datetime):
                     activity[key] = value.strftime('%Y-%m-%d %H:%M:%S')
             
+            # Combine tracking point counts
+            activity['tracking_points'] = (
+                (activity.pop('activity_tracking_points', 0) or 0) +
+                (activity.pop('field_tracking_points', 0) or 0)
+            )
+            
             # Parse start coordinates
             start_coords = activity.get('start_location', '').split(', ')
             activity['start_lat'] = start_coords[0] if len(start_coords) > 0 else ''
@@ -444,6 +464,40 @@ def get_activities(emp_email: str, limit: int = 50, activity_type: str = None):
                     activity['destinations'] = json.loads(activity['destinations'])
                 except:
                     pass
+            
+            # Include activity GPS tracking points if requested
+            if include_activity_tracking and activity.get('id'):
+                cursor.execute("""
+                    SELECT id, location, address, tracked_at, tracking_type
+                    FROM location_tracking
+                    WHERE activity_id = %s
+                    ORDER BY tracked_at ASC
+                """, (activity['id'],))
+                
+                gps_points = cursor.fetchall()
+                for point in gps_points:
+                    for key, value in point.items():
+                        if isinstance(value, datetime):
+                            point[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+                
+                activity['gps_tracking'] = gps_points
+            
+            # Include field visit tracking points if requested
+            if include_tracking and activity.get('field_visit_id'):
+                cursor.execute("""
+                    SELECT id, latitude, longitude, address, tracked_at, tracking_type
+                    FROM field_visit_tracking
+                    WHERE field_visit_id = %s
+                    ORDER BY tracked_at ASC
+                """, (activity['field_visit_id'],))
+                
+                fv_points = cursor.fetchall()
+                for point in fv_points:
+                    for key, value in point.items():
+                        if isinstance(value, datetime):
+                            point[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+                
+                activity['field_visit_tracking'] = fv_points
         
         return ({
             "success": True,
@@ -460,9 +514,6 @@ def get_activities(emp_email: str, limit: int = 50, activity_type: str = None):
         cursor.close()
         conn.close()
 
-
-# Additional functions remain the same...
-# (mark_destination_visited, get_activity_route, start_break, end_break, etc.)
 
 def mark_destination_visited(activity_id: int, destination_sequence: int, lat: str, lon: str):
     """
@@ -552,6 +603,9 @@ def get_activity_route(activity_id: int):
     """
     Get complete route with all tracking points for an activity
     
+    ✅ FIX: Now queries BOTH location_tracking (GPS pings from /track endpoint)
+    AND field_visit_tracking (destination checkpoints) to get complete route.
+    
     Args:
         activity_id: Activity ID
     
@@ -576,9 +630,39 @@ def get_activity_route(activity_id: int):
             return ({"success": False, "message": "Activity not found"}, 404)
         
         field_visit_id = activity.get('field_visit_id')
-        tracking_points = []
         
-        # Get tracking points if field visit exists
+        # ✅ FIX: Get GPS tracking points from location_tracking table
+        # (this is where /track endpoint and initial location are saved)
+        cursor.execute("""
+            SELECT 
+                id, activity_id, employee_email, 
+                location, address, 
+                tracked_at, tracking_type
+            FROM location_tracking
+            WHERE activity_id = %s
+            ORDER BY tracked_at ASC
+        """, (activity_id,))
+        
+        location_points = cursor.fetchall()
+        
+        # Convert datetime and parse coordinates for location_tracking points
+        tracking_points = []
+        for point in location_points:
+            for key, value in point.items():
+                if isinstance(value, datetime):
+                    point[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Parse "lat, lon" from location field
+            loc = point.get('location', '')
+            if loc:
+                coords = loc.split(', ')
+                point['latitude'] = coords[0] if len(coords) > 0 else ''
+                point['longitude'] = coords[1] if len(coords) > 1 else ''
+            
+            tracking_points.append(point)
+        
+        # Also get field_visit_tracking points (destination checkpoints)
+        field_tracking_points = []
         if field_visit_id:
             cursor.execute("""
                 SELECT * FROM field_visit_tracking
@@ -586,10 +670,9 @@ def get_activity_route(activity_id: int):
                 ORDER BY tracked_at ASC
             """, (field_visit_id,))
             
-            tracking_points = cursor.fetchall()
+            field_tracking_points = cursor.fetchall()
             
-            # Convert datetime
-            for point in tracking_points:
+            for point in field_tracking_points:
                 for key, value in point.items():
                     if isinstance(value, datetime):
                         point[key] = value.strftime('%Y-%m-%d %H:%M:%S')
@@ -620,6 +703,11 @@ def get_activity_route(activity_id: int):
             "total_points": len(tracking_points),
             "total_distance_km": float(activity.get('total_distance_km') or 0)
         }
+        
+        # Include field visit checkpoint tracking separately if present
+        if field_tracking_points:
+            route_data['field_visit_checkpoints'] = field_tracking_points
+            route_data['total_checkpoint_points'] = len(field_tracking_points)
         
         # Include destinations if available
         if activity.get('destinations'):
@@ -715,8 +803,10 @@ def get_active_activity(emp_email: str):
                 a.*,
                 fv.id as field_visit_id,
                 fv.total_distance_km,
+                (SELECT COUNT(*) FROM location_tracking 
+                 WHERE activity_id = a.id) as activity_tracking_points,
                 (SELECT COUNT(*) FROM field_visit_tracking 
-                 WHERE field_visit_id = fv.id) as tracking_points
+                 WHERE field_visit_id = fv.id) as field_tracking_points
             FROM activities a
             LEFT JOIN field_visits fv ON a.field_visit_id = fv.id
             WHERE a.attendance_id = %s AND a.status = 'active'
@@ -737,6 +827,12 @@ def get_active_activity(emp_email: str):
         for key, value in activity.items():
             if isinstance(value, datetime):
                 activity[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Combine tracking point counts
+        activity['tracking_points'] = (
+            (activity.pop('activity_tracking_points', 0) or 0) +
+            (activity.pop('field_tracking_points', 0) or 0)
+        )
         
         # Parse coordinates
         start_coords = activity.get('start_location', '').split(', ')

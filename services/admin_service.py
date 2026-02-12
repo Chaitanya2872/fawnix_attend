@@ -475,3 +475,68 @@ def get_all_leaves(limit: int = 100, status: str = None, emp_code: str = None,
     finally:
         cursor.close()
         conn.close()
+
+
+def get_all_overtime_records(limit: int = 100, status: str = None,
+                             emp_code: str = None,
+                             from_date: date = None,
+                             to_date: date = None):
+    """Get overtime records for all employees"""
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        query = """
+            SELECT 
+                o.*,
+                e.emp_full_name,
+                e.emp_email,
+                e.emp_designation
+            FROM overtime_records o
+            LEFT JOIN employees e ON o.emp_code = e.emp_code
+            WHERE 1=1
+        """
+        params = []
+
+        if status:
+            query += " AND o.status = %s"
+            params.append(status)
+
+        if emp_code:
+            query += " AND o.emp_code = %s"
+            params.append(emp_code)
+
+        if from_date:
+            query += " AND o.overtime_date >= %s"
+            params.append(from_date)
+
+        if to_date:
+            query += " AND o.overtime_date <= %s"
+            params.append(to_date)
+
+        query += " ORDER BY o.overtime_date DESC LIMIT %s"
+        params.append(limit)
+
+        cursor.execute(query, params)
+        records = cursor.fetchall()
+
+        # Convert datetime/date to string
+        for record in records:
+            for key, value in record.items():
+                if isinstance(value, datetime):
+                    record[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+                elif isinstance(value, date):
+                    record[key] = value.strftime('%Y-%m-%d')
+
+        return ({
+            "success": True,
+            "data": {
+                "overtime_records": records,
+                "count": len(records)
+            }
+        }, 200)
+
+    finally:
+        cursor.close()
+        conn.close()

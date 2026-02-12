@@ -169,3 +169,56 @@ def get_all_leaves(current_user):
     )
 
     return jsonify(response), status_code
+
+@admin_bp.route('/overtime-records', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_all_overtime_records(current_user):
+    """
+    Get overtime records for all employees
+
+    Optional query params:
+    - limit: number of records (default: 100)
+    - status: eligible/requested/approved/rejected/expired/utilized (optional)
+    - emp_code: filter by employee code (optional)
+    - from_date: YYYY-MM-DD (optional)
+    - to_date: YYYY-MM-DD (optional)
+    """
+
+    limit = request.args.get('limit', default=100, type=int)
+    status = request.args.get('status')
+    emp_code = request.args.get('emp_code')
+    from_date_str = request.args.get('from_date')
+    to_date_str = request.args.get('to_date')
+
+    from_date = None
+    to_date = None
+
+    if from_date_str:
+        try:
+            from_date = datetime.strptime(from_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid from_date format. Use YYYY-MM-DD"
+            }), 400
+
+    if to_date_str:
+        try:
+            to_date = datetime.strptime(to_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid to_date format. Use YYYY-MM-DD"
+            }), 400
+
+    response, status_code = admin_service.get_all_overtime_records(
+        limit=limit,
+        status=status,
+        emp_code=emp_code,
+        from_date=from_date,
+        to_date=to_date
+    )
+
+    return jsonify(response), status_code
+

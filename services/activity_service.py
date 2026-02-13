@@ -515,6 +515,150 @@ def get_activities(emp_email: str, limit: int = 50, activity_type: str = None,
         conn.close()
 
 
+def get_team_activities(manager_code: str, limit: int = 100, activity_type: str = None,
+                        include_tracking: bool = True, include_activity_tracking: bool = True):
+    """Get activities for a manager's team (optionally include field visit + activity GPS tracking points)"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        query = """
+            SELECT 
+                a.*,
+                e.emp_code,
+                fv.id as field_visit_id,
+                fv.visit_type as field_visit_type,
+                fv.purpose as field_visit_purpose,
+                fv.start_time as field_visit_start_time,
+                fv.end_time as field_visit_end_time,
+                fv.start_latitude,
+                fv.start_longitude,
+                fv.end_latitude,
+                fv.end_longitude,
+                fv.start_address as field_visit_start_address,
+                fv.end_address as field_visit_end_address,
+                fv.total_distance_km,
+                fv.duration_minutes as field_visit_duration_minutes,
+                fv.status as field_visit_status
+            FROM activities a
+            JOIN employees e ON a.employee_email = e.emp_email
+            LEFT JOIN field_visits fv ON a.field_visit_id = fv.id
+            WHERE (e.emp_manager = %s OR e.emp_informing_manager = %s)
+        """
+        params = [manager_code, manager_code]
+
+        if activity_type:
+            query += " AND a.activity_type = %s"
+            params.append(activity_type)
+
+        query += " ORDER BY a.start_time DESC LIMIT %s"
+        params.append(limit)
+
+        cursor.execute(query, params)
+        activities = cursor.fetchall()
+
+        # Convert datetime and parse coordinates
+        for activity in activities:
+            for key, value in activity.items():
+                if isinstance(value, datetime):
+                    activity[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+
+            # Parse start coordinates
+            start_coords = (activity.get('start_location') or '').split(', ')
+            activity['start_lat'] = start_coords[0] if len(start_coords) > 0 else ''
+            activity['start_lon'] = start_coords[1] if len(start_coords) > 1 else ''
+
+            # Parse end coordinates
+            end_location = activity.get('end_location', '')
+            if end_location:
+                end_coords = end_location.split(', ')
+                activity['end_lat'] = end_coords[0] if len(end_coords) > 0 else ''
+                activity['end_lon'] = end_coords[1] if len(end_coords) > 1 else ''
+
+            # Parse destinations JSON
+            if activity.get('destinations'):
+                try:
+                    activity['destinations'] = json.loads(activity['destinations'])
+                except Exception:
+                    pass
+
+        # Include all field visit tracking points if requested
+        if include_tracking:
+            field_visit_ids = [a['field_visit_id'] for a in activities if a.get('field_visit_id')]
+            if field_visit_ids:
+                cursor.execute("""
+                    SELECT *
+                    FROM field_visit_tracking
+                    WHERE field_visit_id = ANY(%s)
+                    ORDER BY tracked_at ASC
+                """, (field_visit_ids,))
+
+                points = cursor.fetchall()
+
+                tracking_by_visit = {}
+                for point in points:
+                    for key, value in point.items():
+                        if isinstance(value, datetime):
+                            point[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+                    tracking_by_visit.setdefault(point['field_visit_id'], []).append(point)
+
+                for activity in activities:
+                    fvid = activity.get('field_visit_id')
+                    if fvid:
+                        activity['field_visit_tracking'] = tracking_by_visit.get(fvid, [])
+                        activity['field_visit_tracking_count'] = len(activity['field_visit_tracking'])
+
+        # Include activity GPS tracking points (location_tracking) if requested
+        if include_activity_tracking:
+            activity_ids = [a['id'] for a in activities if a.get('id')]
+            if activity_ids:
+                cursor.execute("""
+                    SELECT *
+                    FROM location_tracking
+                    WHERE activity_id = ANY(%s)
+                    ORDER BY tracked_at ASC
+                """, (activity_ids,))
+
+                points = cursor.fetchall()
+
+                tracking_by_activity = {}
+                for point in points:
+                    for key, value in point.items():
+                        if isinstance(value, datetime):
+                            point[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+
+                    # Derive latitude/longitude from location string if missing
+                    coords = (point.get('location') or '').split(', ')
+                    if coords and len(coords) >= 2:
+                        point.setdefault('latitude', coords[0])
+                        point.setdefault('longitude', coords[1])
+
+                    tracking_by_activity.setdefault(point['activity_id'], []).append(point)
+
+                for activity in activities:
+                    aid = activity.get('id')
+                    if aid:
+                        activity['activity_tracking'] = tracking_by_activity.get(aid, [])
+                        activity['activity_tracking_count'] = len(activity['activity_tracking'])
+
+        return ({
+            "success": True,
+            "data": {
+                "activities": activities,
+                "count": len(activities),
+                "include_tracking": include_tracking,
+                "include_activity_tracking": include_activity_tracking
+            }
+        }, 200)
+
+    except Exception as e:
+        logger.error(f"❌ Get team activities error: {e}")
+        return ({"success": False, "message": str(e)}, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def mark_destination_visited(activity_id: int, destination_sequence: int, lat: str, lon: str):
     """
     Mark a destination as visited (for branch visits)

@@ -6,7 +6,7 @@ Activity and break management endpoints
 from flask import Blueprint, request, jsonify
 from middleware.auth_middleware import token_required
 from services.activity_service import (
-    start_activity, end_activity, get_activities,
+    start_activity, end_activity, get_activities, get_team_activities,
     mark_destination_visited, get_activity_route,
     start_break, end_break
 )
@@ -131,6 +131,35 @@ def list_activities(current_user):
     
     result = get_activities(
         current_user['emp_email'],
+        limit,
+        activity_type,
+        include_tracking=include_tracking,
+        include_activity_tracking=include_activity_tracking
+    )
+    return jsonify(result[0]), result[1]
+
+
+@activities_bp.route('/team', methods=['GET'])
+@token_required
+def list_team_activities(current_user):
+    """
+    List activities for manager's team
+
+    Query Params:
+        limit: Number of records (default: 100)
+        type: Filter by activity type (optional)
+        include_tracking: true/false (default: true) for field visit tracking points
+        include_activity_tracking: true/false (default: true) for activity GPS points
+    """
+    limit = request.args.get('limit', 100, type=int)
+    activity_type = request.args.get('type')
+    include_tracking = request.args.get('include_tracking', default='true')
+    include_tracking = str(include_tracking).lower() in ['1', 'true', 'yes']
+    include_activity_tracking = request.args.get('include_activity_tracking', default='true')
+    include_activity_tracking = str(include_activity_tracking).lower() in ['1', 'true', 'yes']
+
+    result = get_team_activities(
+        current_user['emp_code'],
         limit,
         activity_type,
         include_tracking=include_tracking,

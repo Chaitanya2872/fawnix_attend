@@ -508,14 +508,14 @@ def get_all_overtime_records(limit: int = 100, status: str = None,
             params.append(emp_code)
 
         if from_date:
-            query += " AND o.overtime_date >= %s"
+            query += " AND o.work_date >= %s"
             params.append(from_date)
 
         if to_date:
-            query += " AND o.overtime_date <= %s"
+            query += " AND o.work_date <= %s"
             params.append(to_date)
 
-        query += " ORDER BY o.overtime_date DESC LIMIT %s"
+        query += " ORDER BY o.work_date DESC LIMIT %s"
         params.append(limit)
 
         cursor.execute(query, params)

@@ -1,25 +1,37 @@
 """
 Employee Management System - Monolithic Application
 Main Flask Application Entry Point
-FIXED: Proper auto clockout integration with 12:30 AM testing schedule
+FIXED: Proper auto clockout integration with testing and production schedules
 """
 
 from flask import Flask, jsonify
 from flask_cors import CORS
 from config import Config
-from database.connection import init_database
+from database.connection import init_database, get_db_connection, return_connection
 from middleware.auth_middleware import setup_auth_middleware
 from middleware.error_handler import register_error_handlers
 from middleware.logging_middleware import setup_logging
+import atexit
 import logging
 import os
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import time
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+try:
+    import fcntl  # Linux/Unix process lock for single scheduler leader.
+except ImportError:  # pragma: no cover - Windows/local fallback
+    fcntl = None
 
 
-os.environ["TZ"] = "Asia/Kolkata"
+APP_TIMEZONE = os.environ.get("AUTO_CLOCKOUT_TIMEZONE", "Asia/Kolkata")
+try:
+    ZoneInfo(APP_TIMEZONE)
+except ZoneInfoNotFoundError:
+    APP_TIMEZONE = "Asia/Kolkata"
+os.environ["TZ"] = APP_TIMEZONE
 if hasattr(time, 'tzset'):
     time.tzset()
 
@@ -39,6 +51,10 @@ CORS(app, resources={
 # Setup logging
 setup_logging(app)
 logger = logging.getLogger(__name__)
+scheduler_instance = None
+scheduler_lock_handle = None
+scheduler_lock_path = None
+scheduler_shutdown_hook_registered = False
 
 # Setup middleware
 setup_auth_middleware(app)
@@ -90,9 +106,14 @@ def auto_clockout_job():
     """
     from services.auto_clockout_service import auto_clockout_all_active_sessions
     
+    timezone_name, timezone_obj = _resolve_scheduler_timezone()
     logger.info("=" * 80)
     logger.info("⏰ AUTO CLOCKOUT JOB TRIGGERED")
-    logger.info(f"⏰ Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(
+        "⏰ Current time: %s (%s)",
+        datetime.now(timezone_obj).strftime('%Y-%m-%d %H:%M:%S'),
+        timezone_name
+    )
     logger.info("=" * 80)
     
     try:
@@ -125,6 +146,239 @@ def auto_clockout_job():
             "message": str(e),
             "auto_clocked_out": 0
         }
+
+
+def _env_to_bool(value, default=False):
+    """Parse a bool env var safely."""
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _parse_positive_int(raw_value, default_value, label):
+    """Parse positive integer from env with fallback."""
+    try:
+        parsed = int(raw_value)
+        if parsed < 1:
+            raise ValueError(f"{label} must be >= 1")
+        return parsed
+    except Exception:
+        logger.warning("%s='%s' is invalid. Falling back to %s.", label, raw_value, default_value)
+        return default_value
+
+
+def _resolve_scheduler_timezone():
+    """Resolve timezone from env; fallback safely to Asia/Kolkata."""
+    timezone_name = os.environ.get("AUTO_CLOCKOUT_TIMEZONE", "Asia/Kolkata")
+    try:
+        timezone_obj = ZoneInfo(timezone_name)
+        return timezone_name, timezone_obj
+    except ZoneInfoNotFoundError:
+        logger.warning(
+            "Invalid AUTO_CLOCKOUT_TIMEZONE='%s'. Falling back to 'Asia/Kolkata'.",
+            timezone_name
+        )
+        try:
+            return "Asia/Kolkata", ZoneInfo("Asia/Kolkata")
+        except ZoneInfoNotFoundError:
+            logger.warning("Zoneinfo database unavailable. Falling back to UTC.")
+            return "UTC", dt_timezone.utc
+
+
+def _get_default_scheduler_lock_file():
+    """Default lock file path; overridable via AUTO_CLOCKOUT_LOCK_FILE."""
+    if os.name == "posix":
+        return "/tmp/fawnix-auto-clockout-scheduler.lock"
+    return os.path.join(os.getcwd(), "fawnix-auto-clockout-scheduler.lock")
+
+
+def _acquire_scheduler_process_lock(lock_file_path):
+    """
+    Acquire non-blocking process lock.
+    Returns True only for the process that should run the scheduler.
+    """
+    global scheduler_lock_handle, scheduler_lock_path
+
+    if scheduler_lock_handle:
+        return True
+
+    if fcntl is None:
+        logger.warning(
+            "Process lock unavailable on this platform; skipping cross-process scheduler lock."
+        )
+        return True
+
+    lock_dir = os.path.dirname(lock_file_path)
+    if lock_dir:
+        os.makedirs(lock_dir, exist_ok=True)
+
+    lock_handle = open(lock_file_path, "a+")
+    try:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock_handle.close()
+        return False
+
+    lock_handle.seek(0)
+    lock_handle.truncate()
+    lock_handle.write(str(os.getpid()))
+    lock_handle.flush()
+
+    scheduler_lock_handle = lock_handle
+    scheduler_lock_path = lock_file_path
+    return True
+
+
+def _release_scheduler_process_lock():
+    """Release process lock used for scheduler leader election."""
+    global scheduler_lock_handle, scheduler_lock_path
+
+    if not scheduler_lock_handle:
+        return
+
+    try:
+        if fcntl is not None:
+            fcntl.flock(scheduler_lock_handle.fileno(), fcntl.LOCK_UN)
+    except Exception as e:
+        logger.warning("Failed to release scheduler process lock cleanly: %s", e)
+    finally:
+        try:
+            scheduler_lock_handle.close()
+        except Exception:
+            pass
+        scheduler_lock_handle = None
+        scheduler_lock_path = None
+
+
+def stop_scheduler():
+    """Gracefully stop scheduler and release leader lock."""
+    global scheduler_instance
+
+    if scheduler_instance:
+        try:
+            if scheduler_instance.running:
+                scheduler_instance.shutdown(wait=False)
+                logger.info("🛑 APScheduler stopped")
+        except Exception as e:
+            logger.warning("Scheduler shutdown raised an error: %s", e)
+        finally:
+            scheduler_instance = None
+
+    _release_scheduler_process_lock()
+
+
+def _register_scheduler_shutdown_hook():
+    """Register one-time process shutdown hook for scheduler cleanup."""
+    global scheduler_shutdown_hook_registered
+
+    if scheduler_shutdown_hook_registered:
+        return
+
+    atexit.register(stop_scheduler)
+    scheduler_shutdown_hook_registered = True
+
+
+def _parse_clock_times(raw_times: str):
+    """Parse comma-separated HH:MM times into unique (hour, minute) tuples."""
+    parsed_times = []
+    seen = set()
+
+    for raw_value in raw_times.split(","):
+        value = raw_value.strip()
+        if not value:
+            continue
+
+        try:
+            hour_text, minute_text = value.split(":")
+            hour = int(hour_text)
+            minute = int(minute_text)
+        except ValueError as exc:
+            raise ValueError(f"Invalid time '{value}'. Expected HH:MM in 24-hour format.") from exc
+
+        if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+            raise ValueError(f"Invalid time '{value}'. Hour must be 00-23 and minute must be 00-59.")
+
+        if (hour, minute) in seen:
+            continue
+
+        seen.add((hour, minute))
+        parsed_times.append((hour, minute))
+
+    if not parsed_times:
+        raise ValueError("At least one auto clock-out time is required.")
+
+    return parsed_times
+
+
+def get_auto_clockout_schedule_config():
+    """
+    Build auto clock-out scheduler config from env vars.
+    Defaults:
+    - Testing mode: 03:00 daily
+    - Production mode: 18:30 and 23:59 daily
+    """
+    timezone_name, scheduler_timezone = _resolve_scheduler_timezone()
+    schedule_mode = os.environ.get("AUTO_CLOCKOUT_SCHEDULE_MODE", "production").strip().lower()
+
+    if schedule_mode not in {"testing", "production"}:
+        logger.warning(
+            "Invalid AUTO_CLOCKOUT_SCHEDULE_MODE='%s'. Falling back to 'production'.",
+            schedule_mode
+        )
+        schedule_mode = "production"
+
+    testing_times = os.environ.get("AUTO_CLOCKOUT_TEST_TIMES") or os.environ.get(
+        "AUTO_CLOCKOUT_TEST_TIME", "03:00"
+    )
+    production_times = os.environ.get("AUTO_CLOCKOUT_PRODUCTION_TIMES", "18:30,23:59")
+    misfire_grace_seconds = _parse_positive_int(
+        os.environ.get("AUTO_CLOCKOUT_MISFIRE_GRACE_SECONDS", "900"),
+        900,
+        "AUTO_CLOCKOUT_MISFIRE_GRACE_SECONDS"
+    )
+    max_instances = _parse_positive_int(
+        os.environ.get("AUTO_CLOCKOUT_MAX_INSTANCES", "1"),
+        1,
+        "AUTO_CLOCKOUT_MAX_INSTANCES"
+    )
+    coalesce = _env_to_bool(os.environ.get("AUTO_CLOCKOUT_COALESCE", "true"), default=True)
+    enforce_single_process = _env_to_bool(
+        os.environ.get("AUTO_CLOCKOUT_ENFORCE_SINGLE_PROCESS", "true"),
+        default=True
+    )
+    lock_file = os.environ.get("AUTO_CLOCKOUT_LOCK_FILE", _get_default_scheduler_lock_file())
+
+    selected_raw_times = production_times if schedule_mode == "production" else testing_times
+    default_selected = "18:30,23:59" if schedule_mode == "production" else "03:00"
+
+    try:
+        active_times = _parse_clock_times(selected_raw_times)
+    except ValueError as exc:
+        logger.warning(
+            "Invalid auto clock-out schedule '%s' for mode '%s': %s. Falling back to '%s'.",
+            selected_raw_times,
+            schedule_mode,
+            exc,
+            default_selected
+        )
+        active_times = _parse_clock_times(default_selected)
+        selected_raw_times = default_selected
+
+    return {
+        "timezone_name": timezone_name,
+        "timezone": scheduler_timezone,
+        "mode": schedule_mode,
+        "active_times": active_times,
+        "active_times_text": ", ".join(f"{hour:02d}:{minute:02d}" for hour, minute in active_times),
+        "testing_times": testing_times,
+        "production_times": production_times,
+        "selected_raw_times": selected_raw_times,
+        "misfire_grace_seconds": misfire_grace_seconds,
+        "max_instances": max_instances,
+        "coalesce": coalesce,
+        "enforce_single_process": enforce_single_process,
+        "lock_file": lock_file
+    }
 
 
 @app.route('/')
@@ -162,14 +416,14 @@ def index():
 @app.route('/health')
 def health_check():
     """Health check endpoint"""
-    from database.connection import get_db_connection
+    schedule_config = get_auto_clockout_schedule_config()
+    conn = None
+    cursor = None
     
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT 1")
-        cursor.close()
-        conn.close()
         
         return jsonify({
             'status': 'healthy',
@@ -185,8 +439,11 @@ def health_check():
             },
             'auto_clockout': {
                 'enabled': True,
-                'schedule': '12:30 AM daily (TESTING)',
-                'production_schedule': '6:30 PM daily'
+                'mode': schedule_config['mode'],
+                'active_schedule': f"{schedule_config['active_times_text']} daily ({schedule_config['timezone_name']})",
+                'testing_schedule': f"{schedule_config['testing_times']} daily",
+                'production_schedule': f"{schedule_config['production_times']} daily",
+                'misfire_grace_seconds': schedule_config['misfire_grace_seconds']
             }
         }), 200
     except Exception as e:
@@ -197,6 +454,11 @@ def health_check():
             'database': 'disconnected',
             'error': str(e)
         }), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            return_connection(conn)
 
 
 @app.route('/api/docs')
@@ -288,7 +550,7 @@ def api_docs():
             },
             'auto_clockout': {
                 'description': 'Automatic clock-out with activity cleanup and comp-off calculation',
-                'schedule': '12:30 AM daily (TESTING) - 6:30 PM (PRODUCTION)',
+                'schedule': '03:00 daily (TESTING) | 18:30, 23:59 daily (PRODUCTION)',
                 'features': [
                     'Auto-closes all active activities',
                     'Auto-closes all active field visits',
@@ -357,7 +619,7 @@ def features():
                     'name': 'Auto Clock-out',
                     'description': 'Automatic clock-out with cleanup',
                     'status': 'active',
-                    'schedule': '12:30 AM daily (TESTING) - 6:30 PM (PRODUCTION)',
+                    'schedule': '03:00 daily (TESTING) | 18:30, 23:59 daily (PRODUCTION)',
                     'features': [
                         'Activity cleanup',
                         'Field visit cleanup',
@@ -397,7 +659,7 @@ with app.app_context():
     logger.info("  ✓ Location Reports (Daily/Weekly)")
     logger.info("  ✓ Distance Monitoring (Smart 1km checks)")
     logger.info("  ✓ Activity Approvals (Late Arrival/Early Leave)")
-    logger.info("  ✓ Auto Clock-out (12:30 AM TESTING / 6:30 PM PRODUCTION)")
+    logger.info("  ✓ Auto Clock-out (03:00 TESTING / 18:30, 23:59 PRODUCTION)")
     
     logger.info("\n🔧 Initializing database...")
     try:
@@ -469,30 +731,107 @@ with app.app_context():
     logger.info("\n" + "=" * 80)
 
 
-def start_scheduler():
+def start_scheduler(schedule_config=None):
     """
-    Initialize and start the APScheduler for auto clockout
-    
-    ✅ FIXED: Now runs at 12:30 AM daily for testing (6:30 PM for production)
+    Initialize and start APScheduler for auto clock-out.
+    Schedule is configurable via env:
+    - AUTO_CLOCKOUT_SCHEDULE_MODE (testing|production, default: production)
+    - AUTO_CLOCKOUT_TEST_TIMES / AUTO_CLOCKOUT_TEST_TIME (default: 03:00)
+    - AUTO_CLOCKOUT_PRODUCTION_TIMES (default: 18:30,23:59)
+    - AUTO_CLOCKOUT_TIMEZONE (default: Asia/Kolkata)
+    - AUTO_CLOCKOUT_MISFIRE_GRACE_SECONDS (default: 900)
+    - AUTO_CLOCKOUT_COALESCE (default: true)
+    - AUTO_CLOCKOUT_MAX_INSTANCES (default: 1)
     """
-    scheduler = BackgroundScheduler(timezone="Asia/Kolkata")
+    global scheduler_instance
 
-    # ✅ Schedule auto clockout at 12:30 AM daily (TESTING)
-    # Change to hour=18, minute=30 for 6:30 PM production
-    scheduler.add_job(
-        auto_clockout_job,
-        CronTrigger(hour=7, minute=45),  # 12:30 AM daily (TESTING)
-        id="auto_clockout_job",
-        replace_existing=True,
-        misfire_grace_time=300  # Allow 5 minutes grace period
+    if scheduler_instance and scheduler_instance.running:
+        logger.info("⚠️ APScheduler already running, skipping duplicate start")
+        return scheduler_instance
+
+    if schedule_config is None:
+        schedule_config = get_auto_clockout_schedule_config()
+
+    scheduler_timezone = schedule_config["timezone"]
+    scheduler_timezone_name = schedule_config["timezone_name"]
+    active_times = schedule_config["active_times"]
+
+    scheduler = BackgroundScheduler(
+        timezone=scheduler_timezone,
+        job_defaults={
+            "coalesce": schedule_config["coalesce"],
+            "max_instances": schedule_config["max_instances"]
+        }
     )
 
+    # Register one cron job per configured time.
+    for hour, minute in active_times:
+        scheduler.add_job(
+            auto_clockout_job,
+            CronTrigger(hour=hour, minute=minute, timezone=scheduler_timezone),
+            id=f"auto_clockout_job_{hour:02d}_{minute:02d}",
+            replace_existing=True,
+            misfire_grace_time=schedule_config["misfire_grace_seconds"]
+        )
+
     scheduler.start()
+    scheduler_instance = scheduler
+    _register_scheduler_shutdown_hook()
     logger.info("=" * 80)
     logger.info("🟢 APScheduler started successfully")
-    logger.info("⏰ Auto clockout scheduled: Daily at 12:30 AM IST (TESTING)")
-    logger.info("⚠️  For PRODUCTION, change to: hour=18, minute=30 (6:30 PM)")
+    logger.info(
+        "⏰ Auto clockout schedule mode: %s | times: %s (%s)",
+        schedule_config['mode'],
+        schedule_config['active_times_text'],
+        scheduler_timezone_name
+    )
+    logger.info("⏰ Testing schedule: %s (%s)", schedule_config['testing_times'], scheduler_timezone_name)
+    logger.info(
+        "⏰ Production schedule: %s (%s)",
+        schedule_config['production_times'],
+        scheduler_timezone_name
+    )
+    logger.info(
+        "⏰ Misfire grace: %ss | coalesce=%s | max_instances=%s",
+        schedule_config["misfire_grace_seconds"],
+        schedule_config["coalesce"],
+        schedule_config["max_instances"]
+    )
+    for job in scheduler.get_jobs():
+        logger.info("📌 Scheduled job %s next run: %s", job.id, job.next_run_time)
     logger.info("=" * 80)
+    return scheduler
+
+
+def maybe_start_scheduler():
+    """Start scheduler only when enabled and in the right process."""
+    schedule_config = get_auto_clockout_schedule_config()
+    run_scheduler = _env_to_bool(os.environ.get("RUN_SCHEDULER", "true"), default=True)
+    if not run_scheduler:
+        logger.info("⏸️ RUN_SCHEDULER=false, skipping scheduler startup")
+        return
+
+    # Avoid duplicate scheduler in Flask debug reloader parent process.
+    if Config.DEBUG and os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        logger.info("⏸️ Skipping scheduler in Flask reloader parent process")
+        return
+
+    if schedule_config["enforce_single_process"]:
+        lock_path = schedule_config["lock_file"]
+        if not _acquire_scheduler_process_lock(lock_path):
+            logger.info(
+                "⏸️ Scheduler lock is held by another process. Skipping startup in pid=%s (%s).",
+                os.getpid(),
+                lock_path
+            )
+            return
+        logger.info("🔒 Scheduler process lock acquired: %s", lock_path)
+
+    try:
+        start_scheduler(schedule_config)
+    except Exception as e:
+        logger.error("Failed to start scheduler: %s", e)
+        _release_scheduler_process_lock()
 
 
 if __name__ == '__main__':
@@ -514,19 +853,14 @@ if __name__ == '__main__':
     logger.info("   • Smart distance monitoring (1km checks)")
     logger.info("   • Manager approval workflows")
     logger.info("   • Multi-device session management")
-    logger.info("   • Auto clock-out at 12:30 AM (TESTING) / 6:30 PM (PRODUCTION)\n")
+    logger.info("   • Auto clock-out at 03:00 (testing) / 18:30 and 23:59 (production)\n")
     
-    # Start scheduler (only in main process, not in reloader)
+    maybe_start_scheduler()
 
-    
     app.run(
         host='0.0.0.0',
         port=port,
         debug=debug
     )
-    
-if os.environ.get("RUN_SCHEDULER", "true") == "true":
-    try:
-        start_scheduler()
-    except Exception as e:
-        logger.error(f"Failed to start scheduler: {e}")
+else:
+    maybe_start_scheduler()

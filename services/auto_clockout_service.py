@@ -11,7 +11,7 @@ Automatically clocks out employees at shift end time.
 """
 
 from datetime import datetime, time, date
-from database.connection import get_db_connection
+from database.connection import get_db_connection, return_connection
 from services.geocoding_service import get_address_from_coordinates
 from services.CompLeaveService import calculate_and_record_compoff
 import logging
@@ -54,12 +54,73 @@ def get_auto_clockout_time(check_date: date) -> time:
         return WEEKDAY_CLOCKOUT_TIME
 
 
+def _to_time(value):
+    """Convert DB time values to Python time."""
+    if isinstance(value, time):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.strptime(value, '%H:%M:%S').time()
+        except ValueError:
+            return None
+    return None
+
+
+def _safe_close_related_records(cursor, attendance_id, logout_datetime):
+    """
+    Close related activity/field-visit records without aborting
+    the full employee clock-out when optional tables/columns drift.
+    """
+    activities_closed = 0
+    field_visits_closed = 0
+
+    cursor.execute("SAVEPOINT sp_auto_cleanup")
+    try:
+        cursor.execute("""
+            UPDATE activities
+            SET
+                end_time = %s,
+                status = 'completed',
+                duration_minutes = EXTRACT(EPOCH FROM (%s - start_time))/60
+            WHERE
+                attendance_id = %s
+                AND status = 'active'
+        """, (logout_datetime, logout_datetime, attendance_id))
+        activities_closed = cursor.rowcount
+        cursor.execute("RELEASE SAVEPOINT sp_auto_cleanup")
+    except Exception as e:
+        cursor.execute("ROLLBACK TO SAVEPOINT sp_auto_cleanup")
+        cursor.execute("RELEASE SAVEPOINT sp_auto_cleanup")
+        logger.warning(f"  ⚠️ Skipped activities cleanup for attendance {attendance_id}: {e}")
+
+    cursor.execute("SAVEPOINT sp_field_visit_cleanup")
+    try:
+        cursor.execute("""
+            UPDATE field_visits
+            SET
+                end_time = %s,
+                status = 'completed',
+                duration_minutes = EXTRACT(EPOCH FROM (%s - start_time))/60
+            WHERE
+                attendance_id = %s
+                AND status = 'active'
+        """, (logout_datetime, logout_datetime, attendance_id))
+        field_visits_closed = cursor.rowcount
+        cursor.execute("RELEASE SAVEPOINT sp_field_visit_cleanup")
+    except Exception as e:
+        cursor.execute("ROLLBACK TO SAVEPOINT sp_field_visit_cleanup")
+        cursor.execute("RELEASE SAVEPOINT sp_field_visit_cleanup")
+        logger.warning(f"  ⚠️ Skipped field visit cleanup for attendance {attendance_id}: {e}")
+
+    return activities_closed, field_visits_closed
+
+
 def auto_clockout_all_active_sessions():
     """
     ✅ FIXED: Auto clock-out all employees who are still logged in.
 
     Called by the scheduler at the correct time. This function:
-    - Finds all active sessions for today
+    - Finds all active sessions
     - Auto-closes activities and field visits
     - Calculates working hours
     - Calculates comp-off eligibility
@@ -81,25 +142,8 @@ def auto_clockout_all_active_sessions():
         logger.info(f"⏰ Today: {current_date.strftime('%A, %B %d, %Y')}")
         logger.info(f"⏰ Configured auto-clockout time: {auto_clockout_time.strftime('%H:%M:%S')}")
 
-        # ✅ FIX: On Saturdays that are NOT half-days, skip entirely
-        if current_date.weekday() == 5 and not is_saturday_halfday(current_date):
-            logger.info("⏰ Today is a non-half-day Saturday (2nd/4th) — skipping auto clock-out")
-            return {
-                "success": True,
-                "message": "Non-half-day Saturday — no auto clock-out needed",
-                "auto_clocked_out": 0
-            }
-
-        # ✅ FIX: On Sundays, skip entirely
-        if current_date.weekday() == 6:
-            logger.info("⏰ Today is Sunday — skipping auto clock-out")
-            return {
-                "success": True,
-                "message": "Sunday — no auto clock-out needed",
-                "auto_clocked_out": 0
-            }
-
-        # Find all active sessions for today
+        # Find all active sessions, regardless of work date.
+        # This catches missed sessions from prior days too.
         cursor.execute("""
             SELECT
                 a.id as attendance_id,
@@ -115,8 +159,8 @@ def auto_clockout_all_active_sessions():
             LEFT JOIN employees e ON a.employee_email = e.emp_email
             LEFT JOIN shifts s ON e.emp_shift_id = s.shift_id
             WHERE a.logout_time IS NULL
-              AND a.date = %s
-        """, (current_date,))
+            ORDER BY a.login_time ASC
+        """)
 
         active_sessions = cursor.fetchall()
 
@@ -134,11 +178,15 @@ def auto_clockout_all_active_sessions():
         errors = []
 
         for session in active_sessions:
+            cursor.execute("SAVEPOINT sp_auto_clockout_employee")
             try:
-                result = _auto_clockout_single_employee(cursor, session, current_date, auto_clockout_time)
+                result = _auto_clockout_single_employee(cursor, session, current_time)
+                cursor.execute("RELEASE SAVEPOINT sp_auto_clockout_employee")
                 if result:
                     auto_clocked_out.append(result)
             except Exception as e:
+                cursor.execute("ROLLBACK TO SAVEPOINT sp_auto_clockout_employee")
+                cursor.execute("RELEASE SAVEPOINT sp_auto_clockout_employee")
                 emp_email = session.get('employee_email', 'unknown')
                 logger.error(f"❌ Error auto clocking-out {emp_email}: {e}")
                 import traceback
@@ -171,10 +219,10 @@ def auto_clockout_all_active_sessions():
         }
     finally:
         cursor.close()
-        conn.close()
+        return_connection(conn)
 
 
-def _auto_clockout_single_employee(cursor, session, current_date, auto_clockout_time):
+def _auto_clockout_single_employee(cursor, session, current_time):
     """
     Process auto clock-out for a single employee.
     Extracted for cleaner error handling.
@@ -185,23 +233,31 @@ def _auto_clockout_single_employee(cursor, session, current_date, auto_clockout_
     emp_code = session['emp_code']
     login_time = session['login_time']
     work_date = session['date']
+    if isinstance(work_date, datetime):
+        work_date = work_date.date()
 
     logger.info(f"🔄 Processing auto clock-out for {emp_email} (attendance_id: {attendance_id})")
 
     # ✅ Use per-employee shift end time if available, otherwise use configured time
-    shift_end = session.get('shift_end_time')
-    if shift_end and isinstance(shift_end, time):
+    shift_end = _to_time(session.get('shift_end_time'))
+    if shift_end:
         logout_time_of_day = shift_end
         logger.info(f"  ⏱️  Using employee's shift end time: {shift_end}")
     else:
-        logout_time_of_day = auto_clockout_time
-        logger.info(f"  ⏱️  Using default auto-clockout time: {auto_clockout_time}")
+        logout_time_of_day = get_auto_clockout_time(work_date)
+        logger.info(f"  ⏱️  Using default auto-clockout time: {logout_time_of_day}")
 
-    logout_datetime = datetime.combine(current_date, logout_time_of_day)
+    # Use the attendance work_date so late/missed jobs don't generate future logout timestamps.
+    logout_datetime = datetime.combine(work_date, logout_time_of_day)
 
-    # ✅ Safety: If logout would be BEFORE login (shouldn't happen), use current time
+    # Safety: never write a future logout time.
+    if logout_datetime > current_time:
+        logout_datetime = current_time
+        logger.warning(f"  ⚠️ Computed logout time was in future — using current time {current_time}")
+
+    # Safety: if computed logout is before login, use current time.
     if logout_datetime < login_time:
-        logout_datetime = datetime.now()
+        logout_datetime = current_time
         logger.warning(f"  ⚠️ Logout time ({logout_time_of_day}) < login time ({login_time.time()}) — using current time")
 
     # Use login location for logout
@@ -219,32 +275,10 @@ def _auto_clockout_single_employee(cursor, session, current_date, auto_clockout_
     logger.info(f"  📍 Logout location: {logout_location}")
     logger.info(f"  ⏱️  Working hours: {working_hours:.2f}h")
 
-    # Auto-close all active activities
-    cursor.execute("""
-        UPDATE activities
-        SET
-            end_time = %s,
-            status = 'completed',
-            duration_minutes = EXTRACT(EPOCH FROM (%s - start_time))/60
-        WHERE
-            attendance_id = %s
-            AND status = 'active'
-    """, (logout_datetime, logout_datetime, attendance_id))
-    activities_closed = cursor.rowcount
+    activities_closed, field_visits_closed = _safe_close_related_records(
+        cursor, attendance_id, logout_datetime
+    )
     logger.info(f"  🧹 Closed {activities_closed} active activities")
-
-    # Auto-close all active field visits
-    cursor.execute("""
-        UPDATE field_visits
-        SET
-            end_time = %s,
-            status = 'completed',
-            duration_minutes = EXTRACT(EPOCH FROM (%s - start_time))/60
-        WHERE
-            attendance_id = %s
-            AND status = 'active'
-    """, (logout_datetime, logout_datetime, attendance_id))
-    field_visits_closed = cursor.rowcount
     logger.info(f"  🧹 Closed {field_visits_closed} active field visits")
 
     # Update attendance record
@@ -279,9 +313,10 @@ def _auto_clockout_single_employee(cursor, session, current_date, auto_clockout_
                 emp_email=emp_email,
                 emp_name=emp_name,
                 work_date=work_date,
-                working_hours=round(working_hours, 2)
+                login_time=login_time,
+                logout_time=logout_datetime
             )
-            logger.info(f"  💰 Comp-off calculated: {comp_off_result.get('comp_off_days', 0)} days")
+            logger.info(f"  💰 Comp-off calculated: {comp_off_result.get('comp_off_days', 0) if comp_off_result else 0} days")
         except Exception as e:
             logger.error(f"  ⚠️ Comp-off calculation failed for {emp_email}: {e}")
 
@@ -310,11 +345,10 @@ def manual_trigger_auto_clockout():
 
     try:
         current_time = datetime.now()
-        current_date = current_time.date()
 
         logger.info(f"🧪 MANUAL AUTO CLOCK-OUT TRIGGERED at {current_time}")
 
-        # Find all active sessions for today (no time/day check)
+        # Find all active sessions (no time/day check)
         cursor.execute("""
             SELECT
                 a.id as attendance_id,
@@ -330,8 +364,8 @@ def manual_trigger_auto_clockout():
             LEFT JOIN employees e ON a.employee_email = e.emp_email
             LEFT JOIN shifts s ON e.emp_shift_id = s.shift_id
             WHERE a.logout_time IS NULL
-              AND a.date = %s
-        """, (current_date,))
+            ORDER BY a.login_time ASC
+        """)
 
         active_sessions = cursor.fetchall()
 
@@ -344,8 +378,10 @@ def manual_trigger_auto_clockout():
             }
 
         auto_clocked_out = []
+        errors = []
 
         for session in active_sessions:
+            cursor.execute("SAVEPOINT sp_manual_auto_clockout_employee")
             try:
                 attendance_id = session['attendance_id']
                 emp_email = session['employee_email']
@@ -353,6 +389,8 @@ def manual_trigger_auto_clockout():
                 emp_code = session['emp_code']
                 login_time = session['login_time']
                 work_date = session['date']
+                if isinstance(work_date, datetime):
+                    work_date = work_date.date()
 
                 logout_datetime = current_time
 
@@ -366,31 +404,9 @@ def manual_trigger_auto_clockout():
                 duration = logout_datetime - login_time
                 working_hours = duration.total_seconds() / 3600
 
-                # End active activities
-                cursor.execute("""
-                    UPDATE activities
-                    SET
-                        end_time = %s,
-                        status = 'completed',
-                        duration_minutes = EXTRACT(EPOCH FROM (%s - start_time))/60
-                    WHERE
-                        attendance_id = %s
-                        AND status = 'active'
-                """, (logout_datetime, logout_datetime, attendance_id))
-                activities_closed = cursor.rowcount
-
-                # End active field visits
-                cursor.execute("""
-                    UPDATE field_visits
-                    SET
-                        end_time = %s,
-                        status = 'completed',
-                        duration_minutes = EXTRACT(EPOCH FROM (%s - start_time))/60
-                    WHERE
-                        attendance_id = %s
-                        AND status = 'active'
-                """, (logout_datetime, logout_datetime, attendance_id))
-                field_visits_closed = cursor.rowcount
+                activities_closed, field_visits_closed = _safe_close_related_records(
+                    cursor, attendance_id, logout_datetime
+                )
 
                 # Update attendance record
                 cursor.execute("""
@@ -424,7 +440,8 @@ def manual_trigger_auto_clockout():
                             emp_email=emp_email,
                             emp_name=emp_name,
                             work_date=work_date,
-                            working_hours=round(working_hours, 2)
+                            login_time=login_time,
+                            logout_time=logout_datetime
                         )
                     except Exception as e:
                         logger.error(f"⚠️ Comp-off calculation failed for {emp_email}: {e}")
@@ -442,9 +459,16 @@ def manual_trigger_auto_clockout():
                 })
 
                 logger.info(f"✅ Manual auto clocked-out: {emp_email} — {working_hours:.2f}h")
+                cursor.execute("RELEASE SAVEPOINT sp_manual_auto_clockout_employee")
 
             except Exception as e:
+                cursor.execute("ROLLBACK TO SAVEPOINT sp_manual_auto_clockout_employee")
+                cursor.execute("RELEASE SAVEPOINT sp_manual_auto_clockout_employee")
                 logger.error(f"❌ Error in manual auto clock-out for {session.get('employee_email')}: {e}")
+                errors.append({
+                    "employee": session.get('employee_email', 'unknown'),
+                    "error": str(e)
+                })
                 continue
 
         conn.commit()
@@ -456,6 +480,7 @@ def manual_trigger_auto_clockout():
             "message": f"Manual auto clock-out successful: {len(auto_clocked_out)} employees",
             "auto_clocked_out": len(auto_clocked_out),
             "details": auto_clocked_out,
+            "errors": errors if errors else None,
             "timestamp": current_time.strftime('%Y-%m-%d %H:%M:%S')
         }
 
@@ -471,4 +496,4 @@ def manual_trigger_auto_clockout():
         }
     finally:
         cursor.close()
-        conn.close()
+        return_connection(conn)

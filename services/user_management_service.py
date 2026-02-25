@@ -12,12 +12,17 @@ from database.connection import get_db_connection, return_connection
 logger = logging.getLogger(__name__)
 
 ALLOWED_MANAGEMENT_ROLES = {"admin", "user_manager", "hr"}
+ALLOWED_MANAGEMENT_DESIGNATIONS = {"devtester"}
 
 
 def can_manage_users(current_user: dict) -> bool:
     """Check if current user can create/delete employees."""
     role = (current_user.get("role") or "").strip().lower()
-    return role in ALLOWED_MANAGEMENT_ROLES
+    if role in ALLOWED_MANAGEMENT_ROLES:
+        return True
+
+    designation = (current_user.get("emp_designation") or "").strip().lower()
+    return designation in ALLOWED_MANAGEMENT_DESIGNATIONS
 
 
 def _serialize_row(row: dict) -> dict:

@@ -44,6 +44,55 @@ def _get_employee_columns(cursor):
     return {row["column_name"]: row for row in rows}
 
 
+def _normalize_employee_payload(payload: dict, columns_meta: dict):
+    """
+    Normalize/validate employee payload for create API.
+    API convention:
+    - Accept `emp_joined_date` only from client
+    - Support `emp_shift_id` and `emp_grade`
+    """
+    normalized = dict(payload)
+
+    if "emp_joining_date" in normalized:
+        return None, (
+            {
+                "success": False,
+                "message": "Use 'emp_joined_date' only (not 'emp_joining_date')",
+            },
+            400,
+        )
+
+    # Map API field to whichever DB column exists.
+    if "emp_joined_date" in normalized:
+        joined_value = normalized.get("emp_joined_date")
+
+        if "emp_joined_date" in columns_meta:
+            normalized["emp_joined_date"] = joined_value
+        elif "emp_joining_date" in columns_meta:
+            normalized["emp_joining_date"] = joined_value
+        else:
+            return None, (
+                {
+                    "success": False,
+                    "message": "employees table does not have a joined date column",
+                },
+                500,
+            )
+
+    # Validate shift id if provided
+    if "emp_shift_id" in normalized and normalized.get("emp_shift_id") not in ("", None):
+        try:
+            normalized["emp_shift_id"] = int(normalized["emp_shift_id"])
+        except Exception:
+            return None, ({"success": False, "message": "emp_shift_id must be an integer"}, 400)
+
+    # Normalize grade if provided
+    if "emp_grade" in normalized and normalized.get("emp_grade") is not None:
+        normalized["emp_grade"] = str(normalized.get("emp_grade")).strip()
+
+    return normalized, None
+
+
 def create_employee(payload: dict):
     """
     Create employee row and ensure user row exists.
@@ -77,7 +126,10 @@ def create_employee(payload: dict):
         if cursor.fetchone():
             return ({"success": False, "message": f"Email '{emp_email}' already exists"}, 409)
 
-        normalized_payload = dict(payload)
+        normalized_payload, error_response = _normalize_employee_payload(payload, columns_meta)
+        if error_response:
+            return error_response
+
         if "emp_name" in normalized_payload and "emp_full_name" not in normalized_payload:
             normalized_payload["emp_full_name"] = normalized_payload["emp_name"]
 
@@ -96,11 +148,18 @@ def create_employee(payload: dict):
                 required_missing.append(column_name)
 
         if required_missing:
+            client_missing = []
+            for field in required_missing:
+                if field == "emp_joining_date":
+                    client_missing.append("emp_joined_date")
+                else:
+                    client_missing.append(field)
+
             return (
                 {
                     "success": False,
                     "message": "Missing required employee fields",
-                    "missing_fields": required_missing,
+                    "missing_fields": client_missing,
                 },
                 400,
             )

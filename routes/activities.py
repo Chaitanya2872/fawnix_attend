@@ -27,6 +27,7 @@ def start(current_user):
             "latitude": "17.385044",          // required for field visits
             "longitude": "78.486671",         // required for field visits
             "notes": "Visiting client",       // optional
+            "lead_id": 123,                   // optional (link lead with created field visit)
             "destinations": [                 // optional, for branch visits
                 {
                     "name": "Branch Office",
@@ -56,6 +57,7 @@ def start(current_user):
     longitude = data.get('longitude', '')
     notes = data.get('notes', '')
     destinations = data.get('destinations')
+    lead_id = data.get('lead_id')
     
     if not activity_type:
         return jsonify({
@@ -70,7 +72,9 @@ def start(current_user):
         latitude,
         longitude,
         notes,
-        destinations
+        destinations,
+        lead_id=lead_id,
+        emp_code=current_user['emp_code']
     )
     
     return jsonify(result[0]), result[1]

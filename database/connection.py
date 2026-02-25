@@ -286,6 +286,30 @@ def init_database():
         
         logger.info("✓ Attendance table ready")
         
+        # Backfill auto clock-out fields for existing databases.
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'attendance'
+                      AND column_name = 'auto_clocked_out'
+                ) THEN
+                    ALTER TABLE attendance ADD COLUMN auto_clocked_out BOOLEAN DEFAULT false;
+                END IF;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'attendance'
+                      AND column_name = 'auto_clockout_reason'
+                ) THEN
+                    ALTER TABLE attendance ADD COLUMN auto_clockout_reason TEXT;
+                END IF;
+            END $$;
+        """)
+
         # 8. Activities (no foreign keys - uses email)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS activities (
@@ -394,6 +418,67 @@ def init_database():
         
         logger.info("✓ Comp-offs table ready")
         
+        # 11. Leads
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS leads (
+                id SERIAL PRIMARY KEY,
+                lead_name VARCHAR(255) NOT NULL,
+                company_name VARCHAR(255),
+                phone_number VARCHAR(30),
+                email VARCHAR(255),
+                source VARCHAR(100),
+                status VARCHAR(30) DEFAULT 'new',
+                priority VARCHAR(20) DEFAULT 'medium',
+                location TEXT,
+                expected_value NUMERIC(12,2),
+                follow_up_date DATE,
+                notes TEXT,
+                field_visit_id INTEGER,
+                assigned_to_emp_code VARCHAR(50),
+                assigned_to_email VARCHAR(255),
+                created_by_emp_code VARCHAR(50) NOT NULL,
+                created_by_email VARCHAR(255),
+                created_by_name VARCHAR(255),
+                last_contacted_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CHECK (status IN ('new', 'contacted', 'qualified', 'proposal', 'won', 'lost')),
+                CHECK (priority IN ('low', 'medium', 'high'))
+            )
+        """)
+
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.table_constraints
+                    WHERE constraint_name = 'leads_created_by_emp_code_fkey'
+                    AND table_name = 'leads'
+                ) THEN
+                    ALTER TABLE leads
+                    ADD CONSTRAINT leads_created_by_emp_code_fkey
+                    FOREIGN KEY (created_by_emp_code) REFERENCES employees(emp_code) ON DELETE CASCADE;
+                END IF;
+            END $$;
+        """)
+
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.table_constraints
+                    WHERE constraint_name = 'leads_assigned_to_emp_code_fkey'
+                    AND table_name = 'leads'
+                ) THEN
+                    ALTER TABLE leads
+                    ADD CONSTRAINT leads_assigned_to_emp_code_fkey
+                    FOREIGN KEY (assigned_to_emp_code) REFERENCES employees(emp_code) ON DELETE SET NULL;
+                END IF;
+            END $$;
+        """)
+
+        logger.info("âœ“ Leads table ready")
+
         # ==================== CREATE INDEXES ====================
         
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_shifts_active ON shifts(is_active)")
@@ -405,6 +490,9 @@ def init_database():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_comp_offs_emp_code ON comp_offs(emp_code, status, work_date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_attendance_email_date ON attendance(employee_email, date, status)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_activities_email_date ON activities(employee_email, date, activity_type, status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_owner ON leads(created_by_emp_code, assigned_to_emp_code)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_status_priority ON leads(status, priority, updated_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_field_visit ON leads(field_visit_id)")
         
         logger.info("✓ Indexes created")
         

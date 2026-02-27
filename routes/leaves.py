@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
+import logging
 from middleware.auth_middleware import token_required
-from database.connection import get_db_connection
+from database.connection import get_db_connection, return_connection
 from services.whatsapp_service import send_leave_notification
 from services.leaves_service import (
     apply_leave,
@@ -12,6 +13,7 @@ from services.leaves_service import (
 )
 
 leaves_bp = Blueprint("leaves", __name__)
+logger = logging.getLogger(__name__)
 
 # =========================================================
 # HELPER FUNCTIONS
@@ -33,7 +35,7 @@ def get_employee_by_code(emp_code):
 
     row = cur.fetchone()
     cur.close()
-    conn.close()
+    return_connection(conn)
 
     if not row:
         return None
@@ -81,7 +83,7 @@ def get_leave_details(leave_id):
 
     row = cur.fetchone()
     cur.close()
-    conn.close()
+    return_connection(conn)
 
     if not row:
         return None
@@ -138,11 +140,20 @@ def apply(current_user):
                     from_date=data["from_date"],
                     to_date=data["to_date"]
                 )
-                print(f"Manager notification sent: {notification_sent}")
+                logger.info(
+                    "Manager leave-request WhatsApp notification sent=%s manager=%s employee=%s",
+                    notification_sent,
+                    manager["emp_code"],
+                    employee["emp_code"]
+                )
             except Exception as e:
-                print(f"Error sending manager notification: {e}")
+                logger.exception("Error sending manager leave-request notification: %s", e)
         else:
-            print(f"Manager not found or missing details. Employee: {employee}, Manager: {manager}")
+            logger.warning(
+                "Manager not found or missing details for leave apply. employee=%s manager=%s",
+                employee,
+                manager
+            )
 
     return jsonify(result), status
 
@@ -187,11 +198,15 @@ def approve(current_user):
                     from_date=leave["from_date"],
                     to_date=leave["to_date"]
                 )
-                print(f"Employee notification sent: {emp_notif}")
+                logger.info(
+                    "Employee leave-status WhatsApp notification sent=%s employee=%s",
+                    emp_notif,
+                    employee["emp_code"]
+                )
             except Exception as e:
-                print(f"Error sending employee notification: {e}")
+                logger.exception("Error sending employee leave-status notification: %s", e)
         else:
-            print(f"Employee details missing or no phone: {employee}")
+            logger.warning("Employee details missing or no phone for leave status: %s", employee)
 
         # Notify Manager (confirmation)
         if manager and manager.get("phone") and employee:
@@ -204,11 +219,15 @@ def approve(current_user):
                     from_date=leave["from_date"],
                     to_date=leave["to_date"]
                 )
-                print(f"Manager notification sent: {mgr_notif}")
+                logger.info(
+                    "Manager leave-action WhatsApp notification sent=%s manager=%s",
+                    mgr_notif,
+                    manager["emp_code"]
+                )
             except Exception as e:
-                print(f"Error sending manager notification: {e}")
+                logger.exception("Error sending manager leave-action notification: %s", e)
         else:
-            print(f"Manager details missing or no phone: {manager}")
+            logger.warning("Manager details missing or no phone for leave action: %s", manager)
 
     return jsonify(result), status
 

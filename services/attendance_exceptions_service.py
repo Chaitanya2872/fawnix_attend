@@ -274,11 +274,13 @@ def request_late_arrival_exception(emp_code: str, attendance_id: int,
                 "exception_id": exception_id,
                 "attendance_id": attendance_id,
                 "exception_type": "late_arrival",
+                "employee_name": emp_info['emp_name'],
                 "late_by_minutes": late_by_minutes,
                 "shift_start_time": shift_start.strftime('%H:%M'),
                 "actual_login_time": login_time_only.strftime('%H:%M'),
                 "planned_arrival_time": shift_start.strftime('%H:%M'),  # New field in response
                 "manager": emp_info['approver_name'],
+                "manager_code": emp_info['approver_code'],
                 "manager_email": emp_info['approver_email'],
                 "status": "pending"
             }
@@ -421,10 +423,12 @@ def request_early_leave_exception(emp_code: str, attendance_id: int,
                 "exception_id": exception_id,
                 "attendance_id": attendance_id,
                 "exception_type": "early_leave",
+                "employee_name": emp_info['emp_name'],
                 "planned_leave_time": planned_leave_time,
                 "early_by_minutes": early_by_minutes,
                 "shift_end_time": shift_end.strftime('%H:%M'),
                 "manager": emp_info['approver_name'],
+                "manager_code": emp_info['approver_code'],
                 "manager_email": emp_info['approver_email'],
                 "status": "pending",
                 "note": "Please wait for manager approval before clocking out"
@@ -504,7 +508,10 @@ def approve_exception(exception_id: int, manager_code: str,
                 "exception_type": exception_type,
                 "status": action,
                 "employee": emp_name,
+                "emp_code": exception['emp_code'],
+                "emp_email": exception['emp_email'],
                 "reviewed_by": manager_code,
+                "manager_remarks": remarks,
                 "reviewed_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
         }, 200)

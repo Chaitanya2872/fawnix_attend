@@ -3,8 +3,12 @@ Attendance Exceptions Routes
 Handles late arrival and early leave approval requests
 """
 
+import logging
+
 from flask import Blueprint, request, jsonify
+from database.connection import get_db_connection, return_connection
 from middleware.auth_middleware import token_required
+from services.whatsapp_service import send_notification
 from services.attendance_exceptions_service import (
     request_late_arrival_exception,
     request_early_leave_exception,
@@ -15,6 +19,104 @@ from services.attendance_exceptions_service import (
 )
 
 exceptions_bp = Blueprint('attendance_exceptions', __name__)
+logger = logging.getLogger(__name__)
+
+
+def _get_employee_contact(emp_code):
+    """Fetch employee name and WhatsApp phone number by emp_code."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT emp_code, emp_full_name, emp_contact
+            FROM employees
+            WHERE emp_code = %s
+            """,
+            (emp_code,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "emp_code": row["emp_code"],
+            "name": row["emp_full_name"],
+            "phone": row["emp_contact"],
+        }
+    finally:
+        cursor.close()
+        return_connection(conn)
+
+
+def _send_manager_request_notification(current_user, exception_data, reason):
+    """Notify manager/informing-manager when exception request is submitted."""
+    manager_code = exception_data.get("manager_code")
+    if not manager_code:
+        logger.info("Skipping manager notification: manager_code missing")
+        return
+
+    manager = _get_employee_contact(manager_code)
+    if not manager or not manager.get("phone"):
+        logger.info("Skipping manager notification: manager contact missing for %s", manager_code)
+        return
+
+    employee_name = current_user.get("emp_full_name") or exception_data.get("employee_name") or "Employee"
+    exception_type = exception_data.get("exception_type")
+
+    if exception_type == "late_arrival":
+        detail = f"Late by: {exception_data.get('late_by_minutes')} minutes"
+        request_label = "late-arrival"
+    else:
+        detail = f"Planned leave time: {exception_data.get('planned_leave_time')}"
+        request_label = "early-leave"
+
+    message = (
+        f"Hello {manager['name']},\n\n"
+        f"{employee_name} has submitted a {request_label} exception request.\n"
+        f"{detail}\n"
+        f"Reason: {reason}\n"
+        "Status: Pending your review.\n\n"
+        "- Fawnix"
+    )
+
+    sent = send_notification(manager["phone"], message)
+    logger.info(
+        "Manager WhatsApp notification for %s request (exception_id=%s): %s",
+        exception_type,
+        exception_data.get("exception_id"),
+        sent
+    )
+
+
+def _send_employee_decision_notification(exception_data, action, remarks):
+    """Notify employee when manager approves/rejects exception request."""
+    emp_code = exception_data.get("emp_code")
+    if not emp_code:
+        logger.info("Skipping employee notification: emp_code missing")
+        return
+
+    employee = _get_employee_contact(emp_code)
+    if not employee or not employee.get("phone"):
+        logger.info("Skipping employee notification: employee contact missing for %s", emp_code)
+        return
+
+    exception_type = exception_data.get("exception_type", "").replace("_", " ")
+    decision = action.lower()
+    message = (
+        f"Hello {employee['name']},\n\n"
+        f"Your {exception_type} exception request has been {decision}."
+    )
+    if remarks:
+        message += f"\nManager remarks: {remarks}"
+    message += "\n\n- Fawnix"
+
+    sent = send_notification(employee["phone"], message)
+    logger.info(
+        "Employee WhatsApp decision notification for exception_id=%s: %s",
+        exception_data.get("exception_id"),
+        sent
+    )
 
 
 @exceptions_bp.route('/late-arrival', methods=['POST'])
@@ -55,7 +157,7 @@ def submit_late_arrival(current_user):
             }
         }
     """
-    data = request.get_json()
+    data = request.get_json() or {}
     
     attendance_id = data.get('attendance_id')
     reason = data.get('reason')
@@ -73,8 +175,15 @@ def submit_late_arrival(current_user):
         reason,
         notes
     )
-    
-    return jsonify(result[0]), result[1]
+
+    response_body, status_code = result
+    if status_code == 201 and response_body.get("success"):
+        try:
+            _send_manager_request_notification(current_user, response_body.get("data", {}), reason)
+        except Exception:
+            logger.exception("Failed to send late arrival WhatsApp notification")
+
+    return jsonify(response_body), status_code
 
 
 @exceptions_bp.route('/early-leave', methods=['POST'])
@@ -118,7 +227,7 @@ def submit_early_leave(current_user):
             }
         }
     """
-    data = request.get_json()
+    data = request.get_json() or {}
     
     attendance_id = data.get('attendance_id')
     planned_leave_time = data.get('planned_leave_time')
@@ -138,8 +247,15 @@ def submit_early_leave(current_user):
         reason,
         notes
     )
-    
-    return jsonify(result[0]), result[1]
+
+    response_body, status_code = result
+    if status_code == 201 and response_body.get("success"):
+        try:
+            _send_manager_request_notification(current_user, response_body.get("data", {}), reason)
+        except Exception:
+            logger.exception("Failed to send early leave WhatsApp notification")
+
+    return jsonify(response_body), status_code
 
 
 @exceptions_bp.route('/approve', methods=['POST'])
@@ -181,7 +297,7 @@ def approve_exception_request(current_user):
             }
         }
     """
-    data = request.get_json()
+    data = request.get_json() or {}
     
     exception_id = data.get('exception_id')
     action = data.get('action')
@@ -205,8 +321,15 @@ def approve_exception_request(current_user):
         action,
         remarks
     )
-    
-    return jsonify(result[0]), result[1]
+
+    response_body, status_code = result
+    if status_code == 200 and response_body.get("success"):
+        try:
+            _send_employee_decision_notification(response_body.get("data", {}), action, remarks)
+        except Exception:
+            logger.exception("Failed to send exception decision WhatsApp notification")
+
+    return jsonify(response_body), status_code
 
 
 @exceptions_bp.route('/my-exceptions', methods=['GET'])

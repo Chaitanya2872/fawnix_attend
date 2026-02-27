@@ -216,28 +216,7 @@ def send_leave_notification(
             "Content-Type": "application/json"
         }
 
-        # Prefer plain text for clearer grammar and readability.
-        text_payload = {
-            "messaging_product": "whatsapp",
-            "to": formatted_phone,
-            "type": "text",
-            "text": {
-                "body": full_message
-            }
-        }
-
-        response = requests.post(url, headers=headers, json=text_payload, timeout=15)
-
-        if response.status_code == 200:
-            logger.info("WhatsApp leave text message sent")
-            return True
-
-        logger.warning(
-            "WhatsApp text message failed for leave notification (status=%s). "
-            "Falling back to template message.",
-            response.status_code
-        )
-
+        # Use template first for production reliability (works outside 24h session window).
         template_payload = {
             "messaging_product": "whatsapp",
             "to": formatted_phone,
@@ -267,10 +246,36 @@ def send_leave_notification(
         response = requests.post(url, headers=headers, json=template_payload, timeout=15)
 
         if response.status_code == 200:
-            logger.info("WhatsApp leave template message sent (fallback)")
+            logger.info("WhatsApp leave template message sent")
             return True
 
-        logger.error(f"WhatsApp error {response.status_code}: {response.text}")
+        logger.warning(
+            "WhatsApp leave template send failed (status=%s): %s. Falling back to text message.",
+            response.status_code,
+            response.text
+        )
+
+        text_payload = {
+            "messaging_product": "whatsapp",
+            "to": formatted_phone,
+            "type": "text",
+            "text": {
+                "body": full_message
+            }
+        }
+
+        text_response = requests.post(url, headers=headers, json=text_payload, timeout=15)
+        if text_response.status_code == 200:
+            logger.info("WhatsApp leave text message sent (fallback)")
+            return True
+
+        logger.error(
+            "WhatsApp leave send failed. template_status=%s text_status=%s template_response=%s text_response=%s",
+            response.status_code,
+            text_response.status_code,
+            response.text,
+            text_response.text
+        )
         return False
 
     except Exception:

@@ -191,6 +191,14 @@ def send_leave_notification(
     """
 
     try:
+        formatted_phone = _format_phone(phone_number)
+        full_message = (
+            f"Hello {employee_name},\n\n"
+            f"{message}\n"
+            f"Leave dates: {from_date} to {to_date}\n\n"
+            "- Fawnix"
+        )
+
         if not Config.WHATSAPP_TOKEN or not Config.PHONE_NUMBER_ID:
             logger.info(f"""
             DEV MODE WHATSAPP
@@ -203,10 +211,36 @@ def send_leave_notification(
             return True
 
         url = f"https://graph.facebook.com/v19.0/{Config.PHONE_NUMBER_ID}/messages"
+        headers = {
+            "Authorization": f"Bearer {Config.WHATSAPP_TOKEN}",
+            "Content-Type": "application/json"
+        }
 
-        payload = {
+        # Prefer plain text for clearer grammar and readability.
+        text_payload = {
             "messaging_product": "whatsapp",
-            "to": _format_phone(phone_number),
+            "to": formatted_phone,
+            "type": "text",
+            "text": {
+                "body": full_message
+            }
+        }
+
+        response = requests.post(url, headers=headers, json=text_payload, timeout=15)
+
+        if response.status_code == 200:
+            logger.info("WhatsApp leave text message sent")
+            return True
+
+        logger.warning(
+            "WhatsApp text message failed for leave notification (status=%s). "
+            "Falling back to template message.",
+            response.status_code
+        )
+
+        template_payload = {
+            "messaging_product": "whatsapp",
+            "to": formatted_phone,
             "type": "template",
             "template": {
                 "name": "fawnix_notification",
@@ -230,16 +264,10 @@ def send_leave_notification(
                 ]
             }
         }
-
-        headers = {
-            "Authorization": f"Bearer {Config.WHATSAPP_TOKEN}",
-            "Content-Type": "application/json"
-        }
-
-        response = requests.post(url, headers=headers, json=payload, timeout=15)
+        response = requests.post(url, headers=headers, json=template_payload, timeout=15)
 
         if response.status_code == 200:
-            logger.info("WhatsApp message sent")
+            logger.info("WhatsApp leave template message sent (fallback)")
             return True
 
         logger.error(f"WhatsApp error {response.status_code}: {response.text}")

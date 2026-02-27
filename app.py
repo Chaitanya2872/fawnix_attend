@@ -75,6 +75,7 @@ from routes.tracking import tracking_bp
 from routes.compoff import compoff_bp
 from routes.attendance_exceptions import exceptions_bp
 from routes.holidays import holidays_bp
+from routes.leads import leads_bp
 
 # ✨ NEW ROUTES - Location Reports, Distance Monitoring, Approvals
 from routes.location import location_report_bp
@@ -90,6 +91,7 @@ app.register_blueprint(admin_bp, url_prefix='/api/admin')
 app.register_blueprint(leaves_bp, url_prefix='/api/leaves')
 app.register_blueprint(tracking_bp, url_prefix='/api/tracking')
 app.register_blueprint(compoff_bp, url_prefix='/api/compoff')
+app.register_blueprint(leads_bp, url_prefix='/api/leads')
 app.register_blueprint(exceptions_bp, url_prefix='/api/attendance-exceptions')
 
 # ✨ Register new blueprints
@@ -248,7 +250,7 @@ def _release_scheduler_process_lock():
             pass
         scheduler_lock_handle = None
         scheduler_lock_path = None
-
+ 
 
 def stop_scheduler():
     """Gracefully stop scheduler and release leader lock."""
@@ -393,6 +395,7 @@ def index():
             'Location Reports (Daily/Weekly)',
             'Distance Monitoring (Smart 1km checks)',
             'Activity Approvals (Late Arrival/Early Leave)',
+            'Lead Management with Field Visit Linking',
             'Auto Clock-out with Activity Cleanup'
         ],
         'endpoints': {
@@ -404,6 +407,7 @@ def index():
             'leaves': '/api/leaves',
             'tracking': '/api/tracking',
             'compoff': '/api/compoff',
+            'leads': '/api/leads',
             'reports': '/api/reports',
             'distance': '/api/distance',
             'approvals': '/api/approvals'
@@ -435,6 +439,7 @@ def health_check():
                 'location_reports': 'active',
                 'distance_monitoring': 'active',
                 'activity_approvals': 'active',
+                'lead_management': 'active',
                 'auto_clockout': 'active'
             },
             'auto_clockout': {
@@ -522,6 +527,13 @@ def api_docs():
                 'GET /api/compoff': 'Get comp-off balance',
                 'POST /api/compoff': 'Request comp-off'
             },
+            'leads': {
+                'POST /api/leads': 'Create a lead',
+                'GET /api/leads': 'List leads (supports filters)',
+                'GET /api/leads/{id}': 'Get lead details',
+                'PUT /api/leads/{id}': 'Update lead',
+                'POST /api/leads/{id}/link-field-visit': 'Link lead with a field visit'
+            },
             'admin': {
                 'POST /api/admin/assign-role': 'Assign role to user',
                 'GET /api/admin/stats': 'Get system statistics'
@@ -547,6 +559,10 @@ def api_docs():
             'activity_approvals': {
                 'description': 'Manager approval system for late arrivals and early leaves',
                 'endpoints': ['/api/approvals/late-arrival/request', '/api/approvals/approve']
+            },
+            'lead_management': {
+                'description': 'Lead creation and tracking with optional field-visit linkage',
+                'endpoints': ['/api/leads', '/api/leads/{id}/link-field-visit']
             },
             'auto_clockout': {
                 'description': 'Automatic clock-out with activity cleanup and comp-off calculation',
@@ -616,6 +632,17 @@ def features():
                     ]
                 },
                 {
+                    'name': 'Lead Management',
+                    'description': 'Lead lifecycle with optional field-visit linkage',
+                    'status': 'active',
+                    'endpoints': [
+                        'POST /api/leads',
+                        'GET /api/leads',
+                        'PUT /api/leads/{id}',
+                        'POST /api/leads/{id}/link-field-visit'
+                    ]
+                },
+                {
                     'name': 'Auto Clock-out',
                     'description': 'Automatic clock-out with cleanup',
                     'status': 'active',
@@ -645,7 +672,7 @@ def after_request(response):
     response.headers['X-Service'] = 'employee-management-system'
     response.headers['X-Version'] = '2.0.0'
     response.headers['X-Architecture'] = 'monolithic'
-    response.headers['X-Features'] = 'refresh-tokens,location-reports,distance-monitoring,approvals,auto-clockout'
+    response.headers['X-Features'] = 'refresh-tokens,location-reports,distance-monitoring,approvals,lead-management,auto-clockout'
     return response
 
 
@@ -659,6 +686,7 @@ with app.app_context():
     logger.info("  ✓ Location Reports (Daily/Weekly)")
     logger.info("  ✓ Distance Monitoring (Smart 1km checks)")
     logger.info("  ✓ Activity Approvals (Late Arrival/Early Leave)")
+    logger.info("  ✓ Lead Management (with optional field-visit linking)")
     logger.info("  ✓ Auto Clock-out (03:00 TESTING / 18:30, 23:59 PRODUCTION)")
     
     logger.info("\n🔧 Initializing database...")
@@ -723,6 +751,13 @@ with app.app_context():
     logger.info("\n  🔄 Comp-off:")
     logger.info("    GET    /api/compoff")
     logger.info("    POST   /api/compoff")
+
+    logger.info("\n  🎯 Leads:")
+    logger.info("    POST   /api/leads")
+    logger.info("    GET    /api/leads")
+    logger.info("    GET    /api/leads/{id}")
+    logger.info("    PUT    /api/leads/{id}")
+    logger.info("    POST   /api/leads/{id}/link-field-visit")
     
     logger.info("\n  🛡️  Admin:")
     logger.info("    POST   /api/admin/assign-role")
@@ -852,6 +887,7 @@ if __name__ == '__main__':
     logger.info("   • Daily/weekly location reports")
     logger.info("   • Smart distance monitoring (1km checks)")
     logger.info("   • Manager approval workflows")
+    logger.info("   • Lead management with field-visit linking")
     logger.info("   • Multi-device session management")
     logger.info("   • Auto clock-out at 03:00 (testing) / 18:30 and 23:59 (production)\n")
     

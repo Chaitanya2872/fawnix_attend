@@ -134,7 +134,7 @@ def apply(current_user):
                     phone_number=manager["phone"],
                     title="Leave Request",
                     employee_name=manager["name"],
-                    message=f"{employee['name']} has applied for leave.",
+                    message=f"{employee['name']} has submitted a leave request.",
                     from_date=data["from_date"],
                     to_date=data["to_date"]
                 )
@@ -183,7 +183,7 @@ def approve(current_user):
                     phone_number=employee["phone"],
                     title="Leave Status Update",
                     employee_name=employee["name"],
-                    message=f"Your leave request has been {action_text}.",
+                    message=f"Your leave request has been {action_text.lower()}.",
                     from_date=leave["from_date"],
                     to_date=leave["to_date"]
                 )
@@ -200,7 +200,7 @@ def approve(current_user):
                     phone_number=manager["phone"],
                     title="Leave Action Taken",
                     employee_name=manager["name"],
-                    message=f"You have {action_text.lower()} {employee['name']}'s leave.",
+                    message=f"You have {action_text.lower()} {employee['name']}'s leave request.",
                     from_date=leave["from_date"],
                     to_date=leave["to_date"]
                 )

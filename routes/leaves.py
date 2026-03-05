@@ -76,7 +76,7 @@ def get_leave_details(leave_id):
     cur = conn.cursor()
 
     cur.execute("""
-        SELECT emp_code, from_date, to_date, leave_type, status
+        SELECT emp_code, from_date, to_date, leave_type, status, leave_count, notes
         FROM leaves
         WHERE id = %s
     """, (leave_id,))
@@ -95,7 +95,9 @@ def get_leave_details(leave_id):
             "from_date": row['from_date'].strftime('%d-%m-%Y') if row['from_date'] else None,
             "to_date": row['to_date'].strftime('%d-%m-%Y') if row['to_date'] else None,
             "leave_type": row['leave_type'],
-            "status": row['status']
+            "status": row['status'],
+            "leave_count": float(row['leave_count']) if row.get('leave_count') is not None else None,
+            "notes": row.get('notes', '')
         }
     else:
         from datetime import date
@@ -104,7 +106,9 @@ def get_leave_details(leave_id):
             "from_date": row[1].strftime('%d-%m-%Y') if isinstance(row[1], date) else row[1],
             "to_date": row[2].strftime('%d-%m-%Y') if isinstance(row[2], date) else row[2],
             "leave_type": row[3],
-            "status": row[4]
+            "status": row[4],
+            "leave_count": float(row[5]) if row[5] is not None else None,
+            "notes": row[6] if len(row) > 6 and row[6] else ''
         }
 
 
@@ -132,6 +136,7 @@ def apply(current_user):
 
         if employee and manager and manager.get("phone"):
             try:
+                leave_data = result.get("data", {}) if isinstance(result, dict) else {}
                 notification_sent = send_leave_notification(
                     phone_number=manager["phone"],
                     title="Leave Request",
@@ -139,7 +144,10 @@ def apply(current_user):
                     message=employee["name"],
                     from_date=data["from_date"],
                     to_date=data["to_date"],
-                    notification_type="submission"
+                    notification_type="submission",
+                    number_of_days=leave_data.get("leave_count"),
+                    reason=data.get("notes", ""),
+                    subject_employee_name=employee["name"]
                 )
                 logger.info(
                     "Manager leave-request WhatsApp notification sent=%s manager=%s employee=%s",
@@ -217,10 +225,12 @@ def approve(current_user):
                     phone_number=manager["phone"],
                     title="Leave Action Taken",
                     employee_name=manager["name"],
-                    message=f"{action_lower} by you for {employee['name']}",
+                    message=action_lower,
                     from_date=leave["from_date"],
                     to_date=leave["to_date"],
-                    notification_type="manager_action"
+                    notification_type="manager_action",
+                    number_of_days=leave.get("leave_count"),
+                    subject_employee_name=employee["name"]
                 )
                 logger.info(
                     "Manager leave-action WhatsApp notification sent=%s manager=%s",

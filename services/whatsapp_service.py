@@ -173,6 +173,17 @@ def _format_phone(phone: str) -> str:
     return phone
 
 
+def _format_days(number_of_days) -> str:
+    """Return a clean day count string (e.g., 2, 1.5)."""
+    if number_of_days is None:
+        return ""
+    try:
+        value = float(number_of_days)
+        return str(int(value)) if value.is_integer() else f"{value}".rstrip("0").rstrip(".")
+    except (TypeError, ValueError):
+        return str(number_of_days).strip()
+
+
 def send_leave_notification(
     phone_number: str,
     title: str,
@@ -180,7 +191,10 @@ def send_leave_notification(
     message: str,
     from_date: str,
     to_date: str,
-    notification_type: str = "decision"
+    notification_type: str = "decision",
+    number_of_days=None,
+    reason: str = "",
+    subject_employee_name: str = ""
 ) -> bool:
     """
     Send WhatsApp leave notification
@@ -188,15 +202,50 @@ def send_leave_notification(
 
     try:
         formatted_phone = _format_phone(phone_number)
-        normalized_status = (message or "").strip().rstrip(".")
+        normalized_message = (message or "").strip().rstrip(".")
+        normalized_subject_name = (subject_employee_name or "").strip()
+        day_count = _format_days(number_of_days)
+        reason_text = (reason or "").strip() or "Not specified"
+
         if notification_type == "submission":
-            if "submitted" not in normalized_status.lower():
-                normalized_status = f"submitted by {normalized_status}"
-        full_message = (
-            f"Hello {employee_name},\n\n"
-            f"Your leave request from {from_date} to {to_date} has been {normalized_status}.\n\n"
-            "- Fawnix"
-        )
+            template_name = getattr(Config, "WHATSAPP_LEAVE_SUBMISSION_TEMPLATE", "fawnix_notification")
+            requester_name = normalized_subject_name or normalized_message
+            if template_name == "fawnix_notification":
+                status_text = f"submitted by {requester_name}"
+                body_values = [employee_name, from_date, to_date, status_text]
+            else:
+                body_values = [employee_name, requester_name, from_date, to_date, day_count, reason_text]
+            full_message = (
+                f"Hi {employee_name},\n"
+                f"{requester_name} has requested leave from {from_date} to {to_date} ({day_count} days) "
+                f"for the following reason:\n"
+                f"{reason_text}\n"
+                f"Fawnix"
+            )
+        elif notification_type == "manager_action":
+            template_name = getattr(Config, "WHATSAPP_LEAVE_MANAGER_ACTION_TEMPLATE", "fawnix_notification")
+            requester_name = normalized_subject_name
+            action_taken = normalized_message
+            if template_name == "fawnix_notification":
+                status_text = f"{action_taken} by you for {requester_name}"
+                body_values = [employee_name, from_date, to_date, status_text]
+            else:
+                body_values = [employee_name, action_taken, requester_name, from_date, to_date, day_count]
+            full_message = (
+                f"Hi {employee_name},\n"
+                f"You have {action_taken} the leave request of {requester_name} for the period "
+                f"{from_date} to {to_date} ({day_count} days).\n"
+                f"Fawnix"
+            )
+        else:
+            template_name = getattr(Config, "WHATSAPP_LEAVE_STATUS_TEMPLATE", "fawnix_notification")
+            status_text = normalized_message
+            body_values = [employee_name, from_date, to_date, status_text]
+            full_message = (
+                f"Hello {employee_name},\n\n"
+                f"Your leave request from {from_date} to {to_date} has been {status_text}.\n\n"
+                "- Fawnix"
+            )
 
         if not Config.WHATSAPP_TOKEN or not Config.PHONE_NUMBER_ID:
             logger.info(f"""
@@ -216,13 +265,15 @@ def send_leave_notification(
             "Content-Type": "application/json"
         }
 
+        body_parameters = [{"type": "text", "text": str(value)} for value in body_values]
+
         # Use template first for production reliability (works outside 24h session window).
         template_payload = {
             "messaging_product": "whatsapp",
             "to": formatted_phone,
             "type": "template",
             "template": {
-                "name": "fawnix_notification",
+                "name": template_name,
                 "language": {"code": "en_US"},
                 "components": [
                     {
@@ -233,12 +284,7 @@ def send_leave_notification(
                     },
                     {
                         "type": "body",
-                        "parameters": [
-                            {"type": "text", "text": employee_name},  # {{2}}
-                            {"type": "text", "text": from_date},      # {{3}}
-                            {"type": "text", "text": to_date},        # {{4}}
-                            {"type": "text", "text": normalized_status}  # {{5}}
-                        ]
+                        "parameters": body_parameters
                     }
                 ]
             }

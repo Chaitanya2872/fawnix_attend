@@ -136,9 +136,10 @@ def apply(current_user):
                     phone_number=manager["phone"],
                     title="Leave Request",
                     employee_name=manager["name"],
-                    message=f"{employee['name']} has submitted a leave request.",
+                    message=employee["name"],
                     from_date=data["from_date"],
-                    to_date=data["to_date"]
+                    to_date=data["to_date"],
+                    notification_type="submission"
                 )
                 logger.info(
                     "Manager leave-request WhatsApp notification sent=%s manager=%s employee=%s",
@@ -185,7 +186,7 @@ def approve(current_user):
         employee = get_employee_by_code(leave["emp_code"])
         manager = get_employee_by_code(current_user["emp_code"])
 
-        action_text = data["action"].capitalize()
+        action_lower = data["action"].lower()
 
         # Notify Employee
         if employee and employee.get("phone"):
@@ -194,9 +195,10 @@ def approve(current_user):
                     phone_number=employee["phone"],
                     title="Leave Status Update",
                     employee_name=employee["name"],
-                    message=f"Your leave request has been {action_text.lower()}.",
+                    message=action_lower,
                     from_date=leave["from_date"],
-                    to_date=leave["to_date"]
+                    to_date=leave["to_date"],
+                    notification_type="decision"
                 )
                 logger.info(
                     "Employee leave-status WhatsApp notification sent=%s employee=%s",
@@ -215,9 +217,10 @@ def approve(current_user):
                     phone_number=manager["phone"],
                     title="Leave Action Taken",
                     employee_name=manager["name"],
-                    message=f"You have {action_text.lower()} {employee['name']}'s leave request.",
+                    message=f"{action_lower} {employee['name']}'s",
                     from_date=leave["from_date"],
-                    to_date=leave["to_date"]
+                    to_date=leave["to_date"],
+                    notification_type="manager_action"
                 )
                 logger.info(
                     "Manager leave-action WhatsApp notification sent=%s manager=%s",

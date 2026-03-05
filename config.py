@@ -41,6 +41,9 @@ class Config:
     WHATSAPP_TOKEN = os.getenv('WHATSAPP_TOKEN', '')
     PHONE_NUMBER_ID = os.getenv('PHONE_NUMBER_ID', '')
     WHATSAPP_TEMPLATE_NAME = os.getenv('WHATSAPP_TEMPLATE_NAME', 'sending_otp')
+    WHATSAPP_LEAVE_SUBMISSION_TEMPLATE = os.getenv('WHATSAPP_LEAVE_SUBMISSION_TEMPLATE', 'fawnix_leave_submission')
+    WHATSAPP_LEAVE_STATUS_TEMPLATE = os.getenv('WHATSAPP_LEAVE_STATUS_TEMPLATE', 'fawnix_leave_status')
+    WHATSAPP_LEAVE_MANAGER_ACTION_TEMPLATE = os.getenv('WHATSAPP_LEAVE_MANAGER_ACTION_TEMPLATE', 'fawnix_leave_manager_action')
     
     # CORS Configuration
     CORS_ORIGINS = "*"

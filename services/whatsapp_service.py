@@ -1,8 +1,3 @@
-"""
-WhatsApp Service - Enhanced Version
-WhatsApp Business API integration with flexible template support
-"""
-
 import requests
 from config import Config
 import logging
@@ -192,10 +187,10 @@ def send_leave_notification(
 
     try:
         formatted_phone = _format_phone(phone_number)
+        normalized_status = (message or "").strip().rstrip(".")
         full_message = (
             f"Hello {employee_name},\n\n"
-            f"{message}\n"
-            f"Leave dates: {from_date} to {to_date}\n\n"
+            f"Your leave request from {from_date} to {to_date} has been {normalized_status}.\n\n"
             "- Fawnix"
         )
 
@@ -235,9 +230,9 @@ def send_leave_notification(
                         "type": "body",
                         "parameters": [
                             {"type": "text", "text": employee_name},  # {{2}}
-                            {"type": "text", "text": message},        # {{3}}
-                            {"type": "text", "text": from_date},      # {{4}}
-                            {"type": "text", "text": to_date}         # {{5}}
+                            {"type": "text", "text": from_date},      # {{3}}
+                            {"type": "text", "text": to_date},        # {{4}}
+                            {"type": "text", "text": normalized_status}  # {{5}}
                         ]
                     }
                 ]

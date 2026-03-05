@@ -217,7 +217,7 @@ def approve(current_user):
                     phone_number=manager["phone"],
                     title="Leave Action Taken",
                     employee_name=manager["name"],
-                    message=f"{action_lower} {employee['name']}'s",
+                    message=f"{action_lower} by you for {employee['name']}",
                     from_date=leave["from_date"],
                     to_date=leave["to_date"],
                     notification_type="manager_action"

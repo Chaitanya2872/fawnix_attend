@@ -179,7 +179,8 @@ def send_leave_notification(
     employee_name: str,
     message: str,
     from_date: str,
-    to_date: str
+    to_date: str,
+    notification_type: str = "decision"
 ) -> bool:
     """
     Send WhatsApp leave notification
@@ -188,6 +189,9 @@ def send_leave_notification(
     try:
         formatted_phone = _format_phone(phone_number)
         normalized_status = (message or "").strip().rstrip(".")
+        if notification_type == "submission":
+            if "submitted" not in normalized_status.lower():
+                normalized_status = f"submitted by {normalized_status}"
         full_message = (
             f"Hello {employee_name},\n\n"
             f"Your leave request from {from_date} to {to_date} has been {normalized_status}.\n\n"
@@ -197,6 +201,7 @@ def send_leave_notification(
         if not Config.WHATSAPP_TOKEN or not Config.PHONE_NUMBER_ID:
             logger.info(f"""
             DEV MODE WHATSAPP
+            TYPE  : {notification_type}
             TITLE : {title}
             NAME  : {employee_name}
             MSG   : {message}
@@ -244,10 +249,17 @@ def send_leave_notification(
             logger.info("WhatsApp leave template message sent")
             return True
 
+        # Retry without header in case template body exists but header is not configured.
+        template_payload["template"]["components"] = [template_payload["template"]["components"][1]]
+        retry_response = requests.post(url, headers=headers, json=template_payload, timeout=15)
+        if retry_response.status_code == 200:
+            logger.info("WhatsApp leave template message sent (without header)")
+            return True
+
         logger.warning(
             "WhatsApp leave template send failed (status=%s): %s. Falling back to text message.",
-            response.status_code,
-            response.text
+            retry_response.status_code,
+            retry_response.text
         )
 
         text_payload = {
@@ -266,9 +278,9 @@ def send_leave_notification(
 
         logger.error(
             "WhatsApp leave send failed. template_status=%s text_status=%s template_response=%s text_response=%s",
-            response.status_code,
+            retry_response.status_code,
             text_response.status_code,
-            response.text,
+            retry_response.text,
             text_response.text
         )
         return False

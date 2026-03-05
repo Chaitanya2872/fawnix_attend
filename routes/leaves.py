@@ -26,7 +26,6 @@ def get_employee_by_code(emp_code):
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # FIXED: Changed emp_phone to emp_contact
     cur.execute("""
         SELECT emp_code, emp_full_name, emp_contact, emp_manager
         FROM employees
@@ -40,7 +39,6 @@ def get_employee_by_code(emp_code):
     if not row:
         return None
 
-    # Handle both dict-like and tuple results
     if hasattr(row, 'keys'):
         return {
             "emp_code": row['emp_code'],
@@ -88,7 +86,6 @@ def get_leave_details(leave_id):
     if not row:
         return None
 
-    # Handle both dict-like and tuple results
     if hasattr(row, 'keys'):
         return {
             "emp_code": row['emp_code'],
@@ -130,24 +127,26 @@ def apply(current_user):
         notes=data.get("notes", "")
     )
 
-    if status == 201:  # Success status from apply_leave is 201
+    if status == 201:
         employee = get_employee_by_code(current_user["emp_code"])
         manager = get_manager(current_user["emp_code"])
 
         if employee and manager and manager.get("phone"):
             try:
                 leave_data = result.get("data", {}) if isinstance(result, dict) else {}
+
+                # Notify manager: "{Employee} has requested leave..."
                 notification_sent = send_leave_notification(
                     phone_number=manager["phone"],
                     title="Leave Request",
-                    employee_name=manager["name"],
-                    message=employee["name"],
+                    employee_name=manager["name"],        # recipient (manager)
+                    message=employee["name"],             # not used directly; kept for legacy
                     from_date=data["from_date"],
                     to_date=data["to_date"],
                     notification_type="submission",
                     number_of_days=leave_data.get("leave_count"),
                     reason=data.get("notes", ""),
-                    subject_employee_name=employee["name"]
+                    subject_employee_name=employee["name"]  # employee who applied
                 )
                 logger.info(
                     "Manager leave-request WhatsApp notification sent=%s manager=%s employee=%s",
@@ -168,7 +167,7 @@ def apply(current_user):
 
 
 # =========================================================
-# APPROVE / REJECT LEAVE (MANAGER → EMPLOYEE)
+# APPROVE / REJECT LEAVE (MANAGER → EMPLOYEE + MANAGER CONFIRM)
 # =========================================================
 
 @leaves_bp.route("/approve", methods=["POST"])
@@ -179,34 +178,39 @@ def approve(current_user):
     result, status = approve_leave(
         leave_id=data["leave_id"],
         manager_code=current_user["emp_code"],
-        action=data["action"],   # approve / reject
+        action=data["action"],   # "approve" / "reject"
         remarks=data.get("remarks", "")
     )
 
     if status == 200:
-        # Get full leave details from database
         leave = get_leave_details(data["leave_id"])
-        
+
         if not leave:
-            print("Could not fetch leave details")
+            logger.warning("Could not fetch leave details for leave_id=%s", data["leave_id"])
             return jsonify(result), status
 
         employee = get_employee_by_code(leave["emp_code"])
         manager = get_employee_by_code(current_user["emp_code"])
 
-        action_lower = data["action"].lower()
+        # Normalise action string, e.g. "approve" → "approved", "reject" → "rejected"
+        raw_action = data["action"].lower().strip()
+        action_past_tense = raw_action + "d" if not raw_action.endswith("e") else raw_action + "d"
+        # Simpler mapping to be safe:
+        action_map = {"approve": "approved", "reject": "rejected", "cancel": "cancelled"}
+        action_label = action_map.get(raw_action, raw_action)
 
-        # Notify Employee
+        # --- Notify Employee: "Your leave has been approved/rejected" ---
         if employee and employee.get("phone"):
             try:
                 emp_notif = send_leave_notification(
                     phone_number=employee["phone"],
                     title="Leave Status Update",
-                    employee_name=employee["name"],
-                    message=action_lower,
+                    employee_name=employee["name"],       # recipient (employee)
+                    message=action_label,                 # "approved" / "rejected"
                     from_date=leave["from_date"],
                     to_date=leave["to_date"],
-                    notification_type="decision"
+                    notification_type="decision",
+                    number_of_days=leave.get("leave_count")
                 )
                 logger.info(
                     "Employee leave-status WhatsApp notification sent=%s employee=%s",
@@ -216,21 +220,21 @@ def approve(current_user):
             except Exception as e:
                 logger.exception("Error sending employee leave-status notification: %s", e)
         else:
-            logger.warning("Employee details missing or no phone for leave status: %s", employee)
+            logger.warning("Employee details missing or no phone. employee=%s", employee)
 
-        # Notify Manager (confirmation)
+        # --- Notify Manager: "You have approved/rejected {Employee}'s leave" ---
         if manager and manager.get("phone") and employee:
             try:
                 mgr_notif = send_leave_notification(
                     phone_number=manager["phone"],
                     title="Leave Action Taken",
-                    employee_name=manager["name"],
-                    message=action_lower,
+                    employee_name=manager["name"],           # recipient (manager)
+                    message=action_label,                    # "approved" / "rejected"
                     from_date=leave["from_date"],
                     to_date=leave["to_date"],
                     notification_type="manager_action",
                     number_of_days=leave.get("leave_count"),
-                    subject_employee_name=employee["name"]
+                    subject_employee_name=employee["name"]   # employee whose leave was actioned
                 )
                 logger.info(
                     "Manager leave-action WhatsApp notification sent=%s manager=%s",
@@ -240,7 +244,7 @@ def approve(current_user):
             except Exception as e:
                 logger.exception("Error sending manager leave-action notification: %s", e)
         else:
-            logger.warning("Manager details missing or no phone for leave action: %s", manager)
+            logger.warning("Manager details missing or no phone. manager=%s", manager)
 
     return jsonify(result), status
 

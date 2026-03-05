@@ -118,12 +118,12 @@ def send_otp(phone_number: str, otp: str, emp_name: str) -> bool:
 def send_notification(phone_number: str, message: str, template_name: str = None) -> bool:
     """
     Send a notification message via WhatsApp
-    
+
     Args:
         phone_number: Recipient phone number
         message: Message to send
         template_name: Optional template name (uses default if not provided)
-    
+
     Returns:
         True if sent successfully, False otherwise
     """
@@ -165,7 +165,8 @@ def send_notification(phone_number: str, message: str, template_name: str = None
     except Exception as e:
         logger.error(f"WhatsApp notification error: {e}")
         return False
-    
+
+
 def _format_phone(phone: str) -> str:
     phone = phone.replace("+", "").replace("-", "").replace(" ", "").strip()
     if len(phone) == 10:
@@ -197,77 +198,98 @@ def send_leave_notification(
     subject_employee_name: str = ""
 ) -> bool:
     """
-    Send WhatsApp leave notification
+    Send WhatsApp leave notification.
+
+    notification_type values:
+      - "submission"     : Employee applied leave → notify manager
+      - "manager_action" : Manager approved/rejected → confirm to manager
+      - "decision"       : Manager approved/rejected → notify employee
     """
 
     try:
         formatted_phone = _format_phone(phone_number)
-        normalized_message = (message or "").strip().rstrip(".")
-        normalized_subject_name = (subject_employee_name or "").strip()
         day_count = _format_days(number_of_days)
         reason_text = (reason or "").strip() or "Not specified"
+        action_taken = (message or "").strip()
+        subject_name = (subject_employee_name or "").strip()
+
+        # ------------------------------------------------------------------
+        # Build human-readable full_message (used as text fallback) and
+        # body_values (used in the fawnix_notification template whose
+        # structure is: "Hello {1}\nYour Request from {2} to {3} has been {4}")
+        # ------------------------------------------------------------------
 
         if notification_type == "submission":
+            # Recipient  : Manager
+            # subject_name = employee who applied
             template_name = getattr(Config, "WHATSAPP_LEAVE_SUBMISSION_TEMPLATE", "fawnix_notification")
-            requester_name = normalized_subject_name or normalized_message
-            if template_name == "fawnix_notification":
-                status_text = f"submitted by {requester_name}"
-                body_values = [employee_name, from_date, to_date, status_text]
-            else:
-                body_values = [employee_name, requester_name, from_date, to_date, day_count, reason_text]
-            full_message = (
-                f"Hi {employee_name},\n"
-                f"{requester_name} has requested leave from {from_date} to {to_date} ({day_count} days) "
-                f"for the following reason:\n"
-                f"{reason_text}\n"
-                f"Fawnix"
+
+            # status_text fills slot {4} of fawnix_notification
+            status_text = (
+                f"requested by {subject_name} ({day_count} day(s)). "
+                f"Reason: {reason_text}"
             )
-        elif notification_type == "manager_action":
-            template_name = getattr(Config, "WHATSAPP_LEAVE_MANAGER_ACTION_TEMPLATE", "fawnix_notification")
-            requester_name = normalized_subject_name
-            action_taken = normalized_message
-            if template_name == "fawnix_notification":
-                status_text = f"{action_taken} by you for {requester_name}"
-                body_values = [employee_name, from_date, to_date, status_text]
-            else:
-                body_values = [employee_name, action_taken, requester_name, from_date, to_date, day_count]
-            full_message = (
-                f"Hi {employee_name},\n"
-                f"You have {action_taken} the leave request of {requester_name} for the period "
-                f"{from_date} to {to_date} ({day_count} days).\n"
-                f"Fawnix"
-            )
-        else:
-            template_name = getattr(Config, "WHATSAPP_LEAVE_STATUS_TEMPLATE", "fawnix_notification")
-            status_text = normalized_message
             body_values = [employee_name, from_date, to_date, status_text]
+
             full_message = (
-                f"Hello {employee_name},\n\n"
-                f"Your leave request from {from_date} to {to_date} has been {status_text}.\n\n"
-                "- Fawnix"
+                f"Hi {employee_name},\n"
+                f"{subject_name} has requested leave from {from_date} to {to_date} "
+                f"({day_count} day(s)) for the following reason:\n"
+                f"{reason_text}\n\n"
+                f"Fawnix"
             )
 
+        elif notification_type == "manager_action":
+            # Recipient  : Manager (confirmation of their own action)
+            # subject_name = employee whose leave was actioned
+            template_name = getattr(Config, "WHATSAPP_LEAVE_MANAGER_ACTION_TEMPLATE", "fawnix_notification")
+
+            status_text = (
+                f"{action_taken} for {subject_name} ({day_count} day(s))"
+            )
+            body_values = [employee_name, from_date, to_date, status_text]
+
+            full_message = (
+                f"Hi {employee_name},\n"
+                f"You have {action_taken} the leave request of {subject_name} "
+                f"for the period {from_date} to {to_date} ({day_count} day(s)).\n\n"
+                f"Fawnix"
+            )
+
+        else:  # "decision" — notify the employee of the outcome
+            # Recipient  : Employee
+            template_name = getattr(Config, "WHATSAPP_LEAVE_STATUS_TEMPLATE", "fawnix_notification")
+
+            status_text = action_taken
+            body_values = [employee_name, from_date, to_date, status_text]
+
+            full_message = (
+                f"Hi {employee_name},\n"
+                f"Your leave request from {from_date} to {to_date} has been {action_taken}.\n\n"
+                f"Fawnix"
+            )
+
+        # ------------------------------------------------------------------
+        # DEV MODE — just log and return
+        # ------------------------------------------------------------------
         if not Config.WHATSAPP_TOKEN or not Config.PHONE_NUMBER_ID:
-            logger.info(f"""
-            DEV MODE WHATSAPP
-            TYPE  : {notification_type}
-            TITLE : {title}
-            NAME  : {employee_name}
-            MSG   : {message}
-            FROM  : {from_date}
-            TO    : {to_date}
-            """)
+            logger.info(
+                "DEV MODE WHATSAPP | type=%s | title=%s | to=%s\n%s",
+                notification_type, title, employee_name, full_message
+            )
             return True
 
+        # ------------------------------------------------------------------
+        # PRODUCTION — try WhatsApp template first, fall back to text
+        # ------------------------------------------------------------------
         url = f"https://graph.facebook.com/v19.0/{Config.PHONE_NUMBER_ID}/messages"
         headers = {
             "Authorization": f"Bearer {Config.WHATSAPP_TOKEN}",
             "Content-Type": "application/json"
         }
 
-        body_parameters = [{"type": "text", "text": str(value)} for value in body_values]
+        body_parameters = [{"type": "text", "text": str(v)} for v in body_values]
 
-        # Use template first for production reliability (works outside 24h session window).
         template_payload = {
             "messaging_product": "whatsapp",
             "to": formatted_phone,
@@ -278,9 +300,7 @@ def send_leave_notification(
                 "components": [
                     {
                         "type": "header",
-                        "parameters": [
-                            {"type": "text", "text": title}
-                        ]
+                        "parameters": [{"type": "text", "text": title}]
                     },
                     {
                         "type": "body",
@@ -289,48 +309,46 @@ def send_leave_notification(
                 ]
             }
         }
-        response = requests.post(url, headers=headers, json=template_payload, timeout=15)
 
+        response = requests.post(url, headers=headers, json=template_payload, timeout=15)
         if response.status_code == 200:
-            logger.info("WhatsApp leave template message sent")
+            logger.info("WhatsApp leave template sent | type=%s | to=%s", notification_type, formatted_phone)
             return True
 
-        # Retry without header in case template body exists but header is not configured.
-        template_payload["template"]["components"] = [template_payload["template"]["components"][1]]
+        # Retry without header component
+        template_payload["template"]["components"] = [
+            {"type": "body", "parameters": body_parameters}
+        ]
         retry_response = requests.post(url, headers=headers, json=template_payload, timeout=15)
         if retry_response.status_code == 200:
-            logger.info("WhatsApp leave template message sent (without header)")
+            logger.info("WhatsApp leave template sent (no header) | type=%s | to=%s", notification_type, formatted_phone)
             return True
 
         logger.warning(
-            "WhatsApp leave template send failed (status=%s): %s. Falling back to text message.",
-            retry_response.status_code,
-            retry_response.text
+            "WhatsApp template failed (status=%s): %s — falling back to text.",
+            retry_response.status_code, retry_response.text
         )
 
+        # Final fallback: plain text message
         text_payload = {
             "messaging_product": "whatsapp",
             "to": formatted_phone,
             "type": "text",
-            "text": {
-                "body": full_message
-            }
+            "text": {"body": full_message}
         }
-
         text_response = requests.post(url, headers=headers, json=text_payload, timeout=15)
         if text_response.status_code == 200:
-            logger.info("WhatsApp leave text message sent (fallback)")
+            logger.info("WhatsApp leave text sent (fallback) | type=%s | to=%s", notification_type, formatted_phone)
             return True
 
         logger.error(
-            "WhatsApp leave send failed. template_status=%s text_status=%s template_response=%s text_response=%s",
-            retry_response.status_code,
-            text_response.status_code,
-            retry_response.text,
-            text_response.text
+            "All WhatsApp send attempts failed | template_status=%s text_status=%s "
+            "template_response=%s text_response=%s",
+            retry_response.status_code, text_response.status_code,
+            retry_response.text, text_response.text
         )
         return False
 
     except Exception:
-        logger.exception("WhatsApp send failed")
+        logger.exception("WhatsApp send_leave_notification failed")
         return False

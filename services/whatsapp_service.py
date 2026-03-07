@@ -249,6 +249,12 @@ def send_leave_notification(
                 "language": {"code": "en_US"},
                 "components": [
                     {
+                        "type": "header",
+                        "parameters": [
+                            {"type": "text", "text": str(title)}
+                        ]
+                    },
+                    {
                         "type": "body",
                         "parameters": [
                             {"type": "text", "text": str(v1)},

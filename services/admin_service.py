@@ -5,6 +5,10 @@ Business logic for admin-only operations
 
 from database.connection import get_db_connection
 from datetime import date, datetime
+from services.CompLeaveService import (
+    attach_attendance_context_to_overtime_records,
+    serialize_temporal_values,
+)
 
 
 
@@ -520,14 +524,8 @@ def get_all_overtime_records(limit: int = 100, status: str = None,
 
         cursor.execute(query, params)
         records = cursor.fetchall()
-
-        # Convert datetime/date to string
-        for record in records:
-            for key, value in record.items():
-                if isinstance(value, datetime):
-                    record[key] = value.strftime('%Y-%m-%d %H:%M:%S')
-                elif isinstance(value, date):
-                    record[key] = value.strftime('%Y-%m-%d')
+        attach_attendance_context_to_overtime_records(cursor, records)
+        records = [serialize_temporal_values(record) for record in records]
 
         return ({
             "success": True,

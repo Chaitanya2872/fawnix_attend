@@ -31,6 +31,113 @@ SATURDAY_SHIFT_END = time(13, 30)   # 1:30 PM
 
 
 # =========================
+# HELPER: Serialize nested date/datetime values
+# =========================
+
+def serialize_temporal_values(value):
+    """Convert nested date/datetime values to API-safe strings."""
+    if isinstance(value, datetime):
+        return value.strftime('%Y-%m-%d %H:%M:%S')
+    if isinstance(value, date):
+        return value.strftime('%Y-%m-%d')
+    if isinstance(value, list):
+        return [serialize_temporal_values(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: serialize_temporal_values(item_value)
+            for key, item_value in value.items()
+        }
+    return value
+
+
+# =========================
+# HELPER: Attach attendance window details to overtime records
+# =========================
+
+def _activity_overlaps_attendance_window(activity: Dict, attendance: Optional[Dict]) -> bool:
+    """Keep only activities that overlap the linked attendance window."""
+    if not attendance:
+        return True
+
+    session_start = attendance.get('login_time')
+    session_end = attendance.get('logout_time')
+    activity_start = activity.get('start_time')
+    activity_end = activity.get('end_time')
+
+    if session_start and activity_end and activity_end < session_start:
+        return False
+
+    if session_end and activity_start and activity_start > session_end:
+        return False
+
+    return True
+
+
+def attach_attendance_context_to_overtime_records(cursor, records: List[Dict]) -> List[Dict]:
+    """
+    Enrich overtime records with clock-in/clock-out times and activities
+    tied to the linked attendance session.
+    """
+    if not records:
+        return records
+
+    attendance_ids = sorted({
+        int(record['attendance_id'])
+        for record in records
+        if record.get('attendance_id') is not None
+    })
+
+    attendance_by_id = {}
+    activities_by_attendance = {attendance_id: [] for attendance_id in attendance_ids}
+
+    if attendance_ids:
+        placeholders = ','.join(['%s'] * len(attendance_ids))
+
+        cursor.execute(f"""
+            SELECT id, login_time, logout_time
+            FROM attendance
+            WHERE id IN ({placeholders})
+        """, attendance_ids)
+        attendance_by_id = {
+            attendance['id']: attendance
+            for attendance in cursor.fetchall()
+        }
+
+        cursor.execute(f"""
+            SELECT
+                id,
+                attendance_id,
+                activity_type,
+                status,
+                start_time,
+                end_time,
+                duration_minutes,
+                field_visit_id,
+                notes
+            FROM activities
+            WHERE attendance_id IN ({placeholders})
+            ORDER BY start_time ASC, id ASC
+        """, attendance_ids)
+
+        for activity in cursor.fetchall():
+            attendance_id = activity.get('attendance_id')
+            attendance = attendance_by_id.get(attendance_id)
+
+            if _activity_overlaps_attendance_window(activity, attendance):
+                activities_by_attendance.setdefault(attendance_id, []).append(activity)
+
+    for record in records:
+        attendance_id = record.get('attendance_id')
+        attendance = attendance_by_id.get(attendance_id)
+
+        record['clock_in_time'] = attendance.get('login_time') if attendance else None
+        record['clock_out_time'] = attendance.get('logout_time') if attendance else None
+        record['activities'] = activities_by_attendance.get(attendance_id, [])
+
+    return records
+
+
+# =========================
 # HELPER: Check if date is working day
 # =========================
 
@@ -602,12 +709,9 @@ def get_employee_overtime_records(emp_code: str, status: Optional[str] = None, l
         
         cursor.execute(query, params)
         records = cursor.fetchall()
-        
-        # Convert dates to strings
-        for record in records:
-            for key, value in record.items():
-                if isinstance(value, (date, datetime)):
-                    record[key] = value.strftime('%Y-%m-%d %H:%M:%S') if isinstance(value, datetime) else value.strftime('%Y-%m-%d')
+
+        attach_attendance_context_to_overtime_records(cursor, records)
+        records = [serialize_temporal_values(record) for record in records]
         
         return ({
             "success": True,

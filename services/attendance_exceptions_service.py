@@ -585,15 +585,22 @@ def get_my_exceptions(emp_code: str, status: str = None,
                 elif isinstance(value, time):
                     exc[key] = value.strftime('%H:%M')
         
-        # Calculate summary
-        cursor.execute("""
+        # Calculate summary for the same exception type scope.
+        summary_query = """
             SELECT 
                 COUNT(*) FILTER (WHERE status = 'pending') as pending_count,
                 COUNT(*) FILTER (WHERE status = 'approved') as approved_count,
                 COUNT(*) FILTER (WHERE status = 'rejected') as rejected_count
             FROM attendance_exceptions
             WHERE emp_code = %s
-        """, (emp_code,))
+        """
+        summary_params = [emp_code]
+
+        if exception_type:
+            summary_query += " AND exception_type = %s"
+            summary_params.append(exception_type)
+
+        cursor.execute(summary_query, summary_params)
         
         summary = cursor.fetchone()
         

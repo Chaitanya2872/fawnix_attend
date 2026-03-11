@@ -15,7 +15,9 @@ from services.attendance_exceptions_service import (
     approve_exception,
     get_my_exceptions,
     get_team_exceptions,
-    auto_detect_late_arrival
+    auto_detect_late_arrival,
+    get_my_late_arrival_records,
+    get_my_early_leave_records,
 )
 
 exceptions_bp = Blueprint('attendance_exceptions', __name__)
@@ -396,11 +398,7 @@ def my_late_arrivals(current_user):
     """
     status = request.args.get('status')
 
-    result = get_my_exceptions(
-        current_user['emp_code'],
-        status,
-        'late_arrival'
-    )
+    result = get_my_late_arrival_records(current_user['emp_code'], status)
 
     return jsonify(result[0]), result[1]
 
@@ -419,11 +417,7 @@ def my_early_leaves(current_user):
     """
     status = request.args.get('status')
 
-    result = get_my_exceptions(
-        current_user['emp_code'],
-        status,
-        'early_leave'
-    )
+    result = get_my_early_leave_records(current_user['emp_code'], status)
 
     return jsonify(result[0]), result[1]
 

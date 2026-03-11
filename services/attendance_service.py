@@ -16,7 +16,9 @@ from services.geocoding_service import get_address_from_coordinates
 from services.CompLeaveService import calculate_and_record_compoff, is_working_day
 from services.attendance_exceptions_service import (
     auto_detect_late_arrival,
-    check_early_leave_approval
+    check_early_leave_approval,
+    get_employee_shift_times,
+    _fetch_exception_rows_by_attendance_ids,
 )
 import logging
 
@@ -590,19 +592,123 @@ def get_attendance_history(emp_email: str, limit: int = 30):
     
     try:
         cursor.execute("""
+            SELECT emp_code
+            FROM employees
+            WHERE emp_email = %s
+            LIMIT 1
+        """, (emp_email,))
+        employee = cursor.fetchone()
+        shift_start = None
+        shift_end = None
+
+        if employee and employee.get('emp_code'):
+            shift_start, shift_end = get_employee_shift_times(employee['emp_code'])
+
+        cursor.execute("""
             SELECT * FROM attendance
             WHERE employee_email = %s
             ORDER BY login_time DESC LIMIT %s
         """, (emp_email, limit))
         
         records = cursor.fetchall()
-        
-        # Convert datetime and parse coordinates
+
+        attendance_ids = [record['id'] for record in records]
+        late_exceptions = _fetch_exception_rows_by_attendance_ids(
+            cursor,
+            attendance_ids,
+            'late_arrival'
+        )
+        early_exceptions = _fetch_exception_rows_by_attendance_ids(
+            cursor,
+            attendance_ids,
+            'early_leave'
+        )
+
+        late_arrivals_count = 0
+        late_arrivals_informed_count = 0
+        early_departures_count = 0
+        early_leave_requested_count = 0
+
+        def format_time_value(value):
+            if not value:
+                return None
+            if isinstance(value, datetime):
+                value = value.time()
+            return value.strftime('%H:%M') if hasattr(value, 'strftime') else str(value)
+
+        def format_datetime_value(value):
+            if isinstance(value, datetime):
+                return value.strftime('%Y-%m-%d %H:%M:%S')
+            return value
+
+        # Convert datetime and attach exception details
         for record in records:
+            login_time_value = record.get('login_time')
+            logout_time_value = record.get('logout_time')
+            login_time_only = login_time_value.time() if isinstance(login_time_value, datetime) else None
+            logout_time_only = logout_time_value.time() if isinstance(logout_time_value, datetime) else None
+            late_exception = late_exceptions.get(record['id'])
+            early_exception = early_exceptions.get(record['id'])
+
+            is_late_arrival = bool(shift_start and login_time_only and login_time_only > shift_start)
+            late_informed = bool(late_exception)
+            is_early_departure = bool(shift_end and logout_time_only and logout_time_only < shift_end)
+            early_leave_requested = bool(early_exception)
+
+            if is_late_arrival:
+                late_arrivals_count += 1
+            if late_informed:
+                late_arrivals_informed_count += 1
+            if is_early_departure:
+                early_departures_count += 1
+            if early_leave_requested:
+                early_leave_requested_count += 1
+
+            late_by_minutes = late_exception.get('late_by_minutes') if late_exception else None
+            if late_by_minutes is None and is_late_arrival:
+                late_by_minutes = int((
+                    datetime.combine(datetime.today(), login_time_only) -
+                    datetime.combine(datetime.today(), shift_start)
+                ).total_seconds() / 60)
+
+            early_by_minutes = early_exception.get('early_by_minutes') if early_exception else None
+            if early_by_minutes is None and is_early_departure:
+                early_by_minutes = int((
+                    datetime.combine(datetime.today(), shift_end) -
+                    datetime.combine(datetime.today(), logout_time_only)
+                ).total_seconds() / 60)
+
             for key, value in record.items():
                 if isinstance(value, datetime):
                     record[key] = value.strftime('%Y-%m-%d %H:%M:%S')
             
+            record['shift_start_time'] = format_time_value(shift_start)
+            record['shift_end_time'] = format_time_value(shift_end)
+            record['late_arrival'] = {
+                "is_late": is_late_arrival,
+                "informed": late_informed,
+                "status": late_exception.get('status') if late_exception else ('not_informed' if is_late_arrival else None),
+                "planned_arrival_time": format_time_value(
+                    late_exception.get('planned_arrival_time') if late_exception else shift_start
+                ) if (is_late_arrival or late_informed) else None,
+                "actual_login_time": format_time_value(login_time_only),
+                "late_by_minutes": late_by_minutes,
+                "reason": late_exception.get('reason') if late_exception else None,
+                "requested_at": format_datetime_value(late_exception.get('requested_at')) if late_exception else None,
+                "reviewed_at": format_datetime_value(late_exception.get('reviewed_at')) if late_exception else None,
+            }
+            record['early_leave'] = {
+                "is_early_departure": is_early_departure,
+                "requested": early_leave_requested,
+                "status": early_exception.get('status') if early_exception else ('not_requested' if is_early_departure else None),
+                "planned_leave_time": format_time_value(early_exception.get('planned_leave_time')) if early_exception else None,
+                "actual_logout_time": format_time_value(logout_time_only),
+                "early_by_minutes": early_by_minutes,
+                "reason": early_exception.get('reason') if early_exception else None,
+                "requested_at": format_datetime_value(early_exception.get('requested_at')) if early_exception else None,
+                "reviewed_at": format_datetime_value(early_exception.get('reviewed_at')) if early_exception else None,
+            }
+
             # Parse login coordinates
             login_coords = record.get('login_location', '').split(', ')
             record['login_lat'] = login_coords[0] if len(login_coords) > 0 else ''
@@ -626,6 +732,10 @@ def get_attendance_history(emp_email: str, limit: int = 30):
                 "statistics": {
                     "total_days": len(records),
                     "completed_days": completed_days,
+                    "late_arrivals": late_arrivals_count,
+                    "late_arrivals_informed": late_arrivals_informed_count,
+                    "early_departures": early_departures_count,
+                    "early_leave_requested": early_leave_requested_count,
                     "total_hours": round(total_hours, 2),
                     "average_hours": round(total_hours / len(records), 2) if records else 0
                 }

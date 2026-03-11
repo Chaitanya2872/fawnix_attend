@@ -382,6 +382,52 @@ def my_exceptions(current_user):
     return jsonify(result[0]), result[1]
 
 
+@exceptions_bp.route('/my-late-arrivals', methods=['GET'])
+@token_required
+def my_late_arrivals(current_user):
+    """
+    Get the logged-in employee's late arrival exceptions.
+
+    Query Params:
+        status: pending, approved, rejected (optional)
+
+    Example:
+        GET /api/attendance-exceptions/my-late-arrivals?status=approved
+    """
+    status = request.args.get('status')
+
+    result = get_my_exceptions(
+        current_user['emp_code'],
+        status,
+        'late_arrival'
+    )
+
+    return jsonify(result[0]), result[1]
+
+
+@exceptions_bp.route('/my-early-leaves', methods=['GET'])
+@token_required
+def my_early_leaves(current_user):
+    """
+    Get the logged-in employee's early leave exceptions.
+
+    Query Params:
+        status: pending, approved, rejected (optional)
+
+    Example:
+        GET /api/attendance-exceptions/my-early-leaves?status=pending
+    """
+    status = request.args.get('status')
+
+    result = get_my_exceptions(
+        current_user['emp_code'],
+        status,
+        'early_leave'
+    )
+
+    return jsonify(result[0]), result[1]
+
+
 @exceptions_bp.route('/team-exceptions', methods=['GET'])
 @token_required
 def team_exceptions(current_user):

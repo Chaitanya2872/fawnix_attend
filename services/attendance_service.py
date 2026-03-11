@@ -145,6 +145,17 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
         
         if is_compoff_session:
             logger.info(f"📅 Non-working day comp-off eligible session registered: {emp_email} on {login_date.strftime('%A')}")
+
+        # Use the persisted attendance flag for response behavior.
+        cursor.execute("""
+            SELECT COALESCE(is_compoff_session, FALSE) AS is_compoff_session
+            FROM attendance
+            WHERE id = %s
+        """, (attendance_id,))
+        persisted_attendance = cursor.fetchone()
+        is_compoff_session = bool(
+            persisted_attendance and persisted_attendance.get('is_compoff_session')
+        )
         
         conn.commit()
         
@@ -161,7 +172,7 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
             }
         }
         
-        # ✅ Skip late arrival detection for comp-off eligible sessions (non-working days)
+        # Skip late arrival detection for comp-off eligible sessions.
         late_arrival_info = None
         if not is_compoff_session and emp_code:
             late_arrival_info = auto_detect_late_arrival(emp_code, attendance_id, login_time)
@@ -170,7 +181,7 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
                 response_data['late_arrival'] = late_arrival_info
                 logger.warning(f"🚨 Late arrival detected: {emp_email} - {late_arrival_info['late_by_minutes']} minutes")
         elif is_compoff_session:
-            logger.info(f"✅ Late arrival check skipped for non-working day: {emp_email}")
+            logger.info(f"✅ Late arrival check skipped for comp-off session: {emp_email}")
         
         message = "Clock in successful"
         if is_compoff_session:
@@ -647,12 +658,23 @@ def get_attendance_history(emp_email: str, limit: int = 30):
             logout_time_value = record.get('logout_time')
             login_time_only = login_time_value.time() if isinstance(login_time_value, datetime) else None
             logout_time_only = logout_time_value.time() if isinstance(logout_time_value, datetime) else None
+            is_compoff_session = bool(record.get('is_compoff_session') or record.get('is_compoff'))
             late_exception = late_exceptions.get(record['id'])
             early_exception = early_exceptions.get(record['id'])
 
-            is_late_arrival = bool(shift_start and login_time_only and login_time_only > shift_start)
+            is_late_arrival = bool(
+                not is_compoff_session and
+                shift_start and
+                login_time_only and
+                login_time_only > shift_start
+            )
             late_informed = bool(late_exception)
-            is_early_departure = bool(shift_end and logout_time_only and logout_time_only < shift_end)
+            is_early_departure = bool(
+                not is_compoff_session and
+                shift_end and
+                logout_time_only and
+                logout_time_only < shift_end
+            )
             early_leave_requested = bool(early_exception)
 
             if is_late_arrival:
@@ -684,30 +706,34 @@ def get_attendance_history(emp_email: str, limit: int = 30):
             
             record['shift_start_time'] = format_time_value(shift_start)
             record['shift_end_time'] = format_time_value(shift_end)
-            record['late_arrival'] = {
-                "is_late": is_late_arrival,
-                "informed": late_informed,
-                "status": late_exception.get('status') if late_exception else ('not_informed' if is_late_arrival else None),
-                "planned_arrival_time": format_time_value(
-                    late_exception.get('planned_arrival_time') if late_exception else shift_start
-                ) if (is_late_arrival or late_informed) else None,
-                "actual_login_time": format_time_value(login_time_only),
-                "late_by_minutes": late_by_minutes,
-                "reason": late_exception.get('reason') if late_exception else None,
-                "requested_at": format_datetime_value(late_exception.get('requested_at')) if late_exception else None,
-                "reviewed_at": format_datetime_value(late_exception.get('reviewed_at')) if late_exception else None,
-            }
-            record['early_leave'] = {
-                "is_early_departure": is_early_departure,
-                "requested": early_leave_requested,
-                "status": early_exception.get('status') if early_exception else ('not_requested' if is_early_departure else None),
-                "planned_leave_time": format_time_value(early_exception.get('planned_leave_time')) if early_exception else None,
-                "actual_logout_time": format_time_value(logout_time_only),
-                "early_by_minutes": early_by_minutes,
-                "reason": early_exception.get('reason') if early_exception else None,
-                "requested_at": format_datetime_value(early_exception.get('requested_at')) if early_exception else None,
-                "reviewed_at": format_datetime_value(early_exception.get('reviewed_at')) if early_exception else None,
-            }
+            if is_compoff_session:
+                record['late_arrival'] = None
+                record['early_leave'] = None
+            else:
+                record['late_arrival'] = {
+                    "is_late": is_late_arrival,
+                    "informed": late_informed,
+                    "status": late_exception.get('status') if late_exception else ('not_informed' if is_late_arrival else None),
+                    "planned_arrival_time": format_time_value(
+                        late_exception.get('planned_arrival_time') if late_exception else shift_start
+                    ) if (is_late_arrival or late_informed) else None,
+                    "actual_login_time": format_time_value(login_time_only),
+                    "late_by_minutes": late_by_minutes,
+                    "reason": late_exception.get('reason') if late_exception else None,
+                    "requested_at": format_datetime_value(late_exception.get('requested_at')) if late_exception else None,
+                    "reviewed_at": format_datetime_value(late_exception.get('reviewed_at')) if late_exception else None,
+                }
+                record['early_leave'] = {
+                    "is_early_departure": is_early_departure,
+                    "requested": early_leave_requested,
+                    "status": early_exception.get('status') if early_exception else ('not_requested' if is_early_departure else None),
+                    "planned_leave_time": format_time_value(early_exception.get('planned_leave_time')) if early_exception else None,
+                    "actual_logout_time": format_time_value(logout_time_only),
+                    "early_by_minutes": early_by_minutes,
+                    "reason": early_exception.get('reason') if early_exception else None,
+                    "requested_at": format_datetime_value(early_exception.get('requested_at')) if early_exception else None,
+                    "reviewed_at": format_datetime_value(early_exception.get('reviewed_at')) if early_exception else None,
+                }
 
             # Parse login coordinates
             login_coords = record.get('login_location', '').split(', ')

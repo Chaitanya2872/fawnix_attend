@@ -467,6 +467,7 @@ def apply_leave(emp_code: str, from_date: str, to_date: str, leave_type: str,
                 "leave_id": leave_id,
                 "leave_count": leave_count,
                 "remaining_balance": balance[leave_type]['remaining'] - leave_count,
+                "approver_code": approver_code,
                 "approver": approver_name,
                 "approver_email": approver_email,
                 "status": "pending"

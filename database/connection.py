@@ -479,6 +479,48 @@ def init_database():
 
         logger.info("âœ“ Leads table ready")
 
+        # 12. User devices for FCM push notifications
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_devices (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                emp_code VARCHAR(50),
+                fcm_token TEXT NOT NULL UNIQUE,
+                platform VARCHAR(20) NOT NULL DEFAULT 'android',
+                device_name VARCHAR(100),
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+        """)
+
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'user_devices'
+                      AND column_name = 'emp_code'
+                ) THEN
+                    ALTER TABLE user_devices ADD COLUMN emp_code VARCHAR(50);
+                END IF;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.table_constraints
+                    WHERE constraint_name = 'user_devices_emp_code_fkey'
+                      AND table_name = 'user_devices'
+                ) THEN
+                    ALTER TABLE user_devices
+                    ADD CONSTRAINT user_devices_emp_code_fkey
+                    FOREIGN KEY (emp_code) REFERENCES employees(emp_code) ON DELETE CASCADE;
+                END IF;
+            END $$;
+        """)
+
+        logger.info("✓ User devices table ready")
+
         # ==================== CREATE INDEXES ====================
         
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_shifts_active ON shifts(is_active)")
@@ -493,6 +535,8 @@ def init_database():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_owner ON leads(created_by_emp_code, assigned_to_emp_code)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_status_priority ON leads(status, priority, updated_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_field_visit ON leads(field_visit_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_devices_user_active ON user_devices(user_id, is_active)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_devices_emp_code_active ON user_devices(emp_code, is_active)")
         
         logger.info("✓ Indexes created")
         

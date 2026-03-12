@@ -3,6 +3,7 @@ import logging
 from middleware.auth_middleware import token_required
 from database.connection import get_db_connection, return_connection
 from services.whatsapp_service import send_leave_notification
+from services.notification_service import send_push_notification_to_employee
 from services.leaves_service import (
     apply_leave,
     approve_leave,
@@ -130,11 +131,11 @@ def apply(current_user):
     if status == 201:
         employee = get_employee_by_code(current_user["emp_code"])
         manager = get_manager(current_user["emp_code"])
+        leave_data = result.get("data", {}) if isinstance(result, dict) else {}
+        approver_code = leave_data.get("approver_code")
 
         if employee and manager and manager.get("phone"):
             try:
-                leave_data = result.get("data", {}) if isinstance(result, dict) else {}
-
                 # Notify manager: "{Employee} has requested leave..."
                 notification_sent = send_leave_notification(
                     phone_number=manager["phone"],
@@ -162,6 +163,29 @@ def apply(current_user):
                 employee,
                 manager
             )
+
+        if approver_code:
+            try:
+                push_result = send_push_notification_to_employee(
+                    approver_code,
+                    "New Leave Request",
+                    "A new leave request is waiting for your approval.",
+                    {
+                        "type": "leave_submitted",
+                        "leave_id": leave_data.get("leave_id"),
+                    },
+                )
+                if not push_result.get("success"):
+                    logger.warning(
+                        "Manager leave-request push notification failed approver=%s leave_id=%s message=%s",
+                        approver_code,
+                        leave_data.get("leave_id"),
+                        push_result.get("message"),
+                    )
+            except Exception as e:
+                logger.exception("Error sending manager leave-request push notification: %s", e)
+        else:
+            logger.warning("Approver code missing for leave apply push. employee=%s", current_user["emp_code"])
 
     return jsonify(result), status
 
@@ -191,6 +215,7 @@ def approve(current_user):
 
         employee = get_employee_by_code(leave["emp_code"])
         manager = get_employee_by_code(current_user["emp_code"])
+        leave_status = (result.get("data", {}) if isinstance(result, dict) else {}).get("status")
 
         # Normalise action string, e.g. "approve" → "approved", "reject" → "rejected"
         raw_action = data["action"].lower().strip()
@@ -221,6 +246,33 @@ def approve(current_user):
                 logger.exception("Error sending employee leave-status notification: %s", e)
         else:
             logger.warning("Employee details missing or no phone. employee=%s", employee)
+
+        if employee:
+            try:
+                push_title = "Leave Approved" if leave_status == "approved" else "Leave Rejected"
+                push_body = (
+                    "Your leave request has been approved."
+                    if leave_status == "approved"
+                    else "Your leave request has been rejected."
+                )
+                push_result = send_push_notification_to_employee(
+                    employee["emp_code"],
+                    push_title,
+                    push_body,
+                    {
+                        "type": "leave_status_updated",
+                        "leave_id": data["leave_id"],
+                    },
+                )
+                if not push_result.get("success"):
+                    logger.warning(
+                        "Employee leave-status push notification failed employee=%s leave_id=%s message=%s",
+                        employee["emp_code"],
+                        data["leave_id"],
+                        push_result.get("message"),
+                    )
+            except Exception as e:
+                logger.exception("Error sending employee leave-status push notification: %s", e)
 
         # --- Notify Manager: "You have approved/rejected {Employee}'s leave" ---
         if manager and manager.get("phone") and employee:

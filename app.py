@@ -16,6 +16,7 @@ import logging
 import os
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from schedulers.attendance_reminder_scheduler import register_attendance_reminder_job
 import time
 from datetime import datetime, timezone as dt_timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -76,6 +77,7 @@ from routes.compoff import compoff_bp
 from routes.attendance_exceptions import exceptions_bp
 from routes.holidays import holidays_bp
 from routes.leads import leads_bp
+from routes.devices import devices_bp
 
 # ✨ NEW ROUTES - Location Reports, Distance Monitoring, Approvals
 from routes.location import location_report_bp
@@ -92,6 +94,7 @@ app.register_blueprint(leaves_bp, url_prefix='/api/leaves')
 app.register_blueprint(tracking_bp, url_prefix='/api/tracking')
 app.register_blueprint(compoff_bp, url_prefix='/api/compoff')
 app.register_blueprint(leads_bp, url_prefix='/api/leads')
+app.register_blueprint(devices_bp, url_prefix='/api/devices')
 app.register_blueprint(exceptions_bp, url_prefix='/api/attendance-exceptions')
 
 # ✨ Register new blueprints
@@ -808,6 +811,12 @@ def start_scheduler(schedule_config=None):
             replace_existing=True,
             misfire_grace_time=schedule_config["misfire_grace_seconds"]
         )
+
+    register_attendance_reminder_job(
+        scheduler,
+        scheduler_timezone,
+        schedule_config["misfire_grace_seconds"],
+    )
 
     scheduler.start()
     scheduler_instance = scheduler

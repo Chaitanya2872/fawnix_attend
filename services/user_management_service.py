@@ -11,7 +11,7 @@ from database.connection import get_db_connection, return_connection
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_MANAGEMENT_ROLES = {"admin", "user_manager", "hr"}
+ALLOWED_MANAGEMENT_ROLES = {"admin", "user_manager", "hr" }
 ALLOWED_MANAGEMENT_DESIGNATIONS = {"devtester"}
 
 

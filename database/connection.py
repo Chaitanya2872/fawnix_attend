@@ -206,6 +206,7 @@ def init_database():
         # 5. Users table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
+                id BIGSERIAL UNIQUE,
                 emp_code VARCHAR(50) PRIMARY KEY,
                 role VARCHAR(20) DEFAULT 'employee',
                 is_active BOOLEAN DEFAULT true,
@@ -214,6 +215,24 @@ def init_database():
                 last_login TIMESTAMP
             )
         """)
+
+        cursor.execute("CREATE SEQUENCE IF NOT EXISTS users_id_seq")
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'users' AND column_name = 'id'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN id BIGINT;
+                END IF;
+            END $$;
+        """)
+        cursor.execute("ALTER TABLE users ALTER COLUMN id SET DEFAULT nextval('users_id_seq')")
+        cursor.execute("UPDATE users SET id = nextval('users_id_seq') WHERE id IS NULL")
+        cursor.execute("ALTER TABLE users ALTER COLUMN id SET NOT NULL")
+        cursor.execute("ALTER SEQUENCE users_id_seq OWNED BY users.id")
+        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_id ON users(id)")
         
         # Add foreign key only if it doesn't exist
         cursor.execute("""

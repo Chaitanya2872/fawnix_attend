@@ -164,7 +164,8 @@ def verify_otp():
         access_token = create_jwt_token(
             emp_code,
             user['role'],
-            employee['emp_email']
+            employee['emp_email'],
+            user.get('id')
         )
         
         # Create refresh token (7 days)
@@ -187,6 +188,8 @@ def verify_otp():
             "refresh_expires_in": 604800,  # 7 days in seconds
             "refresh_expires_at": refresh_expires_at.strftime('%Y-%m-%d %H:%M:%S'),
             "user": {
+                "id": user.get("id"),
+                "user_id": user.get("id"),
                 "emp_code": emp_code,
                 "emp_full_name": employee['emp_full_name'],
                 "emp_email": employee['emp_email'],

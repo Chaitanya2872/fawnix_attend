@@ -22,7 +22,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30 minutes
 REFRESH_TOKEN_EXPIRE_DAYS = 7     # 7 days
 
 
-def create_jwt_token(emp_code: str, role: str, email: str) -> str:
+def create_jwt_token(emp_code: str, role: str, email: str, user_id: int | None = None) -> str:
     """
     Create short-lived JWT access token (30 minutes)
     """
@@ -34,6 +34,11 @@ def create_jwt_token(emp_code: str, role: str, email: str) -> str:
         "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
         "type": "access"
     }
+
+    if user_id is not None:
+        payload["id"] = int(user_id)
+        payload["user_id"] = int(user_id)
+
     return jwt.encode(payload, Config.JWT_SECRET_KEY, algorithm=Config.JWT_ALGORITHM)
 
 
@@ -212,7 +217,7 @@ def rotate_refresh_token(old_token: str, user_agent: str = None,
         
         # Get user role for new access token
         cursor.execute("""
-            SELECT role FROM users WHERE emp_code = %s
+            SELECT id, role FROM users WHERE emp_code = %s
         """, (emp_code,))
         
         user = cursor.fetchone()
@@ -220,6 +225,7 @@ def rotate_refresh_token(old_token: str, user_agent: str = None,
             raise Exception("User not found")
         
         role = user['role']
+        user_id = user.get('id')
         
         # Revoke old token
         cursor.execute("""
@@ -232,7 +238,7 @@ def rotate_refresh_token(old_token: str, user_agent: str = None,
         """, (old_token_id,))
         
         # Create new tokens
-        new_access_token = create_jwt_token(emp_code, role, emp_email)
+        new_access_token = create_jwt_token(emp_code, role, emp_email, user_id)
         
         # Generate new refresh token (same family)
         new_refresh_token = secrets.token_urlsafe(64)

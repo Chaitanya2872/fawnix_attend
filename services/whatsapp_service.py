@@ -4,7 +4,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 def send_otp(phone_number: str, otp: str, emp_name: str) -> bool:
     """Send OTP via WhatsApp Business API"""
     try:

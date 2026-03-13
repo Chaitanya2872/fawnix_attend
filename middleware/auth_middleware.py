@@ -57,6 +57,13 @@ def token_required(f):
                     return jsonify({"success": False, "message": "Account inactive"}), 403
                 
                 current_user = dict(user)
+                resolved_user_id = current_user.get('id')
+                if resolved_user_id is None:
+                    resolved_user_id = payload.get('id', payload.get('user_id'))
+                    if resolved_user_id is not None:
+                        current_user['id'] = resolved_user_id
+                if resolved_user_id is not None and 'user_id' not in current_user:
+                    current_user['user_id'] = resolved_user_id
             finally:
                 cursor.close()
                 conn.close()

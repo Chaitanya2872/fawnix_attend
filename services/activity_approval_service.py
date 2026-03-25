@@ -6,10 +6,33 @@ Manager approval system for late arrival and early leave requests
 from datetime import datetime
 from database.connection import get_db_connection
 from services.leaves_service import is_employee_on_leave
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 import logging
 
 logger = logging.getLogger(__name__)
+
+def _get_employee_designation(emp_code: str) -> Optional[str]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT emp_designation FROM employees WHERE emp_code = %s",
+            (emp_code,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        if hasattr(row, 'keys'):
+            return row.get('emp_designation')
+        return row[0]
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def _is_privileged_emp(emp_code: str) -> bool:
+    designation = (_get_employee_designation(emp_code) or '').strip().upper()
+    return designation in ['HR', 'CMD', 'ADMIN']
 
 
 def request_late_arrival_approval(emp_code: str, activity_id: int, 
@@ -298,11 +321,18 @@ def approve_activity_request(approval_id: int, manager_code: str,
     cursor = conn.cursor()
     
     try:
+        is_privileged = _is_privileged_emp(manager_code)
         # Get approval request
-        cursor.execute("""
-            SELECT * FROM activity_approvals
-            WHERE id = %s AND manager_code = %s
-        """, (approval_id, manager_code))
+        if is_privileged:
+            cursor.execute("""
+                SELECT * FROM activity_approvals
+                WHERE id = %s
+            """, (approval_id,))
+        else:
+            cursor.execute("""
+                SELECT * FROM activity_approvals
+                WHERE id = %s AND manager_code = %s
+            """, (approval_id, manager_code))
         
         approval = cursor.fetchone()
         
@@ -413,14 +443,18 @@ def get_team_approval_requests(manager_code: str, status: str = None) -> Tuple[D
     cursor = conn.cursor()
     
     try:
+        is_privileged = _is_privileged_emp(manager_code)
         query = """
             SELECT * FROM activity_approvals 
-            WHERE manager_code = %s
         """
-        params = [manager_code]
+        params = []
+
+        if not is_privileged:
+            query += " WHERE manager_code = %s"
+            params.append(manager_code)
         
         if status:
-            query += " AND status = %s"
+            query += " AND status = %s" if params else " WHERE status = %s"
             params.append(status)
         
         query += " ORDER BY requested_at DESC"

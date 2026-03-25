@@ -4,6 +4,7 @@ from middleware.auth_middleware import token_required
 from database.connection import get_db_connection, return_connection
 from services.whatsapp_service import send_leave_notification
 from services.notification_service import send_push_notification_to_employee
+from services import admin_service
 from services.leaves_service import (
     apply_leave,
     approve_leave,
@@ -15,6 +16,11 @@ from services.leaves_service import (
 
 leaves_bp = Blueprint("leaves", __name__)
 logger = logging.getLogger(__name__)
+
+
+def _is_privileged(current_user) -> bool:
+    designation = (current_user.get("emp_designation") or "").strip().lower()
+    return designation in ["hr", "cmd", "admin"]
 
 # =========================================================
 # HELPER FUNCTIONS
@@ -320,7 +326,50 @@ def cancel(current_user):
 @leaves_bp.route("/my-leaves", methods=["GET"])
 @token_required
 def my_leaves(current_user):
-    result, status = get_my_leaves(current_user["emp_code"])
+    status = request.args.get("status")
+    limit = request.args.get("limit", 50, type=int)
+    emp_code = request.args.get("emp_code")
+    include_all = str(request.args.get("all", "")).lower() in ["1", "true", "yes"]
+    from_date_str = request.args.get("from_date")
+    to_date_str = request.args.get("to_date")
+
+    from_date = None
+    to_date = None
+
+    if from_date_str:
+        try:
+            from_date = datetime.strptime(from_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid from_date format. Use YYYY-MM-DD"
+            }), 400
+
+    if to_date_str:
+        try:
+            to_date = datetime.strptime(to_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid to_date format. Use YYYY-MM-DD"
+            }), 400
+
+    if _is_privileged(current_user):
+        if include_all:
+            result, status_code = admin_service.get_all_leaves(
+                limit=limit,
+                status=status,
+                emp_code=emp_code,
+                from_date=from_date,
+                to_date=to_date
+            )
+            return jsonify(result), status_code
+
+        if emp_code:
+            result, status_code = get_my_leaves(emp_code, status=status, limit=limit)
+            return jsonify(result), status_code
+
+    result, status = get_my_leaves(current_user["emp_code"], status=status, limit=limit)
     return jsonify(result), status
 
 
@@ -331,7 +380,50 @@ def my_leaves(current_user):
 @leaves_bp.route("/team-leaves", methods=["GET"])
 @token_required
 def team_leaves(current_user):
-    result, status = get_team_leaves(current_user["emp_code"])
+    status = request.args.get("status")
+    limit = request.args.get("limit", 50, type=int)
+    emp_code = request.args.get("emp_code")
+    include_all = str(request.args.get("all", "")).lower() in ["1", "true", "yes"]
+    from_date_str = request.args.get("from_date")
+    to_date_str = request.args.get("to_date")
+
+    from_date = None
+    to_date = None
+
+    if from_date_str:
+        try:
+            from_date = datetime.strptime(from_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid from_date format. Use YYYY-MM-DD"
+            }), 400
+
+    if to_date_str:
+        try:
+            to_date = datetime.strptime(to_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid to_date format. Use YYYY-MM-DD"
+            }), 400
+
+    if _is_privileged(current_user):
+        if include_all:
+            result, status_code = admin_service.get_all_leaves(
+                limit=limit,
+                status=status,
+                emp_code=emp_code,
+                from_date=from_date,
+                to_date=to_date
+            )
+            return jsonify(result), status_code
+
+        if emp_code:
+            result, status_code = get_my_leaves(emp_code, status=status, limit=limit)
+            return jsonify(result), status_code
+
+    result, status = get_team_leaves(current_user["emp_code"], status=status, limit=limit)
     return jsonify(result), status
 
 
@@ -342,5 +434,10 @@ def team_leaves(current_user):
 @leaves_bp.route("/summary", methods=["GET"])
 @token_required
 def summary(current_user):
-    result, status = get_leave_summary(current_user["emp_code"])
+    emp_code = request.args.get("emp_code")
+
+    if _is_privileged(current_user) and emp_code:
+        result, status = get_leave_summary(emp_code)
+    else:
+        result, status = get_leave_summary(current_user["emp_code"])
     return jsonify(result), status

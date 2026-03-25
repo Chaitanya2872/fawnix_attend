@@ -5,6 +5,7 @@ API endpoints for overtime tracking and comp-off management with multi-level app
 
 from flask import Blueprint, request, jsonify
 from middleware.auth_middleware import token_required
+from services import admin_service
 from services.CompLeaveService import (
     trigger_compoff_calculation,
     get_employee_overtime_records,
@@ -20,6 +21,10 @@ from services.CompLeaveService import (
 from datetime import datetime
 
 compoff_bp = Blueprint('compoff', __name__)
+
+def _is_privileged(current_user) -> bool:
+    designation = (current_user.get('emp_designation') or '').strip().upper()
+    return designation in ['HR', 'CMD', 'ADMIN']
 
 
 # ========================================
@@ -170,16 +175,35 @@ def overtime_records(current_user):
     
     Example: /api/compoff/overtime-records?status=eligible&limit=20
     """
-    # STEP 1: TRIGGER comp-off calculation automatically
-    trigger_result = trigger_compoff_calculation(current_user['emp_code'])
-    trigger_data = trigger_result[0] if trigger_result[1] == 200 else None
-    
-    # STEP 2: Get overtime records after trigger
     status = request.args.get('status')
     limit = request.args.get('limit', 50, type=int)
-    
+    emp_code = request.args.get('emp_code')
+    include_all = str(request.args.get('all', '')).lower() in ['1', 'true', 'yes']
+
+    if _is_privileged(current_user) and include_all:
+        response, status_code = admin_service.get_all_overtime_records(
+            limit=limit,
+            status=status,
+            emp_code=emp_code
+        )
+        return jsonify(response), status_code
+
+    target_emp_code = current_user['emp_code']
+    if emp_code:
+        if not _is_privileged(current_user):
+            return jsonify({
+                "success": False,
+                "message": "Unauthorized. You can only view your own overtime records."
+            }), 403
+        target_emp_code = emp_code
+
+    # STEP 1: TRIGGER comp-off calculation automatically
+    trigger_result = trigger_compoff_calculation(target_emp_code)
+    trigger_data = trigger_result[0] if trigger_result[1] == 200 else None
+
+    # STEP 2: Get overtime records after trigger
     result = get_employee_overtime_records(
-        current_user['emp_code'],
+        target_emp_code,
         status,
         limit
     )
@@ -278,9 +302,28 @@ def my_requests(current_user):
     """
     status = request.args.get('status')
     limit = request.args.get('limit', 50, type=int)
-    
+    emp_code = request.args.get('emp_code')
+    include_all = str(request.args.get('all', '')).lower() in ['1', 'true', 'yes']
+
+    if _is_privileged(current_user) and include_all:
+        result = get_team_compoff_requests(
+            current_user['emp_code'],
+            status,
+            limit
+        )
+        return jsonify(result[0]), result[1]
+
+    target_emp_code = current_user['emp_code']
+    if emp_code:
+        if not _is_privileged(current_user):
+            return jsonify({
+                "success": False,
+                "message": "Unauthorized. You can only view your own requests."
+            }), 403
+        target_emp_code = emp_code
+
     result = get_my_compoff_requests(
-        current_user['emp_code'],
+        target_emp_code,
         status,
         limit
     )
@@ -415,7 +458,16 @@ def balance(current_user):
         }
     }
     """
-    result = get_compoff_balance(current_user['emp_code'])
+    emp_code = request.args.get('emp_code')
+    if emp_code:
+        if not _is_privileged(current_user):
+            return jsonify({
+                "success": False,
+                "message": "Unauthorized. You can only view your own balance."
+            }), 403
+        result = get_compoff_balance(emp_code)
+    else:
+        result = get_compoff_balance(current_user['emp_code'])
     return jsonify(result[0]), result[1]
 
 
@@ -521,9 +573,19 @@ def statistics(current_user):
     """
     year = request.args.get('year', type=int)
     month = request.args.get('month', type=int)
-    
+    emp_code = request.args.get('emp_code')
+
+    target_emp_code = current_user['emp_code']
+    if emp_code:
+        if not _is_privileged(current_user):
+            return jsonify({
+                "success": False,
+                "message": "Unauthorized. You can only view your own statistics."
+            }), 403
+        target_emp_code = emp_code
+
     result = get_compoff_statistics(
-        current_user['emp_code'],
+        target_emp_code,
         year,
         month
     )

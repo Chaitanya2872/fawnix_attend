@@ -4,6 +4,8 @@ Clock in/out and attendance management endpoints
 """
 
 from flask import Blueprint, request, jsonify
+from database.connection import get_db_connection, return_connection
+from services import admin_service
 from middleware.auth_middleware import token_required
 from services.attendance_service import (
     clock_in, clock_out, get_attendance_status, 
@@ -13,6 +15,28 @@ from datetime import datetime
 
 attendance_bp = Blueprint('attendance', __name__)
 
+def _is_privileged(current_user) -> bool:
+    designation = (current_user.get('emp_designation') or '').strip().lower()
+    return designation in ['hr', 'cmd', 'admin']
+
+
+def _resolve_emp_email(emp_code: str):
+    if not emp_code:
+        return None
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT emp_email FROM employees WHERE emp_code = %s",
+            (emp_code,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return row.get('emp_email') if hasattr(row, 'keys') else row[0]
+    finally:
+        cursor.close()
+        return_connection(conn)
 
 @attendance_bp.route('/login', methods=['POST'])
 @token_required
@@ -88,7 +112,24 @@ def status(current_user):
         - Active activities
         - Active field visits
     """
-    result = get_attendance_status(current_user['emp_email'])
+    emp_code = request.args.get('emp_code')
+    emp_email = request.args.get('emp_email')
+    include_all = str(request.args.get('all', '')).lower() in ['1', 'true', 'yes']
+
+    if _is_privileged(current_user):
+        if include_all:
+            response, status_code = admin_service.get_all_attendance_status()
+            return jsonify(response), status_code
+
+        if emp_code:
+            emp_email = _resolve_emp_email(emp_code)
+            if not emp_email:
+                return jsonify({"success": False, "message": "Employee not found"}), 404
+
+    target_email = current_user['emp_email']
+    if _is_privileged(current_user) and emp_email:
+        target_email = emp_email
+    result = get_attendance_status(target_email)
     return jsonify(result[0]), result[1]
 
 
@@ -102,7 +143,24 @@ def history(current_user):
         limit: Number of records (default: 30)
     """
     limit = request.args.get('limit', 30, type=int)
-    result = get_attendance_history(current_user['emp_email'], limit)
+    emp_code = request.args.get('emp_code')
+    emp_email = request.args.get('emp_email')
+    include_all = str(request.args.get('all', '')).lower() in ['1', 'true', 'yes']
+
+    if _is_privileged(current_user):
+        if include_all:
+            response, status_code = admin_service.get_all_attendance_history(limit)
+            return jsonify(response), status_code
+
+        if emp_code:
+            emp_email = _resolve_emp_email(emp_code)
+            if not emp_email:
+                return jsonify({"success": False, "message": "Employee not found"}), 404
+
+    target_email = current_user['emp_email']
+    if _is_privileged(current_user) and emp_email:
+        target_email = emp_email
+    result = get_attendance_history(target_email, limit)
     return jsonify(result[0]), result[1]
 
 
@@ -122,6 +180,9 @@ def day_summary(current_user):
         - Summary statistics
     """
     date_str = request.args.get('date')
+    emp_code = request.args.get('emp_code')
+    emp_email = request.args.get('emp_email')
+    include_all = str(request.args.get('all', '')).lower() in ['1', 'true', 'yes']
     target_date = None
     
     if date_str:
@@ -133,5 +194,18 @@ def day_summary(current_user):
                 "message": "Invalid date format. Use YYYY-MM-DD"
             }), 400
     
-    result = get_day_summary(current_user['emp_email'], target_date)
+    if _is_privileged(current_user):
+        if include_all:
+            response, status_code = admin_service.get_all_day_summary(target_date)
+            return jsonify(response), status_code
+
+        if emp_code:
+            emp_email = _resolve_emp_email(emp_code)
+            if not emp_email:
+                return jsonify({"success": False, "message": "Employee not found"}), 404
+
+    target_email = current_user['emp_email']
+    if _is_privileged(current_user) and emp_email:
+        target_email = emp_email
+    result = get_day_summary(target_email, target_date)
     return jsonify(result[0]), result[1]

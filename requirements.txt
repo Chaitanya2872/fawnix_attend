@@ -11,6 +11,7 @@ PyJWT==2.8.0
 
 # HTTP Requests
 requests==2.31.0
+firebase-admin==7.1.0
 
 # Environment
 python-dotenv==1.0.0

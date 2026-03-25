@@ -112,6 +112,30 @@ def get_employee_and_manager_info(emp_code: str) -> Dict:
         conn.close()
 
 
+def _get_employee_designation(emp_code: str) -> Optional[str]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT emp_designation FROM employees WHERE emp_code = %s",
+            (emp_code,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        if hasattr(row, 'keys'):
+            return row.get('emp_designation')
+        return row[0]
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def _is_privileged_emp(emp_code: str) -> bool:
+    designation = (_get_employee_designation(emp_code) or '').strip().upper()
+    return designation in ['HR', 'CMD', 'ADMIN']
+
+
 def _get_table_columns(cursor, table_name: str) -> set:
     """Return the available columns for a table to handle schema drift safely."""
     cursor.execute("""
@@ -572,10 +596,17 @@ def approve_exception(exception_id: int, manager_code: str,
     
     try:
         # Get exception details
-        cursor.execute("""
-            SELECT * FROM attendance_exceptions
-            WHERE id = %s AND manager_code = %s
-        """, (exception_id, manager_code))
+        is_privileged = _is_privileged_emp(manager_code)
+        if is_privileged:
+            cursor.execute("""
+                SELECT * FROM attendance_exceptions
+                WHERE id = %s
+            """, (exception_id,))
+        else:
+            cursor.execute("""
+                SELECT * FROM attendance_exceptions
+                WHERE id = %s AND manager_code = %s
+            """, (exception_id, manager_code))
         
         exception = cursor.fetchone()
         
@@ -748,6 +779,7 @@ def get_team_exceptions(manager_code: str, status: str = None,
     try:
         exception_columns = _get_table_columns(cursor, 'attendance_exceptions')
         select_clause = _build_exception_select(exception_columns, include_employee_fields=True)
+        is_privileged = _is_privileged_emp(manager_code)
 
         query = f"""
             SELECT 
@@ -756,7 +788,9 @@ def get_team_exceptions(manager_code: str, status: str = None,
         """
         params = []
 
-        if 'manager_code' in exception_columns:
+        if is_privileged:
+            query += " WHERE 1=1"
+        elif 'manager_code' in exception_columns:
             query += " WHERE manager_code = %s"
             params.append(manager_code)
         else:

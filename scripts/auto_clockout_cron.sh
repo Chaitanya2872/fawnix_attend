@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Update this to your deployment path.
-PROJECT_ROOT="${PROJECT_ROOT:-/opt/fawnix}"
+PROJECT_ROOT="${PROJECT_ROOT:-/root/backend/fawnix_attend}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/venv/bin/python}"
 RUNNER_PATH="$PROJECT_ROOT/scripts/run_auto_clockout_cron.py"
 

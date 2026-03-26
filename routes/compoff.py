@@ -178,9 +178,8 @@ def overtime_records(current_user):
     status = request.args.get('status')
     limit = request.args.get('limit', 50, type=int)
     emp_code = request.args.get('emp_code')
-    include_all = str(request.args.get('all', '')).lower() in ['1', 'true', 'yes']
 
-    if _is_privileged(current_user) and include_all:
+    if _is_privileged(current_user) and not emp_code:
         response, status_code = admin_service.get_all_overtime_records(
             limit=limit,
             status=status,
@@ -303,9 +302,8 @@ def my_requests(current_user):
     status = request.args.get('status')
     limit = request.args.get('limit', 50, type=int)
     emp_code = request.args.get('emp_code')
-    include_all = str(request.args.get('all', '')).lower() in ['1', 'true', 'yes']
 
-    if _is_privileged(current_user) and include_all:
+    if _is_privileged(current_user) and not emp_code:
         result = get_team_compoff_requests(
             current_user['emp_code'],
             status,

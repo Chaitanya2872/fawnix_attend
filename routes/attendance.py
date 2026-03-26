@@ -114,10 +114,9 @@ def status(current_user):
     """
     emp_code = request.args.get('emp_code')
     emp_email = request.args.get('emp_email')
-    include_all = str(request.args.get('all', '')).lower() in ['1', 'true', 'yes']
 
     if _is_privileged(current_user):
-        if include_all:
+        if not emp_code and not emp_email:
             response, status_code = admin_service.get_all_attendance_status()
             return jsonify(response), status_code
 
@@ -125,6 +124,11 @@ def status(current_user):
             emp_email = _resolve_emp_email(emp_code)
             if not emp_email:
                 return jsonify({"success": False, "message": "Employee not found"}), 404
+    elif emp_code or emp_email:
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. You can only view your own attendance."
+        }), 403
 
     target_email = current_user['emp_email']
     if _is_privileged(current_user) and emp_email:
@@ -145,10 +149,9 @@ def history(current_user):
     limit = request.args.get('limit', 30, type=int)
     emp_code = request.args.get('emp_code')
     emp_email = request.args.get('emp_email')
-    include_all = str(request.args.get('all', '')).lower() in ['1', 'true', 'yes']
 
     if _is_privileged(current_user):
-        if include_all:
+        if not emp_code and not emp_email:
             response, status_code = admin_service.get_all_attendance_history(limit)
             return jsonify(response), status_code
 
@@ -156,6 +159,11 @@ def history(current_user):
             emp_email = _resolve_emp_email(emp_code)
             if not emp_email:
                 return jsonify({"success": False, "message": "Employee not found"}), 404
+    elif emp_code or emp_email:
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. You can only view your own attendance."
+        }), 403
 
     target_email = current_user['emp_email']
     if _is_privileged(current_user) and emp_email:
@@ -182,7 +190,6 @@ def day_summary(current_user):
     date_str = request.args.get('date')
     emp_code = request.args.get('emp_code')
     emp_email = request.args.get('emp_email')
-    include_all = str(request.args.get('all', '')).lower() in ['1', 'true', 'yes']
     target_date = None
     
     if date_str:
@@ -195,7 +202,7 @@ def day_summary(current_user):
             }), 400
     
     if _is_privileged(current_user):
-        if include_all:
+        if not emp_code and not emp_email:
             response, status_code = admin_service.get_all_day_summary(target_date)
             return jsonify(response), status_code
 
@@ -203,6 +210,11 @@ def day_summary(current_user):
             emp_email = _resolve_emp_email(emp_code)
             if not emp_email:
                 return jsonify({"success": False, "message": "Employee not found"}), 404
+    elif emp_code or emp_email:
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. You can only view your own attendance."
+        }), 403
 
     target_email = current_user['emp_email']
     if _is_privileged(current_user) and emp_email:

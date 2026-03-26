@@ -329,7 +329,6 @@ def my_leaves(current_user):
     status = request.args.get("status")
     limit = request.args.get("limit", 50, type=int)
     emp_code = request.args.get("emp_code")
-    include_all = str(request.args.get("all", "")).lower() in ["1", "true", "yes"]
     from_date_str = request.args.get("from_date")
     to_date_str = request.args.get("to_date")
 
@@ -355,7 +354,7 @@ def my_leaves(current_user):
             }), 400
 
     if _is_privileged(current_user):
-        if include_all:
+        if not emp_code:
             result, status_code = admin_service.get_all_leaves(
                 limit=limit,
                 status=status,
@@ -365,9 +364,13 @@ def my_leaves(current_user):
             )
             return jsonify(result), status_code
 
-        if emp_code:
-            result, status_code = get_my_leaves(emp_code, status=status, limit=limit)
-            return jsonify(result), status_code
+        result, status_code = get_my_leaves(emp_code, status=status, limit=limit)
+        return jsonify(result), status_code
+    elif emp_code:
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. You can only view your own leaves."
+        }), 403
 
     result, status = get_my_leaves(current_user["emp_code"], status=status, limit=limit)
     return jsonify(result), status
@@ -383,7 +386,6 @@ def team_leaves(current_user):
     status = request.args.get("status")
     limit = request.args.get("limit", 50, type=int)
     emp_code = request.args.get("emp_code")
-    include_all = str(request.args.get("all", "")).lower() in ["1", "true", "yes"]
     from_date_str = request.args.get("from_date")
     to_date_str = request.args.get("to_date")
 
@@ -409,7 +411,7 @@ def team_leaves(current_user):
             }), 400
 
     if _is_privileged(current_user):
-        if include_all:
+        if not emp_code:
             result, status_code = admin_service.get_all_leaves(
                 limit=limit,
                 status=status,
@@ -419,9 +421,13 @@ def team_leaves(current_user):
             )
             return jsonify(result), status_code
 
-        if emp_code:
-            result, status_code = get_my_leaves(emp_code, status=status, limit=limit)
-            return jsonify(result), status_code
+        result, status_code = get_my_leaves(emp_code, status=status, limit=limit)
+        return jsonify(result), status_code
+    elif emp_code:
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. You can only view your team leaves."
+        }), 403
 
     result, status = get_team_leaves(current_user["emp_code"], status=status, limit=limit)
     return jsonify(result), status

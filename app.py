@@ -154,7 +154,7 @@ def auto_clockout_job():
 
 
 def _env_to_bool(value, default=False):
-    """Parse a bool env var safely."""
+    """Parse a bool env var safely. test"""
     if value is None:
         return default
     return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}

@@ -5,6 +5,8 @@ Activity and break management endpoints
 
 from flask import Blueprint, request, jsonify
 from middleware.auth_middleware import token_required
+from database.connection import get_db_connection, return_connection
+from services import admin_service
 from services.activity_service import (
     start_activity, end_activity, get_activities, get_team_activities,
     mark_destination_visited, get_activity_route,
@@ -14,6 +16,29 @@ from services.locationtracking_service import track_location
 
 activities_bp = Blueprint('activities', __name__)
 
+def _is_privileged(current_user) -> bool:
+    designation = (current_user.get('emp_designation') or '').strip().lower()
+    department = (current_user.get('emp_department') or '').strip().lower()
+    return designation in ['hr', 'cmd', 'admin'] or department == 'hr'
+
+
+def _resolve_emp_email(emp_code: str):
+    if not emp_code:
+        return None
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT emp_email FROM employees WHERE emp_code = %s",
+            (emp_code,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return row.get('emp_email') if hasattr(row, 'keys') else row[0]
+    finally:
+        cursor.close()
+        return_connection(conn)
 
 @activities_bp.route('/start', methods=['POST'])
 @token_required
@@ -132,9 +157,31 @@ def list_activities(current_user):
     include_tracking = str(include_tracking).lower() in ['1', 'true', 'yes']
     include_activity_tracking = request.args.get('include_activity_tracking', default='true')
     include_activity_tracking = str(include_activity_tracking).lower() in ['1', 'true', 'yes']
+    emp_code = request.args.get('emp_code')
+    emp_email = request.args.get('emp_email')
+
+    if _is_privileged(current_user):
+        if not emp_code and not emp_email:
+            response, status_code = admin_service.get_all_activities(
+                limit=limit,
+                activity_type=activity_type,
+                include_tracking=include_tracking,
+                include_activity_tracking=include_activity_tracking
+            )
+            return jsonify(response), status_code
+
+        if emp_code:
+            emp_email = _resolve_emp_email(emp_code)
+            if not emp_email:
+                return jsonify({"success": False, "message": "Employee not found"}), 404
+    elif emp_code or emp_email:
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. You can only view your own activities."
+        }), 403
     
     result = get_activities(
-        current_user['emp_email'],
+        emp_email or current_user['emp_email'],
         limit,
         activity_type,
         include_tracking=include_tracking,
@@ -161,6 +208,37 @@ def list_team_activities(current_user):
     include_tracking = str(include_tracking).lower() in ['1', 'true', 'yes']
     include_activity_tracking = request.args.get('include_activity_tracking', default='true')
     include_activity_tracking = str(include_activity_tracking).lower() in ['1', 'true', 'yes']
+    emp_code = request.args.get('emp_code')
+    emp_email = request.args.get('emp_email')
+
+    if _is_privileged(current_user):
+        if not emp_code and not emp_email:
+            response, status_code = admin_service.get_all_activities(
+                limit=limit,
+                activity_type=activity_type,
+                include_tracking=include_tracking,
+                include_activity_tracking=include_activity_tracking
+            )
+            return jsonify(response), status_code
+
+        if emp_code:
+            emp_email = _resolve_emp_email(emp_code)
+            if not emp_email:
+                return jsonify({"success": False, "message": "Employee not found"}), 404
+
+        result = get_activities(
+            emp_email,
+            limit,
+            activity_type,
+            include_tracking=include_tracking,
+            include_activity_tracking=include_activity_tracking
+        )
+        return jsonify(result[0]), result[1]
+    elif emp_code or emp_email:
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. You can only view your team activities."
+        }), 403
 
     result = get_team_activities(
         current_user['emp_code'],

@@ -112,28 +112,30 @@ def get_employee_and_manager_info(emp_code: str) -> Dict:
         conn.close()
 
 
-def _get_employee_designation(emp_code: str) -> Optional[str]:
+def _get_employee_privilege_flags(emp_code: str) -> Tuple[Optional[str], Optional[str]]:
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "SELECT emp_designation FROM employees WHERE emp_code = %s",
+            "SELECT emp_designation, emp_department FROM employees WHERE emp_code = %s",
             (emp_code,)
         )
         row = cursor.fetchone()
         if not row:
-            return None
+            return None, None
         if hasattr(row, 'keys'):
-            return row.get('emp_designation')
-        return row[0]
+            return row.get('emp_designation'), row.get('emp_department')
+        return row[0], row[1] if len(row) > 1 else None
     finally:
         cursor.close()
         conn.close()
 
 
 def _is_privileged_emp(emp_code: str) -> bool:
-    designation = (_get_employee_designation(emp_code) or '').strip().upper()
-    return designation in ['HR', 'CMD', 'ADMIN']
+    designation, department = _get_employee_privilege_flags(emp_code)
+    designation = (designation or '').strip().upper()
+    department = (department or '').strip().upper()
+    return designation in ['HR', 'CMD', 'ADMIN'] or department == 'HR'
 
 
 def _get_table_columns(cursor, table_name: str) -> set:

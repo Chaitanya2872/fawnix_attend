@@ -24,7 +24,8 @@ compoff_bp = Blueprint('compoff', __name__)
 
 def _is_privileged(current_user) -> bool:
     designation = (current_user.get('emp_designation') or '').strip().upper()
-    return designation in ['HR', 'CMD', 'ADMIN']
+    department = (current_user.get('emp_department') or '').strip().upper()
+    return designation in ['HR', 'CMD', 'ADMIN'] or department == 'HR'
 
 
 # ========================================

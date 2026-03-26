@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 def _is_privileged(current_user) -> bool:
     designation = (current_user.get("emp_designation") or "").strip().lower()
-    return designation in ["hr", "cmd", "admin"]
+    department = (current_user.get("emp_department") or "").strip().lower()
+    return designation in ["hr", "cmd", "admin"] or department == "hr"
 
 # =========================================================
 # HELPER FUNCTIONS

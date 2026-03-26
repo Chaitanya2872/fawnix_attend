@@ -6,6 +6,7 @@ services:
     image: postgres:14-alpine
     container_name: employee_db
     environment:
+      TZ: Asia/Kolkata
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: Intimation
@@ -23,6 +24,7 @@ services:
     build: .
     container_name: employee_app
     environment:
+      TZ: Asia/Kolkata
       DATABASE_HOST: postgres
       DATABASE_PORT: 5432
       DATABASE_NAME: Intimation

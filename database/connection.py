@@ -540,6 +540,18 @@ def init_database():
 
         logger.info("✓ User devices table ready")
 
+        # 13. Attendance away alert rate limiting
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS attendance_away_alerts (
+                user_id BIGINT PRIMARY KEY,
+                last_sent_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+        """)
+
+        logger.info("✓ Attendance away alerts table ready")
+
         # ==================== CREATE INDEXES ====================
         
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_shifts_active ON shifts(is_active)")
@@ -556,6 +568,7 @@ def init_database():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_field_visit ON leads(field_visit_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_devices_user_active ON user_devices(user_id, is_active)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_devices_emp_code_active ON user_devices(emp_code, is_active)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_attendance_away_alerts_last_sent ON attendance_away_alerts(last_sent_at)")
         
         logger.info("✓ Indexes created")
         

@@ -1,7 +1,7 @@
 """
 Employee Management System - Monolithic Application
 Main Flask Application Entry Point
-FIXED: Proper auto clockout integration with testing and production schedules
+FIXED: Proper auto clock out integration with testing and production schedules
 """
 
 from flask import Flask, jsonify
@@ -151,7 +151,6 @@ def auto_clockout_job():
             "message": str(e),
             "auto_clocked_out": 0
         }
-
 
 def _env_to_bool(value, default=False):
     """Parse a bool env var safely. test"""
@@ -495,6 +494,7 @@ def api_docs():
             'attendance': {
                 'POST /api/attendance/login': 'Clock in',
                 'POST /api/attendance/logout': 'Clock out',
+                'POST /api/attendance/away': 'Send away alert notification (push)',
                 'GET /api/attendance/status': 'Get attendance status',
                 'GET /api/attendance/history': 'Get attendance history'
             },

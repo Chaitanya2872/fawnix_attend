@@ -42,6 +42,7 @@ def token_required(f):
                         e.emp_full_name, 
                         e.emp_email,
                         e.emp_designation,
+                        e.emp_department,
                         e.emp_manager
                     FROM users u
                     JOIN employees e ON u.emp_code = e.emp_code

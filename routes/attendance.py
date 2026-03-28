@@ -11,6 +11,7 @@ from services.attendance_service import (
     clock_in, clock_out, get_attendance_status, 
     get_attendance_history, get_day_summary
 )
+from services.attendance_away_service import process_attendance_away_alert
 from datetime import datetime
 
 attendance_bp = Blueprint('attendance', __name__)
@@ -38,6 +39,19 @@ def _resolve_emp_email(emp_code: str):
     finally:
         cursor.close()
         return_connection(conn)
+
+
+def _resolve_authenticated_user_id(current_user):
+    raw_user_id = current_user.get('id') or current_user.get('user_id')
+    try:
+        user_id = int(raw_user_id)
+    except (TypeError, ValueError):
+        return None, ({"sent": 0, "failed": 0, "message": "Authenticated user id is invalid"}, 400)
+
+    if user_id <= 0:
+        return None, ({"sent": 0, "failed": 0, "message": "Authenticated user id is invalid"}, 400)
+
+    return user_id, None
 
 @attendance_bp.route('/login', methods=['POST'])
 @token_required
@@ -222,3 +236,42 @@ def day_summary(current_user):
         target_email = emp_email
     result = get_day_summary(target_email, target_date)
     return jsonify(result[0]), result[1]
+
+
+@attendance_bp.route('/away', methods=['POST'])
+@token_required
+def attendance_away(current_user):
+    """
+    Send away alert notification when user is >=100m from expected location.
+
+    Request Body:
+        {
+            "user_id": 123,
+            "distance_m": 150.5,
+            "timestamp": "2026-03-29T10:15:00Z",
+            "lat": 17.385044,
+            "lon": 78.486671
+        }
+
+    Response:
+        { "sent": 1, "failed": 0, "message": "..." }
+    """
+    data = request.get_json() or {}
+
+    auth_user_id, error_response = _resolve_authenticated_user_id(current_user)
+    if error_response:
+        return jsonify(error_response[0]), error_response[1]
+
+    try:
+        target_user_id = int(data.get("user_id"))
+    except (TypeError, ValueError):
+        return jsonify({"sent": 0, "failed": 0, "message": "user_id must be a valid integer"}), 400
+
+    if target_user_id <= 0:
+        return jsonify({"sent": 0, "failed": 0, "message": "user_id must be greater than 0"}), 400
+
+    if not _is_privileged(current_user) and target_user_id != auth_user_id:
+        return jsonify({"sent": 0, "failed": 0, "message": "Unauthorized for this user_id"}), 403
+
+    result, status_code = process_attendance_away_alert(data)
+    return jsonify(result), status_code

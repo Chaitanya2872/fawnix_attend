@@ -45,9 +45,13 @@ class Config:
     WHATSAPP_LEAVE_STATUS_TEMPLATE = os.getenv('WHATSAPP_LEAVE_STATUS_TEMPLATE', 'fawnix_notification')
     WHATSAPP_LEAVE_MANAGER_ACTION_TEMPLATE = os.getenv('WHATSAPP_LEAVE_MANAGER_ACTION_TEMPLATE', 'fawnix_notification')
     FIREBASE_SERVICE_ACCOUNT_PATH = os.getenv(
-        'FIREBASE_SERVICE_ACCOUNT_PATH',
-        os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '')
+        'FIREBASE_CREDENTIALS',
+        os.getenv(
+            'FIREBASE_SERVICE_ACCOUNT_PATH',
+            os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '')
+        )
     )
+    AWAY_ALERT_COOLDOWN_MINUTES = int(os.getenv('AWAY_ALERT_COOLDOWN_MINUTES', 5))
     
     # CORS Configuration
     CORS_ORIGINS = "*"

@@ -14,6 +14,7 @@ from datetime import datetime, time, date
 from database.connection import get_db_connection, return_connection
 from services.geocoding_service import get_address_from_coordinates
 from services.CompLeaveService import calculate_and_record_compoff
+from utils.time_utils import now_local_naive
 import logging
 
 logger = logging.getLogger(__name__)
@@ -134,7 +135,7 @@ def auto_clockout_all_active_sessions():
     cursor = conn.cursor()
 
     try:
-        current_time = datetime.now()
+        current_time = now_local_naive()
         current_date = current_time.date()
         auto_clockout_time = get_auto_clockout_time(current_date)
 
@@ -344,7 +345,7 @@ def manual_trigger_auto_clockout():
     cursor = conn.cursor()
 
     try:
-        current_time = datetime.now()
+        current_time = now_local_naive()
 
         logger.info(f"🧪 MANUAL AUTO CLOCK-OUT TRIGGERED at {current_time}")
 

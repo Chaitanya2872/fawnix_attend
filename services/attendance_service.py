@@ -20,6 +20,7 @@ from services.attendance_exceptions_service import (
     get_employee_shift_times,
     _fetch_exception_rows_by_attendance_ids,
 )
+from utils.time_utils import now_local_naive
 import logging
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
 
         # ✅ Check for NON-WORKING day second clock-in (Comp-off)
         # Non-working days: Sundays, Holidays, 2nd/4th Saturdays
-        login_time = datetime.now()
+        login_time = now_local_naive()
         login_date = login_time.date()
         
         # Get emp_code first for working day check
@@ -235,7 +236,7 @@ def clock_out(emp_email: str, lat: str, lon: str):
             return ({"success": False, "message": "No active session found"}, 404)
         
         attendance_id = record['id']
-        logout_time = datetime.now()
+        logout_time = now_local_naive()
         login_time = record['login_time']
         
         if isinstance(login_time, str):

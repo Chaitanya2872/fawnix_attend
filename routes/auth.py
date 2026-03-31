@@ -68,6 +68,15 @@ def request_otp():
         if not employee['emp_contact']:
             return jsonify({"success": False, "message": "No contact number"}), 400
         
+        # Play Store review dummy OTP (no real WhatsApp send)
+        if otp_service.is_playstore_test_emp(emp_code):
+            otp_service.save_otp(emp_code, otp_service.PLAYSTORE_TEST_OTP)
+            return jsonify({
+                "success": True,
+                "message": "Test OTP generated for Play Store review",
+                "expires_in_minutes": 5
+            }), 200
+
         # Generate and save OTP
         otp = otp_service.generate_otp()
         otp_service.save_otp(emp_code, otp)

@@ -11,6 +11,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Play Store review dummy credentials
+PLAYSTORE_TEST_EMP_CODE = "2872"
+PLAYSTORE_TEST_OTP = "654321"
+
+
+def is_playstore_test_emp(emp_code: str) -> bool:
+    return str(emp_code).strip() == PLAYSTORE_TEST_EMP_CODE
+
 
 def generate_otp() -> str:
     """Generate random OTP code"""
@@ -46,6 +54,9 @@ def save_otp(emp_code: str, otp: str) -> datetime:
 
 def verify_otp(emp_code: str, otp: str) -> bool:
     """Verify OTP code"""
+    if is_playstore_test_emp(emp_code):
+        return str(otp).strip() == PLAYSTORE_TEST_OTP
+
     conn = get_db_connection()
     cursor = conn.cursor()
     

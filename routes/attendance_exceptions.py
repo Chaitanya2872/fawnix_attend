@@ -8,7 +8,7 @@ import logging
 from flask import Blueprint, request, jsonify
 from database.connection import get_db_connection, return_connection
 from middleware.auth_middleware import token_required
-from services.whatsapp_service import send_notification
+from services.whatsapp_service import send_exception_notification
 from services.attendance_exceptions_service import (
     request_late_arrival_exception,
     request_early_leave_exception,
@@ -73,16 +73,16 @@ def _send_manager_request_notification(current_user, exception_data, reason):
         detail = f"Planned leave time: {exception_data.get('planned_leave_time')}"
         request_label = "early-leave"
 
-    message = (
-        f"Hello {manager['name']},\n\n"
-        f"{employee_name} has submitted a {request_label} exception request.\n"
-        f"{detail}\n"
-        f"Reason: {reason}\n"
-        "Status: Pending your review.\n\n"
-        "- Fawnix"
+    sent = send_exception_notification(
+        phone_number=manager["phone"],
+        manager_name=manager["name"],
+        employee_name=employee_name,
+        exception_type=request_label,
+        detail=detail,
+        reason=reason,
+        status_label="Pending your review",
+        title="Attendance Exception"
     )
-
-    sent = send_notification(manager["phone"], message)
     logger.info(
         "Manager WhatsApp notification for %s request (exception_id=%s): %s",
         exception_type,

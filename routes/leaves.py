@@ -354,23 +354,10 @@ def my_leaves(current_user):
                 "message": "Invalid to_date format. Use YYYY-MM-DD"
             }), 400
 
-    if _is_privileged(current_user):
-        if not emp_code:
-            result, status_code = admin_service.get_all_leaves(
-                limit=limit,
-                status=status,
-                emp_code=emp_code,
-                from_date=from_date,
-                to_date=to_date
-            )
-            return jsonify(result), status_code
-
-        result, status_code = get_my_leaves(emp_code, status=status, limit=limit)
-        return jsonify(result), status_code
-    elif emp_code:
+    if emp_code and emp_code != current_user["emp_code"]:
         return jsonify({
             "success": False,
-            "message": "Unauthorized. You can only view your own leaves."
+            "message": "Unauthorized. You can only view your own leaves in this endpoint."
         }), 403
 
     result, status = get_my_leaves(current_user["emp_code"], status=status, limit=limit)

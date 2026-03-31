@@ -180,22 +180,12 @@ def overtime_records(current_user):
     limit = request.args.get('limit', 50, type=int)
     emp_code = request.args.get('emp_code')
 
-    if _is_privileged(current_user) and not emp_code:
-        response, status_code = admin_service.get_all_overtime_records(
-            limit=limit,
-            status=status,
-            emp_code=emp_code
-        )
-        return jsonify(response), status_code
-
     target_emp_code = current_user['emp_code']
-    if emp_code:
-        if not _is_privileged(current_user):
-            return jsonify({
-                "success": False,
-                "message": "Unauthorized. You can only view your own overtime records."
-            }), 403
-        target_emp_code = emp_code
+    if emp_code and emp_code != current_user['emp_code']:
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. You can only view your own overtime records in this endpoint."
+        }), 403
 
     # STEP 1: TRIGGER comp-off calculation automatically
     trigger_result = trigger_compoff_calculation(target_emp_code)
@@ -304,22 +294,12 @@ def my_requests(current_user):
     limit = request.args.get('limit', 50, type=int)
     emp_code = request.args.get('emp_code')
 
-    if _is_privileged(current_user) and not emp_code:
-        result = get_team_compoff_requests(
-            current_user['emp_code'],
-            status,
-            limit
-        )
-        return jsonify(result[0]), result[1]
-
     target_emp_code = current_user['emp_code']
-    if emp_code:
-        if not _is_privileged(current_user):
-            return jsonify({
-                "success": False,
-                "message": "Unauthorized. You can only view your own requests."
-            }), 403
-        target_emp_code = emp_code
+    if emp_code and emp_code != current_user['emp_code']:
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. You can only view your own requests in this endpoint."
+        }), 403
 
     result = get_my_compoff_requests(
         target_emp_code,

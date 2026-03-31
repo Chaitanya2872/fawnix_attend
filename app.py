@@ -496,7 +496,10 @@ def api_docs():
                 'POST /api/attendance/logout': 'Clock out',
                 'POST /api/attendance/away': 'Send away alert notification (push)',
                 'GET /api/attendance/status': 'Get attendance status',
-                'GET /api/attendance/history': 'Get attendance history'
+                'GET /api/attendance/history': 'Get attendance history',
+                'GET /api/attendance/team-status': 'HR/CMD/Admin: attendance status for all employees',
+                'GET /api/attendance/team-history': 'HR/CMD/Admin: attendance history for all employees',
+                'GET /api/attendance/team-day-summary': 'HR/CMD/Admin: attendance day summaries'
             },
             'activities': {
                 'POST /api/activities/start': 'Start activity',

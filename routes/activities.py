@@ -160,28 +160,19 @@ def list_activities(current_user):
     emp_code = request.args.get('emp_code')
     emp_email = request.args.get('emp_email')
 
-    if _is_privileged(current_user):
-        if not emp_code and not emp_email:
-            response, status_code = admin_service.get_all_activities(
-                limit=limit,
-                activity_type=activity_type,
-                include_tracking=include_tracking,
-                include_activity_tracking=include_activity_tracking
-            )
-            return jsonify(response), status_code
-
-        if emp_code:
-            emp_email = _resolve_emp_email(emp_code)
-            if not emp_email:
-                return jsonify({"success": False, "message": "Employee not found"}), 404
-    elif emp_code or emp_email:
+    if emp_code and emp_code != current_user.get('emp_code'):
         return jsonify({
             "success": False,
-            "message": "Unauthorized. You can only view your own activities."
+            "message": "Unauthorized. You can only view your own activities in this endpoint."
+        }), 403
+    if emp_email and emp_email != current_user.get('emp_email'):
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. You can only view your own activities in this endpoint."
         }), 403
     
     result = get_activities(
-        emp_email or current_user['emp_email'],
+        current_user['emp_email'],
         limit,
         activity_type,
         include_tracking=include_tracking,

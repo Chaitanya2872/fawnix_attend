@@ -130,24 +130,18 @@ def status(current_user):
     emp_code = request.args.get('emp_code')
     emp_email = request.args.get('emp_email')
 
-    if _is_privileged(current_user):
-        if not emp_code and not emp_email:
-            response, status_code = admin_service.get_all_attendance_status()
-            return jsonify(response), status_code
-
-        if emp_code:
-            emp_email = _resolve_emp_email(emp_code)
-            if not emp_email:
-                return jsonify({"success": False, "message": "Employee not found"}), 404
-    elif emp_code or emp_email:
+    if emp_code and emp_code != current_user.get('emp_code'):
         return jsonify({
             "success": False,
-            "message": "Unauthorized. You can only view your own attendance."
+            "message": "Unauthorized. You can only view your own attendance in this endpoint."
+        }), 403
+    if emp_email and emp_email != current_user.get('emp_email'):
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. You can only view your own attendance in this endpoint."
         }), 403
 
     target_email = current_user['emp_email']
-    if _is_privileged(current_user) and emp_email:
-        target_email = emp_email
     result = get_attendance_status(target_email)
     return jsonify(result[0]), result[1]
 
@@ -165,24 +159,18 @@ def history(current_user):
     emp_code = request.args.get('emp_code')
     emp_email = request.args.get('emp_email')
 
-    if _is_privileged(current_user):
-        if not emp_code and not emp_email:
-            response, status_code = admin_service.get_all_attendance_history(limit)
-            return jsonify(response), status_code
-
-        if emp_code:
-            emp_email = _resolve_emp_email(emp_code)
-            if not emp_email:
-                return jsonify({"success": False, "message": "Employee not found"}), 404
-    elif emp_code or emp_email:
+    if emp_code and emp_code != current_user.get('emp_code'):
         return jsonify({
             "success": False,
-            "message": "Unauthorized. You can only view your own attendance."
+            "message": "Unauthorized. You can only view your own attendance in this endpoint."
+        }), 403
+    if emp_email and emp_email != current_user.get('emp_email'):
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. You can only view your own attendance in this endpoint."
         }), 403
 
     target_email = current_user['emp_email']
-    if _is_privileged(current_user) and emp_email:
-        target_email = emp_email
     result = get_attendance_history(target_email, limit)
     return jsonify(result[0]), result[1]
 
@@ -216,25 +204,115 @@ def day_summary(current_user):
                 "message": "Invalid date format. Use YYYY-MM-DD"
             }), 400
     
-    if _is_privileged(current_user):
-        if not emp_code and not emp_email:
-            response, status_code = admin_service.get_all_day_summary(target_date)
-            return jsonify(response), status_code
-
-        if emp_code:
-            emp_email = _resolve_emp_email(emp_code)
-            if not emp_email:
-                return jsonify({"success": False, "message": "Employee not found"}), 404
-    elif emp_code or emp_email:
+    if emp_code and emp_code != current_user.get('emp_code'):
         return jsonify({
             "success": False,
-            "message": "Unauthorized. You can only view your own attendance."
+            "message": "Unauthorized. You can only view your own attendance in this endpoint."
+        }), 403
+    if emp_email and emp_email != current_user.get('emp_email'):
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. You can only view your own attendance in this endpoint."
         }), 403
 
     target_email = current_user['emp_email']
-    if _is_privileged(current_user) and emp_email:
-        target_email = emp_email
     result = get_day_summary(target_email, target_date)
+    return jsonify(result[0]), result[1]
+
+
+@attendance_bp.route('/team-status', methods=['GET'])
+@token_required
+def team_status(current_user):
+    """
+    Get attendance status for all employees (HR/CMD/Admin) or a specific employee.
+    """
+    if not _is_privileged(current_user):
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. Team attendance is restricted."
+        }), 403
+
+    emp_code = request.args.get('emp_code')
+    emp_email = request.args.get('emp_email')
+
+    if not emp_code and not emp_email:
+        response, status_code = admin_service.get_all_attendance_status()
+        return jsonify(response), status_code
+
+    if emp_code:
+        emp_email = _resolve_emp_email(emp_code)
+        if not emp_email:
+            return jsonify({"success": False, "message": "Employee not found"}), 404
+
+    result = get_attendance_status(emp_email)
+    return jsonify(result[0]), result[1]
+
+
+@attendance_bp.route('/team-history', methods=['GET'])
+@token_required
+def team_history(current_user):
+    """
+    Get attendance history for all employees (HR/CMD/Admin) or a specific employee.
+    """
+    if not _is_privileged(current_user):
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. Team attendance history is restricted."
+        }), 403
+
+    limit = request.args.get('limit', 30, type=int)
+    emp_code = request.args.get('emp_code')
+    emp_email = request.args.get('emp_email')
+
+    if not emp_code and not emp_email:
+        response, status_code = admin_service.get_all_attendance_history(limit)
+        return jsonify(response), status_code
+
+    if emp_code:
+        emp_email = _resolve_emp_email(emp_code)
+        if not emp_email:
+            return jsonify({"success": False, "message": "Employee not found"}), 404
+
+    result = get_attendance_history(emp_email, limit)
+    return jsonify(result[0]), result[1]
+
+
+@attendance_bp.route('/team-day-summary', methods=['GET'])
+@token_required
+def team_day_summary(current_user):
+    """
+    Get day summary for all employees (HR/CMD/Admin) or a specific employee.
+    """
+    if not _is_privileged(current_user):
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. Team day summary is restricted."
+        }), 403
+
+    date_str = request.args.get('date')
+    emp_code = request.args.get('emp_code')
+    emp_email = request.args.get('emp_email')
+    target_date = None
+
+    if date_str:
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except:
+            return jsonify({
+                "success": False,
+                "message": "Invalid date format. Use YYYY-MM-DD"
+            }), 400
+
+    if not emp_code and not emp_email:
+        response, status_code = admin_service.get_all_day_summary(target_date)
+        return jsonify(response), status_code
+
+    if emp_code:
+        emp_email = _resolve_emp_email(emp_code)
+        if not emp_email:
+            return jsonify({"success": False, "message": "Employee not found"}), 404
+
+    result = get_day_summary(emp_email, target_date)
     return jsonify(result[0]), result[1]
 
 

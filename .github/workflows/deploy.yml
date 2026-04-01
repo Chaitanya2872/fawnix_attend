@@ -28,9 +28,10 @@ jobs:
             cd /root/backend/fawnix_attend
  
             git pull origin main
- 
+
             cd ..
- 
+
+            echo "Building containers (includes frontend build in Dockerfile)..."
             docker compose build --no-cache
  
             docker compose down

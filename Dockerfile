@@ -1,3 +1,11 @@
+FROM node:20-alpine AS frontend-build
+
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend ./
+RUN npm run build
+
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -17,6 +25,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application
 COPY . .
+# Copy built frontend assets
+COPY --from=frontend-build /app/frontend/dist /app/frontend/dist
 
 # Create logs directory
 RUN mkdir -p logs

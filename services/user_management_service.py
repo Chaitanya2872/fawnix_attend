@@ -229,7 +229,7 @@ def create_employee(payload: dict):
         return_connection(conn)
 
 
-def delete_employee(emp_code: str, requested_by_emp_code: str = None):
+def delete_employee(emp_code: str, requested_by_emp_code: str = None, allow_self_delete: bool = False):
     """
     Delete employee and related user.
     """
@@ -237,7 +237,7 @@ def delete_employee(emp_code: str, requested_by_emp_code: str = None):
     if not target_emp_code:
         return ({"success": False, "message": "emp_code is required"}, 400)
 
-    if requested_by_emp_code and target_emp_code == requested_by_emp_code:
+    if not allow_self_delete and requested_by_emp_code and target_emp_code == requested_by_emp_code:
         return ({"success": False, "message": "You cannot delete your own account"}, 400)
 
     conn = get_db_connection()

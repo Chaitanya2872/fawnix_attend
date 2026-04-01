@@ -5,6 +5,7 @@ Implements secure token refresh with 7-day expiration
 
 from flask import Blueprint, request, jsonify
 from services import auth_service, otp_service, whatsapp_service
+from services.user_management_service import delete_employee
 from services.auth_service import (
     create_jwt_token,
     create_refresh_token,
@@ -437,6 +438,25 @@ def get_profile(current_user):
     finally:
         cursor.close()
         conn.close()
+
+
+@auth_bp.route('/account/delete', methods=['POST'])
+def delete_account():
+    """
+    Delete account using Employee ID + OTP.
+    """
+    data = request.get_json() or {}
+    emp_code = data.get('emp_code')
+    otp = data.get('otp')
+
+    if not emp_code or not otp:
+        return jsonify({"success": False, "message": "emp_code and otp required"}), 400
+
+    if not otp_service.verify_otp(emp_code, otp):
+        return jsonify({"success": False, "message": "Invalid or expired OTP"}), 401
+
+    result, status_code = delete_employee(emp_code, requested_by_emp_code=emp_code, allow_self_delete=True)
+    return jsonify(result), status_code
 
 
 # ==========================================

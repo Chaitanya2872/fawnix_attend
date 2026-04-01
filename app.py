@@ -4,7 +4,7 @@ Main Flask Application Entry Point
 FIXED: Proper auto clock out integration with testing and production schedules
 """
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from config import Config
 from database.connection import init_database, get_db_connection, return_connection
@@ -102,6 +102,35 @@ app.register_blueprint(location_report_bp, url_prefix='/api/reports')
 app.register_blueprint(distance_bp, url_prefix='/api/distance')
 app.register_blueprint(approvals_bp, url_prefix='/api/approvals')
 app.register_blueprint(holidays_bp, url_prefix = '/api/holidays')
+
+# ==========================================
+# FRONTEND (VITE BUILD) SERVING
+# ==========================================
+FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "frontend", "dist")
+
+
+def _frontend_dist_exists() -> bool:
+    return os.path.isdir(FRONTEND_DIST) and os.path.isfile(os.path.join(FRONTEND_DIST, "index.html"))
+
+
+@app.route("/")
+def serve_frontend_root():
+    if _frontend_dist_exists():
+        return send_from_directory(FRONTEND_DIST, "index.html")
+    return jsonify({
+        "message": "Frontend not built. Run `npm install` and `npm run build` inside /frontend.",
+        "frontend_path": FRONTEND_DIST
+    }), 200
+
+
+@app.route("/<path:path>")
+def serve_frontend_assets(path):
+    if _frontend_dist_exists():
+        asset_path = os.path.join(FRONTEND_DIST, path)
+        if os.path.isfile(asset_path):
+            return send_from_directory(FRONTEND_DIST, path)
+        return send_from_directory(FRONTEND_DIST, "index.html")
+    return jsonify({"message": "Frontend not built"}), 404
 # ==========================================
 # ✅ FIXED: Auto Clockout Job
 # ==========================================

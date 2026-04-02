@@ -866,11 +866,9 @@ function App() {
                 {authStatus ? <p className="delete-note">{authStatus}</p> : null}
               </div>
               <div className="sidebar-foot">
-                {accessToken ? (
-                  <button className="ghost sidebar-back" onClick={handleLogout}>
-                    Logout
-                  </button>
-                ) : null}
+                <button className="ghost sidebar-back" onClick={handleLogout}>
+                  Logout
+                </button>
                 <button className="ghost sidebar-back" onClick={() => setShowDashboard(false)}>
                   Back to Landing
                 </button>

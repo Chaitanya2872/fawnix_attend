@@ -106,7 +106,11 @@ type AttendanceRow = {
   employee_name?: string
   emp_designation?: string
   login_time?: string
+  login_location?: string
+  login_address?: string
   logout_time?: string
+  logout_location?: string
+  logout_address?: string
   working_hours?: number
   status?: string
 }
@@ -948,12 +952,21 @@ function App() {
           </div>
           <div className="data-card">
             {attendancePageRows.map((row, index) => (
-              <div key={`${row.id || row.employee_email || index}`} className="data-row">
+              <div key={`${row.id || row.employee_email || index}`} className="data-row attendance-row">
                 <div>
                   <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
                   <span className="muted-email">{row.emp_designation || row.employee_email || '--'}</span>
                 </div>
-                <div>{formatDateTime(row.login_time)}</div>
+                <div>
+                  <strong>{formatDateTime(row.login_time)}</strong>
+                  <span>{row.login_location || 'Login location unavailable'}</span>
+                  <span>{row.login_address || 'Login address unavailable'}</span>
+                </div>
+                <div>
+                  <strong>{formatDateTime(row.logout_time)}</strong>
+                  <span>{row.logout_location || 'Logout location unavailable'}</span>
+                  <span>{row.logout_address || 'Logout address unavailable'}</span>
+                </div>
                 <div>
                   <span className="table-pill accent">{row.status || 'Unknown'}</span>
                 </div>

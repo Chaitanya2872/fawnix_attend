@@ -149,6 +149,16 @@ def _get_table_columns(cursor, table_name: str) -> set:
     return {row['column_name'] for row in cursor.fetchall()}
 
 
+def _get_table_column_types(cursor, table_name: str) -> Dict[str, str]:
+    """Return column data types for a table to handle schema drift safely."""
+    cursor.execute("""
+        SELECT column_name, data_type
+        FROM information_schema.columns
+        WHERE table_name = %s
+    """, (table_name,))
+    return {row['column_name']: row['data_type'] for row in cursor.fetchall()}
+
+
 def _build_exception_select(columns: set, include_employee_fields: bool = False) -> str:
     """Build a portable SELECT list for attendance_exceptions across schema versions."""
     def pick(column_name: str, alias: Optional[str] = None) -> str:
@@ -293,6 +303,14 @@ def _calculate_late_by_minutes(reference_time: time, shift_start: time) -> int:
     return int((reference_dt - shift_dt).total_seconds() / 60)
 
 
+def _exception_time_value(cursor, timestamp_value: datetime):
+    """Adapt exception_time writes for DBs using either TIME or TIMESTAMP columns."""
+    column_types = _get_table_column_types(cursor, 'attendance_exceptions')
+    if column_types.get('exception_time') == 'timestamp without time zone':
+        return timestamp_value
+    return timestamp_value.time()
+
+
 def attach_pending_late_arrival_to_attendance(
     emp_code: str,
     attendance_id: int,
@@ -335,6 +353,7 @@ def attach_pending_late_arrival_to_attendance(
             return None
 
         late_by_minutes = _calculate_late_by_minutes(login_time_only, shift_start)
+        exception_time_value = _exception_time_value(cursor, login_time)
 
         cursor.execute("""
             UPDATE attendance_exceptions
@@ -343,7 +362,7 @@ def attach_pending_late_arrival_to_attendance(
                 exception_time = %s,
                 late_by_minutes = %s
             WHERE id = %s
-        """, (attendance_id, login_time_only, late_by_minutes, exception['id']))
+        """, (attendance_id, exception_time_value, late_by_minutes, exception['id']))
 
         conn.commit()
 
@@ -401,6 +420,7 @@ def request_late_arrival_exception(emp_code: str, reason: str,
         current_dt = now_local_naive()
         current_date = current_dt.date()
         current_time = current_dt.time()
+        exception_time_value = _exception_time_value(cursor, current_dt)
 
         # Late arrival must be raised before clock-in, not after.
         cursor.execute("""
@@ -467,7 +487,7 @@ def request_late_arrival_exception(emp_code: str, reason: str,
             None,
             'late_arrival',
             current_date,
-            current_time,
+            exception_time_value,
             shift_start,
             late_by_minutes,
             reason,

@@ -11,6 +11,7 @@ NEW FEATURES:
 """
 
 from datetime import datetime, timedelta, date
+import json
 from database.connection import get_db_connection
 from services.geocoding_service import get_address_from_coordinates
 from services.CompLeaveService import calculate_and_record_compoff, is_working_day
@@ -38,6 +39,111 @@ def _normalize_attendance_type(attendance_type: str | None) -> str:
     return normalized
 
 
+def _create_site_clock_in_field_visit(
+    cursor,
+    attendance_id: int,
+    emp_email: str,
+    emp_name: str,
+    lat: str,
+    lon: str,
+    address: str,
+    start_time: datetime,
+):
+    destination = {
+        "sequence": 1,
+        "name": "Clock-in site",
+        "latitude": lat,
+        "longitude": lon,
+        "coordinates": f"{lat}, {lon}",
+        "address": address,
+        "visited": False,
+        "visited_at": None,
+    }
+    destinations_json = json.dumps([destination])
+
+    cursor.execute(
+        """
+        INSERT INTO field_visits (
+            attendance_id, employee_email, employee_name,
+            visit_type, purpose,
+            start_time, date,
+            start_latitude, start_longitude, start_address,
+            status
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
+        """,
+        (
+            attendance_id,
+            emp_email,
+            emp_name,
+            'field_visit',
+            'Auto-started from site clock-in',
+            start_time,
+            start_time.date(),
+            lat,
+            lon,
+            address,
+            'active',
+        ),
+    )
+    field_visit_id = cursor.fetchone()['id']
+
+    cursor.execute(
+        """
+        INSERT INTO activities (
+            attendance_id, field_visit_id,
+            employee_email, employee_name, activity_type,
+            start_time, start_location, start_address,
+            notes, date, status, destinations
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
+        """,
+        (
+            attendance_id,
+            field_visit_id,
+            emp_email,
+            emp_name,
+            'field_visit',
+            start_time,
+            f"{lat}, {lon}",
+            address,
+            'Auto-started from site clock-in',
+            start_time.date(),
+            'active',
+            destinations_json,
+        ),
+    )
+    activity_id = cursor.fetchone()['id']
+
+    cursor.execute(
+        """
+        INSERT INTO location_tracking (
+            activity_id, employee_email, location, address,
+            tracked_at, tracking_type
+        ) VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING id
+        """,
+        (
+            activity_id,
+            emp_email,
+            f"{lat}, {lon}",
+            address,
+            start_time,
+            'initial',
+        ),
+    )
+    initial_tracking_id = cursor.fetchone()['id']
+
+    return {
+        "activity_id": activity_id,
+        "field_visit_id": field_visit_id,
+        "tracking_enabled": True,
+        "tracking_interval": "3 minutes",
+        "initial_tracking_id": initial_tracking_id,
+        "destinations": [destination],
+    }
+
+
 def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str, attendance_type: str | None = None):
     """
     Clock in employee with late arrival auto-detection
@@ -51,6 +157,12 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str, atte
         normalized_attendance_type = _normalize_attendance_type(attendance_type)
     except ValueError as e:
         return ({"success": False, "message": str(e)}, 400)
+
+    if normalized_attendance_type == "site" and (not lat or not lon):
+        return ({
+            "success": False,
+            "message": "latitude and longitude are required for site attendance"
+        }, 400)
     
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -139,6 +251,8 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str, atte
         
         attendance_id = cursor.fetchone()['id']
         
+        site_visit_info = None
+
         # ✅ No need to mark comp-off session on non-working days
         # First clock-in on non-working days is automatically eligible for comp-off
         is_compoff_session = is_nonworking  # Mark as comp-off eligible since it's a non-working day
@@ -174,6 +288,18 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str, atte
         is_compoff_session = bool(
             persisted_attendance and persisted_attendance.get('is_compoff_session')
         )
+
+        if normalized_attendance_type == 'site':
+            site_visit_info = _create_site_clock_in_field_visit(
+                cursor,
+                attendance_id,
+                emp_email,
+                emp_name,
+                lat,
+                lon,
+                address,
+                login_time,
+            )
         
         conn.commit()
 
@@ -201,6 +327,8 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str, atte
                 "address": address
             }
         }
+        if site_visit_info:
+            response_data["site_visit"] = site_visit_info
         
         # Skip late arrival detection for comp-off eligible sessions.
         late_arrival_info = None
@@ -228,6 +356,8 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str, atte
             logger.info(f"✅ Late arrival check skipped for comp-off session: {emp_email}")
         
         message = "Clock in successful"
+        if site_visit_info:
+            message += ". Site field visit started automatically."
         if is_compoff_session:
             message = f"✨ Non-working day ({login_date.strftime('%A')}) - Eligible for comp-off"
             response_data['is_compoff_session'] = True

@@ -958,12 +958,12 @@ function App() {
                     {item.label}
                   </button>
                 ))}
-                <button className="sidebar-link logout-link" onClick={handleLogout}>
-                  Logout
-                </button>
               </div>
 
               <div className="sidebar-foot">
+                <button className="sidebar-link logout-link" onClick={handleLogout}>
+                  Logout
+                </button>
                 <div className="sidebar-note">
                   <strong>Today</strong>
                   <span>

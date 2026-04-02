@@ -109,13 +109,14 @@ a {
 }
 
 .sidebar-link.logout-link {
-  background: rgba(255, 255, 255, 0.08);
-  color: #eef7f5;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(135deg, #ffad46, #ff6b4a);
+  color: #2b160b;
+  border: none;
+  font-weight: 700;
 }
 
 .sidebar-link.logout-link:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: linear-gradient(135deg, #ffb85f, #ff7a5d);
   transform: translateX(4px);
 }
 

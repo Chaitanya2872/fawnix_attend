@@ -173,6 +173,18 @@ a {
   font-size: 17px;
 }
 
+.refresh-toast {
+  display: inline-flex;
+  margin-top: 14px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #e6f4f3;
+  color: #0f4449;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 6px 16px rgba(17, 44, 50, 0.08);
+}
+
 .dashboard-highlight,
 .dashboard-panel {
   background: rgba(255, 255, 255, 0.74);

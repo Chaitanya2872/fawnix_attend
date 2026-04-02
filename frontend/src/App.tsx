@@ -212,6 +212,7 @@ function App() {
   const [profile, setProfile] = useState<AdminProfile | null>(null)
   const [dashboardLoading, setDashboardLoading] = useState(false)
   const [dashboardError, setDashboardError] = useState('')
+  const [refreshNotice, setRefreshNotice] = useState('')
 
   const [employees, setEmployees] = useState<EmployeeRow[]>([])
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
@@ -252,7 +253,49 @@ function App() {
     void loadDashboard(accessToken)
   }, [accessToken, showDashboard, showAdminLogin])
 
-  const apiRequest = async (path: string, options: RequestInit = {}, tokenOverride?: string) => {
+  const updateTokens = (nextAccessToken: string, nextRefreshToken: string) => {
+    setAccessToken(nextAccessToken)
+    setRefreshToken(nextRefreshToken)
+    window.localStorage.setItem(ACCESS_TOKEN_KEY, nextAccessToken)
+    window.localStorage.setItem(REFRESH_TOKEN_KEY, nextRefreshToken)
+  }
+
+  const refreshAccessToken = async () => {
+    if (!refreshToken) {
+      throw new Error('Refresh token missing')
+    }
+
+    const response = await fetch('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken })
+    })
+
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      throw new Error(data?.message || 'Unable to refresh session')
+    }
+
+    const nextAccessToken = data?.access_token || ''
+    const nextRefreshToken = data?.refresh_token || ''
+
+    if (!nextAccessToken || !nextRefreshToken) {
+      throw new Error('Invalid refresh response')
+    }
+
+    updateTokens(nextAccessToken, nextRefreshToken)
+    setRefreshNotice('Session refreshed')
+    window.setTimeout(() => setRefreshNotice(''), 2500)
+    return nextAccessToken
+  }
+
+  const apiRequest = async (
+    path: string,
+    options: RequestInit = {},
+    tokenOverride?: string,
+    allowRetry = true
+  ) => {
     const token = tokenOverride || accessToken
     const headers = new Headers(options.headers || {})
 
@@ -272,7 +315,17 @@ function App() {
     const data = await response.json().catch(() => ({}))
 
     if (!response.ok) {
-      throw new Error(data?.message || 'Request failed')
+      const message = data?.message || 'Request failed'
+      const shouldRefresh =
+        allowRetry &&
+        (response.status === 401 || message.toLowerCase().includes('token') || message.toLowerCase().includes('expired'))
+
+      if (shouldRefresh) {
+        const nextAccessToken = await refreshAccessToken()
+        return apiRequest(path, options, nextAccessToken, false)
+      }
+
+      throw new Error(message)
     }
 
     return data
@@ -350,7 +403,13 @@ function App() {
 
       setFieldVisitRows(fieldVisits)
     } catch (error) {
-      setDashboardError(error instanceof Error ? error.message : 'Failed to load admin dashboard')
+      const message = error instanceof Error ? error.message : 'Failed to load admin dashboard'
+      setDashboardError(message)
+      if (message.toLowerCase().includes('expired') || message.toLowerCase().includes('token')) {
+        clearSession()
+        setShowAdminLogin(true)
+        setShowDashboard(true)
+      }
     } finally {
       setDashboardLoading(false)
     }
@@ -924,6 +983,7 @@ function App() {
                 Live data from admin APIs for employees, attendance, leave approvals,
                 activities, and field movement.
               </p>
+              {refreshNotice ? <div className="refresh-toast">{refreshNotice}</div> : null}
             </div>
             <div className="dashboard-highlight">
               <span>Shift Compliance</span>

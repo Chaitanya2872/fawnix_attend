@@ -31,6 +31,7 @@ class Config:
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'your-jwt-secret-key-change-in-production')
     JWT_ALGORITHM = 'HS256'
     JWT_EXPIRE_MINUTES = int(os.getenv('JWT_EXPIRE_MINUTES', 1440))  # 24 hours
+    REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv('REFRESH_TOKEN_EXPIRE_DAYS', 7))
     
     # OTP Configuration
     OTP_LENGTH = 6

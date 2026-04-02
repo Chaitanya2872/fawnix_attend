@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
 const useCases = [
@@ -218,6 +218,7 @@ function App() {
   const [dashboardLoading, setDashboardLoading] = useState(false)
   const [dashboardError, setDashboardError] = useState('')
   const [refreshNotice, setRefreshNotice] = useState('')
+  const refreshPromiseRef = useRef<Promise<string> | null>(null)
 
   const [employees, setEmployees] = useState<EmployeeRow[]>([])
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
@@ -283,29 +284,38 @@ function App() {
       throw new Error('Refresh token missing')
     }
 
-    const response = await fetch('/api/auth/refresh', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken })
-    })
+    if (!refreshPromiseRef.current) {
+      refreshPromiseRef.current = (async () => {
+        const response = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken })
+        })
 
-    const data = await response.json().catch(() => ({}))
+        const data = await response.json().catch(() => ({}))
 
-    if (!response.ok) {
-      throw new Error(data?.message || 'Unable to refresh session')
+        if (!response.ok) {
+          throw new Error(data?.message || 'Unable to refresh session')
+        }
+
+        const nextAccessToken = data?.access_token || ''
+        const nextRefreshToken = data?.refresh_token || ''
+
+        if (!nextAccessToken || !nextRefreshToken) {
+          throw new Error('Invalid refresh response')
+        }
+
+        updateTokens(nextAccessToken, nextRefreshToken)
+        setRefreshNotice('Session refreshed')
+        window.setTimeout(() => setRefreshNotice(''), 2500)
+        return nextAccessToken
+      })()
+        .finally(() => {
+          refreshPromiseRef.current = null
+        })
     }
 
-    const nextAccessToken = data?.access_token || ''
-    const nextRefreshToken = data?.refresh_token || ''
-
-    if (!nextAccessToken || !nextRefreshToken) {
-      throw new Error('Invalid refresh response')
-    }
-
-    updateTokens(nextAccessToken, nextRefreshToken)
-    setRefreshNotice('Session refreshed')
-    window.setTimeout(() => setRefreshNotice(''), 2500)
-    return nextAccessToken
+    return refreshPromiseRef.current
   }
 
   const apiRequest = async (

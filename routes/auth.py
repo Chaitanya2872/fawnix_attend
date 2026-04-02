@@ -20,9 +20,13 @@ from middleware.auth_middleware import token_required
 from datetime import datetime, date, time
 from typing import Dict
 import logging
+from config import Config
 
 logger = logging.getLogger(__name__)
 auth_bp = Blueprint('auth', __name__)
+
+ACCESS_TOKEN_EXPIRES_IN_SECONDS = Config.JWT_EXPIRE_MINUTES * 60
+REFRESH_TOKEN_EXPIRES_IN_SECONDS = Config.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
 
 
 def serialize_row(row):
@@ -194,8 +198,8 @@ def verify_otp():
             "access_token": access_token,
             "refresh_token": refresh_token,
             "token_type": "bearer",
-            "expires_in": 1800,  # 30 minutes in seconds
-            "refresh_expires_in": 604800,  # 7 days in seconds
+            "expires_in": ACCESS_TOKEN_EXPIRES_IN_SECONDS,
+            "refresh_expires_in": REFRESH_TOKEN_EXPIRES_IN_SECONDS,
             "refresh_expires_at": refresh_expires_at.strftime('%Y-%m-%d %H:%M:%S'),
             "user": {
                 "id": user.get("id"),
@@ -264,8 +268,8 @@ def refresh():
             "access_token": new_access_token,
             "refresh_token": new_refresh_token,
             "token_type": "bearer",
-            "expires_in": 1800,
-            "refresh_expires_in": 604800,
+            "expires_in": ACCESS_TOKEN_EXPIRES_IN_SECONDS,
+            "refresh_expires_in": REFRESH_TOKEN_EXPIRES_IN_SECONDS,
             "refresh_expires_at": refresh_expires_at.strftime('%Y-%m-%d %H:%M:%S')
         }), 200
         

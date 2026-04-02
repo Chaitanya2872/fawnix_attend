@@ -18,8 +18,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Token Configuration
-ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30 minutes
-REFRESH_TOKEN_EXPIRE_DAYS = 7     # 7 days
+ACCESS_TOKEN_EXPIRE_MINUTES = Config.JWT_EXPIRE_MINUTES
+REFRESH_TOKEN_EXPIRE_DAYS = Config.REFRESH_TOKEN_EXPIRE_DAYS
 
 
 def create_jwt_token(emp_code: str, role: str, email: str, user_id: int | None = None) -> str:

@@ -497,48 +497,53 @@ function App() {
     setShowAdminLogin(false)
   }
 
+  // Helper functions for login time analysis
+  const parseLoginTime = (value?: string) => {
+    if (!value) {
+      return null
+    }
+    const parsed = new Date(value)
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed
+    }
+    const fallback = new Date(`1970-01-01T${value}`)
+    return Number.isNaN(fallback.getTime()) ? null : fallback
+  }
+
+  const isLateLogin = (value?: string) => {
+    const time = parseLoginTime(value)
+    if (!time) {
+      return false
+    }
+    const minutes = time.getHours() * 60 + time.getMinutes()
+    return minutes > 10 * 60 + 15
+  }
+
+  const isOnTimeLogin = (value?: string) => {
+    const time = parseLoginTime(value)
+    if (!time) {
+      return false
+    }
+    return time.getHours() === 10 && time.getMinutes() === 0
+  }
+
+  // Calculate filtered attendance and login metrics for hero section
+  const filteredAttendance = attendanceRows.filter((row) => {
+    if (!attendanceDateFilter) {
+      return true
+    }
+    const time = parseLoginTime(row.login_time)
+    if (!time) {
+      return false
+    }
+    const yyyyMmDd = time.toISOString().slice(0, 10)
+    return yyyyMmDd === attendanceDateFilter
+  })
+
+  const lateLogins = filteredAttendance.filter((row) => isLateLogin(row.login_time)).length
+  const onTimeLogins = filteredAttendance.filter((row) => isOnTimeLogin(row.login_time)).length
+
   const renderDashboardPanel = () => {
-    const parseLoginTime = (value?: string) => {
-      if (!value) {
-        return null
-      }
-      const parsed = new Date(value)
-      if (!Number.isNaN(parsed.getTime())) {
-        return parsed
-      }
-      const fallback = new Date(`1970-01-01T${value}`)
-      return Number.isNaN(fallback.getTime()) ? null : fallback
-    }
-
-    const isLateLogin = (value?: string) => {
-      const time = parseLoginTime(value)
-      if (!time) {
-        return false
-      }
-      const minutes = time.getHours() * 60 + time.getMinutes()
-      return minutes > 10 * 60 + 15
-    }
-
-    const isOnTimeLogin = (value?: string) => {
-      const time = parseLoginTime(value)
-      if (!time) {
-        return false
-      }
-      return time.getHours() === 10 && time.getMinutes() === 0
-    }
-
-    const filteredAttendance = attendanceRows.filter((row) => {
-      if (!attendanceDateFilter) {
-        return true
-      }
-      const time = parseLoginTime(row.login_time)
-      if (!time) {
-        return false
-      }
-      const yyyyMmDd = time.toISOString().slice(0, 10)
-      return yyyyMmDd === attendanceDateFilter
-    })
-
     const attendancePageCount = Math.max(1, Math.ceil(filteredAttendance.length / attendancePageSize))
     const safeAttendancePage = Math.min(attendancePage, attendancePageCount)
     const attendanceSliceStart = (safeAttendancePage - 1) * attendancePageSize
@@ -546,8 +551,6 @@ function App() {
       attendanceSliceStart,
       attendanceSliceStart + attendancePageSize
     )
-    const lateLogins = filteredAttendance.filter((row) => isLateLogin(row.login_time)).length
-    const onTimeLogins = filteredAttendance.filter((row) => isOnTimeLogin(row.login_time)).length
 
     if (dashboardLoading) {
       return <div className="empty-state">Loading admin data...</div>

@@ -605,7 +605,8 @@ function App() {
     if (!time) {
       return false
     }
-    return time.getHours() === 10 && time.getMinutes() === 0
+    const minutes = time.getHours() * 60 + time.getMinutes()
+    return minutes < 10 * 60 + 15
   }
 
   // Calculate filtered attendance and login metrics for hero section

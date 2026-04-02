@@ -314,12 +314,26 @@ function App() {
       ])
 
       const employeesData = Array.isArray(employeesResponse?.data) ? employeesResponse.data : []
-      const attendanceData = Array.isArray(attendanceResponse?.data?.records) ? attendanceResponse.data.records : []
+      const attendanceData: AttendanceRow[] = Array.isArray(attendanceResponse?.data?.records)
+        ? attendanceResponse.data.records
+        : []
       const leavesData = Array.isArray(leavesResponse?.data?.leaves) ? leavesResponse.data.leaves : []
       const activitiesData = Array.isArray(activitiesResponse?.data?.activities) ? activitiesResponse.data.activities : []
 
       setEmployees(employeesData)
-      setAttendanceRows(attendanceData)
+      const attendanceDeduped = Array.from(
+        attendanceData.reduce((map, row) => {
+          const key =
+            row.id?.toString() ||
+            `${row.employee_email || 'unknown'}-${row.login_time || row.logout_time || 'time'}`.toLowerCase()
+          if (!map.has(key)) {
+            map.set(key, row)
+          }
+          return map
+        }, new Map<string, AttendanceRow>())
+          .values()
+      )
+      setAttendanceRows(attendanceDeduped)
       setLeaveRows(leavesData)
       setActivityRows(activitiesData)
 
@@ -821,35 +835,47 @@ function App() {
           </div>
 
           {showAdminLogin ? (
-            <div className="login-card sidebar-login">
-              <h3>Admin Login</h3>
-              <p>Use Employee ID and OTP to access admin endpoints.</p>
-              <label htmlFor="admin-emp-code">Employee ID</label>
-              <input
-                id="admin-emp-code"
-                type="text"
-                value={adminEmpCode}
-                onChange={(event) => setAdminEmpCode(event.target.value)}
-                placeholder="e.g. 2981"
-              />
-              <label htmlFor="admin-otp">OTP</label>
-              <input
-                id="admin-otp"
-                type="text"
-                value={adminOtp}
-                onChange={(event) => setAdminOtp(event.target.value)}
-                placeholder="Enter OTP"
-              />
-              <div className="login-actions">
-                <button className="ghost" onClick={handleAdminRequestOtp} disabled={authLoading}>
-                  Request OTP
-                </button>
-                <button className="cta" onClick={handleAdminLogin} disabled={authLoading}>
-                  Login
+            <>
+              <div className="login-card sidebar-login">
+                <h3>Admin Login</h3>
+                <p>Use Employee ID and OTP to access admin endpoints.</p>
+                <label htmlFor="admin-emp-code">Employee ID</label>
+                <input
+                  id="admin-emp-code"
+                  type="text"
+                  value={adminEmpCode}
+                  onChange={(event) => setAdminEmpCode(event.target.value)}
+                  placeholder="e.g. 2981"
+                />
+                <label htmlFor="admin-otp">OTP</label>
+                <input
+                  id="admin-otp"
+                  type="text"
+                  value={adminOtp}
+                  onChange={(event) => setAdminOtp(event.target.value)}
+                  placeholder="Enter OTP"
+                />
+                <div className="login-actions">
+                  <button className="ghost" onClick={handleAdminRequestOtp} disabled={authLoading}>
+                    Request OTP
+                  </button>
+                  <button className="cta" onClick={handleAdminLogin} disabled={authLoading}>
+                    Login
+                  </button>
+                </div>
+                {authStatus ? <p className="delete-note">{authStatus}</p> : null}
+              </div>
+              <div className="sidebar-foot">
+                {accessToken ? (
+                  <button className="ghost sidebar-back" onClick={handleLogout}>
+                    Logout
+                  </button>
+                ) : null}
+                <button className="ghost sidebar-back" onClick={() => setShowDashboard(false)}>
+                  Back to Landing
                 </button>
               </div>
-              {authStatus ? <p className="delete-note">{authStatus}</p> : null}
-            </div>
+            </>
           ) : (
             <>
               <div className="sidebar-user">

@@ -1,6 +1,8 @@
-﻿:root {
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+:root {
   color-scheme: light;
-  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+  font-family: 'Poppins', 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
   background: #f7f4ef;
@@ -378,6 +380,19 @@ a {
     minmax(120px, 0.6fr);
 }
 
+.employee-row strong {
+  font-size: 13px;
+}
+
+.employee-row span {
+  font-size: 10.5px;
+}
+
+.employee-row strong,
+.employee-row span {
+  word-break: break-word;
+}
+
 .data-row strong,
 .data-row span {
   display: block;
@@ -385,11 +400,12 @@ a {
 
 .data-row strong {
   color: #112c32;
+  font-size: 14px;
 }
 
 .data-row span {
   color: #607076;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .table-pill {
@@ -840,3 +856,4 @@ a {
     transform: translateY(0);
   }
 }
+

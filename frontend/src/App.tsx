@@ -88,7 +88,14 @@ type AdminProfile = {
 type EmployeeRow = {
   emp_code: string
   emp_full_name: string
+  emp_email?: string
+  emp_contact?: string
   emp_designation?: string
+  emp_department?: string
+  emp_manager?: string
+  manager_name?: string
+  manager_email?: string
+  manager_code?: string
   role?: string
   is_active?: boolean
 }
@@ -538,12 +545,27 @@ function App() {
           </div>
           <div className="data-card">
             {employees.map((employee) => (
-              <div key={employee.emp_code} className="data-row">
+              <div key={employee.emp_code} className="data-row employee-row">
                 <div>
                   <strong>{employee.emp_full_name || employee.emp_code}</strong>
                   <span>{employee.emp_code}</span>
                 </div>
-                <div>{employee.emp_designation || employee.role || '--'}</div>
+                <div>
+                  <strong>{employee.emp_designation || employee.role || '--'}</strong>
+                  <span>Designation</span>
+                </div>
+                <div>
+                  <strong>{employee.emp_department || '--'}</strong>
+                  <span>Department</span>
+                </div>
+                <div>
+                  <strong>{employee.emp_email || '--'}</strong>
+                  <span>{employee.emp_contact || 'Contact unavailable'}</span>
+                </div>
+                <div>
+                  <strong>{employee.manager_name || employee.emp_manager || '--'}</strong>
+                  <span>{employee.manager_email || employee.manager_code || 'Manager'}</span>
+                </div>
                 <div>
                   <span className="table-pill">{employee.is_active ? 'Active' : 'Inactive'}</span>
                 </div>

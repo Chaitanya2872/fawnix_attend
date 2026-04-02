@@ -311,6 +311,16 @@ a {
   border: 1px solid rgba(17, 44, 50, 0.08);
 }
 
+.employee-row {
+  grid-template-columns:
+    minmax(0, 1.6fr)
+    minmax(160px, 0.9fr)
+    minmax(160px, 0.9fr)
+    minmax(220px, 1.2fr)
+    minmax(220px, 1.2fr)
+    minmax(120px, 0.6fr);
+}
+
 .data-row strong,
 .data-row span {
   display: block;

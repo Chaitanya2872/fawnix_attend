@@ -44,13 +44,18 @@ def get_all_employees():
                 e.emp_email,
                 e.emp_contact,
                 e.emp_designation,
+                e.emp_department,
                 e.emp_branch_id,
                 e.emp_manager,
                 e.emp_informing_manager,
+                m.emp_full_name AS manager_name,
+                m.emp_email AS manager_email,
+                m.emp_code AS manager_code,
                 u.role,
                 u.is_active,
                 u.last_login
             FROM employees e
+            LEFT JOIN employees m ON e.emp_manager = m.emp_code
             LEFT JOIN users u ON e.emp_code = u.emp_code
             ORDER BY e.emp_full_name
         """)

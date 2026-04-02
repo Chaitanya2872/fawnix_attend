@@ -218,6 +218,9 @@ function App() {
   const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([])
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
+  const [attendanceDateFilter, setAttendanceDateFilter] = useState('')
+  const [attendancePage, setAttendancePage] = useState(1)
+  const attendancePageSize = 10
 
   useEffect(() => {
     const storedAccessToken = window.localStorage.getItem(ACCESS_TOKEN_KEY) || ''
@@ -495,6 +498,57 @@ function App() {
   }
 
   const renderDashboardPanel = () => {
+    const parseLoginTime = (value?: string) => {
+      if (!value) {
+        return null
+      }
+      const parsed = new Date(value)
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed
+      }
+      const fallback = new Date(`1970-01-01T${value}`)
+      return Number.isNaN(fallback.getTime()) ? null : fallback
+    }
+
+    const isLateLogin = (value?: string) => {
+      const time = parseLoginTime(value)
+      if (!time) {
+        return false
+      }
+      const minutes = time.getHours() * 60 + time.getMinutes()
+      return minutes > 10 * 60 + 15
+    }
+
+    const isOnTimeLogin = (value?: string) => {
+      const time = parseLoginTime(value)
+      if (!time) {
+        return false
+      }
+      return time.getHours() === 10 && time.getMinutes() === 0
+    }
+
+    const filteredAttendance = attendanceRows.filter((row) => {
+      if (!attendanceDateFilter) {
+        return true
+      }
+      const time = parseLoginTime(row.login_time)
+      if (!time) {
+        return false
+      }
+      const yyyyMmDd = time.toISOString().slice(0, 10)
+      return yyyyMmDd === attendanceDateFilter
+    })
+
+    const attendancePageCount = Math.max(1, Math.ceil(filteredAttendance.length / attendancePageSize))
+    const safeAttendancePage = Math.min(attendancePage, attendancePageCount)
+    const attendanceSliceStart = (safeAttendancePage - 1) * attendancePageSize
+    const attendancePageRows = filteredAttendance.slice(
+      attendanceSliceStart,
+      attendanceSliceStart + attendancePageSize
+    )
+    const lateLogins = filteredAttendance.filter((row) => isLateLogin(row.login_time)).length
+    const onTimeLogins = filteredAttendance.filter((row) => isOnTimeLogin(row.login_time)).length
+
     if (dashboardLoading) {
       return <div className="empty-state">Loading admin data...</div>
     }
@@ -584,24 +638,55 @@ function App() {
               <p className="eyebrow">Operations</p>
               <h2>Attendance Records</h2>
             </div>
-            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-              Refresh
-            </button>
+            <div className="attendance-controls">
+              <div className="attendance-filter">
+                <label htmlFor="attendance-date">Date</label>
+                <input
+                  id="attendance-date"
+                  type="date"
+                  value={attendanceDateFilter}
+                  onChange={(event) => {
+                    setAttendanceDateFilter(event.target.value)
+                    setAttendancePage(1)
+                  }}
+                />
+              </div>
+              <div className="attendance-filter">
+                <label htmlFor="attendance-page">Page</label>
+                <select
+                  id="attendance-page"
+                  value={safeAttendancePage}
+                  onChange={(event) => setAttendancePage(Number(event.target.value))}
+                >
+                  {Array.from({ length: attendancePageCount }, (_, index) => {
+                    const pageNumber = index + 1
+                    return (
+                      <option key={pageNumber} value={pageNumber}>
+                        {pageNumber}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+              <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+                Refresh
+              </button>
+            </div>
           </div>
           <div className="metric-row">
             <div className="metric-card">
               <span>Total Records</span>
-              <strong>{attendanceRows.length}</strong>
+              <strong>{filteredAttendance.length}</strong>
             </div>
             <div className="metric-card">
               <span>Logged Out</span>
-              <strong>{attendanceRows.filter((row) => row.status === 'logged_out').length}</strong>
+              <strong>{filteredAttendance.filter((row) => row.status === 'logged_out').length}</strong>
             </div>
             <div className="metric-card">
               <span>Late / Exceptions</span>
               <strong>
                 {
-                  attendanceRows.filter((row) =>
+                  filteredAttendance.filter((row) =>
                     (row.status || '').toLowerCase().includes('late') ||
                     (row.status || '').toLowerCase().includes('pending')
                   ).length
@@ -610,11 +695,11 @@ function App() {
             </div>
           </div>
           <div className="data-card">
-            {attendanceRows.map((row, index) => (
+            {attendancePageRows.map((row, index) => (
               <div key={`${row.id || row.employee_email || index}`} className="data-row">
                 <div>
                   <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
-                  <span>{row.emp_designation || row.employee_email || '--'}</span>
+                  <span className="muted-email">{row.emp_designation || row.employee_email || '--'}</span>
                 </div>
                 <div>{formatDateTime(row.login_time)}</div>
                 <div>
@@ -815,11 +900,11 @@ function App() {
             </div>
             <div className="dashboard-highlight">
               <span>Shift Compliance</span>
-              <strong>{attendanceRows.length || 0}</strong>
+              <strong>{lateLogins + onTimeLogins}</strong>
               <p>
                 {showAdminLogin
                   ? 'Authenticate to load admin endpoints.'
-                  : `Loaded ${employees.length} employees and ${fieldVisitRows.length} field visits.`}
+                  : `Late logins: ${lateLogins} · On-time logins: ${onTimeLogins}`}
               </p>
             </div>
           </section>

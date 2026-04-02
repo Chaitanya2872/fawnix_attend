@@ -258,6 +258,35 @@ a {
   flex-wrap: wrap;
 }
 
+.attendance-controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.attendance-filter {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: #4b5c61;
+}
+
+.attendance-filter input,
+.attendance-filter select {
+  border-radius: 999px;
+  border: 1px solid rgba(17, 44, 50, 0.2);
+  padding: 8px 12px;
+  font-size: 13px;
+  background: #fff;
+  color: #112c32;
+}
+
+.muted-email {
+  font-size: 12px;
+  color: #6b7b80;
+}
+
 .dashboard-section-head h2 {
   margin: 8px 0 0;
   font-size: 30px;

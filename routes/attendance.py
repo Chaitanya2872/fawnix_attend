@@ -61,8 +61,9 @@ def login(current_user):
     
     Request Body:
         {
-            "latitude": "17.385044",  // optional
-            "longitude": "78.486671"  // optional
+            "latitude": "17.385044",       // optional
+            "longitude": "78.486671",      // optional
+            "attendance_type": "office"    // optional: office | site
         }
     
     Guards:
@@ -73,13 +74,15 @@ def login(current_user):
     
     latitude = data.get('latitude', '')
     longitude = data.get('longitude', '')
+    attendance_type = data.get('attendance_type')
     
     result = clock_in(
         current_user['emp_email'],
         current_user['emp_full_name'],
         current_user.get('emp_contact', ''),
         latitude,
-        longitude
+        longitude,
+        attendance_type
     )
     
     return jsonify(result[0]), result[1]

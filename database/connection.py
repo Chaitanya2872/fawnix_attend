@@ -298,6 +298,7 @@ def init_database():
                 working_hours NUMERIC(4,2),
                 date DATE NOT NULL,
                 status VARCHAR(20) DEFAULT 'logged_in',
+                attendance_type VARCHAR(20) NOT NULL DEFAULT 'office',
                 alert_sent BOOLEAN DEFAULT false,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -309,6 +310,15 @@ def init_database():
         cursor.execute("""
             DO $$
             BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'attendance'
+                      AND column_name = 'attendance_type'
+                ) THEN
+                    ALTER TABLE attendance ADD COLUMN attendance_type VARCHAR(20) NOT NULL DEFAULT 'office';
+                END IF;
+
                 IF NOT EXISTS (
                     SELECT 1
                     FROM information_schema.columns
@@ -326,6 +336,10 @@ def init_database():
                 ) THEN
                     ALTER TABLE attendance ADD COLUMN auto_clockout_reason TEXT;
                 END IF;
+
+                UPDATE attendance
+                SET attendance_type = 'office'
+                WHERE attendance_type IS NULL OR attendance_type = '';
             END $$;
         """)
 

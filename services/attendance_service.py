@@ -28,7 +28,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
+VALID_ATTENDANCE_TYPES = {"office", "site"}
+
+
+def _normalize_attendance_type(attendance_type: str | None) -> str:
+    normalized = (attendance_type or "office").strip().lower()
+    if normalized not in VALID_ATTENDANCE_TYPES:
+        raise ValueError("attendance_type must be either 'office' or 'site'")
+    return normalized
+
+
+def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str, attendance_type: str | None = None):
     """
     Clock in employee with late arrival auto-detection
     
@@ -36,6 +46,11 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
     """
     location = f"{lat}, {lon}" if lat and lon else ''
     address = get_address_from_coordinates(lat, lon) if lat and lon else ''
+
+    try:
+        normalized_attendance_type = _normalize_attendance_type(attendance_type)
+    except ValueError as e:
+        return ({"success": False, "message": str(e)}, 400)
     
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -113,13 +128,13 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
             INSERT INTO attendance (
                 employee_email, employee_name, phone_number,
                 login_time, login_location, login_address,
-                date, status
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                date, status, attendance_type
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             emp_email, emp_name, phone,
             login_time, location, address,
-            login_time.date(), 'logged_in'
+            login_time.date(), 'logged_in', normalized_attendance_type
         ))
         
         attendance_id = cursor.fetchone()['id']
@@ -177,6 +192,7 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
         
         response_data = {
             "attendance_id": attendance_id,
+            "attendance_type": normalized_attendance_type,
             "login_time": login_time.strftime('%Y-%m-%d %H:%M:%S'),
             "location": {
                 "coordinates": location,
@@ -298,6 +314,7 @@ def clock_out(emp_email: str, lat: str, lon: str):
                 "message": "Employee already auto clocked out at shift end time",
                 "data": {
                     "attendance_id": attendance_id,
+                    "attendance_type": record.get('attendance_type', 'office'),
                     "login_time": record['login_time'].strftime('%Y-%m-%d %H:%M:%S') if isinstance(record['login_time'], datetime) else record['login_time'],
                     "logout_time": record['logout_time'].strftime('%Y-%m-%d %H:%M:%S') if isinstance(record['logout_time'], datetime) else record['logout_time'],
                     "working_hours": float(record['working_hours'] or 0),
@@ -482,6 +499,7 @@ def clock_out(emp_email: str, lat: str, lon: str):
         
         response_data = {
             "attendance_id": attendance_id,
+            "attendance_type": record.get('attendance_type', 'office'),
             "login_time": record['login_time'].strftime('%Y-%m-%d %H:%M:%S') if isinstance(record['login_time'], datetime) else record['login_time'],
             "logout_time": logout_time.strftime('%Y-%m-%d %H:%M:%S'),
             "working_hours": round(hours, 2),
@@ -612,6 +630,7 @@ def get_attendance_status(emp_email: str):
             "success": True,
             "data": {
                 "attendance_id": attendance_id,
+                "attendance_type": record.get('attendance_type', 'office'),
                 "is_logged_in": is_logged_in,
                 "status": record['status'],
                 "login_time": str(record['login_time']),

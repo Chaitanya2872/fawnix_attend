@@ -105,6 +105,7 @@ type AttendanceRow = {
   employee_email?: string
   employee_name?: string
   emp_designation?: string
+  attendance_type?: string
   login_time?: string
   login_location?: string
   login_address?: string
@@ -955,7 +956,9 @@ function App() {
               <div key={`${row.id || row.employee_email || index}`} className="data-row attendance-row">
                 <div>
                   <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
-                  <span className="muted-email">{row.emp_designation || row.employee_email || '--'}</span>
+                  <span className="muted-email">
+                    {[row.emp_designation || row.employee_email || '--', row.attendance_type || 'office'].join(' • ')}
+                  </span>
                 </div>
                 <div>
                   <strong>{formatDateTime(row.login_time)}</strong>

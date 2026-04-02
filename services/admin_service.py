@@ -147,6 +147,7 @@ def get_all_attendance_status():
                 "employee_email": record['employee_email'],
                 "emp_designation": record.get('emp_designation'),
                 "attendance_id": attendance_id,
+                "attendance_type": record.get('attendance_type', 'office'),
                 "status": record['status'],
                 "is_logged_in": is_logged_in,
                 "login_time": record['login_time'],

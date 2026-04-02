@@ -221,6 +221,19 @@ function App() {
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
   const [attendanceDateFilter, setAttendanceDateFilter] = useState('')
   const [attendancePage, setAttendancePage] = useState(1)
+  const [showAddEmployee, setShowAddEmployee] = useState(false)
+  const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
+  const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
+  const [newEmployee, setNewEmployee] = useState({
+    emp_code: '',
+    emp_full_name: '',
+    emp_email: '',
+    emp_contact: '',
+    emp_designation: '',
+    emp_department: '',
+    emp_manager: '',
+    role: 'employee'
+  })
   const attendancePageSize = 10
 
   useEffect(() => {
@@ -578,6 +591,58 @@ function App() {
     setShowAdminLogin(false)
   }
 
+  const updateNewEmployee = (field: keyof typeof newEmployee, value: string) => {
+    setNewEmployee((current) => ({
+      ...current,
+      [field]: value
+    }))
+  }
+
+  const resetNewEmployee = () => {
+    setNewEmployee({
+      emp_code: '',
+      emp_full_name: '',
+      emp_email: '',
+      emp_contact: '',
+      emp_designation: '',
+      emp_department: '',
+      emp_manager: '',
+      role: 'employee'
+    })
+  }
+
+  const handleCreateEmployee = async () => {
+    if (!newEmployee.emp_code.trim() || !newEmployee.emp_full_name.trim() || !newEmployee.emp_email.trim()) {
+      setCreateEmployeeStatus('Employee ID, full name, and email are required.')
+      return
+    }
+
+    setCreateEmployeeLoading(true)
+    setCreateEmployeeStatus('Creating employee...')
+
+    const payload = Object.fromEntries(
+      Object.entries(newEmployee)
+        .map(([key, value]) => [key, typeof value === 'string' ? value.trim() : value])
+        .filter(([, value]) => value !== '')
+    )
+
+    try {
+      const response = await apiRequest('/api/users', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      })
+
+      setCreateEmployeeStatus(response?.message || 'Employee created successfully.')
+      resetNewEmployee()
+      setShowAddEmployee(false)
+      await loadDashboard(accessToken)
+    } catch (error) {
+      setCreateEmployeeStatus(error instanceof Error ? error.message : 'Failed to create employee')
+    } finally {
+      setCreateEmployeeLoading(false)
+    }
+  }
+
   // Helper functions for login time analysis
   const parseLoginTime = (value?: string) => {
     if (!value) {
@@ -658,9 +723,14 @@ function App() {
               <p className="eyebrow">Directory</p>
               <h2>Employees List</h2>
             </div>
-            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-              Refresh
-            </button>
+            <div className="employee-actions">
+              <button className="ghost dashboard-button" onClick={() => setShowAddEmployee((current) => !current)}>
+                {showAddEmployee ? 'Close Form' : 'Add Employee'}
+              </button>
+              <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+                Refresh
+              </button>
+            </div>
           </div>
           <div className="metric-row">
             <div className="metric-card">
@@ -682,6 +752,103 @@ function App() {
               </strong>
             </div>
           </div>
+          {showAddEmployee ? (
+            <div className="form-card">
+              <div className="form-head">
+                <div>
+                  <strong>Add Employee</strong>
+                  <span>Uses `POST /api/users` with the current admin session.</span>
+                </div>
+              </div>
+              <div className="form-grid">
+                <div>
+                  <label htmlFor="new-emp-code">Employee ID</label>
+                  <input
+                    id="new-emp-code"
+                    value={newEmployee.emp_code}
+                    onChange={(event) => updateNewEmployee('emp_code', event.target.value)}
+                    placeholder="e.g. 3051"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-emp-name">Full Name</label>
+                  <input
+                    id="new-emp-name"
+                    value={newEmployee.emp_full_name}
+                    onChange={(event) => updateNewEmployee('emp_full_name', event.target.value)}
+                    placeholder="Employee full name"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-emp-email">Email</label>
+                  <input
+                    id="new-emp-email"
+                    type="email"
+                    value={newEmployee.emp_email}
+                    onChange={(event) => updateNewEmployee('emp_email', event.target.value)}
+                    placeholder="name@example.com"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-emp-contact">Contact</label>
+                  <input
+                    id="new-emp-contact"
+                    value={newEmployee.emp_contact}
+                    onChange={(event) => updateNewEmployee('emp_contact', event.target.value)}
+                    placeholder="Phone number"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-emp-designation">Designation</label>
+                  <input
+                    id="new-emp-designation"
+                    value={newEmployee.emp_designation}
+                    onChange={(event) => updateNewEmployee('emp_designation', event.target.value)}
+                    placeholder="HR / Sales Executive / DevTester"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-emp-department">Department</label>
+                  <input
+                    id="new-emp-department"
+                    value={newEmployee.emp_department}
+                    onChange={(event) => updateNewEmployee('emp_department', event.target.value)}
+                    placeholder="Department"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-emp-manager">Manager Code</label>
+                  <input
+                    id="new-emp-manager"
+                    value={newEmployee.emp_manager}
+                    onChange={(event) => updateNewEmployee('emp_manager', event.target.value)}
+                    placeholder="e.g. 2981"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-emp-role">User Role</label>
+                  <select
+                    id="new-emp-role"
+                    value={newEmployee.role}
+                    onChange={(event) => updateNewEmployee('role', event.target.value)}
+                  >
+                    <option value="employee">employee</option>
+                    <option value="user_manager">user_manager</option>
+                    <option value="admin">admin</option>
+                  </select>
+                </div>
+              </div>
+              <div className="form-actions">
+                <button className="ghost" onClick={resetNewEmployee} disabled={createEmployeeLoading}>
+                  Reset
+                </button>
+                <button className="cta" onClick={() => void handleCreateEmployee()} disabled={createEmployeeLoading}>
+                  Create Employee
+                </button>
+              </div>
+              {createEmployeeStatus ? <p className="form-note">{createEmployeeStatus}</p> : null}
+            </div>
+          ) : null}
           <div className="data-card">
             {employees.map((employee) => (
               <div key={employee.emp_code} className="data-row employee-row">
@@ -698,7 +865,7 @@ function App() {
                   <span>Department</span>
                 </div>
                 <div>
-                  <strong>{employee.emp_email || '--'}</strong>
+                  <strong className="employee-email">{employee.emp_email || '--'}</strong>
                   <span>{employee.emp_contact || 'Contact unavailable'}</span>
                 </div>
                 <div>

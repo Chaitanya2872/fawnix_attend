@@ -295,6 +295,12 @@ a {
   align-items: flex-end;
 }
 
+.employee-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .attendance-filter {
   display: grid;
   gap: 6px;
@@ -384,6 +390,11 @@ a {
   font-size: 13px;
 }
 
+.employee-email {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .employee-row span {
   font-size: 10.5px;
 }
@@ -396,6 +407,63 @@ a {
 .data-row strong,
 .data-row span {
   display: block;
+}
+
+.form-card {
+  background: #fff;
+  border: 1px solid rgba(17, 44, 50, 0.08);
+  border-radius: 24px;
+  padding: 20px;
+  display: grid;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.form-head strong,
+.form-head span {
+  display: block;
+}
+
+.form-head span {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #63757a;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.form-grid label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: #4b5c61;
+}
+
+.form-grid input,
+.form-grid select {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(17, 44, 50, 0.16);
+  padding: 10px 12px;
+  background: #fff;
+  color: #112c32;
+  font-size: 13px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.form-note {
+  margin: 0;
+  font-size: 12px;
+  color: #5c6d72;
 }
 
 .data-row strong {

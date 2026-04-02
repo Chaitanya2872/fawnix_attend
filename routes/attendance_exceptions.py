@@ -127,12 +127,11 @@ def submit_late_arrival(current_user):
     """
     Submit late arrival exception with reason
     
-    This should be called AFTER clock-in when user is prompted for late arrival reason.
-    The system auto-detects late arrival during clock-in.
+    This should be called BEFORE clock-in, after shift start time.
+    The request is linked to the attendance session automatically once the employee clocks in.
     
     Request Body:
         {
-            "attendance_id": 123,      // required - current attendance session ID
             "reason": "Traffic jam",   // required
             "notes": "Heavy rain"      // optional
         }
@@ -140,7 +139,6 @@ def submit_late_arrival(current_user):
     Example:
         POST /api/attendance-exceptions/late-arrival
         {
-            "attendance_id": 45,
             "reason": "Traffic jam on ORR",
             "notes": "Heavy rain caused 30 min delay"
         }
@@ -151,7 +149,7 @@ def submit_late_arrival(current_user):
             "message": "Late arrival exception submitted",
             "data": {
                 "exception_id": 12,
-                "attendance_id": 45,
+                "attendance_id": null,
                 "exception_type": "late_arrival",
                 "late_by_minutes": 25,
                 "manager": "Rajesh Kumar",
@@ -161,19 +159,17 @@ def submit_late_arrival(current_user):
     """
     data = request.get_json() or {}
     
-    attendance_id = data.get('attendance_id')
     reason = data.get('reason')
     notes = data.get('notes', '')
     
-    if not attendance_id or not reason:
+    if not reason:
         return jsonify({
             "success": False,
-            "message": "attendance_id and reason are required"
+            "message": "reason is required"
         }), 400
     
     result = request_late_arrival_exception(
         current_user['emp_code'],
-        attendance_id,
         reason,
         notes
     )
@@ -496,12 +492,12 @@ app.register_blueprint(exceptions_bp, url_prefix='/api/attendance-exceptions')
 WORKFLOW:
 
 Late Arrival Flow:
-    1. User clocks in late
-    2. System detects late arrival (in clock_in function)
-    3. Frontend prompts user for reason
-    4. User submits: POST /api/attendance-exceptions/late-arrival
-    5. Manager reviews: GET /api/attendance-exceptions/team-exceptions
-    6. Manager approves: POST /api/attendance-exceptions/approve
+    1. User becomes late after shift start
+    2. User submits: POST /api/attendance-exceptions/late-arrival
+    3. Manager reviews: GET /api/attendance-exceptions/team-exceptions
+    4. Manager approves: POST /api/attendance-exceptions/approve
+    5. User clocks in
+    6. System links the request to the new attendance row
 
 Early Leave Flow:
     1. User wants to leave early

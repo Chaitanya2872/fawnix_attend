@@ -93,8 +93,11 @@ def get_all_attendance_status():
 
     try:
         cursor.execute("""
-            SELECT a.*
+            SELECT
+                a.*,
+                e.emp_designation
             FROM attendance a
+            LEFT JOIN employees e ON a.employee_email = e.emp_email
             INNER JOIN (
                 SELECT employee_email, MAX(login_time) AS latest_login
                 FROM attendance
@@ -137,6 +140,7 @@ def get_all_attendance_status():
 
             result.append({
                 "employee_email": record['employee_email'],
+                "emp_designation": record.get('emp_designation'),
                 "attendance_id": attendance_id,
                 "status": record['status'],
                 "is_logged_in": is_logged_in,
@@ -166,8 +170,12 @@ def get_all_attendance_history(limit: int = 100):
 
     try:
         cursor.execute("""
-            SELECT *
+            SELECT
+                a.*,
+                e.emp_designation
             FROM attendance
+            a
+            LEFT JOIN employees e ON a.employee_email = e.emp_email
             ORDER BY login_time DESC
             LIMIT %s
         """, (limit,))
@@ -211,9 +219,12 @@ def get_all_day_summary(target_date: date = None):
 
     try:
         cursor.execute("""
-            SELECT *
-            FROM attendance
-            WHERE date = %s
+            SELECT
+                a.*,
+                e.emp_designation
+            FROM attendance a
+            LEFT JOIN employees e ON a.employee_email = e.emp_email
+            WHERE a.date = %s
         """, (target_date,))
 
         attendances = cursor.fetchall()
@@ -255,6 +266,7 @@ def get_all_day_summary(target_date: date = None):
 
             summaries.append({
                 "employee_email": attendance['employee_email'],
+                "emp_designation": attendance.get('emp_designation'),
                 "attendance": attendance,
                 "activities": activities,
                 "field_visits": field_visits,

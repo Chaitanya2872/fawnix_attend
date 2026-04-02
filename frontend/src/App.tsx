@@ -321,8 +321,16 @@ function App() {
         (response.status === 401 || message.toLowerCase().includes('token') || message.toLowerCase().includes('expired'))
 
       if (shouldRefresh) {
-        const nextAccessToken = await refreshAccessToken()
-        return apiRequest(path, options, nextAccessToken, false)
+        try {
+          const nextAccessToken = await refreshAccessToken()
+          return apiRequest(path, options, nextAccessToken, false)
+        } catch (refreshError) {
+          clearSession()
+          setShowAdminLogin(true)
+          setShowDashboard(true)
+          setAuthStatus('Session expired. Please log in again.')
+          throw refreshError
+        }
       }
 
       throw new Error(message)

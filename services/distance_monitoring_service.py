@@ -10,6 +10,10 @@ from datetime import datetime, date
 from database.connection import get_db_connection
 from math import radians, sin, cos, sqrt, atan2
 from typing import Dict, Tuple, Optional
+from services.attendance_notification_service import (
+    notify_working_hours_paused,
+    notify_working_hours_resumed,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -172,6 +176,14 @@ def check_distance_from_clock_in(emp_email: str, current_lat: str, current_lon: 
         
         attendance_id = attendance['attendance_id']
         work_date = attendance['date']
+
+        cursor.execute("""
+            SELECT emp_code
+            FROM employees
+            WHERE emp_email = %s
+        """, (emp_email,))
+        employee = cursor.fetchone()
+        emp_code = employee['emp_code'] if employee else None
         
         # 2. Check if working day
         is_working, day_reason = is_working_day(work_date)
@@ -235,6 +247,14 @@ def check_distance_from_clock_in(emp_email: str, current_lat: str, current_lon: 
         
         # 7. Check if exceeds threshold
         exceeds_threshold = distance_km > DISTANCE_THRESHOLD_KM
+
+        cursor.execute("""
+            SELECT id FROM activities
+            WHERE attendance_id = %s
+              AND activity_type = 'distance_alert'
+              AND status = 'active'
+        """, (attendance_id,))
+        existing_alert = cursor.fetchone()
         
         response_data = {
             "attendance_id": attendance_id,
@@ -260,16 +280,6 @@ def check_distance_from_clock_in(emp_email: str, current_lat: str, current_lon: 
         
         # 8. Create alert/activity if threshold exceeded
         if exceeds_threshold:
-            # Check if alert already exists for this session
-            cursor.execute("""
-                SELECT id FROM activities
-                WHERE attendance_id = %s 
-                AND activity_type = 'distance_alert'
-                AND status = 'active'
-            """, (attendance_id,))
-            
-            existing_alert = cursor.fetchone()
-            
             if not existing_alert:
                 # Create distance alert activity
                 cursor.execute("""
@@ -307,7 +317,18 @@ def check_distance_from_clock_in(emp_email: str, current_lat: str, current_lon: 
                 
                 alert_id = cursor.fetchone()['id']
                 conn.commit()
-                
+
+                try:
+                    if emp_code:
+                        notify_working_hours_paused(emp_code, attendance_id)
+                except Exception as notification_error:
+                    logger.error(
+                        "Non-critical working_hours_paused notification failure for %s attendance=%s: %s",
+                        emp_code or emp_email,
+                        attendance_id,
+                        notification_error,
+                    )
+
                 logger.warning(f"⚠️  DISTANCE ALERT: Employee {emp_email} is {distance_km:.2f}km from clock-in location")
                 
                 response_data['alert_created'] = True
@@ -317,6 +338,34 @@ def check_distance_from_clock_in(emp_email: str, current_lat: str, current_lon: 
                 response_data['alert_created'] = False
                 response_data['alert_id'] = existing_alert['id']
                 response_data['alert_message'] = "Distance alert already active"
+        elif existing_alert:
+            cursor.execute("""
+                UPDATE activities
+                SET
+                    status = 'completed',
+                    end_time = NOW(),
+                    duration_minutes = EXTRACT(EPOCH FROM (NOW() - start_time))/60
+                WHERE id = %s
+                RETURNING id
+            """, (existing_alert['id'],))
+
+            cleared_alert = cursor.fetchone()
+            conn.commit()
+
+            if cleared_alert:
+                try:
+                    if emp_code:
+                        notify_working_hours_resumed(emp_code, attendance_id)
+                except Exception as notification_error:
+                    logger.error(
+                        "Non-critical working_hours_resumed notification failure for %s attendance=%s: %s",
+                        emp_code or emp_email,
+                        attendance_id,
+                        notification_error,
+                    )
+
+            response_data['alert_cleared'] = bool(cleared_alert)
+            response_data['alert_message'] = "Back within threshold. Working hours resumed."
         
         return ({
             "success": True,
@@ -358,8 +407,30 @@ def clear_distance_alert(attendance_id: int) -> Tuple[Dict, int]:
         
         updated = cursor.fetchall()
         conn.commit()
-        
+
+        cursor.execute("""
+            SELECT
+                a.employee_email,
+                e.emp_code
+            FROM attendance a
+            LEFT JOIN employees e ON e.emp_email = a.employee_email
+            WHERE a.id = %s
+        """, (attendance_id,))
+        attendance = cursor.fetchone()
+        emp_email = attendance['employee_email'] if attendance else None
+        emp_code = attendance['emp_code'] if attendance else None
+
         if updated:
+            if emp_code:
+                try:
+                    notify_working_hours_resumed(emp_code, attendance_id)
+                except Exception as notification_error:
+                    logger.error(
+                        "Non-critical working_hours_resumed notification failure for %s attendance=%s: %s",
+                        emp_code,
+                        attendance_id,
+                        notification_error,
+                    )
             logger.info(f"✅ Distance alert cleared for attendance {attendance_id}")
             return ({
                 "success": True,

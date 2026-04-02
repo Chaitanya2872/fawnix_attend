@@ -21,6 +21,7 @@ from services.attendance_exceptions_service import (
     get_employee_shift_times,
     _fetch_exception_rows_by_attendance_ids,
 )
+from services.attendance_notification_service import notify_tracking_started, notify_tracking_stopped
 from utils.time_utils import now_local_naive
 import logging
 
@@ -160,8 +161,19 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str):
         )
         
         conn.commit()
-        
+
         logger.info(f"✅ Clock in successful: {emp_email} - Attendance ID: {attendance_id}")
+
+        if emp_code:
+            try:
+                notify_tracking_started(emp_code, attendance_id)
+            except Exception as notification_error:
+                logger.error(
+                    "Non-critical tracking_started notification failure for %s attendance=%s: %s",
+                    emp_code,
+                    attendance_id,
+                    notification_error,
+                )
         
         response_data = {
             "attendance_id": attendance_id,
@@ -429,7 +441,18 @@ def clock_out(emp_email: str, lat: str, lon: str):
         """, (logout_time, location, address, round(hours, 2), 'logged_out', attendance_id))
         
         conn.commit()
-        
+
+        if emp_info and emp_code:
+            try:
+                notify_tracking_stopped(emp_code, attendance_id)
+            except Exception as notification_error:
+                logger.error(
+                    "Non-critical tracking_stopped notification failure for %s attendance=%s: %s",
+                    emp_code,
+                    attendance_id,
+                    notification_error,
+                )
+
         # ✅ Calculate and record comp-off (if eligible)
         comp_off_result = None
         if emp_info:

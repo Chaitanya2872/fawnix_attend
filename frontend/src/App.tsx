@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 
 const useCases = [
@@ -66,11 +66,271 @@ const steps = [
   }
 ]
 
+const sidebarItems = [
+  { id: 'employees', label: 'Employees List' },
+  { id: 'attendance', label: 'Attendance Records' },
+  { id: 'leaves', label: 'Leaves' },
+  { id: 'activities', label: 'Activities' },
+  { id: 'field-visits', label: 'Field Visits' }
+] as const
+
+type SidebarId = (typeof sidebarItems)[number]['id']
+
+type AdminProfile = {
+  emp_code: string
+  emp_full_name: string
+  emp_email: string
+  emp_designation?: string
+  emp_department?: string
+  role?: string
+}
+
+type EmployeeRow = {
+  emp_code: string
+  emp_full_name: string
+  emp_designation?: string
+  role?: string
+  is_active?: boolean
+}
+
+type AttendanceRow = {
+  id?: number
+  employee_email?: string
+  employee_name?: string
+  emp_designation?: string
+  login_time?: string
+  logout_time?: string
+  working_hours?: number
+  status?: string
+}
+
+type LeaveRow = {
+  id?: number
+  emp_code?: string
+  emp_full_name?: string
+  emp_designation?: string
+  leave_type?: string
+  from_date?: string
+  to_date?: string
+  status?: string
+}
+
+type ActivityRow = {
+  id?: number
+  employee_name?: string
+  employee_email?: string
+  activity_type?: string
+  status?: string
+  start_time?: string
+  field_visit_id?: number
+  field_visit_type?: string
+  field_visit_purpose?: string
+  field_visit_status?: string
+  field_visit_start_address?: string
+  field_visit_end_address?: string
+}
+
+type FieldVisitRow = {
+  activityId: number | string
+  employee: string
+  visitType: string
+  purpose: string
+  status: string
+  location: string
+}
+
+const ACCESS_TOKEN_KEY = 'fawnix_admin_access_token'
+const REFRESH_TOKEN_KEY = 'fawnix_admin_refresh_token'
+const USER_KEY = 'fawnix_admin_user'
+
+function isPrivilegedUser(profile: AdminProfile | null) {
+  if (!profile) {
+    return false
+  }
+
+  const designation = (profile.emp_designation || '').trim().toLowerCase()
+  return ['hr', 'devtester'].includes(designation)
+}
+
+function formatDateTime(value?: string) {
+  if (!value) {
+    return '--'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+function formatDate(value?: string) {
+  if (!value) {
+    return '--'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  })
+}
+
 function App() {
   const [empCode, setEmpCode] = useState('')
   const [otp, setOtp] = useState('')
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(false)
+
+  const [showDashboard, setShowDashboard] = useState(false)
+  const [activePanel, setActivePanel] = useState<SidebarId>('employees')
+  const [showAdminLogin, setShowAdminLogin] = useState(false)
+  const [authLoading, setAuthLoading] = useState(false)
+  const [authStatus, setAuthStatus] = useState('')
+  const [adminEmpCode, setAdminEmpCode] = useState('')
+  const [adminOtp, setAdminOtp] = useState('')
+  const [accessToken, setAccessToken] = useState('')
+  const [refreshToken, setRefreshToken] = useState('')
+  const [profile, setProfile] = useState<AdminProfile | null>(null)
+  const [dashboardLoading, setDashboardLoading] = useState(false)
+  const [dashboardError, setDashboardError] = useState('')
+
+  const [employees, setEmployees] = useState<EmployeeRow[]>([])
+  const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
+  const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([])
+  const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
+  const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
+
+  useEffect(() => {
+    const storedAccessToken = window.localStorage.getItem(ACCESS_TOKEN_KEY) || ''
+    const storedRefreshToken = window.localStorage.getItem(REFRESH_TOKEN_KEY) || ''
+    const storedUser = window.localStorage.getItem(USER_KEY)
+
+    if (storedAccessToken) {
+      setAccessToken(storedAccessToken)
+    }
+
+    if (storedRefreshToken) {
+      setRefreshToken(storedRefreshToken)
+    }
+
+    if (storedUser) {
+      try {
+        setProfile(JSON.parse(storedUser))
+      } catch {
+        window.localStorage.removeItem(USER_KEY)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!accessToken || !showDashboard || showAdminLogin) {
+      return
+    }
+
+    void loadDashboard(accessToken)
+  }, [accessToken, showDashboard, showAdminLogin])
+
+  const apiRequest = async (path: string, options: RequestInit = {}, tokenOverride?: string) => {
+    const token = tokenOverride || accessToken
+    const headers = new Headers(options.headers || {})
+
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`)
+    }
+
+    if (!headers.has('Content-Type') && options.body) {
+      headers.set('Content-Type', 'application/json')
+    }
+
+    const response = await fetch(path, {
+      ...options,
+      headers
+    })
+
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      throw new Error(data?.message || 'Request failed')
+    }
+
+    return data
+  }
+
+  const persistSession = (nextAccessToken: string, nextRefreshToken: string, nextProfile: AdminProfile) => {
+    setAccessToken(nextAccessToken)
+    setRefreshToken(nextRefreshToken)
+    setProfile(nextProfile)
+    window.localStorage.setItem(ACCESS_TOKEN_KEY, nextAccessToken)
+    window.localStorage.setItem(REFRESH_TOKEN_KEY, nextRefreshToken)
+    window.localStorage.setItem(USER_KEY, JSON.stringify(nextProfile))
+  }
+
+  const clearSession = () => {
+    setAccessToken('')
+    setRefreshToken('')
+    setProfile(null)
+    setEmployees([])
+    setAttendanceRows([])
+    setLeaveRows([])
+    setActivityRows([])
+    setFieldVisitRows([])
+    window.localStorage.removeItem(ACCESS_TOKEN_KEY)
+    window.localStorage.removeItem(REFRESH_TOKEN_KEY)
+    window.localStorage.removeItem(USER_KEY)
+  }
+
+  const loadDashboard = async (token: string) => {
+    setDashboardLoading(true)
+    setDashboardError('')
+
+    try {
+      const [employeesResponse, attendanceResponse, leavesResponse, activitiesResponse] = await Promise.all([
+        apiRequest('/api/admin/employees', {}, token),
+        apiRequest('/api/admin/attendance/history?limit=30', {}, token),
+        apiRequest('/api/admin/leaves?limit=30', {}, token),
+        apiRequest('/api/admin/activities?limit=30&include_tracking=false&include_activity_tracking=false', {}, token)
+      ])
+
+      const employeesData = Array.isArray(employeesResponse?.data) ? employeesResponse.data : []
+      const attendanceData = Array.isArray(attendanceResponse?.data?.records) ? attendanceResponse.data.records : []
+      const leavesData = Array.isArray(leavesResponse?.data?.leaves) ? leavesResponse.data.leaves : []
+      const activitiesData = Array.isArray(activitiesResponse?.data?.activities) ? activitiesResponse.data.activities : []
+
+      setEmployees(employeesData)
+      setAttendanceRows(attendanceData)
+      setLeaveRows(leavesData)
+      setActivityRows(activitiesData)
+
+      const fieldVisits = activitiesData
+        .filter((item: ActivityRow) => item.field_visit_id)
+        .map((item: ActivityRow) => ({
+          activityId: item.id || item.field_visit_id || '',
+          employee: item.employee_name || item.employee_email || 'Unknown employee',
+          visitType: item.field_visit_type || 'Field Visit',
+          purpose: item.field_visit_purpose || item.activity_type || 'Visit',
+          status: item.field_visit_status || item.status || 'Unknown',
+          location: item.field_visit_start_address || item.field_visit_end_address || 'Location unavailable'
+        }))
+
+      setFieldVisitRows(fieldVisits)
+    } catch (error) {
+      setDashboardError(error instanceof Error ? error.message : 'Failed to load admin dashboard')
+    } finally {
+      setDashboardLoading(false)
+    }
+  }
 
   const handleRequestOtp = async () => {
     if (!empCode.trim()) {
@@ -124,6 +384,439 @@ function App() {
     }
   }
 
+  const handleAdminRequestOtp = async () => {
+    if (!adminEmpCode.trim()) {
+      setAuthStatus('Enter your Employee ID to request OTP.')
+      return
+    }
+
+    setAuthLoading(true)
+    setAuthStatus('Requesting admin OTP...')
+
+    try {
+      const data = await apiRequest('/api/auth/request-otp', {
+        method: 'POST',
+        body: JSON.stringify({ emp_code: adminEmpCode.trim() })
+      })
+
+      setAuthStatus(data?.message || 'OTP sent successfully.')
+    } catch (error) {
+      setAuthStatus(error instanceof Error ? error.message : 'Failed to request OTP')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleAdminLogin = async () => {
+    if (!adminEmpCode.trim() || !adminOtp.trim()) {
+      setAuthStatus('Employee ID and OTP are required.')
+      return
+    }
+
+    setAuthLoading(true)
+    setAuthStatus('Verifying admin login...')
+
+    try {
+      const loginData = await apiRequest('/api/auth/verify-otp', {
+        method: 'POST',
+        body: JSON.stringify({
+          emp_code: adminEmpCode.trim(),
+          otp: adminOtp.trim(),
+          device_info: {
+            device_name: 'Fawnix Admin Web',
+            os: navigator.platform || 'web',
+            app_version: 'frontend-admin-dashboard'
+          }
+        })
+      })
+
+      const nextAccessToken = loginData?.access_token || ''
+      const nextRefreshToken = loginData?.refresh_token || ''
+
+      if (!nextAccessToken) {
+        throw new Error('Access token missing from login response')
+      }
+
+      const profileResponse = await apiRequest('/api/auth/me', {}, nextAccessToken)
+      const nextProfile = (profileResponse?.data || null) as AdminProfile | null
+
+      if (!isPrivilegedUser(nextProfile)) {
+        throw new Error('This dashboard currently requires HR or DevTester access')
+      }
+
+      persistSession(nextAccessToken, nextRefreshToken, nextProfile as AdminProfile)
+      setShowAdminLogin(false)
+      setShowDashboard(true)
+      setAuthStatus('Admin login successful.')
+      setAdminOtp('')
+      await loadDashboard(nextAccessToken)
+    } catch (error) {
+      clearSession()
+      setAuthStatus(error instanceof Error ? error.message : 'Admin login failed')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      if (accessToken && refreshToken) {
+        await apiRequest('/api/auth/logout', {
+          method: 'POST',
+          body: JSON.stringify({ refresh_token: refreshToken })
+        })
+      }
+    } catch {
+      // Ignore logout failures and clear local session anyway.
+    } finally {
+      clearSession()
+      setShowDashboard(false)
+      setShowAdminLogin(false)
+      setAuthStatus('')
+    }
+  }
+
+  const openAdminDashboard = () => {
+    setShowDashboard(true)
+    if (!accessToken) {
+      setShowAdminLogin(true)
+      setAuthStatus('')
+      return
+    }
+
+    setShowAdminLogin(false)
+  }
+
+  const renderDashboardPanel = () => {
+    if (dashboardLoading) {
+      return <div className="empty-state">Loading admin data...</div>
+    }
+
+    if (dashboardError) {
+      return (
+        <div className="empty-state">
+          <strong>Unable to load dashboard</strong>
+          <p>{dashboardError}</p>
+          <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+            Retry
+          </button>
+        </div>
+      )
+    }
+
+    if (activePanel === 'employees') {
+      return (
+        <>
+          <div className="dashboard-section-head">
+            <div>
+              <p className="eyebrow">Directory</p>
+              <h2>Employees List</h2>
+            </div>
+            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+              Refresh
+            </button>
+          </div>
+          <div className="metric-row">
+            <div className="metric-card">
+              <span>Total Employees</span>
+              <strong>{employees.length}</strong>
+            </div>
+            <div className="metric-card">
+              <span>Active Users</span>
+              <strong>{employees.filter((employee) => employee.is_active).length}</strong>
+            </div>
+            <div className="metric-card">
+              <span>HR / Admin</span>
+              <strong>
+                {
+                  employees.filter((employee) =>
+                    ['hr', 'cmd', 'admin'].includes((employee.emp_designation || '').toLowerCase())
+                  ).length
+                }
+              </strong>
+            </div>
+          </div>
+          <div className="data-card">
+            {employees.map((employee) => (
+              <div key={employee.emp_code} className="data-row">
+                <div>
+                  <strong>{employee.emp_full_name || employee.emp_code}</strong>
+                  <span>{employee.emp_code}</span>
+                </div>
+                <div>{employee.emp_designation || employee.role || '--'}</div>
+                <div>
+                  <span className="table-pill">{employee.is_active ? 'Active' : 'Inactive'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )
+    }
+
+    if (activePanel === 'attendance') {
+      return (
+        <>
+          <div className="dashboard-section-head">
+            <div>
+              <p className="eyebrow">Operations</p>
+              <h2>Attendance Records</h2>
+            </div>
+            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+              Refresh
+            </button>
+          </div>
+          <div className="metric-row">
+            <div className="metric-card">
+              <span>Total Records</span>
+              <strong>{attendanceRows.length}</strong>
+            </div>
+            <div className="metric-card">
+              <span>Logged Out</span>
+              <strong>{attendanceRows.filter((row) => row.status === 'logged_out').length}</strong>
+            </div>
+            <div className="metric-card">
+              <span>Late / Exceptions</span>
+              <strong>
+                {
+                  attendanceRows.filter((row) =>
+                    (row.status || '').toLowerCase().includes('late') ||
+                    (row.status || '').toLowerCase().includes('pending')
+                  ).length
+                }
+              </strong>
+            </div>
+          </div>
+          <div className="data-card">
+            {attendanceRows.map((row, index) => (
+              <div key={`${row.id || row.employee_email || index}`} className="data-row">
+                <div>
+                  <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
+                  <span>{row.emp_designation || row.employee_email || '--'}</span>
+                </div>
+                <div>{formatDateTime(row.login_time)}</div>
+                <div>
+                  <span className="table-pill accent">{row.status || 'Unknown'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )
+    }
+
+    if (activePanel === 'leaves') {
+      return (
+        <>
+          <div className="dashboard-section-head">
+            <div>
+              <p className="eyebrow">Approvals</p>
+              <h2>Leaves</h2>
+            </div>
+            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+              Refresh
+            </button>
+          </div>
+          <div className="data-card">
+            {leaveRows.map((row, index) => (
+              <div key={`${row.id || row.emp_code || index}`} className="data-row">
+                <div>
+                  <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
+                  <span>{row.leave_type || 'Leave Request'}</span>
+                </div>
+                <div>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</div>
+                <div>
+                  <span className="table-pill">{row.status || 'Unknown'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )
+    }
+
+    if (activePanel === 'activities') {
+      return (
+        <>
+          <div className="dashboard-section-head">
+            <div>
+              <p className="eyebrow">Live Work</p>
+              <h2>Activities</h2>
+            </div>
+            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+              Refresh
+            </button>
+          </div>
+          <div className="data-card">
+            {activityRows.map((row, index) => (
+              <div key={`${row.id || row.employee_email || index}`} className="data-row">
+                <div>
+                  <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
+                  <span>{row.activity_type || 'Activity'}</span>
+                </div>
+                <div>{formatDateTime(row.start_time)}</div>
+                <div>
+                  <span className="table-pill accent">{row.status || 'Unknown'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )
+    }
+
+    return (
+      <>
+        <div className="dashboard-section-head">
+          <div>
+            <p className="eyebrow">Movement</p>
+            <h2>Field Visits</h2>
+          </div>
+          <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+            Refresh
+          </button>
+        </div>
+        <div className="data-card">
+          {fieldVisitRows.length ? (
+            fieldVisitRows.map((row) => (
+              <div key={row.activityId} className="data-row">
+                <div>
+                  <strong>{row.employee}</strong>
+                  <span>{row.visitType}</span>
+                </div>
+                <div>{row.location}</div>
+                <div>
+                  <span className="table-pill accent">{row.status}</span>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="empty-state">No field visits found in the latest activity feed.</div>
+          )}
+        </div>
+      </>
+    )
+  }
+
+  if (showDashboard) {
+    return (
+      <div className="admin-shell">
+        <aside className="sidebar">
+          <div className="sidebar-brand">
+            <span className="brand-mark" aria-hidden="true" />
+            <div>
+              <div className="brand-name">Fawnix Admin</div>
+              <div className="brand-tag">Operations control room</div>
+            </div>
+          </div>
+
+          {showAdminLogin ? (
+            <div className="login-card sidebar-login">
+              <h3>Admin Login</h3>
+              <p>Use Employee ID and OTP to access admin endpoints.</p>
+              <label htmlFor="admin-emp-code">Employee ID</label>
+              <input
+                id="admin-emp-code"
+                type="text"
+                value={adminEmpCode}
+                onChange={(event) => setAdminEmpCode(event.target.value)}
+                placeholder="e.g. 2981"
+              />
+              <label htmlFor="admin-otp">OTP</label>
+              <input
+                id="admin-otp"
+                type="text"
+                value={adminOtp}
+                onChange={(event) => setAdminOtp(event.target.value)}
+                placeholder="Enter OTP"
+              />
+              <div className="login-actions">
+                <button className="ghost" onClick={handleAdminRequestOtp} disabled={authLoading}>
+                  Request OTP
+                </button>
+                <button className="cta" onClick={handleAdminLogin} disabled={authLoading}>
+                  Login
+                </button>
+              </div>
+              {authStatus ? <p className="delete-note">{authStatus}</p> : null}
+            </div>
+          ) : (
+            <>
+              <div className="sidebar-user">
+                <strong>{profile?.emp_full_name || 'Admin'}</strong>
+                <span>{profile?.emp_designation || profile?.role || profile?.emp_code}</span>
+              </div>
+
+              <div className="sidebar-group">
+                {sidebarItems.map((item) => (
+                  <button
+                    key={item.id}
+                    className={`sidebar-link ${activePanel === item.id ? 'active' : ''}`}
+                    onClick={() => setActivePanel(item.id)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="sidebar-foot">
+                <div className="sidebar-note">
+                  <strong>Today</strong>
+                  <span>
+                    {attendanceRows.length} attendance rows, {leaveRows.length} leave entries,
+                    {' '}{activityRows.length} activities
+                  </span>
+                </div>
+                <button className="ghost sidebar-back" onClick={() => void loadDashboard(accessToken)}>
+                  Refresh Data
+                </button>
+                <button className="ghost sidebar-back" onClick={handleLogout}>
+                  Logout
+                </button>
+                <button className="ghost sidebar-back" onClick={() => setShowDashboard(false)}>
+                  Back to Landing
+                </button>
+              </div>
+            </>
+          )}
+        </aside>
+
+        <main className="dashboard-main">
+          <section className="dashboard-hero">
+            <div>
+              <p className="eyebrow">Admin dashboard</p>
+              <h1>Keep teams visible, accountable, and moving.</h1>
+              <p className="dashboard-copy">
+                Live data from admin APIs for employees, attendance, leave approvals,
+                activities, and field movement.
+              </p>
+            </div>
+            <div className="dashboard-highlight">
+              <span>Shift Compliance</span>
+              <strong>{attendanceRows.length || 0}</strong>
+              <p>
+                {showAdminLogin
+                  ? 'Authenticate to load admin endpoints.'
+                  : `Loaded ${employees.length} employees and ${fieldVisitRows.length} field visits.`}
+              </p>
+            </div>
+          </section>
+
+          <section className="dashboard-panel">
+            {showAdminLogin ? (
+              <div className="empty-state">
+                <strong>Admin authentication required</strong>
+                <p>Request OTP and log in from the sidebar to load protected admin APIs.</p>
+              </div>
+            ) : (
+              renderDashboardPanel()
+            )}
+          </section>
+        </main>
+      </div>
+    )
+  }
+
   return (
     <div className="page">
       <header className="hero" data-animate>
@@ -153,7 +846,9 @@ function App() {
               single mobile-first experience for teams that move.
             </p>
             <div className="hero-actions">
-              <button className="cta">Get Started</button>
+              <button className="cta" onClick={openAdminDashboard}>
+                Get Started
+              </button>
               <button className="ghost">View Product Tour</button>
             </div>
             <div className="hero-stats">
@@ -201,7 +896,7 @@ function App() {
                   </div>
                 </div>
                 <div className="panel-note">
-                  Auto clock-out enabled for shift 18:30
+                  Admin dashboard now supports OTP login and live admin API data.
                 </div>
               </div>
             </div>

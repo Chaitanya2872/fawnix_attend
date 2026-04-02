@@ -893,6 +893,15 @@ function App() {
                 ))}
               </div>
 
+              <div className="sidebar-actions">
+                <button className="ghost sidebar-back" onClick={handleLogout}>
+                  Logout
+                </button>
+                <button className="ghost sidebar-back" onClick={() => setShowDashboard(false)}>
+                  Back to Landing
+                </button>
+              </div>
+
               <div className="sidebar-foot">
                 <div className="sidebar-note">
                   <strong>Today</strong>
@@ -903,12 +912,6 @@ function App() {
                 </div>
                 <button className="ghost sidebar-back" onClick={() => void loadDashboard(accessToken)}>
                   Refresh Data
-                </button>
-                <button className="ghost sidebar-back" onClick={handleLogout}>
-                  Logout
-                </button>
-                <button className="ghost sidebar-back" onClick={() => setShowDashboard(false)}>
-                  Back to Landing
                 </button>
               </div>
             </>

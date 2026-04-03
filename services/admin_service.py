@@ -169,32 +169,44 @@ def get_all_attendance_status():
         cursor.close()
         conn.close()
 
-def get_all_attendance_history(limit: int = None, target_date: date = None):
-    """Get attendance history for all employees (optional date filter)"""
+def get_all_attendance_history(limit: int = None, target_date: date = None,
+                               page: int = None, page_size: int = None):
+    """Get attendance history for all employees (optional date filter + pagination)"""
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
-        query = """
-            SELECT
-                a.*,
-                e.emp_designation
+        base_query = """
             FROM attendance a
             LEFT JOIN employees e ON a.employee_email = e.emp_email
         """
         params = []
 
         if target_date:
-            query += " WHERE a.date = %s"
+            base_query += " WHERE a.date = %s"
             params.append(target_date)
 
-        query += " ORDER BY login_time DESC"
+        cursor.execute(f"SELECT COUNT(*) AS total_records {base_query}", params)
+        total_records = cursor.fetchone()['total_records']
 
-        if limit is not None:
+        query = f"""
+            SELECT
+                a.*,
+                e.emp_designation
+            {base_query}
+            ORDER BY login_time DESC
+        """
+
+        pagination_params = []
+        if page_size:
+            offset = max((page or 1) - 1, 0) * page_size
+            query += " LIMIT %s OFFSET %s"
+            pagination_params.extend([page_size, offset])
+        elif limit is not None:
             query += " LIMIT %s"
-            params.append(limit)
+            pagination_params.append(limit)
 
-        cursor.execute(query, params)
+        cursor.execute(query, params + pagination_params)
 
         records = cursor.fetchall()
 
@@ -210,6 +222,7 @@ def get_all_attendance_history(limit: int = None, target_date: date = None):
             "success": True,
             "data": {
                 "records": records,
+                "total_records": total_records,
                 "statistics": {
                     "total_records": len(records),
                     "completed_days": completed_days,

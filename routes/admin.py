@@ -92,10 +92,14 @@ def get_all_attendance_history(current_user):
     """
     Get attendance history for all employees
     Optional query params:
-    - limit: number of records (optional)
+    - limit: number of records (optional, legacy)
+    - page: page number (optional)
+    - page_size: page size (optional)
     - date: YYYY-MM-DD (optional)
     """
     limit = request.args.get('limit', type=int)
+    page = request.args.get('page', type=int)
+    page_size = request.args.get('page_size', type=int)
     date_str = request.args.get('date')
     target_date = None
 
@@ -108,7 +112,12 @@ def get_all_attendance_history(current_user):
                 "message": "Invalid date format. Use YYYY-MM-DD"
             }), 400
 
-    response, status_code = admin_service.get_all_attendance_history(limit, target_date)
+    response, status_code = admin_service.get_all_attendance_history(
+        limit=limit,
+        target_date=target_date,
+        page=page,
+        page_size=page_size
+    )
 
     return jsonify(response), status_code
 

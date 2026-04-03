@@ -223,6 +223,7 @@ function App() {
 
   const [employees, setEmployees] = useState<EmployeeRow[]>([])
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
+  const [attendanceTotalCount, setAttendanceTotalCount] = useState(0)
   const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([])
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
@@ -271,7 +272,7 @@ function App() {
     }
 
     void loadDashboard(accessToken)
-  }, [accessToken, showDashboard, showAdminLogin, attendanceDateFilter])
+  }, [accessToken, showDashboard, showAdminLogin, attendanceDateFilter, attendancePage])
 
   const updateTokens = (nextAccessToken: string, nextRefreshToken: string) => {
     setAccessToken(nextAccessToken)
@@ -396,9 +397,13 @@ function App() {
     setDashboardError('')
 
     try {
-      const attendancePath = attendanceDateFilter
-        ? `/api/admin/attendance/history?date=${attendanceDateFilter}`
-        : '/api/admin/attendance/history'
+      const attendanceParams = new URLSearchParams()
+      attendanceParams.set('page', String(attendancePage))
+      attendanceParams.set('page_size', String(attendancePageSize))
+      if (attendanceDateFilter) {
+        attendanceParams.set('date', attendanceDateFilter)
+      }
+      const attendancePath = `/api/admin/attendance/history?${attendanceParams.toString()}`
 
       const [employeesResponse, attendanceResponse, leavesResponse, activitiesResponse] = await Promise.all([
         apiRequest('/api/admin/employees', {}, token),
@@ -411,6 +416,10 @@ function App() {
       const attendanceData: AttendanceRow[] = Array.isArray(attendanceResponse?.data?.records)
         ? attendanceResponse.data.records
         : []
+      const attendanceCount =
+        typeof attendanceResponse?.data?.total_records === 'number'
+          ? attendanceResponse.data.total_records
+          : attendanceData.length
       const leavesData = Array.isArray(leavesResponse?.data?.leaves) ? leavesResponse.data.leaves : []
       const activitiesData = Array.isArray(activitiesResponse?.data?.activities) ? activitiesResponse.data.activities : []
 
@@ -428,6 +437,7 @@ function App() {
           .values()
       )
       setAttendanceRows(attendanceDeduped)
+      setAttendanceTotalCount(attendanceCount)
       setLeaveRows(leavesData)
       setActivityRows(activitiesData)
 
@@ -694,37 +704,16 @@ function App() {
     return minutes < 10 * 60 + 15
   }
 
-  // Calculate filtered attendance and login metrics for hero section
-  const filteredAttendance = attendanceRows.filter((row) => {
-    if (!attendanceDateFilter) {
-      return true
-    }
-    if (row.date) {
-      const parsedDate = new Date(row.date)
-      if (!Number.isNaN(parsedDate.getTime())) {
-        const dateValue = parsedDate.toISOString().slice(0, 10)
-        return dateValue === attendanceDateFilter
-      }
-    }
-    const time = parseLoginTime(row.login_time)
-    if (!time) {
-      return false
-    }
-    const yyyyMmDd = time.toISOString().slice(0, 10)
-    return yyyyMmDd === attendanceDateFilter
-  })
+  // Attendance data is already filtered + paginated server-side
+  const filteredAttendance = attendanceRows
 
   const lateLogins = filteredAttendance.filter((row) => isLateLogin(row.login_time)).length
   const onTimeLogins = filteredAttendance.filter((row) => isOnTimeLogin(row.login_time)).length
 
   const renderDashboardPanel = () => {
-    const attendancePageCount = Math.max(1, Math.ceil(filteredAttendance.length / attendancePageSize))
+    const attendancePageCount = Math.max(1, Math.ceil(attendanceTotalCount / attendancePageSize))
     const safeAttendancePage = Math.min(attendancePage, attendancePageCount)
-    const attendanceSliceStart = (safeAttendancePage - 1) * attendancePageSize
-    const attendancePageRows = filteredAttendance.slice(
-      attendanceSliceStart,
-      attendanceSliceStart + attendancePageSize
-    )
+    const attendancePageRows = filteredAttendance
 
     if (dashboardLoading) {
       return <div className="empty-state">Loading admin data...</div>

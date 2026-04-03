@@ -3,10 +3,15 @@ Admin Routes
 Administrative endpoints
 """
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, Response, send_file
 from middleware.auth_middleware import token_required
 from middleware.admin_middleware import hr_or_devtester_required
 from services import admin_service
+import csv
+from io import StringIO, BytesIO
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.lib.units import inch
+from reportlab.pdfgen import canvas
 from services.notification_service import send_push_notification_to_employee
 from database.connection import get_db_connection, return_connection
 from datetime import datetime, date, time
@@ -120,6 +125,133 @@ def get_all_attendance_history(current_user):
     )
 
     return jsonify(response), status_code
+
+@admin_bp.route('/attendance/report', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def download_attendance_report(current_user):
+    """
+    Download attendance report (CSV or PDF) filtered by month and year.
+    Query params: month (1-12), year (YYYY), format=csv|pdf
+    """
+    month = request.args.get('month', type=int)
+    year = request.args.get('year', type=int)
+    report_format = (request.args.get('format') or 'csv').lower()
+
+    if not month or month < 1 or month > 12:
+        return jsonify({
+            "success": False,
+            "message": "Invalid month. Use 1-12."
+        }), 400
+
+    if not year or year < 2000:
+        return jsonify({
+            "success": False,
+            "message": "Invalid year."
+        }), 400
+
+    records = admin_service.get_attendance_report_data(month, year)
+
+    headers = [
+        "Date",
+        "Employee Name",
+        "Employee Email",
+        "Designation",
+        "Department",
+        "Attendance Type",
+        "Login Time",
+        "Logout Time",
+        "Status",
+        "Working Hours",
+        "Login Address",
+        "Logout Address"
+    ]
+
+    if report_format == 'pdf':
+        buffer = BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=landscape(letter))
+        width, height = landscape(letter)
+        x_start = 0.5 * inch
+        y = height - 0.6 * inch
+
+        pdf.setFont("Helvetica-Bold", 14)
+        pdf.drawString(x_start, y, f"Attendance Report - {year}-{month:02d}")
+        y -= 0.3 * inch
+
+        pdf.setFont("Helvetica", 8)
+        col_widths = [0.9, 1.6, 2.2, 1.6, 1.6, 1.1, 1.3, 1.3, 1.0, 1.0, 2.4, 2.4]
+        col_widths = [w * inch for w in col_widths]
+
+        def draw_row(values, y_pos, bold=False):
+            pdf.setFont("Helvetica-Bold" if bold else "Helvetica", 8)
+            x = x_start
+            for value, width_col in zip(values, col_widths):
+                text = str(value or '')
+                if len(text) > 40:
+                    text = text[:37] + "..."
+                pdf.drawString(x, y_pos, text)
+                x += width_col
+
+        draw_row(headers, y, bold=True)
+        y -= 0.22 * inch
+
+        for record in records:
+            if y < 0.6 * inch:
+                pdf.showPage()
+                y = height - 0.6 * inch
+                draw_row(headers, y, bold=True)
+                y -= 0.22 * inch
+
+            draw_row([
+                record.get('date', ''),
+                record.get('emp_full_name', '') or record.get('employee_name', ''),
+                record.get('emp_email', '') or record.get('employee_email', ''),
+                record.get('emp_designation', ''),
+                record.get('emp_department', ''),
+                record.get('attendance_type', ''),
+                record.get('login_time', ''),
+                record.get('logout_time', ''),
+                record.get('status', ''),
+                record.get('working_hours', ''),
+                record.get('login_address', ''),
+                record.get('logout_address', '')
+            ], y)
+            y -= 0.2 * inch
+
+        pdf.save()
+        buffer.seek(0)
+        filename = f"attendance_report_{year}_{month:02d}.pdf"
+        return send_file(
+            buffer,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/pdf'
+        )
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+
+    for record in records:
+        writer.writerow([
+            record.get('date', ''),
+            record.get('emp_full_name', '') or record.get('employee_name', ''),
+            record.get('emp_email', '') or record.get('employee_email', ''),
+            record.get('emp_designation', ''),
+            record.get('emp_department', ''),
+            record.get('attendance_type', ''),
+            record.get('login_time', ''),
+            record.get('logout_time', ''),
+            record.get('status', ''),
+            record.get('working_hours', ''),
+            record.get('login_address', ''),
+            record.get('logout_address', '')
+        ])
+
+    filename = f"attendance_report_{year}_{month:02d}.csv"
+    response = Response(output.getvalue(), mimetype='text/csv')
+    response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+    return response
 
 @admin_bp.route('/attendance/summary', methods=['GET'])
 @token_required

@@ -91,6 +91,41 @@ def get_all_attendance_records():
         cursor.close()
         conn.close()
 
+def get_attendance_report_data(month: int, year: int):
+    """Fetch attendance records filtered by month and year for report export."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT
+                a.*,
+                e.emp_full_name,
+                e.emp_email,
+                e.emp_designation,
+                e.emp_department
+            FROM attendance a
+            LEFT JOIN employees e ON a.employee_email = e.emp_email
+            WHERE EXTRACT(MONTH FROM a.date) = %s
+              AND EXTRACT(YEAR FROM a.date) = %s
+            ORDER BY a.date ASC, a.login_time ASC
+        """, (month, year))
+
+        records = cursor.fetchall()
+
+        for record in records:
+            for key, value in record.items():
+                if isinstance(value, datetime):
+                    record[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+                elif isinstance(value, date):
+                    record[key] = value.strftime('%Y-%m-%d')
+
+        return records
+
+    finally:
+        cursor.close()
+        conn.close()
+
 def get_all_attendance_status():
     """Get current attendance status for all employees"""
     conn = get_db_connection()

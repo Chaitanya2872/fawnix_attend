@@ -230,6 +230,10 @@ function App() {
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
   const [attendanceDateFilter, setAttendanceDateFilter] = useState('')
   const [attendancePage, setAttendancePage] = useState(1)
+  const [attendanceReportMonth, setAttendanceReportMonth] = useState(() => String(new Date().getMonth() + 1))
+  const [attendanceReportYear, setAttendanceReportYear] = useState(() => String(new Date().getFullYear()))
+  const [attendanceReportFormat, setAttendanceReportFormat] = useState<'csv' | 'pdf'>('csv')
+  const [attendanceReportStatus, setAttendanceReportStatus] = useState('')
   const [showAddEmployee, setShowAddEmployee] = useState(false)
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
   const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
@@ -368,6 +372,50 @@ function App() {
     }
 
     return data
+  }
+
+  const downloadAttendanceReport = async () => {
+    try {
+      setAttendanceReportStatus('Preparing report...')
+      const params = new URLSearchParams({
+        month: attendanceReportMonth,
+        year: attendanceReportYear,
+        format: attendanceReportFormat
+      })
+
+      const makeRequest = async (token: string) =>
+        fetch(`/api/admin/attendance/report?${params.toString()}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        })
+
+      let response = await makeRequest(accessToken)
+      if (response.status === 401) {
+        const nextAccessToken = await refreshAccessToken()
+        response = await makeRequest(nextAccessToken)
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || 'Failed to download report')
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `attendance_report_${attendanceReportYear}_${attendanceReportMonth.padStart(2, '0')}.${attendanceReportFormat}`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      setAttendanceReportStatus('Report downloaded.')
+      window.setTimeout(() => setAttendanceReportStatus(''), 2500)
+    } catch (error) {
+      setAttendanceReportStatus(error instanceof Error ? error.message : 'Failed to download report')
+    }
   }
 
   const persistSession = (nextAccessToken: string, nextRefreshToken: string, nextProfile: AdminProfile) => {
@@ -947,6 +995,67 @@ function App() {
               <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                 Refresh
               </button>
+            </div>
+            <div className="attendance-controls">
+              <div className="attendance-filter">
+                <label htmlFor="attendance-month">Month</label>
+                <select
+                  id="attendance-month"
+                  value={attendanceReportMonth}
+                  onChange={(event) => setAttendanceReportMonth(event.target.value)}
+                >
+                  {[
+                    '01',
+                    '02',
+                    '03',
+                    '04',
+                    '05',
+                    '06',
+                    '07',
+                    '08',
+                    '09',
+                    '10',
+                    '11',
+                    '12'
+                  ].map((month, index) => (
+                    <option key={month} value={index + 1}>
+                      {month}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="attendance-filter">
+                <label htmlFor="attendance-year">Year</label>
+                <select
+                  id="attendance-year"
+                  value={attendanceReportYear}
+                  onChange={(event) => setAttendanceReportYear(event.target.value)}
+                >
+                  {Array.from({ length: 6 }, (_, index) => {
+                    const year = new Date().getFullYear() - index
+                    return (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+              <div className="attendance-filter">
+                <label htmlFor="attendance-format">Format</label>
+                <select
+                  id="attendance-format"
+                  value={attendanceReportFormat}
+                  onChange={(event) => setAttendanceReportFormat(event.target.value as 'csv' | 'pdf')}
+                >
+                  <option value="csv">CSV</option>
+                  <option value="pdf">PDF</option>
+                </select>
+              </div>
+              <button className="cta dashboard-button" onClick={downloadAttendanceReport}>
+                Download Report
+              </button>
+              {attendanceReportStatus ? <span className="report-status">{attendanceReportStatus}</span> : null}
             </div>
           </div>
           <div className="metric-row">

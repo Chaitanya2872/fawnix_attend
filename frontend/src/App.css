@@ -306,6 +306,12 @@ a {
   align-items: flex-end;
 }
 
+.report-status {
+  font-size: 12px;
+  color: #4b5c61;
+  align-self: center;
+}
+
 .employee-actions {
   display: flex;
   gap: 12px;

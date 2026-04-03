@@ -5,6 +5,7 @@ Business logic for admin-only operations
 
 from database.connection import get_db_connection
 from datetime import date, datetime, time
+import calendar
 from services.CompLeaveService import (
     attach_attendance_context_to_overtime_records,
     serialize_temporal_values,
@@ -121,6 +122,85 @@ def get_attendance_report_data(month: int, year: int):
                     record[key] = value.strftime('%Y-%m-%d')
 
         return records
+
+    finally:
+        cursor.close()
+        conn.close()
+
+def get_attendance_report_summary(month: int, year: int):
+    """Return attendance summary per employee for a month/year."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    start_date = date(year, month, 1)
+    last_day = calendar.monthrange(year, month)[1]
+    end_date = date(year, month, last_day)
+
+    try:
+        cursor.execute("""
+            SELECT
+                e.emp_code,
+                e.emp_full_name,
+                COUNT(DISTINCT a.date) AS attended_days,
+                SUM(
+                    CASE
+                        WHEN a.login_time IS NOT NULL
+                             AND CAST(a.login_time AS time) > %s THEN 1
+                        ELSE 0
+                    END
+                ) AS late_arrivals
+            FROM employees e
+            LEFT JOIN attendance a
+                ON a.employee_email = e.emp_email
+               AND a.date BETWEEN %s AND %s
+            GROUP BY e.emp_code, e.emp_full_name
+            ORDER BY e.emp_full_name
+        """, (time(10, 15), start_date, end_date))
+        attendance_rows = cursor.fetchall()
+
+        cursor.execute("""
+            SELECT
+                emp_code,
+                COALESCE(SUM(comp_off_earned), 0) AS comp_offs
+            FROM comp_offs
+            WHERE work_date BETWEEN %s AND %s
+            GROUP BY emp_code
+        """, (start_date, end_date))
+        comp_off_map = {row['emp_code']: float(row['comp_offs'] or 0) for row in cursor.fetchall()}
+
+        cursor.execute("""
+            SELECT
+                emp_code,
+                COALESCE(SUM(leave_count), 0) AS leaves
+            FROM leaves
+            WHERE status = 'approved'
+              AND from_date <= %s
+              AND to_date >= %s
+            GROUP BY emp_code
+        """, (end_date, start_date))
+        leave_map = {row['emp_code']: float(row['leaves'] or 0) for row in cursor.fetchall()}
+
+        summary = []
+        for row in attendance_rows:
+            emp_code = row.get('emp_code')
+            comp_offs = comp_off_map.get(emp_code, 0)
+            leaves = leave_map.get(emp_code, 0)
+            attended_days = int(row.get('attended_days') or 0)
+            late_arrivals = int(row.get('late_arrivals') or 0)
+
+            if attended_days == 0 and comp_offs == 0 and leaves == 0:
+                continue
+
+            summary.append({
+                "emp_code": emp_code,
+                "emp_full_name": row.get('emp_full_name') or '',
+                "attended_days": attended_days,
+                "late_arrivals": late_arrivals,
+                "comp_offs": comp_offs,
+                "leaves": leaves
+            })
+
+        return summary
 
     finally:
         cursor.close()

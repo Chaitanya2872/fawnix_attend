@@ -168,6 +168,7 @@ def download_attendance_report(current_user):
     ]
 
     if report_format == 'pdf':
+        summary_rows = admin_service.get_attendance_report_summary(month, year)
         buffer = BytesIO()
         pdf = canvas.Canvas(buffer, pagesize=landscape(letter))
         width, height = landscape(letter)
@@ -178,8 +179,16 @@ def download_attendance_report(current_user):
         pdf.drawString(x_start, y, f"Attendance Report - {year}-{month:02d}")
         y -= 0.3 * inch
 
-        pdf.setFont("Helvetica", 8)
-        col_widths = [0.9, 1.6, 2.2, 1.6, 1.6, 1.1, 1.3, 1.3, 1.0, 1.0, 2.4, 2.4]
+        pdf.setFont("Helvetica", 9)
+        pdf_fields = [
+            "Employee Code",
+            "Employee Full Name",
+            "Number of Attended Days",
+            "Number of Late Arrivals",
+            "Number of Comp-Offs",
+            "Number of Leaves"
+        ]
+        col_widths = [1.2, 2.6, 1.6, 1.6, 1.2, 1.2]
         col_widths = [w * inch for w in col_widths]
 
         def draw_row(values, y_pos, bold=False):
@@ -192,29 +201,23 @@ def download_attendance_report(current_user):
                 pdf.drawString(x, y_pos, text)
                 x += width_col
 
-        draw_row(headers, y, bold=True)
+        draw_row(pdf_fields, y, bold=True)
         y -= 0.22 * inch
 
-        for record in records:
+        for record in summary_rows:
             if y < 0.6 * inch:
                 pdf.showPage()
                 y = height - 0.6 * inch
-                draw_row(headers, y, bold=True)
+                draw_row(pdf_fields, y, bold=True)
                 y -= 0.22 * inch
 
             draw_row([
-                record.get('date', ''),
-                record.get('emp_full_name', '') or record.get('employee_name', ''),
-                record.get('emp_email', '') or record.get('employee_email', ''),
-                record.get('emp_designation', ''),
-                record.get('emp_department', ''),
-                record.get('attendance_type', ''),
-                record.get('login_time', ''),
-                record.get('logout_time', ''),
-                record.get('status', ''),
-                record.get('working_hours', ''),
-                record.get('login_address', ''),
-                record.get('logout_address', '')
+                record.get('emp_code', ''),
+                record.get('emp_full_name', ''),
+                record.get('attended_days', 0),
+                record.get('late_arrivals', 0),
+                record.get('comp_offs', 0),
+                record.get('leaves', 0)
             ], y)
             y -= 0.2 * inch
 

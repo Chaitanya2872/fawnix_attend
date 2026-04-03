@@ -393,6 +393,36 @@ a {
   border: 1px solid rgba(17, 44, 50, 0.08);
 }
 
+.location-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.map-button {
+  border: none;
+  background: #e6f4f3;
+  color: #0f4449;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.map-button svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.map-button:hover {
+  background: #d6eeec;
+}
+
 .employee-row {
   grid-template-columns:
     minmax(0, 1.6fr)

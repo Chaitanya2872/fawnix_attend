@@ -675,6 +675,17 @@ function App() {
     setShowAdminLogin(false)
   }
 
+  const openMapForLocation = (location: string) => {
+    if (!location) {
+      return
+    }
+    const trimmed = location.trim()
+    const coordMatch = trimmed.match(/-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?/)
+    const query = coordMatch ? coordMatch[0] : trimmed
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
   const updateNewEmployee = (field: keyof typeof newEmployee, value: string) => {
     setNewEmployee((current) => ({
       ...current,
@@ -1187,7 +1198,20 @@ function App() {
                   <strong>{row.employee}</strong>
                   <span>{row.visitType}</span>
                 </div>
-                <div>{row.location}</div>
+                <div className="location-cell">
+                  <span>{row.location}</span>
+                  <button
+                    className="map-button"
+                    onClick={() => openMapForLocation(row.location)}
+                    aria-label="Open map"
+                    title="Open map"
+                    type="button"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                      <path d="M12 2c-3.6 0-6.5 2.9-6.5 6.5 0 4.7 6.5 12 6.5 12s6.5-7.3 6.5-12C18.5 4.9 15.6 2 12 2zm0 9.2c-1.5 0-2.7-1.2-2.7-2.7S10.5 5.8 12 5.8s2.7 1.2 2.7 2.7S13.5 11.2 12 11.2z" />
+                    </svg>
+                  </button>
+                </div>
                 <div>
                   <span className="table-pill accent">{row.status}</span>
                 </div>

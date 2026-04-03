@@ -933,10 +933,12 @@ function App() {
                 </div>
                 {authStatus ? <p className="delete-note">{authStatus}</p> : null}
               </div>
-              <div className="sidebar-foot">
-                <button className="ghost sidebar-back" onClick={handleLogout}>
+              <div className="sidebar-logout">
+                <button className="sidebar-link logout-link" onClick={handleLogout}>
                   Logout
                 </button>
+              </div>
+              <div className="sidebar-foot">
                 <button className="ghost sidebar-back" onClick={() => setShowDashboard(false)}>
                   Back to Landing
                 </button>
@@ -961,10 +963,13 @@ function App() {
                 ))}
               </div>
 
-              <div className="sidebar-foot">
+              <div className="sidebar-logout">
                 <button className="sidebar-link logout-link" onClick={handleLogout}>
                   Logout
                 </button>
+              </div>
+
+              <div className="sidebar-foot">
                 <div className="sidebar-note">
                   <strong>Today</strong>
                   <span>

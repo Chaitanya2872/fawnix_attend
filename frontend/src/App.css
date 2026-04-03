@@ -69,6 +69,17 @@ a {
   gap: 10px;
 }
 
+.sidebar-logout {
+  position: sticky;
+  bottom: 16px;
+  margin-top: auto;
+  display: grid;
+  gap: 10px;
+  padding-top: 8px;
+  background: linear-gradient(180deg, rgba(16, 40, 45, 0), #10282d 40%);
+  z-index: 1;
+}
+
 .sidebar-user {
   background: rgba(255, 255, 255, 0.06);
   border-radius: 18px;

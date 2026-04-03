@@ -944,7 +944,7 @@ function App() {
           <div className="metric-row">
             <div className="metric-card">
               <span>Total Records</span>
-              <strong>{filteredAttendance.length}</strong>
+              <strong>{attendanceTotalCount}</strong>
             </div>
             <div className="metric-card">
               <span>Logged Out</span>

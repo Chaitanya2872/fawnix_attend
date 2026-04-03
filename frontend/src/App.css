@@ -471,6 +471,26 @@ a {
   border: 0;
 }
 
+.map-dialog-map {
+  width: 100%;
+  height: 100%;
+}
+
+.map-dialog-map.leaflet-container {
+  width: 100%;
+  height: 100%;
+}
+
+.map-dialog-state {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #5b6b70;
+  font-size: 14px;
+  background: #f1f2f2;
+}
+
 .employee-row {
   grid-template-columns:
     minmax(0, 1.6fr)

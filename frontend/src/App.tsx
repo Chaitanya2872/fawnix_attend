@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import './App.css'
 
 const useCases = [
@@ -145,6 +147,7 @@ type ActivityRow = {
 
 type FieldVisitRow = {
   activityId: number | string
+  fieldVisitId?: number
   employee: string
   visitType: string
   purpose: string
@@ -236,7 +239,12 @@ function App() {
   const [attendanceReportStatus, setAttendanceReportStatus] = useState('')
   const [mapDialogOpen, setMapDialogOpen] = useState(false)
   const [mapDialogTitle, setMapDialogTitle] = useState('')
-  const [mapDialogUrl, setMapDialogUrl] = useState('')
+  const [mapDialogLoading, setMapDialogLoading] = useState(false)
+  const [mapDialogError, setMapDialogError] = useState('')
+  const [mapPoints, setMapPoints] = useState<Array<{ lat: number; lon: number }>>([])
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lon: number } | null>(null)
+  const mapContainerRef = useRef<HTMLDivElement | null>(null)
+  const mapRef = useRef<L.Map | null>(null)
   const [showAddEmployee, setShowAddEmployee] = useState(false)
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
   const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
@@ -502,6 +510,7 @@ function App() {
         .filter((item: ActivityRow) => item.field_visit_id)
         .map((item: ActivityRow) => ({
           activityId: item.id || item.field_visit_id || '',
+          fieldVisitId: item.field_visit_id ? Number(item.field_visit_id) : undefined,
           employee: item.employee_name || item.employee_email || 'Unknown employee',
           visitType: item.field_visit_type || 'Field Visit',
           purpose: item.field_visit_purpose || item.activity_type || 'Visit',
@@ -678,32 +687,110 @@ function App() {
     setShowAdminLogin(false)
   }
 
-  const openMapForLocation = (location: string) => {
+  const openMapForLocation = async (location: string, fieldVisitId?: number) => {
     if (!location) {
       return
     }
     const trimmed = location.trim()
     const coordMatch = trimmed.match(/-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?/)
+    setMapDialogTitle('Field Visit Location')
+    setMapDialogOpen(true)
+    setMapDialogError('')
+    setMapDialogLoading(true)
+    setMapPoints([])
+    setMapCenter(null)
+    if (fieldVisitId) {
+      try {
+        const trackingResponse = await apiRequest(`/api/admin/field-visits/${fieldVisitId}/tracking`, {})
+        const points = Array.isArray(trackingResponse?.data?.tracking_points)
+          ? trackingResponse.data.tracking_points
+          : []
+        const mappedPoints = points
+          .map((point: { latitude?: number | string; longitude?: number | string }) => ({
+            lat: Number(point.latitude),
+            lon: Number(point.longitude)
+          }))
+          .filter((point: { lat: number; lon: number }) => !Number.isNaN(point.lat) && !Number.isNaN(point.lon))
+        setMapPoints(mappedPoints)
+        if (mappedPoints.length) {
+          setMapCenter(mappedPoints[0])
+          setMapDialogLoading(false)
+          return
+        }
+      } catch (error) {
+        setMapDialogError(error instanceof Error ? error.message : 'Unable to load tracking points.')
+      }
+    }
+
     if (coordMatch) {
       const [lat, lon] = coordMatch[0].split(',').map((value) => value.trim())
       const latNum = Number(lat)
       const lonNum = Number(lon)
-      const delta = 0.01
-      const bbox = `${lonNum - delta},${latNum - delta},${lonNum + delta},${latNum + delta}`
-      const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&marker=${encodeURIComponent(
-        `${latNum},${lonNum}`
-      )}&layer=mapnik`
-      setMapDialogUrl(embedUrl)
-      setMapDialogTitle('Field Visit Location')
-      setMapDialogOpen(true)
+      setMapCenter({ lat: latNum, lon: lonNum })
+      setMapDialogLoading(false)
       return
     }
 
-    const searchUrl = `https://www.openstreetmap.org/search?query=${encodeURIComponent(trimmed)}`
-    setMapDialogUrl(searchUrl)
-    setMapDialogTitle('Field Visit Location')
-    setMapDialogOpen(true)
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(trimmed)}&limit=1`
+      )
+      const results = await response.json()
+      const match = Array.isArray(results) ? results[0] : null
+      if (!match) {
+        throw new Error('Unable to locate this address.')
+      }
+      const latNum = Number(match.lat)
+      const lonNum = Number(match.lon)
+      setMapCenter({ lat: latNum, lon: lonNum })
+    } catch (error) {
+      setMapDialogError(error instanceof Error ? error.message : 'Unable to load map.')
+    } finally {
+      setMapDialogLoading(false)
+    }
   }
+
+  useEffect(() => {
+    if (!mapDialogOpen || !mapContainerRef.current || !mapCenter) {
+      return
+    }
+
+    if (mapRef.current) {
+      mapRef.current.remove()
+      mapRef.current = null
+    }
+
+    const map = L.map(mapContainerRef.current, { zoomControl: true })
+    mapRef.current = map
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map)
+
+    const defaultIcon = L.icon({
+      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41]
+    })
+
+    if (mapPoints.length > 1) {
+      const latlngs = mapPoints.map((point) => [point.lat, point.lon] as [number, number])
+      L.polyline(latlngs, { color: '#1fa7a4', weight: 4 }).addTo(map)
+      L.marker(latlngs[0], { icon: defaultIcon }).addTo(map)
+      L.marker(latlngs[latlngs.length - 1], { icon: defaultIcon }).addTo(map)
+      map.fitBounds(latlngs, { padding: [30, 30] })
+    } else {
+      map.setView([mapCenter.lat, mapCenter.lon], 14)
+      L.marker([mapCenter.lat, mapCenter.lon], { icon: defaultIcon }).addTo(map)
+    }
+
+    return () => {
+      map.remove()
+      mapRef.current = null
+    }
+  }, [mapDialogOpen, mapCenter, mapPoints])
 
   const updateNewEmployee = (field: keyof typeof newEmployee, value: string) => {
     setNewEmployee((current) => ({
@@ -1221,7 +1308,7 @@ function App() {
                   <span>{row.location}</span>
                   <button
                     className="map-button"
-                    onClick={() => openMapForLocation(row.location)}
+                    onClick={() => openMapForLocation(row.location, row.fieldVisitId)}
                     aria-label="Open map"
                     title="Open map"
                     type="button"
@@ -1356,7 +1443,15 @@ function App() {
                   </button>
                 </div>
                 <div className="map-dialog-body">
-                  <iframe title="Map" src={mapDialogUrl} loading="lazy" />
+                  {mapDialogLoading ? (
+                    <div className="map-dialog-state">Loading map...</div>
+                  ) : mapDialogError ? (
+                    <div className="map-dialog-state">{mapDialogError}</div>
+                  ) : mapCenter ? (
+                    <div ref={mapContainerRef} className="map-dialog-map" />
+                  ) : (
+                    <div className="map-dialog-state">No location data available.</div>
+                  )}
                 </div>
               </div>
             </div>

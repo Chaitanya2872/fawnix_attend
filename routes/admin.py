@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify, Response, send_file
 from middleware.auth_middleware import token_required
 from middleware.admin_middleware import hr_or_devtester_required
 from services import admin_service
+from services import field_visit_service
 import csv
 from io import StringIO, BytesIO
 from reportlab.lib.pagesizes import letter, landscape
@@ -255,6 +256,16 @@ def download_attendance_report(current_user):
     response = Response(output.getvalue(), mimetype='text/csv')
     response.headers['Content-Disposition'] = f'attachment; filename={filename}'
     return response
+
+@admin_bp.route('/field-visits/<int:field_visit_id>/tracking', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_field_visit_tracking(current_user, field_visit_id):
+    """
+    Get tracking points for a specific field visit (admin only).
+    """
+    response, status_code = field_visit_service.get_tracking_history(field_visit_id)
+    return jsonify(response), status_code
 
 @admin_bp.route('/attendance/summary', methods=['GET'])
 @token_required

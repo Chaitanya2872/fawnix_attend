@@ -533,7 +533,7 @@ def send_push_notification_to_employee(
 
 
 def get_attendance_reminder_candidates(target_date: date | None = None) -> List[Dict[str, Any]]:
-    """Fetch employees who should receive the 10:10 attendance reminder."""
+    """Fetch employees who should receive the daily attendance reminder."""
     reminder_date = target_date or date.today()
 
     conn = get_db_connection()

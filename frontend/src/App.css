@@ -443,8 +443,7 @@ a {
   grid-template-rows: auto 1fr auto;
 }
 
-.map-dialog-header,
-.map-dialog-footer {
+.map-dialog-header {
   display: flex;
   justify-content: space-between;
   align-items: center;

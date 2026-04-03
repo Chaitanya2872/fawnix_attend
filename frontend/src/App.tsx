@@ -237,7 +237,6 @@ function App() {
   const [mapDialogOpen, setMapDialogOpen] = useState(false)
   const [mapDialogTitle, setMapDialogTitle] = useState('')
   const [mapDialogUrl, setMapDialogUrl] = useState('')
-  const [mapDialogExternalUrl, setMapDialogExternalUrl] = useState('')
   const [showAddEmployee, setShowAddEmployee] = useState(false)
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
   const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
@@ -695,7 +694,6 @@ function App() {
         `${latNum},${lonNum}`
       )}&layer=mapnik`
       setMapDialogUrl(embedUrl)
-      setMapDialogExternalUrl(`https://www.openstreetmap.org/?mlat=${latNum}&mlon=${lonNum}#map=16/${latNum}/${lonNum}`)
       setMapDialogTitle('Field Visit Location')
       setMapDialogOpen(true)
       return
@@ -703,7 +701,6 @@ function App() {
 
     const searchUrl = `https://www.openstreetmap.org/search?query=${encodeURIComponent(trimmed)}`
     setMapDialogUrl(searchUrl)
-    setMapDialogExternalUrl(searchUrl)
     setMapDialogTitle('Field Visit Location')
     setMapDialogOpen(true)
   }
@@ -1360,11 +1357,6 @@ function App() {
                 </div>
                 <div className="map-dialog-body">
                   <iframe title="Map" src={mapDialogUrl} loading="lazy" />
-                </div>
-                <div className="map-dialog-footer">
-                  <a className="ghost" href={mapDialogExternalUrl} target="_blank" rel="noreferrer">
-                    Open in new tab
-                  </a>
                 </div>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
 const useCases = [
@@ -105,8 +105,13 @@ type AttendanceRow = {
   employee_email?: string
   employee_name?: string
   emp_designation?: string
+  attendance_type?: string
   login_time?: string
+  login_location?: string
+  login_address?: string
   logout_time?: string
+  logout_location?: string
+  logout_address?: string
   working_hours?: number
   status?: string
 }
@@ -213,6 +218,7 @@ function App() {
   const [dashboardLoading, setDashboardLoading] = useState(false)
   const [dashboardError, setDashboardError] = useState('')
   const [refreshNotice, setRefreshNotice] = useState('')
+  const refreshPromiseRef = useRef<Promise<string> | null>(null)
 
   const [employees, setEmployees] = useState<EmployeeRow[]>([])
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
@@ -221,6 +227,19 @@ function App() {
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
   const [attendanceDateFilter, setAttendanceDateFilter] = useState('')
   const [attendancePage, setAttendancePage] = useState(1)
+  const [showAddEmployee, setShowAddEmployee] = useState(false)
+  const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
+  const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
+  const [newEmployee, setNewEmployee] = useState({
+    emp_code: '',
+    emp_full_name: '',
+    emp_email: '',
+    emp_contact: '',
+    emp_designation: '',
+    emp_department: '',
+    emp_manager: '',
+    role: 'employee'
+  })
   const attendancePageSize = 10
 
   useEffect(() => {
@@ -265,29 +284,38 @@ function App() {
       throw new Error('Refresh token missing')
     }
 
-    const response = await fetch('/api/auth/refresh', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken })
-    })
+    if (!refreshPromiseRef.current) {
+      refreshPromiseRef.current = (async () => {
+        const response = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken })
+        })
 
-    const data = await response.json().catch(() => ({}))
+        const data = await response.json().catch(() => ({}))
 
-    if (!response.ok) {
-      throw new Error(data?.message || 'Unable to refresh session')
+        if (!response.ok) {
+          throw new Error(data?.message || 'Unable to refresh session')
+        }
+
+        const nextAccessToken = data?.access_token || ''
+        const nextRefreshToken = data?.refresh_token || ''
+
+        if (!nextAccessToken || !nextRefreshToken) {
+          throw new Error('Invalid refresh response')
+        }
+
+        updateTokens(nextAccessToken, nextRefreshToken)
+        setRefreshNotice('Session refreshed')
+        window.setTimeout(() => setRefreshNotice(''), 2500)
+        return nextAccessToken
+      })()
+        .finally(() => {
+          refreshPromiseRef.current = null
+        })
     }
 
-    const nextAccessToken = data?.access_token || ''
-    const nextRefreshToken = data?.refresh_token || ''
-
-    if (!nextAccessToken || !nextRefreshToken) {
-      throw new Error('Invalid refresh response')
-    }
-
-    updateTokens(nextAccessToken, nextRefreshToken)
-    setRefreshNotice('Session refreshed')
-    window.setTimeout(() => setRefreshNotice(''), 2500)
-    return nextAccessToken
+    return refreshPromiseRef.current
   }
 
   const apiRequest = async (
@@ -578,6 +606,58 @@ function App() {
     setShowAdminLogin(false)
   }
 
+  const updateNewEmployee = (field: keyof typeof newEmployee, value: string) => {
+    setNewEmployee((current) => ({
+      ...current,
+      [field]: value
+    }))
+  }
+
+  const resetNewEmployee = () => {
+    setNewEmployee({
+      emp_code: '',
+      emp_full_name: '',
+      emp_email: '',
+      emp_contact: '',
+      emp_designation: '',
+      emp_department: '',
+      emp_manager: '',
+      role: 'employee'
+    })
+  }
+
+  const handleCreateEmployee = async () => {
+    if (!newEmployee.emp_code.trim() || !newEmployee.emp_full_name.trim() || !newEmployee.emp_email.trim()) {
+      setCreateEmployeeStatus('Employee ID, full name, and email are required.')
+      return
+    }
+
+    setCreateEmployeeLoading(true)
+    setCreateEmployeeStatus('Creating employee...')
+
+    const payload = Object.fromEntries(
+      Object.entries(newEmployee)
+        .map(([key, value]) => [key, typeof value === 'string' ? value.trim() : value])
+        .filter(([, value]) => value !== '')
+    )
+
+    try {
+      const response = await apiRequest('/api/users', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      })
+
+      setCreateEmployeeStatus(response?.message || 'Employee created successfully.')
+      resetNewEmployee()
+      setShowAddEmployee(false)
+      await loadDashboard(accessToken)
+    } catch (error) {
+      setCreateEmployeeStatus(error instanceof Error ? error.message : 'Failed to create employee')
+    } finally {
+      setCreateEmployeeLoading(false)
+    }
+  }
+
   // Helper functions for login time analysis
   const parseLoginTime = (value?: string) => {
     if (!value) {
@@ -658,9 +738,14 @@ function App() {
               <p className="eyebrow">Directory</p>
               <h2>Employees List</h2>
             </div>
-            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-              Refresh
-            </button>
+            <div className="employee-actions">
+              <button className="ghost dashboard-button" onClick={() => setShowAddEmployee((current) => !current)}>
+                {showAddEmployee ? 'Close Form' : 'Add Employee'}
+              </button>
+              <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+                Refresh
+              </button>
+            </div>
           </div>
           <div className="metric-row">
             <div className="metric-card">
@@ -682,6 +767,103 @@ function App() {
               </strong>
             </div>
           </div>
+          {showAddEmployee ? (
+            <div className="form-card">
+              <div className="form-head">
+                <div>
+                  <strong>Add Employee</strong>
+                  <span>Uses `POST /api/users` with the current admin session.</span>
+                </div>
+              </div>
+              <div className="form-grid">
+                <div>
+                  <label htmlFor="new-emp-code">Employee ID</label>
+                  <input
+                    id="new-emp-code"
+                    value={newEmployee.emp_code}
+                    onChange={(event) => updateNewEmployee('emp_code', event.target.value)}
+                    placeholder="e.g. 3051"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-emp-name">Full Name</label>
+                  <input
+                    id="new-emp-name"
+                    value={newEmployee.emp_full_name}
+                    onChange={(event) => updateNewEmployee('emp_full_name', event.target.value)}
+                    placeholder="Employee full name"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-emp-email">Email</label>
+                  <input
+                    id="new-emp-email"
+                    type="email"
+                    value={newEmployee.emp_email}
+                    onChange={(event) => updateNewEmployee('emp_email', event.target.value)}
+                    placeholder="name@example.com"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-emp-contact">Contact</label>
+                  <input
+                    id="new-emp-contact"
+                    value={newEmployee.emp_contact}
+                    onChange={(event) => updateNewEmployee('emp_contact', event.target.value)}
+                    placeholder="Phone number"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-emp-designation">Designation</label>
+                  <input
+                    id="new-emp-designation"
+                    value={newEmployee.emp_designation}
+                    onChange={(event) => updateNewEmployee('emp_designation', event.target.value)}
+                    placeholder="HR / Sales Executive / DevTester"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-emp-department">Department</label>
+                  <input
+                    id="new-emp-department"
+                    value={newEmployee.emp_department}
+                    onChange={(event) => updateNewEmployee('emp_department', event.target.value)}
+                    placeholder="Department"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-emp-manager">Manager Code</label>
+                  <input
+                    id="new-emp-manager"
+                    value={newEmployee.emp_manager}
+                    onChange={(event) => updateNewEmployee('emp_manager', event.target.value)}
+                    placeholder="e.g. 2981"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-emp-role">User Role</label>
+                  <select
+                    id="new-emp-role"
+                    value={newEmployee.role}
+                    onChange={(event) => updateNewEmployee('role', event.target.value)}
+                  >
+                    <option value="employee">employee</option>
+                    <option value="user_manager">user_manager</option>
+                    <option value="admin">admin</option>
+                  </select>
+                </div>
+              </div>
+              <div className="form-actions">
+                <button className="ghost" onClick={resetNewEmployee} disabled={createEmployeeLoading}>
+                  Reset
+                </button>
+                <button className="cta" onClick={() => void handleCreateEmployee()} disabled={createEmployeeLoading}>
+                  Create Employee
+                </button>
+              </div>
+              {createEmployeeStatus ? <p className="form-note">{createEmployeeStatus}</p> : null}
+            </div>
+          ) : null}
           <div className="data-card">
             {employees.map((employee) => (
               <div key={employee.emp_code} className="data-row employee-row">
@@ -698,7 +880,7 @@ function App() {
                   <span>Department</span>
                 </div>
                 <div>
-                  <strong>{employee.emp_email || '--'}</strong>
+                  <strong className="employee-email">{employee.emp_email || '--'}</strong>
                   <span>{employee.emp_contact || 'Contact unavailable'}</span>
                 </div>
                 <div>
@@ -781,12 +963,23 @@ function App() {
           </div>
           <div className="data-card">
             {attendancePageRows.map((row, index) => (
-              <div key={`${row.id || row.employee_email || index}`} className="data-row">
+              <div key={`${row.id || row.employee_email || index}`} className="data-row attendance-row">
                 <div>
                   <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
-                  <span className="muted-email">{row.emp_designation || row.employee_email || '--'}</span>
+                  <span className="muted-email">
+                    {[row.emp_designation || row.employee_email || '--', row.attendance_type || 'office'].join(' • ')}
+                  </span>
                 </div>
-                <div>{formatDateTime(row.login_time)}</div>
+                <div>
+                  <strong>{formatDateTime(row.login_time)}</strong>
+                  <span>{row.login_location || 'Login location unavailable'}</span>
+                  <span>{row.login_address || 'Login address unavailable'}</span>
+                </div>
+                <div>
+                  <strong>{formatDateTime(row.logout_time)}</strong>
+                  <span>{row.logout_location || 'Logout location unavailable'}</span>
+                  <span>{row.logout_address || 'Logout address unavailable'}</span>
+                </div>
                 <div>
                   <span className="table-pill accent">{row.status || 'Unknown'}</span>
                 </div>

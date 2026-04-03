@@ -7,6 +7,8 @@ from flask import Blueprint, jsonify
 from middleware.auth_middleware import token_required
 from middleware.admin_middleware import hr_or_devtester_required
 from services import admin_service
+from services.notification_service import send_push_notification_to_employee
+from database.connection import get_db_connection, return_connection
 from datetime import datetime, date, time
 from flask import request
 
@@ -21,6 +23,37 @@ def serialize_row(row):
         else:
             result[key] = value
     return result
+
+
+def _resolve_emp_code_from_user_id(user_id):
+    try:
+        normalized_user_id = int(user_id)
+    except (TypeError, ValueError):
+        return None, "user_id must be a valid integer"
+
+    if normalized_user_id <= 0:
+        return None, "user_id must be greater than 0"
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT emp_code
+            FROM users
+            WHERE id = %s
+            """,
+            (normalized_user_id,),
+        )
+        row = cursor.fetchone()
+        if not row or not row.get("emp_code"):
+            return None, "No employee code found for the provided user_id"
+
+        return row["emp_code"], None
+    finally:
+        cursor.close()
+        return_connection(conn)
 
 
 @admin_bp.route('/employees', methods=['GET'])
@@ -222,3 +255,63 @@ def get_all_overtime_records(current_user):
 
     return jsonify(response), status_code
 
+
+@admin_bp.route('/test-push', methods=['POST'])
+@token_required
+@hr_or_devtester_required
+def send_test_push(current_user):
+    """
+    Send a manual test push notification to an employee device.
+
+    Request body:
+        {
+            "emp_code": "2872"
+        }
+    or
+        {
+            "user_id": 4
+        }
+    Optional fields:
+        - title
+        - body
+        - data
+    """
+    data = request.get_json() or {}
+
+    emp_code = (data.get('emp_code') or '').strip()
+    if not emp_code and data.get('user_id') is not None:
+        emp_code, error_message = _resolve_emp_code_from_user_id(data.get('user_id'))
+        if error_message:
+            return jsonify({
+                "success": False,
+                "message": error_message
+            }), 400
+
+    if not emp_code:
+        return jsonify({
+            "success": False,
+            "message": "emp_code or user_id is required"
+        }), 400
+
+    title = (data.get('title') or 'Test Notification').strip()
+    body = (data.get('body') or 'This is a test push notification from the backend.').strip()
+    payload = data.get('data') if isinstance(data.get('data'), dict) else {}
+    payload.setdefault('type', 'test_notification')
+    payload.setdefault('employee_id', emp_code)
+    payload.setdefault('attendance_id', '0')
+    payload.setdefault('status', 'test')
+    payload.setdefault('timestamp', datetime.utcnow().isoformat())
+
+    result = send_push_notification_to_employee(
+        emp_code,
+        title,
+        body,
+        payload
+    )
+
+    result.update({
+        "target_emp_code": emp_code,
+        "requested_by": current_user.get('emp_code')
+    })
+    status_code = 200 if result.get("success") else 400
+    return jsonify(result), status_code

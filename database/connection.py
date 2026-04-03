@@ -298,6 +298,7 @@ def init_database():
                 working_hours NUMERIC(4,2),
                 date DATE NOT NULL,
                 status VARCHAR(20) DEFAULT 'logged_in',
+                attendance_type VARCHAR(20) NOT NULL DEFAULT 'office',
                 alert_sent BOOLEAN DEFAULT false,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -309,6 +310,15 @@ def init_database():
         cursor.execute("""
             DO $$
             BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'attendance'
+                      AND column_name = 'attendance_type'
+                ) THEN
+                    ALTER TABLE attendance ADD COLUMN attendance_type VARCHAR(20) NOT NULL DEFAULT 'office';
+                END IF;
+
                 IF NOT EXISTS (
                     SELECT 1
                     FROM information_schema.columns
@@ -326,6 +336,10 @@ def init_database():
                 ) THEN
                     ALTER TABLE attendance ADD COLUMN auto_clockout_reason TEXT;
                 END IF;
+
+                UPDATE attendance
+                SET attendance_type = 'office'
+                WHERE attendance_type IS NULL OR attendance_type = '';
             END $$;
         """)
 
@@ -552,6 +566,50 @@ def init_database():
 
         logger.info("✓ Attendance away alerts table ready")
 
+        # 14. Attendance tracking notification state
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS attendance_tracking_notification_state (
+                attendance_id BIGINT PRIMARY KEY,
+                emp_code VARCHAR(50),
+                current_status VARCHAR(32) NOT NULL DEFAULT 'unknown',
+                started_notified_at TIMESTAMP NULL,
+                paused_notified_at TIMESTAMP NULL,
+                resumed_notified_at TIMESTAMP NULL,
+                stopped_notified_at TIMESTAMP NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+        """)
+
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.table_constraints
+                    WHERE constraint_name = 'attendance_tracking_notification_state_attendance_fkey'
+                      AND table_name = 'attendance_tracking_notification_state'
+                ) THEN
+                    ALTER TABLE attendance_tracking_notification_state
+                    ADD CONSTRAINT attendance_tracking_notification_state_attendance_fkey
+                    FOREIGN KEY (attendance_id) REFERENCES attendance(id) ON DELETE CASCADE;
+                END IF;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.table_constraints
+                    WHERE constraint_name = 'attendance_tracking_notification_state_emp_code_fkey'
+                      AND table_name = 'attendance_tracking_notification_state'
+                ) THEN
+                    ALTER TABLE attendance_tracking_notification_state
+                    ADD CONSTRAINT attendance_tracking_notification_state_emp_code_fkey
+                    FOREIGN KEY (emp_code) REFERENCES employees(emp_code) ON DELETE CASCADE;
+                END IF;
+            END $$;
+        """)
+
+        logger.info("Attendance tracking notification state table ready")
+
         # ==================== CREATE INDEXES ====================
         
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_shifts_active ON shifts(is_active)")
@@ -569,6 +627,10 @@ def init_database():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_devices_user_active ON user_devices(user_id, is_active)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_devices_emp_code_active ON user_devices(emp_code, is_active)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_attendance_away_alerts_last_sent ON attendance_away_alerts(last_sent_at)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_attendance_tracking_notification_state_emp_status "
+            "ON attendance_tracking_notification_state(emp_code, current_status)"
+        )
         
         logger.info("✓ Indexes created")
         

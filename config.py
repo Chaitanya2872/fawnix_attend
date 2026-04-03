@@ -21,7 +21,7 @@ class Config:
     PORT = int(os.getenv('PORT', 5000))
     
     # Database Configuration
-    DATABASE_HOST = os.getenv('DATABASE_HOST', 'localhost')
+    DATABASE_HOST = os.getenv('DATABASE_HOST', 'employee_db')
     DATABASE_PORT = int(os.getenv('DATABASE_PORT', 5432))
     DATABASE_NAME = os.getenv('DATABASE_NAME', 'Intimation')
     DATABASE_USER = os.getenv('DATABASE_USER', 'postgres')
@@ -31,6 +31,7 @@ class Config:
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'your-jwt-secret-key-change-in-production')
     JWT_ALGORITHM = 'HS256'
     JWT_EXPIRE_MINUTES = int(os.getenv('JWT_EXPIRE_MINUTES', 1440))  # 24 hours
+    REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv('REFRESH_TOKEN_EXPIRE_DAYS', 7))
     
     # OTP Configuration
     OTP_LENGTH = 6
@@ -46,10 +47,13 @@ class Config:
     WHATSAPP_LEAVE_MANAGER_ACTION_TEMPLATE = os.getenv('WHATSAPP_LEAVE_MANAGER_ACTION_TEMPLATE', 'fawnix_notification')
     WHATSAPP_EXCEPTION_TEMPLATE = os.getenv('WHATSAPP_EXCEPTION_TEMPLATE', 'fawnix_notification')
     FIREBASE_SERVICE_ACCOUNT_PATH = os.getenv(
-        'FIREBASE_CREDENTIALS',
+        'FIREBASE_CREDENTIALS_JSON',
         os.getenv(
-            'FIREBASE_SERVICE_ACCOUNT_PATH',
-            os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '')
+            'FIREBASE_CREDENTIALS',
+            os.getenv(
+                'FIREBASE_SERVICE_ACCOUNT_PATH',
+                os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '')
+            )
         )
     )
     AWAY_ALERT_COOLDOWN_MINUTES = int(os.getenv('AWAY_ALERT_COOLDOWN_MINUTES', 5))
@@ -89,7 +93,11 @@ class Config:
     FEATURE_GEOLOCATION = os.getenv('FEATURE_GEOLOCATION', 'True').lower() == 'true'
     FEATURE_WHATSAPP_OTP = os.getenv('FEATURE_WHATSAPP_OTP', 'True').lower() == 'true'
     FEATURE_ACTIVITY_TRACKING = os.getenv('FEATURE_ACTIVITY_TRACKING', 'True').lower() == 'true'
-    FEATURE_PUSH_NOTIFICATIONS = os.getenv('FEATURE_PUSH_NOTIFICATIONS', 'False').lower() == 'true'
+    FCM_ENABLED = os.getenv(
+        'FCM_ENABLED',
+        os.getenv('FEATURE_PUSH_NOTIFICATIONS', 'False')
+    ).lower() == 'true'
+    FEATURE_PUSH_NOTIFICATIONS = FCM_ENABLED or os.getenv('FEATURE_PUSH_NOTIFICATIONS', 'False').lower() == 'true'
     
     @classmethod
     def get_database_uri(cls) -> str:

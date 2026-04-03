@@ -169,22 +169,32 @@ def get_all_attendance_status():
         cursor.close()
         conn.close()
 
-def get_all_attendance_history(limit: int = 100):
-    """Get attendance history for all employees"""
+def get_all_attendance_history(limit: int = None, target_date: date = None):
+    """Get attendance history for all employees (optional date filter)"""
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
-        cursor.execute("""
+        query = """
             SELECT
                 a.*,
                 e.emp_designation
-            FROM attendance
-            a
+            FROM attendance a
             LEFT JOIN employees e ON a.employee_email = e.emp_email
-            ORDER BY login_time DESC
-            LIMIT %s
-        """, (limit,))
+        """
+        params = []
+
+        if target_date:
+            query += " WHERE a.date = %s"
+            params.append(target_date)
+
+        query += " ORDER BY login_time DESC"
+
+        if limit is not None:
+            query += " LIMIT %s"
+            params.append(limit)
+
+        cursor.execute(query, params)
 
         records = cursor.fetchall()
 

@@ -102,6 +102,7 @@ type EmployeeRow = {
 
 type AttendanceRow = {
   id?: number
+  date?: string
   employee_email?: string
   employee_name?: string
   emp_designation?: string
@@ -395,9 +396,13 @@ function App() {
     setDashboardError('')
 
     try {
+      const attendancePath = attendanceDateFilter
+        ? `/api/admin/attendance/history?date=${attendanceDateFilter}`
+        : '/api/admin/attendance/history'
+
       const [employeesResponse, attendanceResponse, leavesResponse, activitiesResponse] = await Promise.all([
         apiRequest('/api/admin/employees', {}, token),
-        apiRequest('/api/admin/attendance/history?limit=30', {}, token),
+        apiRequest(attendancePath, {}, token),
         apiRequest('/api/admin/leaves?limit=30', {}, token),
         apiRequest('/api/admin/activities?limit=30&include_tracking=false&include_activity_tracking=false', {}, token)
       ])
@@ -693,6 +698,10 @@ function App() {
   const filteredAttendance = attendanceRows.filter((row) => {
     if (!attendanceDateFilter) {
       return true
+    }
+    if (row.date) {
+      const dateValue = row.date.slice(0, 10)
+      return dateValue === attendanceDateFilter
     }
     const time = parseLoginTime(row.login_time)
     if (!time) {

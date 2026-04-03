@@ -91,11 +91,24 @@ def get_all_attendance_status(current_user):
 def get_all_attendance_history(current_user):
     """
     Get attendance history for all employees
-    Optional query param: ?limit=100
+    Optional query params:
+    - limit: number of records (optional)
+    - date: YYYY-MM-DD (optional)
     """
-    limit = request.args.get('limit', default=100, type=int)
+    limit = request.args.get('limit', type=int)
+    date_str = request.args.get('date')
+    target_date = None
 
-    response, status_code = admin_service.get_all_attendance_history(limit)
+    if date_str:
+        try:
+            target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid date format. Use YYYY-MM-DD"
+            }), 400
+
+    response, status_code = admin_service.get_all_attendance_history(limit, target_date)
 
     return jsonify(response), status_code
 

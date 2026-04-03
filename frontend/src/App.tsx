@@ -234,6 +234,10 @@ function App() {
   const [attendanceReportYear, setAttendanceReportYear] = useState(() => String(new Date().getFullYear()))
   const [attendanceReportFormat, setAttendanceReportFormat] = useState<'csv' | 'pdf'>('csv')
   const [attendanceReportStatus, setAttendanceReportStatus] = useState('')
+  const [mapDialogOpen, setMapDialogOpen] = useState(false)
+  const [mapDialogTitle, setMapDialogTitle] = useState('')
+  const [mapDialogUrl, setMapDialogUrl] = useState('')
+  const [mapDialogExternalUrl, setMapDialogExternalUrl] = useState('')
   const [showAddEmployee, setShowAddEmployee] = useState(false)
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
   const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
@@ -681,9 +685,27 @@ function App() {
     }
     const trimmed = location.trim()
     const coordMatch = trimmed.match(/-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?/)
-    const query = coordMatch ? coordMatch[0] : trimmed
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`
-    window.open(url, '_blank', 'noopener,noreferrer')
+    if (coordMatch) {
+      const [lat, lon] = coordMatch[0].split(',').map((value) => value.trim())
+      const latNum = Number(lat)
+      const lonNum = Number(lon)
+      const delta = 0.01
+      const bbox = `${lonNum - delta},${latNum - delta},${lonNum + delta},${latNum + delta}`
+      const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&marker=${encodeURIComponent(
+        `${latNum},${lonNum}`
+      )}&layer=mapnik`
+      setMapDialogUrl(embedUrl)
+      setMapDialogExternalUrl(`https://www.openstreetmap.org/?mlat=${latNum}&mlon=${lonNum}#map=16/${latNum}/${lonNum}`)
+      setMapDialogTitle('Field Visit Location')
+      setMapDialogOpen(true)
+      return
+    }
+
+    const searchUrl = `https://www.openstreetmap.org/search?query=${encodeURIComponent(trimmed)}`
+    setMapDialogUrl(searchUrl)
+    setMapDialogExternalUrl(searchUrl)
+    setMapDialogTitle('Field Visit Location')
+    setMapDialogOpen(true)
   }
 
   const updateNewEmployee = (field: keyof typeof newEmployee, value: string) => {
@@ -1324,6 +1346,29 @@ function App() {
         </aside>
 
         <main className="dashboard-main">
+          {mapDialogOpen ? (
+            <div className="map-dialog-backdrop" role="dialog" aria-modal="true">
+              <div className="map-dialog">
+                <div className="map-dialog-header">
+                  <div>
+                    <strong>{mapDialogTitle}</strong>
+                    <span>OpenStreetMap</span>
+                  </div>
+                  <button className="ghost" onClick={() => setMapDialogOpen(false)} type="button">
+                    Close
+                  </button>
+                </div>
+                <div className="map-dialog-body">
+                  <iframe title="Map" src={mapDialogUrl} loading="lazy" />
+                </div>
+                <div className="map-dialog-footer">
+                  <a className="ghost" href={mapDialogExternalUrl} target="_blank" rel="noreferrer">
+                    Open in new tab
+                  </a>
+                </div>
+              </div>
+            </div>
+          ) : null}
           <section className="dashboard-hero">
             <div>
               <p className="eyebrow">Admin dashboard</p>

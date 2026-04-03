@@ -357,6 +357,111 @@ a {
   margin-bottom: 22px;
 }
 
+.chart-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.chart-card {
+  background: #fff;
+  border-radius: 22px;
+  padding: 18px 20px;
+  border: 1px solid rgba(17, 44, 50, 0.08);
+  display: grid;
+  gap: 12px;
+}
+
+.chart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.chart-head span {
+  font-size: 12px;
+  color: #607076;
+}
+
+.donut-wrap {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  margin: 0 auto;
+}
+
+.donut-chart {
+  transform: rotate(-90deg);
+}
+
+.donut-bg {
+  fill: none;
+  stroke: #e6eeec;
+  stroke-width: 12;
+}
+
+.donut-progress {
+  fill: none;
+  stroke: #1fa7a4;
+  stroke-width: 12;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease;
+}
+
+.donut-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.donut-center strong {
+  font-size: 20px;
+}
+
+.donut-center span {
+  font-size: 12px;
+  color: #607076;
+}
+
+.bar-chart {
+  display: grid;
+  gap: 12px;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 50px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #4b5c61;
+}
+
+.bar-track {
+  height: 10px;
+  background: #edf2f1;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.bar-fill.attendance {
+  background: linear-gradient(90deg, #1fa7a4, #5cd0c2);
+}
+
+.bar-fill.compoff {
+  background: linear-gradient(90deg, #ffad46, #ff6b4a);
+}
+
 .metric-card {
   background: linear-gradient(180deg, #ffffff, #f3f0ea);
   border-radius: 22px;

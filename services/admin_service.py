@@ -320,12 +320,37 @@ def get_all_attendance_history(limit: int = None, target_date: date = None,
                                  AND CAST(login_time AS time) < %s THEN 1
                             ELSE 0
                         END
-                    ) AS on_time_logins
+                    ) AS on_time_logins,
+                    SUM(
+                        CASE
+                            WHEN status = 'logged_out' THEN 1
+                            ELSE 0
+                        END
+                    ) AS logged_out_count,
+                    SUM(
+                        CASE
+                            WHEN LOWER(COALESCE(status, '')) LIKE '%%late%%'
+                                 OR LOWER(COALESCE(status, '')) LIKE '%%pending%%' THEN 1
+                            ELSE 0
+                        END
+                    ) AS late_exception_count
                 {base_query}
             """,
             [time(10, 15), time(10, 15)] + params
         )
         shift_metrics = cursor.fetchone() or {}
+
+        comp_off_days = 0
+        if target_date:
+            cursor.execute("""
+                SELECT COALESCE(SUM(comp_off_earned), 0) AS comp_off_days
+                FROM comp_offs
+                WHERE work_date = %s
+            """, (target_date,))
+            comp_off_days = float(cursor.fetchone().get('comp_off_days') or 0)
+
+        logged_out_count = int(shift_metrics.get('logged_out_count') or 0)
+        efficiency_score = round((logged_out_count / total_records) * 100, 2) if total_records else 0
 
         query = f"""
             SELECT
@@ -364,6 +389,13 @@ def get_all_attendance_history(limit: int = None, target_date: date = None,
                 "shift_compliance": {
                     "late_logins": int(shift_metrics.get('late_logins') or 0),
                     "on_time_logins": int(shift_metrics.get('on_time_logins') or 0),
+                    "logged_out": int(shift_metrics.get('logged_out_count') or 0),
+                    "late_exceptions": int(shift_metrics.get('late_exception_count') or 0),
+                },
+                "attendance_summary": {
+                    "attendance_count": total_records,
+                    "comp_off_days": comp_off_days,
+                    "efficiency_score": efficiency_score
                 },
                 "statistics": {
                     "total_records": len(records),

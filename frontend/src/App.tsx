@@ -227,7 +227,17 @@ function App() {
   const [employees, setEmployees] = useState<EmployeeRow[]>([])
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
   const [attendanceTotalCount, setAttendanceTotalCount] = useState(0)
-  const [attendanceShiftMetrics, setAttendanceShiftMetrics] = useState({ lateLogins: 0, onTimeLogins: 0 })
+  const [attendanceShiftMetrics, setAttendanceShiftMetrics] = useState({
+    lateLogins: 0,
+    onTimeLogins: 0,
+    loggedOut: 0,
+    lateExceptions: 0
+  })
+  const [attendanceSummary, setAttendanceSummary] = useState({
+    attendanceCount: 0,
+    compOffDays: 0,
+    efficiencyScore: 0
+  })
   const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([])
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
@@ -481,6 +491,7 @@ function App() {
           ? attendanceResponse.data.total_records
           : attendanceData.length
       const nextShiftMetrics = attendanceResponse?.data?.shift_compliance || {}
+      const nextSummary = attendanceResponse?.data?.attendance_summary || {}
       const leavesData = Array.isArray(leavesResponse?.data?.leaves) ? leavesResponse.data.leaves : []
       const activitiesData = Array.isArray(activitiesResponse?.data?.activities) ? activitiesResponse.data.activities : []
 
@@ -499,10 +510,34 @@ function App() {
       )
       setAttendanceRows(attendanceDeduped)
       setAttendanceTotalCount(attendanceCount)
-      setAttendanceShiftMetrics({
-        lateLogins: Number(nextShiftMetrics.late_logins || 0),
-        onTimeLogins: Number(nextShiftMetrics.on_time_logins || 0)
-      })
+      setAttendanceShiftMetrics(
+        attendanceDateFilter
+          ? {
+              lateLogins: Number(nextShiftMetrics.late_logins || 0),
+              onTimeLogins: Number(nextShiftMetrics.on_time_logins || 0),
+              loggedOut: Number(nextShiftMetrics.logged_out || 0),
+              lateExceptions: Number(nextShiftMetrics.late_exceptions || 0)
+            }
+          : {
+              lateLogins: 0,
+              onTimeLogins: 0,
+              loggedOut: 0,
+              lateExceptions: 0
+            }
+      )
+      setAttendanceSummary(
+        attendanceDateFilter
+          ? {
+              attendanceCount: Number(nextSummary.attendance_count || attendanceCount),
+              compOffDays: Number(nextSummary.comp_off_days || 0),
+              efficiencyScore: Number(nextSummary.efficiency_score || 0)
+            }
+          : {
+              attendanceCount: 0,
+              compOffDays: 0,
+              efficiencyScore: 0
+            }
+      )
       setLeaveRows(leavesData)
       setActivityRows(activitiesData)
 
@@ -878,10 +913,9 @@ function App() {
   // Attendance data is already filtered + paginated server-side
   const filteredAttendance = attendanceRows
 
-  const lateLogins =
-    attendanceShiftMetrics.lateLogins || filteredAttendance.filter((row) => isLateLogin(row.login_time)).length
-  const onTimeLogins =
-    attendanceShiftMetrics.onTimeLogins || filteredAttendance.filter((row) => isOnTimeLogin(row.login_time)).length
+  const lateLogins = attendanceShiftMetrics.lateLogins
+  const onTimeLogins = attendanceShiftMetrics.onTimeLogins
+  const efficiencyScore = attendanceSummary.efficiencyScore
 
   const renderDashboardPanel = () => {
     const attendancePageCount = Math.max(1, Math.ceil(attendanceTotalCount / attendancePageSize))
@@ -1072,6 +1106,13 @@ function App() {
     }
 
     if (activePanel === 'attendance') {
+      const donutRadius = 52
+      const donutCircumference = 2 * Math.PI * donutRadius
+      const donutOffset = donutCircumference * (1 - Math.min(Math.max(efficiencyScore, 0), 100) / 100)
+      const attendanceBarTotal = Math.max(attendanceSummary.attendanceCount, attendanceSummary.compOffDays, 1)
+      const attendanceBarWidth = (attendanceSummary.attendanceCount / attendanceBarTotal) * 100
+      const compOffBarWidth = (attendanceSummary.compOffDays / attendanceBarTotal) * 100
+
       return (
         <>
           <div className="dashboard-section-head">
@@ -1182,18 +1223,58 @@ function App() {
             </div>
             <div className="metric-card">
               <span>Logged Out</span>
-              <strong>{filteredAttendance.filter((row) => row.status === 'logged_out').length}</strong>
+              <strong>{attendanceShiftMetrics.loggedOut}</strong>
             </div>
             <div className="metric-card">
               <span>Late / Exceptions</span>
-              <strong>
-                {
-                  filteredAttendance.filter((row) =>
-                    (row.status || '').toLowerCase().includes('late') ||
-                    (row.status || '').toLowerCase().includes('pending')
-                  ).length
-                }
-              </strong>
+              <strong>{attendanceShiftMetrics.lateExceptions}</strong>
+            </div>
+          </div>
+          <div className="chart-row">
+            <div className="chart-card">
+              <div className="chart-head">
+                <strong>Attendance Efficiency Score</strong>
+                <span>{attendanceDateFilter ? `${efficiencyScore.toFixed(1)}%` : '--'}</span>
+              </div>
+              <div className="donut-wrap">
+                <svg width="140" height="140" viewBox="0 0 140 140" className="donut-chart" aria-hidden="true">
+                  <circle className="donut-bg" cx="70" cy="70" r={donutRadius} />
+                  <circle
+                    className="donut-progress"
+                    cx="70"
+                    cy="70"
+                    r={donutRadius}
+                    strokeDasharray={donutCircumference}
+                    strokeDashoffset={donutOffset}
+                  />
+                </svg>
+                <div className="donut-center">
+                  <strong>{attendanceDateFilter ? `${efficiencyScore.toFixed(1)}%` : '0%'}</strong>
+                  <span>Efficiency</span>
+                </div>
+              </div>
+            </div>
+            <div className="chart-card">
+              <div className="chart-head">
+                <strong>Attendance & Comp-Offs</strong>
+                <span>{attendanceDateFilter ? 'Selected date' : 'No date selected'}</span>
+              </div>
+              <div className="bar-chart">
+                <div className="bar-row">
+                  <span>Attendance</span>
+                  <div className="bar-track">
+                    <div className="bar-fill attendance" style={{ width: `${attendanceBarWidth}%` }} />
+                  </div>
+                  <strong>{attendanceSummary.attendanceCount}</strong>
+                </div>
+                <div className="bar-row">
+                  <span>Comp-Offs</span>
+                  <div className="bar-track">
+                    <div className="bar-fill compoff" style={{ width: `${compOffBarWidth}%` }} />
+                  </div>
+                  <strong>{attendanceSummary.compOffDays}</strong>
+                </div>
+              </div>
             </div>
           </div>
           <div className="data-card">

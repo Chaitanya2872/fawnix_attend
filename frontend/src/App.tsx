@@ -271,7 +271,7 @@ function App() {
     }
 
     void loadDashboard(accessToken)
-  }, [accessToken, showDashboard, showAdminLogin])
+  }, [accessToken, showDashboard, showAdminLogin, attendanceDateFilter])
 
   const updateTokens = (nextAccessToken: string, nextRefreshToken: string) => {
     setAccessToken(nextAccessToken)
@@ -700,8 +700,11 @@ function App() {
       return true
     }
     if (row.date) {
-      const dateValue = row.date.slice(0, 10)
-      return dateValue === attendanceDateFilter
+      const parsedDate = new Date(row.date)
+      if (!Number.isNaN(parsedDate.getTime())) {
+        const dateValue = parsedDate.toISOString().slice(0, 10)
+        return dateValue === attendanceDateFilter
+      }
     }
     const time = parseLoginTime(row.login_time)
     if (!time) {

@@ -1402,9 +1402,6 @@ function App() {
                     {item.label}
                   </button>
                 ))}
-              </div>
-
-              <div className="sidebar-logout">
                 <button className="sidebar-link logout-link" onClick={handleLogout}>
                   Logout
                 </button>

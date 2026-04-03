@@ -4,7 +4,7 @@ Business logic for admin-only operations
 """
 
 from database.connection import get_db_connection
-from datetime import date, datetime
+from datetime import date, datetime, time
 from services.CompLeaveService import (
     attach_attendance_context_to_overtime_records,
     serialize_temporal_values,
@@ -189,6 +189,29 @@ def get_all_attendance_history(limit: int = None, target_date: date = None,
         cursor.execute(f"SELECT COUNT(*) AS total_records {base_query}", params)
         total_records = cursor.fetchone()['total_records']
 
+        cursor.execute(
+            f"""
+                SELECT
+                    SUM(
+                        CASE
+                            WHEN login_time IS NOT NULL
+                                 AND CAST(login_time AS time) > %s THEN 1
+                            ELSE 0
+                        END
+                    ) AS late_logins,
+                    SUM(
+                        CASE
+                            WHEN login_time IS NOT NULL
+                                 AND CAST(login_time AS time) < %s THEN 1
+                            ELSE 0
+                        END
+                    ) AS on_time_logins
+                {base_query}
+            """,
+            [time(10, 15), time(10, 15)] + params
+        )
+        shift_metrics = cursor.fetchone() or {}
+
         query = f"""
             SELECT
                 a.*,
@@ -223,6 +246,10 @@ def get_all_attendance_history(limit: int = None, target_date: date = None,
             "data": {
                 "records": records,
                 "total_records": total_records,
+                "shift_compliance": {
+                    "late_logins": int(shift_metrics.get('late_logins') or 0),
+                    "on_time_logins": int(shift_metrics.get('on_time_logins') or 0),
+                },
                 "statistics": {
                     "total_records": len(records),
                     "completed_days": completed_days,

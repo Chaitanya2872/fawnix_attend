@@ -224,6 +224,7 @@ function App() {
   const [employees, setEmployees] = useState<EmployeeRow[]>([])
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
   const [attendanceTotalCount, setAttendanceTotalCount] = useState(0)
+  const [attendanceShiftMetrics, setAttendanceShiftMetrics] = useState({ lateLogins: 0, onTimeLogins: 0 })
   const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([])
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
@@ -420,6 +421,7 @@ function App() {
         typeof attendanceResponse?.data?.total_records === 'number'
           ? attendanceResponse.data.total_records
           : attendanceData.length
+      const nextShiftMetrics = attendanceResponse?.data?.shift_compliance || {}
       const leavesData = Array.isArray(leavesResponse?.data?.leaves) ? leavesResponse.data.leaves : []
       const activitiesData = Array.isArray(activitiesResponse?.data?.activities) ? activitiesResponse.data.activities : []
 
@@ -438,6 +440,10 @@ function App() {
       )
       setAttendanceRows(attendanceDeduped)
       setAttendanceTotalCount(attendanceCount)
+      setAttendanceShiftMetrics({
+        lateLogins: Number(nextShiftMetrics.late_logins || 0),
+        onTimeLogins: Number(nextShiftMetrics.on_time_logins || 0)
+      })
       setLeaveRows(leavesData)
       setActivityRows(activitiesData)
 
@@ -707,8 +713,10 @@ function App() {
   // Attendance data is already filtered + paginated server-side
   const filteredAttendance = attendanceRows
 
-  const lateLogins = filteredAttendance.filter((row) => isLateLogin(row.login_time)).length
-  const onTimeLogins = filteredAttendance.filter((row) => isOnTimeLogin(row.login_time)).length
+  const lateLogins =
+    attendanceShiftMetrics.lateLogins || filteredAttendance.filter((row) => isLateLogin(row.login_time)).length
+  const onTimeLogins =
+    attendanceShiftMetrics.onTimeLogins || filteredAttendance.filter((row) => isOnTimeLogin(row.login_time)).length
 
   const renderDashboardPanel = () => {
     const attendancePageCount = Math.max(1, Math.ceil(attendanceTotalCount / attendancePageSize))

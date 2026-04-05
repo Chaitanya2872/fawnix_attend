@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import './App.css'
 
 type PrivacySection = {
@@ -246,6 +248,7 @@ type ActivityRow = {
 
 type FieldVisitRow = {
   activityId: number | string
+  fieldVisitId?: number
   employee: string
   visitType: string
   purpose: string
@@ -406,12 +409,34 @@ function App() {
   const [employees, setEmployees] = useState<EmployeeRow[]>([])
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
   const [attendanceTotalCount, setAttendanceTotalCount] = useState(0)
-  const [attendanceShiftMetrics, setAttendanceShiftMetrics] = useState({ lateLogins: 0, onTimeLogins: 0 })
+  const [attendanceShiftMetrics, setAttendanceShiftMetrics] = useState({
+    lateLogins: 0,
+    onTimeLogins: 0,
+    loggedOut: 0,
+    lateExceptions: 0
+  })
+  const [attendanceSummary, setAttendanceSummary] = useState({
+    attendanceCount: 0,
+    compOffDays: 0,
+    efficiencyScore: 0
+  })
   const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([])
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
   const [attendanceDateFilter, setAttendanceDateFilter] = useState('')
   const [attendancePage, setAttendancePage] = useState(1)
+  const [attendanceReportMonth, setAttendanceReportMonth] = useState(() => String(new Date().getMonth() + 1))
+  const [attendanceReportYear, setAttendanceReportYear] = useState(() => String(new Date().getFullYear()))
+  const [attendanceReportFormat, setAttendanceReportFormat] = useState<'csv' | 'pdf'>('csv')
+  const [attendanceReportStatus, setAttendanceReportStatus] = useState('')
+  const [mapDialogOpen, setMapDialogOpen] = useState(false)
+  const [mapDialogTitle, setMapDialogTitle] = useState('')
+  const [mapDialogLoading, setMapDialogLoading] = useState(false)
+  const [mapDialogError, setMapDialogError] = useState('')
+  const [mapPoints, setMapPoints] = useState<Array<{ lat: number; lon: number }>>([])
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lon: number } | null>(null)
+  const mapContainerRef = useRef<HTMLDivElement | null>(null)
+  const mapRef = useRef<L.Map | null>(null)
   const [showAddEmployee, setShowAddEmployee] = useState(false)
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
   const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
@@ -558,6 +583,50 @@ function App() {
     return data
   }
 
+  const downloadAttendanceReport = async () => {
+    try {
+      setAttendanceReportStatus('Preparing report...')
+      const params = new URLSearchParams({
+        month: attendanceReportMonth,
+        year: attendanceReportYear,
+        format: attendanceReportFormat
+      })
+
+      const makeRequest = async (token: string) =>
+        fetch(`/api/admin/attendance/report?${params.toString()}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        })
+
+      let response = await makeRequest(accessToken)
+      if (response.status === 401) {
+        const nextAccessToken = await refreshAccessToken()
+        response = await makeRequest(nextAccessToken)
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || 'Failed to download report')
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `attendance_report_${attendanceReportYear}_${attendanceReportMonth.padStart(2, '0')}.${attendanceReportFormat}`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      setAttendanceReportStatus('Report downloaded.')
+      window.setTimeout(() => setAttendanceReportStatus(''), 2500)
+    } catch (error) {
+      setAttendanceReportStatus(error instanceof Error ? error.message : 'Failed to download report')
+    }
+  }
+
   const persistSession = (nextAccessToken: string, nextRefreshToken: string, nextProfile: AdminProfile) => {
     setAccessToken(nextAccessToken)
     setRefreshToken(nextRefreshToken)
@@ -610,6 +679,7 @@ function App() {
           ? attendanceResponse.data.total_records
           : attendanceData.length
       const nextShiftMetrics = attendanceResponse?.data?.shift_compliance || {}
+      const nextSummary = attendanceResponse?.data?.attendance_summary || {}
       const leavesData = Array.isArray(leavesResponse?.data?.leaves) ? leavesResponse.data.leaves : []
       const activitiesData = Array.isArray(activitiesResponse?.data?.activities) ? activitiesResponse.data.activities : []
 
@@ -628,10 +698,34 @@ function App() {
       )
       setAttendanceRows(attendanceDeduped)
       setAttendanceTotalCount(attendanceCount)
-      setAttendanceShiftMetrics({
-        lateLogins: Number(nextShiftMetrics.late_logins || 0),
-        onTimeLogins: Number(nextShiftMetrics.on_time_logins || 0)
-      })
+      setAttendanceShiftMetrics(
+        attendanceDateFilter
+          ? {
+              lateLogins: Number(nextShiftMetrics.late_logins || 0),
+              onTimeLogins: Number(nextShiftMetrics.on_time_logins || 0),
+              loggedOut: Number(nextShiftMetrics.logged_out || 0),
+              lateExceptions: Number(nextShiftMetrics.late_exceptions || 0)
+            }
+          : {
+              lateLogins: 0,
+              onTimeLogins: 0,
+              loggedOut: 0,
+              lateExceptions: 0
+            }
+      )
+      setAttendanceSummary(
+        attendanceDateFilter
+          ? {
+              attendanceCount: Number(nextSummary.attendance_count || attendanceCount),
+              compOffDays: Number(nextSummary.comp_off_days || 0),
+              efficiencyScore: Number(nextSummary.efficiency_score || 0)
+            }
+          : {
+              attendanceCount: 0,
+              compOffDays: 0,
+              efficiencyScore: 0
+            }
+      )
       setLeaveRows(leavesData)
       setActivityRows(activitiesData)
 
@@ -639,6 +733,7 @@ function App() {
         .filter((item: ActivityRow) => item.field_visit_id)
         .map((item: ActivityRow) => ({
           activityId: item.id || item.field_visit_id || '',
+          fieldVisitId: item.field_visit_id ? Number(item.field_visit_id) : undefined,
           employee: item.employee_name || item.employee_email || 'Unknown employee',
           visitType: item.field_visit_type || 'Field Visit',
           purpose: item.field_visit_purpose || item.activity_type || 'Visit',
@@ -815,6 +910,111 @@ function App() {
     setShowAdminLogin(false)
   }
 
+  const openMapForLocation = async (location: string, fieldVisitId?: number) => {
+    if (!location) {
+      return
+    }
+    const trimmed = location.trim()
+    const coordMatch = trimmed.match(/-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?/)
+    setMapDialogTitle('Field Visit Location')
+    setMapDialogOpen(true)
+    setMapDialogError('')
+    setMapDialogLoading(true)
+    setMapPoints([])
+    setMapCenter(null)
+    if (fieldVisitId) {
+      try {
+        const trackingResponse = await apiRequest(`/api/admin/field-visits/${fieldVisitId}/tracking`, {})
+        const points = Array.isArray(trackingResponse?.data?.tracking_points)
+          ? trackingResponse.data.tracking_points
+          : []
+        const mappedPoints = points
+          .map((point: { latitude?: number | string; longitude?: number | string }) => ({
+            lat: Number(point.latitude),
+            lon: Number(point.longitude)
+          }))
+          .filter((point: { lat: number; lon: number }) => !Number.isNaN(point.lat) && !Number.isNaN(point.lon))
+        setMapPoints(mappedPoints)
+        if (mappedPoints.length) {
+          setMapCenter(mappedPoints[0])
+          setMapDialogLoading(false)
+          return
+        }
+      } catch (error) {
+        setMapDialogError(error instanceof Error ? error.message : 'Unable to load tracking points.')
+      }
+    }
+
+    if (coordMatch) {
+      const [lat, lon] = coordMatch[0].split(',').map((value) => value.trim())
+      const latNum = Number(lat)
+      const lonNum = Number(lon)
+      setMapCenter({ lat: latNum, lon: lonNum })
+      setMapDialogLoading(false)
+      return
+    }
+
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(trimmed)}&limit=1`
+      )
+      const results = await response.json()
+      const match = Array.isArray(results) ? results[0] : null
+      if (!match) {
+        throw new Error('Unable to locate this address.')
+      }
+      const latNum = Number(match.lat)
+      const lonNum = Number(match.lon)
+      setMapCenter({ lat: latNum, lon: lonNum })
+    } catch (error) {
+      setMapDialogError(error instanceof Error ? error.message : 'Unable to load map.')
+    } finally {
+      setMapDialogLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!mapDialogOpen || !mapContainerRef.current || !mapCenter) {
+      return
+    }
+
+    if (mapRef.current) {
+      mapRef.current.remove()
+      mapRef.current = null
+    }
+
+    const map = L.map(mapContainerRef.current, { zoomControl: true })
+    mapRef.current = map
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map)
+
+    const defaultIcon = L.icon({
+      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41]
+    })
+
+    if (mapPoints.length > 1) {
+      const latlngs = mapPoints.map((point) => [point.lat, point.lon] as [number, number])
+      L.polyline(latlngs, { color: '#1fa7a4', weight: 4 }).addTo(map)
+      L.marker(latlngs[0], { icon: defaultIcon }).addTo(map)
+      L.marker(latlngs[latlngs.length - 1], { icon: defaultIcon }).addTo(map)
+      map.fitBounds(latlngs, { padding: [30, 30] })
+    } else {
+      map.setView([mapCenter.lat, mapCenter.lon], 14)
+      L.marker([mapCenter.lat, mapCenter.lon], { icon: defaultIcon }).addTo(map)
+    }
+
+    return () => {
+      map.remove()
+      mapRef.current = null
+    }
+  }, [mapDialogOpen, mapCenter, mapPoints])
+
   const updateNewEmployee = (field: keyof typeof newEmployee, value: string) => {
     setNewEmployee((current) => ({
       ...current,
@@ -901,10 +1101,9 @@ function App() {
   // Attendance data is already filtered + paginated server-side
   const filteredAttendance = attendanceRows
 
-  const lateLogins =
-    attendanceShiftMetrics.lateLogins || filteredAttendance.filter((row) => isLateLogin(row.login_time)).length
-  const onTimeLogins =
-    attendanceShiftMetrics.onTimeLogins || filteredAttendance.filter((row) => isOnTimeLogin(row.login_time)).length
+  const lateLogins = attendanceShiftMetrics.lateLogins
+  const onTimeLogins = attendanceShiftMetrics.onTimeLogins
+  const efficiencyScore = attendanceSummary.efficiencyScore
 
   const renderDashboardPanel = () => {
     const attendancePageCount = Math.max(1, Math.ceil(attendanceTotalCount / attendancePageSize))
@@ -1095,6 +1294,13 @@ function App() {
     }
 
     if (activePanel === 'attendance') {
+      const donutRadius = 52
+      const donutCircumference = 2 * Math.PI * donutRadius
+      const donutOffset = donutCircumference * (1 - Math.min(Math.max(efficiencyScore, 0), 100) / 100)
+      const attendanceBarTotal = Math.max(attendanceSummary.attendanceCount, attendanceSummary.compOffDays, 1)
+      const attendanceBarWidth = (attendanceSummary.attendanceCount / attendanceBarTotal) * 100
+      const compOffBarWidth = (attendanceSummary.compOffDays / attendanceBarTotal) * 100
+
       return (
         <>
           <div className="dashboard-section-head">
@@ -1136,6 +1342,67 @@ function App() {
                 Refresh
               </button>
             </div>
+            <div className="attendance-controls">
+              <div className="attendance-filter">
+                <label htmlFor="attendance-month">Month</label>
+                <select
+                  id="attendance-month"
+                  value={attendanceReportMonth}
+                  onChange={(event) => setAttendanceReportMonth(event.target.value)}
+                >
+                  {[
+                    '01',
+                    '02',
+                    '03',
+                    '04',
+                    '05',
+                    '06',
+                    '07',
+                    '08',
+                    '09',
+                    '10',
+                    '11',
+                    '12'
+                  ].map((month, index) => (
+                    <option key={month} value={index + 1}>
+                      {month}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="attendance-filter">
+                <label htmlFor="attendance-year">Year</label>
+                <select
+                  id="attendance-year"
+                  value={attendanceReportYear}
+                  onChange={(event) => setAttendanceReportYear(event.target.value)}
+                >
+                  {Array.from({ length: 6 }, (_, index) => {
+                    const year = new Date().getFullYear() - index
+                    return (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+              <div className="attendance-filter">
+                <label htmlFor="attendance-format">Format</label>
+                <select
+                  id="attendance-format"
+                  value={attendanceReportFormat}
+                  onChange={(event) => setAttendanceReportFormat(event.target.value as 'csv' | 'pdf')}
+                >
+                  <option value="csv">CSV</option>
+                  <option value="pdf">PDF</option>
+                </select>
+              </div>
+              <button className="cta dashboard-button" onClick={downloadAttendanceReport}>
+                Download Report
+              </button>
+              {attendanceReportStatus ? <span className="report-status">{attendanceReportStatus}</span> : null}
+            </div>
           </div>
           <div className="metric-row">
             <div className="metric-card">
@@ -1144,18 +1411,58 @@ function App() {
             </div>
             <div className="metric-card">
               <span>Logged Out</span>
-              <strong>{filteredAttendance.filter((row) => row.status === 'logged_out').length}</strong>
+              <strong>{attendanceShiftMetrics.loggedOut}</strong>
             </div>
             <div className="metric-card">
               <span>Late / Exceptions</span>
-              <strong>
-                {
-                  filteredAttendance.filter((row) =>
-                    (row.status || '').toLowerCase().includes('late') ||
-                    (row.status || '').toLowerCase().includes('pending')
-                  ).length
-                }
-              </strong>
+              <strong>{attendanceShiftMetrics.lateExceptions}</strong>
+            </div>
+          </div>
+          <div className="chart-row">
+            <div className="chart-card">
+              <div className="chart-head">
+                <strong>Attendance Efficiency Score</strong>
+                <span>{attendanceDateFilter ? `${efficiencyScore.toFixed(1)}%` : '--'}</span>
+              </div>
+              <div className="donut-wrap">
+                <svg width="140" height="140" viewBox="0 0 140 140" className="donut-chart" aria-hidden="true">
+                  <circle className="donut-bg" cx="70" cy="70" r={donutRadius} />
+                  <circle
+                    className="donut-progress"
+                    cx="70"
+                    cy="70"
+                    r={donutRadius}
+                    strokeDasharray={donutCircumference}
+                    strokeDashoffset={donutOffset}
+                  />
+                </svg>
+                <div className="donut-center">
+                  <strong>{attendanceDateFilter ? `${efficiencyScore.toFixed(1)}%` : '0%'}</strong>
+                  <span>Efficiency</span>
+                </div>
+              </div>
+            </div>
+            <div className="chart-card">
+              <div className="chart-head">
+                <strong>Attendance & Comp-Offs</strong>
+                <span>{attendanceDateFilter ? 'Selected date' : 'No date selected'}</span>
+              </div>
+              <div className="bar-chart">
+                <div className="bar-row">
+                  <span>Attendance</span>
+                  <div className="bar-track">
+                    <div className="bar-fill attendance" style={{ width: `${attendanceBarWidth}%` }} />
+                  </div>
+                  <strong>{attendanceSummary.attendanceCount}</strong>
+                </div>
+                <div className="bar-row">
+                  <span>Comp-Offs</span>
+                  <div className="bar-track">
+                    <div className="bar-fill compoff" style={{ width: `${compOffBarWidth}%` }} />
+                  </div>
+                  <strong>{attendanceSummary.compOffDays}</strong>
+                </div>
+              </div>
             </div>
           </div>
           <div className="data-card">
@@ -1266,7 +1573,20 @@ function App() {
                   <strong>{row.employee}</strong>
                   <span>{row.visitType}</span>
                 </div>
-                <div>{row.location}</div>
+                <div className="location-cell">
+                  <span>{row.location}</span>
+                  <button
+                    className="map-button"
+                    onClick={() => openMapForLocation(row.location, row.fieldVisitId)}
+                    aria-label="Open map"
+                    title="Open map"
+                    type="button"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                      <path d="M12 2c-3.6 0-6.5 2.9-6.5 6.5 0 4.7 6.5 12 6.5 12s6.5-7.3 6.5-12C18.5 4.9 15.6 2 12 2zm0 9.2c-1.5 0-2.7-1.2-2.7-2.7S10.5 5.8 12 5.8s2.7 1.2 2.7 2.7S13.5 11.2 12 11.2z" />
+                    </svg>
+                  </button>
+                </div>
                 <div>
                   <span className="table-pill accent">{row.status}</span>
                 </div>
@@ -1351,9 +1671,6 @@ function App() {
                     {item.label}
                   </button>
                 ))}
-              </div>
-
-              <div className="sidebar-logout">
                 <button className="sidebar-link logout-link" onClick={handleLogout}>
                   Logout
                 </button>
@@ -1379,6 +1696,32 @@ function App() {
         </aside>
 
         <main className="dashboard-main">
+          {mapDialogOpen ? (
+            <div className="map-dialog-backdrop" role="dialog" aria-modal="true">
+              <div className="map-dialog">
+                <div className="map-dialog-header">
+                  <div>
+                    <strong>{mapDialogTitle}</strong>
+                    <span>OpenStreetMap</span>
+                  </div>
+                  <button className="ghost" onClick={() => setMapDialogOpen(false)} type="button">
+                    Close
+                  </button>
+                </div>
+                <div className="map-dialog-body">
+                  {mapDialogLoading ? (
+                    <div className="map-dialog-state">Loading map...</div>
+                  ) : mapDialogError ? (
+                    <div className="map-dialog-state">{mapDialogError}</div>
+                  ) : mapCenter ? (
+                    <div ref={mapContainerRef} className="map-dialog-map" />
+                  ) : (
+                    <div className="map-dialog-state">No location data available.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null}
           <section className="dashboard-hero">
             <div>
               <p className="eyebrow">Admin dashboard</p>

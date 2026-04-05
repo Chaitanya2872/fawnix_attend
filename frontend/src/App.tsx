@@ -1067,37 +1067,6 @@ function App() {
     }
   }
 
-  // Helper functions for login time analysis
-  const parseLoginTime = (value?: string) => {
-    if (!value) {
-      return null
-    }
-    const parsed = new Date(value)
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed
-    }
-    const fallback = new Date(`1970-01-01T${value}`)
-    return Number.isNaN(fallback.getTime()) ? null : fallback
-  }
-
-  const isLateLogin = (value?: string) => {
-    const time = parseLoginTime(value)
-    if (!time) {
-      return false
-    }
-    const minutes = time.getHours() * 60 + time.getMinutes()
-    return minutes > 10 * 60 + 15
-  }
-
-  const isOnTimeLogin = (value?: string) => {
-    const time = parseLoginTime(value)
-    if (!time) {
-      return false
-    }
-    const minutes = time.getHours() * 60 + time.getMinutes()
-    return minutes < 10 * 60 + 15
-  }
-
   // Attendance data is already filtered + paginated server-side
   const filteredAttendance = attendanceRows
 

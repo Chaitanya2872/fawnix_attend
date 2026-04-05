@@ -1,6 +1,107 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
+type PrivacySection = {
+  title: string
+  body: string[]
+  bullets: string[]
+}
+
+const privacySections: PrivacySection[] = [
+  {
+    title: 'Information We Collect',
+    body: [
+      'Fawnix collects account and workforce management information such as employee ID, name, phone number, email address, role, attendance records, activity records, leave requests, and device/session details needed to authenticate users and operate the service.',
+      'Fawnix also collects and processes location data to support attendance and workforce features, including clock-in, clock-out, field visits, route tracking, geofence validation, working-hours pause and resume, and attendance-related notifications.'
+    ],
+    bullets: []
+  },
+  {
+    title: 'Location Information',
+    body: [
+      'Our app collects and processes location data to support attendance and workforce features, including clock-in, clock-out, field visits, route tracking, geofence validation, working-hours pause and resume, and attendance-related notifications.'
+    ],
+    bullets: []
+  },
+  {
+    title: 'What Location Data We Collect',
+    body: [],
+    bullets: [
+      'Precise location data from your device',
+      'Clock-in and clock-out location',
+      'Field visit destination and tracking location',
+      'Background location, where enabled, for attendance/geofence monitoring'
+    ]
+  },
+  {
+    title: 'How We Use Location Data',
+    body: [
+      'We use location data to:'
+    ],
+    bullets: [
+      'verify attendance actions such as clock-in and clock-out',
+      'monitor whether you are within the allowed work radius',
+      'pause or resume working hours based on geofence rules',
+      'support field visit tracking and route history',
+      'improve attendance accuracy, security, and compliance'
+    ]
+  },
+  {
+    title: 'When Location Is Collected',
+    body: [
+      'Location may be collected:'
+    ],
+    bullets: [
+      'while the app is open and in use',
+      'in the background, if attendance tracking or field visit tracking is active and permission is granted'
+    ]
+  },
+  {
+    title: 'Sharing of Location Data',
+    body: [
+      'Location data is shared only with the organization and backend services required to provide attendance, field tracking, reporting, and compliance features.',
+      'We do not sell your location data for advertising purposes.'
+    ],
+    bullets: []
+  },
+  {
+    title: 'Retention',
+    body: [
+      'Location data may be stored as part of attendance records, visit logs, control records, and compliance reports for as long as needed to provide the service, maintain security, resolve disputes, and meet legal or employer recordkeeping requirements.'
+    ],
+    bullets: []
+  },
+  {
+    title: 'Retention and Deletion',
+    body: [
+      'Users can request account deletion from the website section below. After a valid deletion request is completed, personal data is deleted or anonymized except where retention is required for legal, fraud-prevention, security, payroll, tax, or dispute-resolution purposes.'
+    ],
+    bullets: []
+  },
+  {
+    title: 'Your Choices',
+    body: [
+      'You can stop future location collection by not using location-based attendance or field features, adjusting device permissions, or contacting your employer administrator if the app is managed by your organization.',
+      'Disabling location permissions may prevent core attendance and field-operations features from working correctly.'
+    ],
+    bullets: []
+  },
+  {
+    title: 'Security',
+    body: [
+      'Fawnix uses reasonable administrative, technical, and organizational measures to protect personal information from unauthorized access, disclosure, alteration, or loss. No method of storage or transmission is completely secure, so absolute security cannot be guaranteed.'
+    ],
+    bullets: []
+  },
+  {
+    title: 'Contact',
+    body: [
+      'For privacy questions, data requests, or policy concerns, please contact the Fawnix support or administrator contact provided by your organization or through the official support contact listed for this app.'
+    ],
+    bullets: []
+  }
+]
+
 const useCases = [
   {
     title: 'Field Teams',
@@ -200,6 +301,87 @@ function formatDate(value?: string) {
   })
 }
 
+function normalizePath(pathname: string) {
+  const trimmed = pathname.replace(/\/+$/, '')
+  return trimmed || '/'
+}
+
+function PrivacyPolicyPage() {
+  return (
+    <div className="policy-page">
+      <header className="policy-hero">
+        <div className="policy-hero-inner">
+          <a className="policy-back" href="/">
+            Back to home
+          </a>
+          <p className="eyebrow">Privacy Policy</p>
+          <h1>Privacy Policy for Fawnix</h1>
+          <p className="policy-lead">
+            Effective date: April 5, 2026. This policy explains how Fawnix collects, uses,
+            shares, retains, and protects personal information, including location data used
+            for attendance and field operations.
+          </p>
+        </div>
+      </header>
+
+      <main className="policy-content">
+        <section className="policy-card">
+          <h2>Summary</h2>
+          <p>
+            Fawnix is a workforce operations platform used for attendance, activity tracking,
+            field visits, approvals, reporting, and account management. Because these features
+            rely on verified work-location events, the app collects location data when required
+            for attendance and field workflows.
+          </p>
+        </section>
+
+        {privacySections.map((section) => (
+          <section key={section.title} className="policy-card">
+            <h2>{section.title}</h2>
+            {section.body.map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))}
+            {section.bullets.length ? (
+              <ul className="policy-list">
+                {section.bullets.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
+        ))}
+
+        <section className="policy-card">
+          <h2>Children</h2>
+          <p>
+            Fawnix is intended for workforce and business use and is not directed to children.
+          </p>
+        </section>
+
+        <section className="policy-card">
+          <h2>Policy Updates</h2>
+          <p>
+            We may update this Privacy Policy from time to time. Material updates will be
+            reflected on this page with a revised effective date.
+          </p>
+        </section>
+      </main>
+
+      <footer className="footer">
+        <div>
+          <strong>Fawnix</strong>
+          <p>Modern workforce operations for distributed teams.</p>
+        </div>
+        <div className="footer-links">
+          <a href="/privacy-policy">Privacy</a>
+          <a href="/">Home</a>
+          <a href="/#delete">Delete account</a>
+        </div>
+      </footer>
+    </div>
+  )
+}
+
 function App() {
   const [empCode, setEmpCode] = useState('')
   const [otp, setOtp] = useState('')
@@ -244,6 +426,12 @@ function App() {
     role: 'employee'
   })
   const attendancePageSize = 10
+  const currentPath = normalizePath(window.location.pathname)
+  const isPrivacyPage = currentPath === '/privacy-policy' || currentPath === '/privacy'
+
+  if (isPrivacyPage) {
+    return <PrivacyPolicyPage />
+  }
 
   useEffect(() => {
     const storedAccessToken = window.localStorage.getItem(ACCESS_TOKEN_KEY) || ''
@@ -1440,9 +1628,9 @@ function App() {
           <p>Modern workforce operations for distributed teams.</p>
         </div>
         <div className="footer-links">
-          <span>Privacy</span>
-          <span>Terms</span>
-          <span>Support</span>
+          <a href="/privacy-policy">Privacy</a>
+          <a href="/#delete">Delete account</a>
+          <a href="/">Home</a>
         </div>
       </footer>
     </div>

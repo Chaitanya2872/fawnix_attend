@@ -476,7 +476,7 @@ function App() {
 
   const [employees, setEmployees] = useState<EmployeeRow[]>([])
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
-  const [attendanceTotalCount, setAttendanceTotalCount] = useState(0)
+  const [, setAttendanceTotalCount] = useState(0)
   const [, setAttendanceShiftMetrics] = useState({
     lateLogins: 0,
     onTimeLogins: 0,
@@ -498,7 +498,6 @@ function App() {
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
   const [attendanceDateFilter, setAttendanceDateFilter] = useState(() => toDateInputValue(new Date()))
-  const [attendancePage, setAttendancePage] = useState(1)
   const [attendanceReportMonth, setAttendanceReportMonth] = useState(() => String(new Date().getMonth() + 1))
   const [attendanceReportYear, setAttendanceReportYear] = useState(() => String(new Date().getFullYear()))
   const [attendanceReportFormat, setAttendanceReportFormat] = useState<'csv' | 'pdf'>('csv')
@@ -524,7 +523,7 @@ function App() {
     emp_manager: '',
     role: 'employee'
   })
-  const attendancePageSize = 10
+  const attendancePageSize = 1000
   const currentPath = normalizePath(window.location.pathname)
   const isPrivacyPage = currentPath === '/privacy-policy' || currentPath === '/privacy'
 
@@ -560,7 +559,7 @@ function App() {
     }
 
     void loadDashboard(accessToken)
-  }, [accessToken, showDashboard, showAdminLogin, attendanceDateFilter, attendancePage])
+  }, [accessToken, showDashboard, showAdminLogin, attendanceDateFilter])
 
   const updateTokens = (nextAccessToken: string, nextRefreshToken: string) => {
     setAccessToken(nextAccessToken)
@@ -733,7 +732,6 @@ function App() {
 
     try {
       const attendanceParams = new URLSearchParams()
-      attendanceParams.set('page', String(attendancePage))
       attendanceParams.set('page_size', String(attendancePageSize))
       if (attendanceDateFilter) {
         attendanceParams.set('date', attendanceDateFilter)
@@ -1200,8 +1198,6 @@ function App() {
     )
 
   const renderDashboardPanel = () => {
-    const attendancePageCount = Math.max(1, Math.ceil(attendanceTotalCount / attendancePageSize))
-    const safeAttendancePage = Math.min(attendancePage, attendancePageCount)
     const attendancePageRows = firstClockInRows
 
     if (dashboardLoading) {
@@ -1449,28 +1445,8 @@ function App() {
                       id="attendance-date"
                       type="date"
                       value={attendanceDateFilter}
-                      onChange={(event) => {
-                        setAttendanceDateFilter(event.target.value)
-                        setAttendancePage(1)
-                      }}
+                      onChange={(event) => setAttendanceDateFilter(event.target.value)}
                     />
-                  </div>
-                  <div className="attendance-filter">
-                    <label htmlFor="attendance-page">Page</label>
-                    <select
-                      id="attendance-page"
-                      value={safeAttendancePage}
-                      onChange={(event) => setAttendancePage(Number(event.target.value))}
-                    >
-                      {Array.from({ length: attendancePageCount }, (_, index) => {
-                        const pageNumber = index + 1
-                        return (
-                          <option key={pageNumber} value={pageNumber}>
-                            {pageNumber}
-                          </option>
-                        )
-                      })}
-                    </select>
                   </div>
                   <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                     Refresh

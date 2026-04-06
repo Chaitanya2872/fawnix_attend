@@ -467,6 +467,41 @@ def get_employee_device_tokens(emp_code: Any) -> List[str]:
         return_connection(conn)
 
 
+def get_department_device_tokens(
+    emp_department: Any,
+    exclude_emp_code: Any = None,
+) -> List[str]:
+    """Fetch active FCM tokens for employees in the same department."""
+    normalized_department = (emp_department or "").strip()
+    if not normalized_department:
+        raise ValueError("emp_department is required")
+
+    excluded_emp_code = (exclude_emp_code or "").strip() or None
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        sql = """
+            SELECT DISTINCT ud.fcm_token
+            FROM user_devices ud
+            JOIN employees e ON e.emp_code = ud.emp_code
+            LEFT JOIN users u ON u.emp_code = e.emp_code
+            WHERE ud.is_active = TRUE
+              AND TRIM(COALESCE(e.emp_department, '')) <> ''
+              AND LOWER(TRIM(e.emp_department)) = LOWER(TRIM(%s))
+              AND (%s IS NULL OR e.emp_code <> %s)
+              AND COALESCE(u.is_active, TRUE) = TRUE
+            ORDER BY ud.fcm_token
+        """
+        cursor.execute(sql, (normalized_department, excluded_emp_code, excluded_emp_code))
+        rows = cursor.fetchall()
+        return [row["fcm_token"] for row in rows]
+    finally:
+        cursor.close()
+        return_connection(conn)
+
+
 def send_push_notification(user_id: Any, title: str, body: str, data: Dict[str, Any] | None = None) -> Dict[str, Any]:
     """Send a push notification to all active devices for the given user_id."""
     try:
@@ -529,6 +564,58 @@ def send_push_notification_to_employee(
         body,
         data=data,
         context={"emp_code": normalized_emp_code},
+    )
+
+
+def send_push_notification_to_department(
+    emp_department: Any,
+    title: str,
+    body: str,
+    data: Dict[str, Any] | None = None,
+    exclude_emp_code: Any = None,
+) -> Dict[str, Any]:
+    """Send a push notification to active devices for a department team."""
+    normalized_department = (emp_department or "").strip()
+    normalized_exclude_emp_code = (exclude_emp_code or "").strip() or None
+
+    if not normalized_department:
+        return {
+            "success": False,
+            "message": "emp_department is required",
+            "sent_count": 0,
+            "failure_count": 0,
+        }
+
+    try:
+        tokens = get_department_device_tokens(
+            normalized_department,
+            exclude_emp_code=normalized_exclude_emp_code,
+        )
+    except ValueError as e:
+        return {
+            "success": False,
+            "message": str(e),
+            "sent_count": 0,
+            "failure_count": 0,
+        }
+    except Exception as e:
+        logger.error("Fetch department device tokens error: %s", e)
+        return {
+            "success": False,
+            "message": str(e),
+            "sent_count": 0,
+            "failure_count": 0,
+        }
+
+    return _send_push_to_tokens(
+        tokens,
+        title,
+        body,
+        data=data,
+        context={
+            "emp_department": normalized_department,
+            "exclude_emp_code": normalized_exclude_emp_code,
+        },
     )
 
 

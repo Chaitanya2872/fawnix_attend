@@ -3,7 +3,10 @@ import logging
 from middleware.auth_middleware import token_required
 from database.connection import get_db_connection, return_connection
 from services.whatsapp_service import send_leave_notification
-from services.notification_service import send_push_notification_to_employee
+from services.notification_service import (
+    send_push_notification_to_department,
+    send_push_notification_to_employee,
+)
 from services import admin_service
 from services.leaves_service import (
     apply_leave,
@@ -22,6 +25,39 @@ def _is_privileged(current_user) -> bool:
     designation = (current_user.get("emp_designation") or "").strip().lower()
     department = (current_user.get("emp_department") or "").strip().lower()
     return designation in ["hr", "cmd", "admin"] or department == "hr"
+
+
+def _notify_department_leave_submission(current_user, leave_data):
+    """Notify teammates in the same department when a leave request is submitted."""
+    department = (current_user.get("emp_department") or "").strip()
+    emp_code = (current_user.get("emp_code") or "").strip()
+    employee_name = (current_user.get("emp_full_name") or "Employee").strip()
+
+    if not department:
+        logger.info("Skipping department leave push notification: emp_department missing for %s", emp_code)
+        return
+
+    push_result = send_push_notification_to_department(
+        department,
+        "Team Leave Request",
+        f"{employee_name} submitted a leave request.",
+        {
+            "type": "team_leave_submitted",
+            "leave_id": leave_data.get("leave_id"),
+            "leave_type": leave_data.get("leave_type"),
+            "emp_code": emp_code,
+            "emp_department": department,
+        },
+        exclude_emp_code=emp_code,
+    )
+    if not push_result.get("success"):
+        logger.warning(
+            "Department leave push notification failed department=%s emp_code=%s leave_id=%s message=%s",
+            department,
+            emp_code,
+            leave_data.get("leave_id"),
+            push_result.get("message"),
+        )
 
 # =========================================================
 # HELPER FUNCTIONS
@@ -193,6 +229,11 @@ def apply(current_user):
                 logger.exception("Error sending manager leave-request push notification: %s", e)
         else:
             logger.warning("Approver code missing for leave apply push. employee=%s", current_user["emp_code"])
+
+        try:
+            _notify_department_leave_submission(current_user, leave_data)
+        except Exception as e:
+            logger.exception("Error sending department leave-request push notification: %s", e)
 
     return jsonify(result), status
 

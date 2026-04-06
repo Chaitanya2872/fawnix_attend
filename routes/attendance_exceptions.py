@@ -9,6 +9,7 @@ from flask import Blueprint, request, jsonify
 from database.connection import get_db_connection, return_connection
 from middleware.auth_middleware import token_required
 from services.whatsapp_service import send_exception_notification
+from services.notification_service import send_push_notification_to_department
 from services.attendance_exceptions_service import (
     request_late_arrival_exception,
     request_early_leave_exception,
@@ -22,6 +23,50 @@ from services.attendance_exceptions_service import (
 
 exceptions_bp = Blueprint('attendance_exceptions', __name__)
 logger = logging.getLogger(__name__)
+
+
+def _notify_department_team_submission(current_user, exception_data):
+    """Notify teammates in the same department when an exception is submitted."""
+    department = (current_user.get("emp_department") or "").strip()
+    emp_code = (current_user.get("emp_code") or "").strip()
+    employee_name = (current_user.get("emp_full_name") or "Employee").strip()
+    exception_type = (exception_data.get("exception_type") or "").strip()
+
+    if not department:
+        logger.info("Skipping department push notification: emp_department missing for %s", emp_code)
+        return
+
+    if exception_type == "late_arrival":
+        title = "Team Late Arrival Request"
+        body = f"{employee_name} submitted a late arrival request."
+    elif exception_type == "early_leave":
+        title = "Team Early Leave Request"
+        body = f"{employee_name} submitted an early leave request."
+    else:
+        logger.info("Skipping department push notification: unsupported exception type %s", exception_type)
+        return
+
+    push_result = send_push_notification_to_department(
+        department,
+        title,
+        body,
+        {
+            "type": "team_exception_submitted",
+            "exception_type": exception_type,
+            "exception_id": exception_data.get("exception_id"),
+            "emp_code": emp_code,
+            "emp_department": department,
+        },
+        exclude_emp_code=emp_code,
+    )
+    if not push_result.get("success"):
+        logger.warning(
+            "Department exception push notification failed department=%s emp_code=%s exception_id=%s message=%s",
+            department,
+            emp_code,
+            exception_data.get("exception_id"),
+            push_result.get("message"),
+        )
 
 
 def _get_employee_contact(emp_code):
@@ -180,6 +225,10 @@ def submit_late_arrival(current_user):
             _send_manager_request_notification(current_user, response_body.get("data", {}), reason)
         except Exception:
             logger.exception("Failed to send late arrival WhatsApp notification")
+        try:
+            _notify_department_team_submission(current_user, response_body.get("data", {}))
+        except Exception:
+            logger.exception("Failed to send late arrival department push notification")
 
     return jsonify(response_body), status_code
 
@@ -252,6 +301,10 @@ def submit_early_leave(current_user):
             _send_manager_request_notification(current_user, response_body.get("data", {}), reason)
         except Exception:
             logger.exception("Failed to send early leave WhatsApp notification")
+        try:
+            _notify_department_team_submission(current_user, response_body.get("data", {}))
+        except Exception:
+            logger.exception("Failed to send early leave department push notification")
 
     return jsonify(response_body), status_code
 

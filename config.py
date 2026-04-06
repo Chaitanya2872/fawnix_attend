@@ -99,6 +99,26 @@ class Config:
         os.getenv('FEATURE_PUSH_NOTIFICATIONS', 'False')
     ).lower() == 'true'
     FEATURE_PUSH_NOTIFICATIONS = FCM_ENABLED or os.getenv('FEATURE_PUSH_NOTIFICATIONS', 'False').lower() == 'true'
+    FEATURE_MEETING_NOTES = os.getenv('FEATURE_MEETING_NOTES', 'True').lower() == 'true'
+
+    # AI / Meeting Notes Configuration
+    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '').strip()
+    GEMINI_BASE_URL = os.getenv('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta').rstrip('/')
+    GEMINI_MEETING_NOTES_MODEL = os.getenv('GEMINI_MEETING_NOTES_MODEL', 'gemini-1.5-flash').strip()
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '').strip()
+    OPENAI_BASE_URL = os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1').rstrip('/')
+    MEETING_NOTES_TRANSCRIPTION_MODEL = os.getenv('MEETING_NOTES_TRANSCRIPTION_MODEL', 'whisper-1').strip()
+    MEETING_NOTES_COMPLETION_MODEL = os.getenv('MEETING_NOTES_COMPLETION_MODEL', 'gpt-4o-mini').strip()
+    MEETING_NOTES_REQUEST_TIMEOUT = int(os.getenv('MEETING_NOTES_REQUEST_TIMEOUT', 120))
+    MEETING_NOTES_MAX_UPLOAD_MB = int(os.getenv('MEETING_NOTES_MAX_UPLOAD_MB', 25))
+    MEETING_NOTES_ALLOWED_EXTENSIONS = [
+        extension.strip().lower()
+        for extension in os.getenv(
+            'MEETING_NOTES_ALLOWED_EXTENSIONS',
+            'mp3,wav,m4a,mp4,mpeg,mpga,webm,ogg'
+        ).split(',')
+        if extension.strip()
+    ]
     
     @classmethod
     def get_database_uri(cls) -> str:

@@ -78,6 +78,7 @@ from routes.attendance_exceptions import exceptions_bp
 from routes.holidays import holidays_bp
 from routes.leads import leads_bp
 from routes.devices import devices_bp
+from routes.meeting_notes import meeting_notes_bp
 
 # ✨ NEW ROUTES - Location Reports, Distance Monitoring, Approvals
 from routes.location import location_report_bp
@@ -96,6 +97,7 @@ app.register_blueprint(compoff_bp, url_prefix='/api/compoff')
 app.register_blueprint(leads_bp, url_prefix='/api/leads')
 app.register_blueprint(devices_bp, url_prefix='/api/devices')
 app.register_blueprint(exceptions_bp, url_prefix='/api/attendance-exceptions')
+app.register_blueprint(meeting_notes_bp, url_prefix='/api/meeting-notes')
 
 # ✨ Register new blueprints
 app.register_blueprint(location_report_bp, url_prefix='/api/reports')
@@ -441,7 +443,8 @@ def index():
             'leads': '/api/leads',
             'reports': '/api/reports',
             'distance': '/api/distance',
-            'approvals': '/api/approvals'
+            'approvals': '/api/approvals',
+            'meeting_notes': '/api/meeting-notes'
         },
         'docs': '/api/docs',
         'health': '/health'
@@ -576,6 +579,9 @@ def api_docs():
             'tracking': {
                 'POST /api/tracking/location': 'Update location',
                 'GET /api/tracking/history': 'Get tracking history'
+            },
+            'meeting_notes': {
+                'POST /api/meeting-notes/generate': 'Upload voice/audio and generate summary, minutes of meeting, and important points'
             }
         },
         'new_features_v2': {
@@ -687,6 +693,14 @@ def features():
                         'Field visit cleanup',
                         'Comp-off calculation',
                         'Auto-clockout flagging'
+                    ]
+                },
+                {
+                    'name': 'Meeting Notes AI',
+                    'description': 'Upload meeting audio and generate transcript, summary, MOM, and important points',
+                    'status': 'active',
+                    'endpoints': [
+                        'POST /api/meeting-notes/generate'
                     ]
                 }
             ]

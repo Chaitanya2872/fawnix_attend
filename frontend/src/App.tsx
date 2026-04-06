@@ -439,6 +439,12 @@ function App() {
     loggedOut: 0,
     lateExceptions: 0
   })
+  const [attendanceExceptions, setAttendanceExceptions] = useState<AttendanceExceptionRow[]>([])
+  const [attendanceExceptionSummary, setAttendanceExceptionSummary] = useState({
+    lateArrivals: 0,
+    earlyLeaves: 0
+  })
+  const [attendanceView, setAttendanceView] = useState<'attendance' | 'late-arrivals' | 'early-leaves'>('attendance')
   const [attendanceSummary, setAttendanceSummary] = useState({
     attendanceCount: 0,
     compOffDays: 0,
@@ -666,6 +672,9 @@ function App() {
     setProfile(null)
     setEmployees([])
     setAttendanceRows([])
+    setAttendanceExceptions([])
+    setAttendanceExceptionSummary({ lateArrivals: 0, earlyLeaves: 0 })
+    setAttendanceView('attendance')
     setLeaveRows([])
     setActivityRows([])
     setFieldVisitRows([])
@@ -693,6 +702,12 @@ function App() {
         apiRequest('/api/admin/leaves?limit=30', {}, token),
         apiRequest('/api/admin/activities?limit=30&include_tracking=false&include_activity_tracking=false', {}, token)
       ])
+      let exceptionsResponse: any = null
+      try {
+        exceptionsResponse = await apiRequest('/api/attendance-exceptions/team-exceptions', {}, token)
+      } catch {
+        exceptionsResponse = null
+      }
 
       const employeesData = Array.isArray(employeesResponse?.data) ? employeesResponse.data : []
       const attendanceData: AttendanceRow[] = Array.isArray(attendanceResponse?.data?.records)
@@ -706,6 +721,9 @@ function App() {
       const nextSummary = attendanceResponse?.data?.attendance_summary || {}
       const leavesData = Array.isArray(leavesResponse?.data?.leaves) ? leavesResponse.data.leaves : []
       const activitiesData = Array.isArray(activitiesResponse?.data?.activities) ? activitiesResponse.data.activities : []
+      const exceptionsData: AttendanceExceptionRow[] = Array.isArray(exceptionsResponse?.data?.exceptions)
+        ? exceptionsResponse.data.exceptions
+        : []
 
       setEmployees(employeesData)
       const attendanceDeduped = Array.from(
@@ -752,6 +770,11 @@ function App() {
       )
       setLeaveRows(leavesData)
       setActivityRows(activitiesData)
+      setAttendanceExceptions(exceptionsData)
+      setAttendanceExceptionSummary({
+        lateArrivals: exceptionsData.filter((item) => item.exception_type === 'late_arrival').length,
+        earlyLeaves: exceptionsData.filter((item) => item.exception_type === 'early_leave').length
+      })
 
       const fieldVisits = activitiesData
         .filter((item: ActivityRow) => item.field_visit_id)
@@ -1282,6 +1305,7 @@ function App() {
               </div>
             ))}
           </div>
+          )}
         </>
       )
     }
@@ -1293,6 +1317,15 @@ function App() {
       const attendanceBarTotal = Math.max(attendanceSummary.attendanceCount, attendanceSummary.compOffDays, 1)
       const attendanceBarWidth = (attendanceSummary.attendanceCount / attendanceBarTotal) * 100
       const compOffBarWidth = (attendanceSummary.compOffDays / attendanceBarTotal) * 100
+      const attendanceTabCount = attendanceTotalCount
+      const lateArrivalCount = attendanceExceptionSummary.lateArrivals
+      const earlyLeaveCount = attendanceExceptionSummary.earlyLeaves
+      const exceptionRows =
+        attendanceView === 'late-arrivals'
+          ? attendanceExceptions.filter((item) => item.exception_type === 'late_arrival')
+          : attendanceView === 'early-leaves'
+            ? attendanceExceptions.filter((item) => item.exception_type === 'early_leave')
+            : []
 
       return (
         <>
@@ -1300,104 +1333,140 @@ function App() {
             <div>
               <p className="eyebrow">Operations</p>
               <h2>Attendance Records</h2>
-            </div>
-            <div className="attendance-controls">
-              <div className="attendance-filter">
-                <label htmlFor="attendance-date">Date</label>
-                <input
-                  id="attendance-date"
-                  type="date"
-                  value={attendanceDateFilter}
-                  onChange={(event) => {
-                    setAttendanceDateFilter(event.target.value)
-                    setAttendancePage(1)
-                  }}
-                />
-              </div>
-              <div className="attendance-filter">
-                <label htmlFor="attendance-page">Page</label>
-                <select
-                  id="attendance-page"
-                  value={safeAttendancePage}
-                  onChange={(event) => setAttendancePage(Number(event.target.value))}
+              <div className="attendance-tabs">
+                <button
+                  className={`attendance-tab ${attendanceView === 'attendance' ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => setAttendanceView('attendance')}
                 >
-                  {Array.from({ length: attendancePageCount }, (_, index) => {
-                    const pageNumber = index + 1
-                    return (
-                      <option key={pageNumber} value={pageNumber}>
-                        {pageNumber}
-                      </option>
-                    )
-                  })}
-                </select>
+                  Attendance
+                  <span>{attendanceTabCount}</span>
+                </button>
+                <button
+                  className={`attendance-tab ${attendanceView === 'late-arrivals' ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => setAttendanceView('late-arrivals')}
+                >
+                  Late Arrivals
+                  <span>{lateArrivalCount}</span>
+                </button>
+                <button
+                  className={`attendance-tab ${attendanceView === 'early-leaves' ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => setAttendanceView('early-leaves')}
+                >
+                  Early Leaves
+                  <span>{earlyLeaveCount}</span>
+                </button>
               </div>
+            </div>
+            {attendanceView === 'attendance' ? (
+              <>
+                <div className="attendance-controls">
+                  <div className="attendance-filter">
+                    <label htmlFor="attendance-date">Date</label>
+                    <input
+                      id="attendance-date"
+                      type="date"
+                      value={attendanceDateFilter}
+                      onChange={(event) => {
+                        setAttendanceDateFilter(event.target.value)
+                        setAttendancePage(1)
+                      }}
+                    />
+                  </div>
+                  <div className="attendance-filter">
+                    <label htmlFor="attendance-page">Page</label>
+                    <select
+                      id="attendance-page"
+                      value={safeAttendancePage}
+                      onChange={(event) => setAttendancePage(Number(event.target.value))}
+                    >
+                      {Array.from({ length: attendancePageCount }, (_, index) => {
+                        const pageNumber = index + 1
+                        return (
+                          <option key={pageNumber} value={pageNumber}>
+                            {pageNumber}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
+                  <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+                    Refresh
+                  </button>
+                </div>
+                <div className="attendance-controls">
+                  <div className="attendance-filter">
+                    <label htmlFor="attendance-month">Month</label>
+                    <select
+                      id="attendance-month"
+                      value={attendanceReportMonth}
+                      onChange={(event) => setAttendanceReportMonth(event.target.value)}
+                    >
+                      {[
+                        '01',
+                        '02',
+                        '03',
+                        '04',
+                        '05',
+                        '06',
+                        '07',
+                        '08',
+                        '09',
+                        '10',
+                        '11',
+                        '12'
+                      ].map((month, index) => (
+                        <option key={month} value={index + 1}>
+                          {month}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="attendance-filter">
+                    <label htmlFor="attendance-year">Year</label>
+                    <select
+                      id="attendance-year"
+                      value={attendanceReportYear}
+                      onChange={(event) => setAttendanceReportYear(event.target.value)}
+                    >
+                      {Array.from({ length: 6 }, (_, index) => {
+                        const year = new Date().getFullYear() - index
+                        return (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
+                  <div className="attendance-filter">
+                    <label htmlFor="attendance-format">Format</label>
+                    <select
+                      id="attendance-format"
+                      value={attendanceReportFormat}
+                      onChange={(event) => setAttendanceReportFormat(event.target.value as 'csv' | 'pdf')}
+                    >
+                      <option value="csv">CSV</option>
+                      <option value="pdf">PDF</option>
+                    </select>
+                  </div>
+                  <button className="cta dashboard-button" onClick={downloadAttendanceReport}>
+                    Download Report
+                  </button>
+                  {attendanceReportStatus ? <span className="report-status">{attendanceReportStatus}</span> : null}
+                </div>
+              </>
+            ) : (
               <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                 Refresh
               </button>
-            </div>
-            <div className="attendance-controls">
-              <div className="attendance-filter">
-                <label htmlFor="attendance-month">Month</label>
-                <select
-                  id="attendance-month"
-                  value={attendanceReportMonth}
-                  onChange={(event) => setAttendanceReportMonth(event.target.value)}
-                >
-                  {[
-                    '01',
-                    '02',
-                    '03',
-                    '04',
-                    '05',
-                    '06',
-                    '07',
-                    '08',
-                    '09',
-                    '10',
-                    '11',
-                    '12'
-                  ].map((month, index) => (
-                    <option key={month} value={index + 1}>
-                      {month}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="attendance-filter">
-                <label htmlFor="attendance-year">Year</label>
-                <select
-                  id="attendance-year"
-                  value={attendanceReportYear}
-                  onChange={(event) => setAttendanceReportYear(event.target.value)}
-                >
-                  {Array.from({ length: 6 }, (_, index) => {
-                    const year = new Date().getFullYear() - index
-                    return (
-                      <option key={year} value={year}>
-                        {year}
-                      </option>
-                    )
-                  })}
-                </select>
-              </div>
-              <div className="attendance-filter">
-                <label htmlFor="attendance-format">Format</label>
-                <select
-                  id="attendance-format"
-                  value={attendanceReportFormat}
-                  onChange={(event) => setAttendanceReportFormat(event.target.value as 'csv' | 'pdf')}
-                >
-                  <option value="csv">CSV</option>
-                  <option value="pdf">PDF</option>
-                </select>
-              </div>
-              <button className="cta dashboard-button" onClick={downloadAttendanceReport}>
-                Download Report
-              </button>
-              {attendanceReportStatus ? <span className="report-status">{attendanceReportStatus}</span> : null}
-            </div>
+            )}
           </div>
-          <div className="metric-row">
+          {attendanceView === 'attendance' ? (
+            <>
+              <div className="metric-row">
             <div className="metric-card">
               <span>Total Records</span>
               <strong>{attendanceTotalCount}</strong>
@@ -1483,6 +1552,39 @@ function App() {
               </div>
             ))}
           </div>
+            </>
+          ) : (
+            <div className="data-card">
+              {exceptionRows.length ? (
+                exceptionRows.map((row, index) => (
+                  <div key={`${row.id || row.emp_code || index}`} className="data-row exception-row">
+                    <div>
+                      <strong>{row.emp_name || row.emp_code || 'Unknown employee'}</strong>
+                      <span>
+                        {attendanceView === 'late-arrivals'
+                          ? `Late by ${row.late_by_minutes ?? '--'} min`
+                          : `Early by ${row.early_by_minutes ?? '--'} min`}
+                      </span>
+                    </div>
+                    <div>
+                      <strong>
+                        {attendanceView === 'late-arrivals'
+                          ? row.exception_time || '--'
+                          : row.planned_leave_time || '--'}
+                      </strong>
+                      <span>{row.reason || 'No reason provided'}</span>
+                    </div>
+                    <div>
+                      <span className="table-pill">{row.status || 'Pending'}</span>
+                      <span>{formatDateTime(row.requested_at)}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="empty-state">No {attendanceView === 'late-arrivals' ? 'late arrival' : 'early leave'} requests found.</div>
+              )}
+            </div>
+          )}
         </>
       )
     }

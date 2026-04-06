@@ -390,6 +390,47 @@ a {
   align-items: flex-end;
 }
 
+.attendance-tabs {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.attendance-tab {
+  border: 1px solid rgba(17, 44, 50, 0.18);
+  background: rgba(255, 255, 255, 0.7);
+  color: #34464c;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.attendance-tab span {
+  background: rgba(17, 44, 50, 0.08);
+  color: #112c32;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.attendance-tab.active {
+  background: linear-gradient(135deg, #1fa7a4, #7ed9cd);
+  color: #0f2e33;
+  border-color: transparent;
+}
+
+.attendance-tab.active span {
+  background: rgba(255, 255, 255, 0.75);
+}
+
 .report-status {
   font-size: 12px;
   color: #4b5c61;
@@ -696,6 +737,10 @@ a {
     minmax(220px, 1fr)
     minmax(220px, 1fr)
     minmax(120px, 0.5fr);
+}
+
+.exception-row {
+  grid-template-columns: minmax(0, 1.4fr) minmax(140px, 0.9fr) minmax(140px, 0.7fr);
 }
 
 .employee-row strong {

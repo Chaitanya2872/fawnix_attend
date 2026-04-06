@@ -21,7 +21,7 @@ const privacySections: PrivacySection[] = [
   {
     title: 'Location Information',
     body: [
-      'Our app collects and processes location data to support attendance and workforce features, including clock-in, clock-out, field visits, route tracking, geofence validation, working-hours pause and resume, and attendance-related notifications.'
+      'Our app collects and processes location data to support attendance and workforce management features such as clock-in/clock-out, field visits, route tracking, and geofence-based validation.'
     ],
     bullets: []
   },
@@ -29,10 +29,10 @@ const privacySections: PrivacySection[] = [
     title: 'What Location Data We Collect',
     body: [],
     bullets: [
-      'Precise location data from your device',
-      'Clock-in and clock-out location',
-      'Field visit destination and tracking location',
-      'Background location, where enabled, for attendance/geofence monitoring'
+      'Precise location data from your device (GPS and network-based)',
+      'Clock-in and clock-out location coordinates',
+      'Field visit locations and movement tracking',
+      'Background location data (only when enabled) for attendance and geofence monitoring'
     ]
   },
   {
@@ -41,37 +41,57 @@ const privacySections: PrivacySection[] = [
       'We use location data to:'
     ],
     bullets: [
-      'verify attendance actions such as clock-in and clock-out',
-      'monitor whether you are within the allowed work radius',
-      'pause or resume working hours based on geofence rules',
-      'support field visit tracking and route history',
-      'improve attendance accuracy, security, and compliance'
+      'Verify attendance actions such as clock-in and clock-out',
+      'Ensure employees are within the assigned work or geofence area',
+      'Automatically pause or resume working hours based on location rules',
+      'Enable field visit tracking and route history',
+      'Improve accuracy, security, and compliance of attendance records'
     ]
   },
   {
     title: 'When Location Is Collected',
     body: [
-      'Location may be collected:'
+      'Location data may be collected:'
     ],
     bullets: [
-      'while the app is open and in use',
-      'in the background, if attendance tracking or field visit tracking is active and permission is granted'
+      'While the app is actively in use',
+      'In the background, only when attendance tracking or field visit tracking is enabled, and required permissions are granted'
+    ]
+  },
+  {
+    title: 'Background Location Usage',
+    body: [
+      'Background location is used strictly for attendance and workforce tracking features, such as:'
+    ],
+    bullets: [
+      'Ensuring accurate work hour tracking',
+      'Validating presence within assigned locations',
+      'Supporting continuous field visit tracking',
+      'Users are informed and can control this permission at any time through device settings.'
     ]
   },
   {
     title: 'Sharing of Location Data',
     body: [
-      'Location data is shared only with the organization and backend services required to provide attendance, field tracking, reporting, and compliance features.',
-      'We do not sell your location data for advertising purposes.'
+      'Location data is shared only with:',
+      'We do not sell or use location data for advertising purposes.'
     ],
-    bullets: []
+    bullets: [
+      'Your organization (employer/admin)',
+      'Secure backend services required to provide attendance, reporting, and compliance features'
+    ]
   },
   {
-    title: 'Retention',
+    title: 'Data Retention',
     body: [
-      'Location data may be stored as part of attendance records, visit logs, control records, and compliance reports for as long as needed to provide the service, maintain security, resolve disputes, and meet legal or employer recordkeeping requirements.'
+      'Location data is retained only as long as necessary for:'
     ],
-    bullets: []
+    bullets: [
+      'Attendance records',
+      'Field visit logs',
+      'Organizational compliance and reporting',
+      'Retention duration may vary based on organizational policies. Data is securely stored and protected.'
+    ]
   },
   {
     title: 'Retention and Deletion',
@@ -81,12 +101,14 @@ const privacySections: PrivacySection[] = [
     bullets: []
   },
   {
-    title: 'Your Choices',
+    title: 'User Control',
     body: [
-      'You can stop future location collection by not using location-based attendance or field features, adjusting device permissions, or contacting your employer administrator if the app is managed by your organization.',
-      'Disabling location permissions may prevent core attendance and field-operations features from working correctly.'
+      'Users can:'
     ],
-    bullets: []
+    bullets: [
+      'Enable or disable location permissions at any time via device settings',
+      'Stop background tracking by disabling permissions or logging out of the app'
+    ]
   },
   {
     title: 'Security',
@@ -98,7 +120,9 @@ const privacySections: PrivacySection[] = [
   {
     title: 'Contact',
     body: [
-      'For privacy questions, data requests, or policy concerns, please contact the Fawnix support or administrator contact provided by your organization or through the official support contact listed for this app.'
+      'For privacy questions, data requests, or policy concerns, contact ACS Technologies Ltd.',
+      'Email: chaitanya.k@acstechnologies.co.in',
+      'Phone: 6304718795'
     ],
     bullets: []
   }

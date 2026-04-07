@@ -803,10 +803,10 @@ a {
     minmax(0, 1.6fr)
     minmax(160px, 0.9fr)
     minmax(160px, 0.9fr)
-    minmax(220px, 1.2fr)
-    minmax(220px, 1.2fr)
+    minmax(210px, 1.15fr)
+    minmax(210px, 1.05fr)
     minmax(120px, 0.6fr)
-    minmax(140px, 0.8fr);
+    minmax(92px, 0.42fr);
 }
 
 .attendance-row {
@@ -837,6 +837,14 @@ a {
 .employee-row strong,
 .employee-row span {
   word-break: break-word;
+}
+
+.employee-row .employee-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: nowrap;
 }
 
 .data-row strong,
@@ -1180,6 +1188,31 @@ a {
   transition: all 0.2s ease;
   white-space: nowrap;
   font-family: 'Poppins', sans-serif;
+}
+
+.employee-row .action-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 10px;
+  font-size: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.employee-row .action-btn::before {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.employee-row .edit-btn::before {
+  content: '\270E';
+}
+
+.employee-row .delete-btn::before {
+  content: '\1F5D1';
 }
 
 .action-btn:hover {

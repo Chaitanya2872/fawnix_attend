@@ -52,3 +52,12 @@ def register_error_handlers(app):
             "error": "Forbidden",
             "message": "You don't have permission to access this resource"
         }), 403
+
+    @app.errorhandler(413)
+    def request_entity_too_large(error):
+        max_upload_mb = app.config.get('MAX_CONTENT_LENGTH', 0) // (1024 * 1024)
+        return jsonify({
+            "success": False,
+            "error": "Request Entity Too Large",
+            "message": f"Uploaded file is too large. Maximum request size is {max_upload_mb} MB."
+        }), 413

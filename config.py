@@ -19,6 +19,8 @@ class Config:
     DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
     TESTING = os.getenv('TESTING', 'False').lower() == 'true'
     PORT = int(os.getenv('PORT', 5000))
+    MAX_CONTENT_LENGTH_MB = int(os.getenv('MAX_CONTENT_LENGTH_MB', 100))
+    MAX_CONTENT_LENGTH = MAX_CONTENT_LENGTH_MB * 1024 * 1024
     
     # Database Configuration
     DATABASE_HOST = os.getenv('DATABASE_HOST', 'employee_db')
@@ -110,7 +112,7 @@ class Config:
     MEETING_NOTES_TRANSCRIPTION_MODEL = os.getenv('MEETING_NOTES_TRANSCRIPTION_MODEL', 'whisper-1').strip()
     MEETING_NOTES_COMPLETION_MODEL = os.getenv('MEETING_NOTES_COMPLETION_MODEL', 'gpt-4o-mini').strip()
     MEETING_NOTES_REQUEST_TIMEOUT = int(os.getenv('MEETING_NOTES_REQUEST_TIMEOUT', 120))
-    MEETING_NOTES_MAX_UPLOAD_MB = int(os.getenv('MEETING_NOTES_MAX_UPLOAD_MB', 25))
+    MEETING_NOTES_MAX_UPLOAD_MB = int(os.getenv('MEETING_NOTES_MAX_UPLOAD_MB', 100))
     MEETING_NOTES_ALLOWED_EXTENSIONS = [
         extension.strip().lower()
         for extension in os.getenv(

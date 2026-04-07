@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fawnix - Employee Management Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .config-section {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .config-section input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .config-section button {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .config-section button:hover {
+            background: #764ba2;
+        }
+
+        .token-display {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #666;
+            max-height: 40px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .main-content {
+            display: grid;
+            gap: 20px;
+            grid-template-columns: 1fr 1fr;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 14px;
+            flex: 1;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #764ba2;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+            flex: 0.5;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-sm {
+            padding: 6px 10px;
+            font-size: 12px;
+        }
+
+        .employee-list {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .employee-item {
+            background: #f8f9fa;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border-left: 4px solid #667eea;
+        }
+
+        .employee-item h4 {
+            color: #333;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .employee-item p {
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 3px;
+        }
+
+        .employee-item-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .response-box {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+            color: #333;
+        }
+
+        .response-box.error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        .response-box.success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #eee;
+        }
+
+        .tab-button {
+            padding: 10px 15px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            color: #666;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .tab-button.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        table th {
+            background: #f8f9fa;
+            color: #333;
+            padding: 10px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #ddd;
+        }
+
+        table td {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .modal-close:hover {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🎯 Fawnix - Employee Management</h1>
+            <div class="config-section">
+                <input type="text" id="baseUrl" placeholder="API Base URL" value="http://localhost:5000/api" style="width: 300px;">
+                <input type="text" id="token" placeholder="JWT Token" style="flex: 1; min-width: 300px;">
+                <button onclick="saveConfig()">Save Config</button>
+            </div>
+            <div class="token-display" id="tokenDisplay">No token loaded</div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Employee List -->
+            <div class="card">
+                <h2>👥 Employee List</h2>
+                <input type="text" class="search-box" id="searchBox" placeholder="Search employees...">
+                
+                <div id="searchResults"></div>
+                
+                <div class="tabs">
+                    <button class="tab-button active" onclick="switchTab('table')">Table View</button>
+                    <button class="tab-button" onclick="switchTab('list')">List View</button>
+                </div>
+
+                <div id="table" class="tab-content active">
+                    <div class="table-container">
+                        <table id="employeeTable">
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Designation</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody">
+                                <tr><td colspan="5" style="text-align: center; color: #999;">Load employees to see data</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="list" class="tab-content">
+                    <div class="employee-list" id="employeeListContainer">
+                        <p style="text-align: center; color: #999;">Load employees to see data</p>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="loadEmployees()">🔄 Load All Employees</button>
+                </div>
+                <div id="loadResponse" style="margin-top: 15px;"></div>
+            </div>
+
+            <!-- Edit Employee -->
+            <div class="card">
+                <h2>✏️ Edit Employee</h2>
+                <div class="form-group">
+                    <label>Employee Code</label>
+                    <input type="text" id="editEmpCode" placeholder="e.g., EMP001" readonly>
+                </div>
+                <div id="editForm" style="display: none;">
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" id="editFullName" placeholder="Full Name">
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="editEmail" placeholder="email@company.com">
+                    </div>
+                    <div class="form-group">
+                        <label>Contact</label>
+                        <input type="text" id="editContact" placeholder="Phone Number">
+                    </div>
+                    <div class="form-group">
+                        <label>Designation</label>
+                        <input type="text" id="editDesignation" placeholder="e.g., Software Engineer">
+                    </div>
+                    <div class="form-group">
+                        <label>Department</label>
+                        <input type="text" id="editDepartment" placeholder="e.g., Engineering">
+                    </div>
+                    <div class="form-group">
+                        <label>Manager Code</label>
+                        <input type="text" id="editManager" placeholder="e.g., EMP002">
+                    </div>
+                    <div class="form-group">
+                        <label>Grade</label>
+                        <input type="text" id="editGrade" placeholder="e.g., A, B, C">
+                    </div>
+                    <div class="button-group">
+                        <button class="btn btn-success" onclick="updateEmployee()">💾 Save Changes</button>
+                        <button class="btn btn-secondary" onclick="clearEditForm()">❌ Clear</button>
+                    </div>
+                    <div id="editResponse" style="margin-top: 15px;"></div>
+                </div>
+                <p id="noEmployeeSelected" style="color: #999; text-align: center; padding: 30px;">Select an employee to edit</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div class="modal-overlay" id="editModal">
+        <div class="modal">
+            <button class="modal-close" onclick="closeEditModal()">×</button>
+            <h2>Edit Employee</h2>
+            <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" id="modalEditFullName" placeholder="Full Name">
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="modalEditEmail" placeholder="email@company.com">
+            </div>
+            <div class="form-group">
+                <label>Contact</label>
+                <input type="text" id="modalEditContact" placeholder="Phone Number">
+            </div>
+            <div class="form-group">
+                <label>Designation</label>
+                <input type="text" id="modalEditDesignation" placeholder="e.g., Software Engineer">
+            </div>
+            <div class="form-group">
+                <label>Department</label>
+                <input type="text" id="modalEditDepartment" placeholder="e.g., Engineering">
+            </div>
+            <div class="form-group">
+                <label>Manager Code</label>
+                <input type="text" id="modalEditManager" placeholder="e.g., EMP002">
+            </div>
+            <div class="button-group">
+                <button class="btn btn-success" onclick="updateEmployeeFromModal()">💾 Save</button>
+                <button class="btn btn-secondary" onclick="closeEditModal()">❌ Cancel</button>
+            </div>
+            <div id="modalEditResponse" style="margin-top: 15px;"></div>
+        </div>
+    </div>
+
+    <script>
+        let employees = [];
+        let currentEditingEmpCode = null;
+        let allEmployeesData = [];
+
+        // Load configuration
+        function loadConfig() {
+            const baseUrl = localStorage.getItem('apiBaseUrl') || 'http://localhost:5000/api';
+            const token = localStorage.getItem('jwtToken') || '';
+            
+            document.getElementById('baseUrl').value = baseUrl;
+            document.getElementById('token').value = token;
+            updateTokenDisplay();
+        }
+
+        function saveConfig() {
+            const baseUrl = document.getElementById('baseUrl').value;
+            const token = document.getElementById('token').value;
+            
+            localStorage.setItem('apiBaseUrl', baseUrl);
+            localStorage.setItem('jwtToken', token);
+            updateTokenDisplay();
+            
+            showAlert('Configuration saved successfully!', 'success');
+        }
+
+        function updateTokenDisplay() {
+            const token = localStorage.getItem('jwtToken') || '';
+            const display = document.getElementById('tokenDisplay');
+            if (token) {
+                display.textContent = `Token: ${token.substring(0, 30)}...`;
+            } else {
+                display.textContent = 'No token loaded';
+            }
+        }
+
+        function getConfig() {
+            return {
+                baseUrl: localStorage.getItem('apiBaseUrl') || 'http://localhost:5000/api',
+                token: localStorage.getItem('jwtToken') || ''
+            };
+        }
+
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-button').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Load employees
+        async function loadEmployees() {
+            const config = getConfig();
+            const resultDiv = document.getElementById('loadResponse');
+            
+            if (!config.token) {
+                showAlert('Please provide a JWT token', 'error', resultDiv);
+                return;
+            }
+
+            resultDiv.innerHTML = '<div class="spinner"></div> Loading employees...';
+
+            try {
+                const response = await fetch(`${config.baseUrl}/admin/all-employees`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${config.token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    allEmployeesData = data.data || [];
+                    renderEmployees(allEmployeesData);
+                    showAlert(`Loaded ${allEmployeesData.length} employees`, 'success', resultDiv);
+                } else {
+                    showAlert(data.message || 'Failed to load employees', 'error', resultDiv);
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error', resultDiv);
+            }
+        }
+
+        // Render employees
+        function renderEmployees(employeeList) {
+            // Render table
+            const tableBody = document.getElementById('tableBody');
+            tableBody.innerHTML = employeeList.map(emp => `
+                <tr>
+                    <td><strong>${emp.emp_code}</strong></td>
+                    <td>${emp.emp_full_name}</td>
+                    <td>${emp.emp_email}</td>
+                    <td>${emp.emp_designation || 'N/A'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="selectEmployeeForEdit('${emp.emp_code}')">✏️ Edit</button>
+                        <button class="btn btn-sm btn-secondary" onclick="viewEmployeeDetails('${emp.emp_code}')">👁️ View</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            // Render list
+            const listContainer = document.getElementById('employeeListContainer');
+            listContainer.innerHTML = employeeList.map(emp => `
+                <div class="employee-item">
+                    <h4>${emp.emp_full_name} <span class="badge badge-success">${emp.emp_code}</span></h4>
+                    <p><strong>Email:</strong> ${emp.emp_email}</p>
+                    <p><strong>Designation:</strong> ${emp.emp_designation || 'N/A'}</p>
+                    <p><strong>Department:</strong> ${emp.emp_department || 'N/A'}</p>
+                    <div class="employee-item-actions">
+                        <button class="btn btn-sm btn-primary" onclick="selectEmployeeForEdit('${emp.emp_code}')">✏️ Edit</button>
+                        <button class="btn btn-sm btn-secondary" onclick="viewEmployeeDetails('${emp.emp_code}')">👁️ View</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Select employee for editing
+        async function selectEmployeeForEdit(empCode) {
+            const config = getConfig();
+            
+            if (!config.token) {
+                showAlert('Please provide a JWT token', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${config.baseUrl}/users/${empCode}`, {
+                    headers: {
+                        'Authorization': `Bearer ${config.token}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    const emp = data.data.employee;
+                    currentEditingEmpCode = empCode;
+                    
+                    document.getElementById('editEmpCode').value = emp.emp_code;
+                    document.getElementById('editFullName').value = emp.emp_full_name;
+                    document.getElementById('editEmail').value = emp.emp_email;
+                    document.getElementById('editContact').value = emp.emp_contact || '';
+                    document.getElementById('editDesignation').value = emp.emp_designation || '';
+                    document.getElementById('editDepartment').value = emp.emp_department || '';
+                    document.getElementById('editManager').value = emp.emp_manager || '';
+                    document.getElementById('editGrade').value = emp.emp_grade || '';
+                    
+                    document.getElementById('editForm').style.display = 'block';
+                    document.getElementById('noEmployeeSelected').style.display = 'none';
+                    
+                    showAlert(`Loaded employee: ${emp.emp_full_name}`, 'success', document.getElementById('editResponse'));
+                } else {
+                    showAlert(data.message || 'Failed to load employee', 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Update employee
+        async function updateEmployee() {
+            const config = getConfig();
+            const empCode = document.getElementById('editEmpCode').value;
+            const responseDiv = document.getElementById('editResponse');
+            
+            if (!config.token) {
+                showAlert('Please provide a JWT token', 'error', responseDiv);
+                return;
+            }
+
+            const payload = {
+                emp_full_name: document.getElementById('editFullName').value,
+                emp_email: document.getElementById('editEmail').value,
+                emp_contact: document.getElementById('editContact').value,
+                emp_designation: document.getElementById('editDesignation').value,
+                emp_department: document.getElementById('editDepartment').value,
+                emp_manager: document.getElementById('editManager').value || null,
+                emp_grade: document.getElementById('editGrade').value || null
+            };
+
+            responseDiv.innerHTML = '<div class="spinner"></div> Updating...';
+
+            try {
+                const response = await fetch(`${config.baseUrl}/users/${empCode}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${config.token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('Employee updated successfully!', 'success', responseDiv);
+                    loadEmployees(); // Refresh list
+                } else {
+                    showAlert(data.message || 'Failed to update employee', 'error', responseDiv);
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error', responseDiv);
+            }
+        }
+
+        // View employee details
+        async function viewEmployeeDetails(empCode) {
+            const config = getConfig();
+            
+            if (!config.token) {
+                showAlert('Please provide a JWT token', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${config.baseUrl}/users/${empCode}`, {
+                    headers: {
+                        'Authorization': `Bearer ${config.token}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    const emp = data.data.employee;
+                    alert(`Employee Details:\n\nCode: ${emp.emp_code}\nName: ${emp.emp_full_name}\nEmail: ${emp.emp_email}\nDesignation: ${emp.emp_designation}\nDepartment: ${emp.emp_department}\nManager: ${emp.emp_manager}`);
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Clear edit form
+        function clearEditForm() {
+            document.getElementById('editEmpCode').value = '';
+            document.getElementById('editFullName').value = '';
+            document.getElementById('editEmail').value = '';
+            document.getElementById('editContact').value = '';
+            document.getElementById('editDesignation').value = '';
+            document.getElementById('editDepartment').value = '';
+            document.getElementById('editManager').value = '';
+            document.getElementById('editGrade').value = '';
+            document.getElementById('editForm').style.display = 'none';
+            document.getElementById('noEmployeeSelected').style.display = 'block';
+            document.getElementById('editResponse').innerHTML = '';
+        }
+
+        // Show alert
+        function showAlert(message, type, container) {
+            const div = document.createElement('div');
+            div.className = `alert alert-${type}`;
+            div.textContent = message;
+            
+            if (container) {
+                container.innerHTML = '';
+                container.appendChild(div);
+            } else {
+                alert(message);
+            }
+        }
+
+        // Initialize
+        window.addEventListener('load', loadConfig);
+    </script>
+</body>
+</html>

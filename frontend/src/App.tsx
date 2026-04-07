@@ -352,7 +352,6 @@ function formatDate(value?: string) {
   })
 }
 
-<<<<<<< HEAD
 function formatDistanceKm(value?: number | null) {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return '--'
@@ -367,6 +366,13 @@ function parseCoords(lat?: number | string, lon?: number | string) {
     return null
   }
   return { lat: latNum, lon: lonNum }
+}
+
+function formatCoordsValue(coords?: { lat: number; lon: number } | null) {
+  if (!coords) {
+    return undefined
+  }
+  return `${coords.lat.toFixed(6)}, ${coords.lon.toFixed(6)}`
 }
 
 function calculateDistanceKm(points: Array<{ lat: number; lon: number }>) {
@@ -393,7 +399,8 @@ function calculateDistanceKm(points: Array<{ lat: number; lon: number }>) {
   }
 
   return total
-=======
+}
+
 function toDateInputValue(value: Date) {
   const offsetValue = value.getTimezoneOffset() * 60000
   return new Date(value.getTime() - offsetValue).toISOString().slice(0, 10)
@@ -422,7 +429,6 @@ function isDateWithinRange(
   }
 
   return targetDate >= startDate.slice(0, 10) && targetDate <= endDate.slice(0, 10)
->>>>>>> 47f50f81c00fd5d68618b6d397c76774e5503d29
 }
 
 function normalizePath(pathname: string) {
@@ -881,20 +887,33 @@ function App() {
 
       const fieldVisits = activitiesData
         .filter((item: ActivityRow) => item.field_visit_id)
-        .map((item: ActivityRow) => ({
-          activityId: item.id || item.field_visit_id || '',
-          fieldVisitId: item.field_visit_id ? Number(item.field_visit_id) : undefined,
-          employee: item.employee_name || item.employee_email || 'Unknown employee',
-          visitType: item.field_visit_type || 'Field Visit',
-          purpose: item.field_visit_purpose || item.activity_type || 'Visit',
-          status: item.field_visit_status || item.status || 'Unknown',
-          location: item.field_visit_start_address || item.field_visit_end_address || 'Location unavailable',
-          startAddress: item.field_visit_start_address || undefined,
-          endAddress: item.field_visit_end_address || undefined,
-          distanceKm: item.total_distance_km !== undefined ? Number(item.total_distance_km) : null,
-          startCoords: parseCoords(item.start_latitude, item.start_longitude),
-          endCoords: parseCoords(item.end_latitude, item.end_longitude)
-        }))
+        .map((item: ActivityRow) => {
+          const startCoords = parseCoords(item.start_latitude, item.start_longitude)
+          const endCoords = parseCoords(item.end_latitude, item.end_longitude)
+          const startAddress = item.field_visit_start_address || formatCoordsValue(startCoords)
+          const endAddress = item.field_visit_end_address || formatCoordsValue(endCoords)
+          const distanceKmValue =
+            item.total_distance_km !== undefined
+              ? Number(item.total_distance_km)
+              : startCoords && endCoords
+                ? calculateDistanceKm([startCoords, endCoords])
+                : null
+
+          return {
+            activityId: item.id || item.field_visit_id || '',
+            fieldVisitId: item.field_visit_id ? Number(item.field_visit_id) : undefined,
+            employee: item.employee_name || item.employee_email || 'Unknown employee',
+            visitType: item.field_visit_type || 'Field Visit',
+            purpose: item.field_visit_purpose || item.activity_type || 'Visit',
+            status: item.field_visit_status || item.status || 'Unknown',
+            location: startAddress || endAddress || 'Location unavailable',
+            startAddress: startAddress || undefined,
+            endAddress: endAddress || undefined,
+            distanceKm: Number.isFinite(distanceKmValue) ? distanceKmValue : null,
+            startCoords,
+            endCoords
+          }
+        })
 
       setFieldVisitRows(fieldVisits)
     } catch (error) {

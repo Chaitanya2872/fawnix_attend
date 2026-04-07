@@ -255,6 +255,20 @@ type LeaveRow = {
   status?: string
 }
 
+type AttendanceExceptionRow = {
+  id?: number
+  emp_code?: string
+  emp_name?: string
+  exception_type?: string
+  exception_time?: string
+  planned_leave_time?: string
+  late_by_minutes?: number
+  early_by_minutes?: number
+  reason?: string
+  status?: string
+  requested_at?: string
+}
+
 type ActivityRow = {
   id?: number
   employee_name?: string
@@ -338,6 +352,7 @@ function formatDate(value?: string) {
   })
 }
 
+<<<<<<< HEAD
 function formatDistanceKm(value?: number | null) {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return '--'
@@ -378,6 +393,36 @@ function calculateDistanceKm(points: Array<{ lat: number; lon: number }>) {
   }
 
   return total
+=======
+function toDateInputValue(value: Date) {
+  const offsetValue = value.getTimezoneOffset() * 60000
+  return new Date(value.getTime() - offsetValue).toISOString().slice(0, 10)
+}
+
+function isSameDate(value: string | undefined, targetDate: string) {
+  if (!value || !targetDate) {
+    return false
+  }
+
+  const parsed = new Date(value)
+  if (!Number.isNaN(parsed.getTime())) {
+    return toDateInputValue(parsed) === targetDate
+  }
+
+  return value.slice(0, 10) === targetDate
+}
+
+function isDateWithinRange(
+  targetDate: string,
+  startDate?: string,
+  endDate?: string
+) {
+  if (!targetDate || !startDate || !endDate) {
+    return false
+  }
+
+  return targetDate >= startDate.slice(0, 10) && targetDate <= endDate.slice(0, 10)
+>>>>>>> 47f50f81c00fd5d68618b6d397c76774e5503d29
 }
 
 function normalizePath(pathname: string) {
@@ -484,20 +529,20 @@ function App() {
 
   const [employees, setEmployees] = useState<EmployeeRow[]>([])
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
-  const [attendanceTotalCount, setAttendanceTotalCount] = useState(0)
-  const [attendanceShiftMetrics, setAttendanceShiftMetrics] = useState({
+  const [, setAttendanceTotalCount] = useState(0)
+  const [, setAttendanceShiftMetrics] = useState({
     lateLogins: 0,
     onTimeLogins: 0,
     loggedOut: 0,
     lateExceptions: 0
   })
   const [attendanceExceptions, setAttendanceExceptions] = useState<AttendanceExceptionRow[]>([])
-  const [attendanceExceptionSummary, setAttendanceExceptionSummary] = useState({
+  const [, setAttendanceExceptionSummary] = useState({
     lateArrivals: 0,
     earlyLeaves: 0
   })
-  const [attendanceView, setAttendanceView] = useState<'attendance' | 'late-arrivals' | 'early-leaves'>('attendance')
-  const [attendanceSummary, setAttendanceSummary] = useState({
+  const [attendanceView, setAttendanceView] = useState<'attendance' | 'late-arrivals' | 'early-leaves' | 'leaves'>('attendance')
+  const [, setAttendanceSummary] = useState({
     attendanceCount: 0,
     compOffDays: 0,
     efficiencyScore: 0
@@ -505,8 +550,7 @@ function App() {
   const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([])
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
-  const [attendanceDateFilter, setAttendanceDateFilter] = useState('')
-  const [attendancePage, setAttendancePage] = useState(1)
+  const [attendanceDateFilter, setAttendanceDateFilter] = useState(() => toDateInputValue(new Date()))
   const [attendanceReportMonth, setAttendanceReportMonth] = useState(() => String(new Date().getMonth() + 1))
   const [attendanceReportYear, setAttendanceReportYear] = useState(() => String(new Date().getFullYear()))
   const [attendanceReportFormat, setAttendanceReportFormat] = useState<'csv' | 'pdf'>('csv')
@@ -540,7 +584,7 @@ function App() {
     emp_manager: '',
     role: 'employee'
   })
-  const attendancePageSize = 10
+  const attendancePageSize = 1000
   const currentPath = normalizePath(window.location.pathname)
   const isPrivacyPage = currentPath === '/privacy-policy' || currentPath === '/privacy'
 
@@ -576,7 +620,7 @@ function App() {
     }
 
     void loadDashboard(accessToken)
-  }, [accessToken, showDashboard, showAdminLogin, attendanceDateFilter, attendancePage])
+  }, [accessToken, showDashboard, showAdminLogin, attendanceDateFilter])
 
   const updateTokens = (nextAccessToken: string, nextRefreshToken: string) => {
     setAccessToken(nextAccessToken)
@@ -749,7 +793,6 @@ function App() {
 
     try {
       const attendanceParams = new URLSearchParams()
-      attendanceParams.set('page', String(attendancePage))
       attendanceParams.set('page_size', String(attendancePageSize))
       if (attendanceDateFilter) {
         attendanceParams.set('date', attendanceDateFilter)
@@ -1212,17 +1255,49 @@ function App() {
     }
   }
 
-  // Attendance data is already filtered + paginated server-side
-  const filteredAttendance = attendanceRows
+  const selectedAttendanceDate = attendanceDateFilter || toDateInputValue(new Date())
 
-  const lateLogins = attendanceShiftMetrics.lateLogins
-  const onTimeLogins = attendanceShiftMetrics.onTimeLogins
-  const efficiencyScore = attendanceSummary.efficiencyScore
+  const firstClockInRows = Array.from(
+    attendanceRows.reduce((map, row) => {
+      const employeeKey = (row.employee_email || row.employee_name || row.id || '').toString().toLowerCase()
+      const existingRow = map.get(employeeKey)
+      const currentTime = row.login_time ? new Date(row.login_time).getTime() : Number.MAX_SAFE_INTEGER
+      const existingTime = existingRow?.login_time ? new Date(existingRow.login_time).getTime() : Number.MAX_SAFE_INTEGER
+
+      if (!existingRow || currentTime < existingTime) {
+        map.set(employeeKey, row)
+      }
+
+      return map
+    }, new Map<string, AttendanceRow>()).values()
+  ).sort((left, right) => {
+    const leftTime = left.login_time ? new Date(left.login_time).getTime() : 0
+    const rightTime = right.login_time ? new Date(right.login_time).getTime() : 0
+    return leftTime - rightTime
+  })
+
+  const selectedDateLateArrivals = attendanceExceptions.filter(
+    (item) => item.exception_type === 'late_arrival' && isSameDate(item.requested_at, selectedAttendanceDate)
+  )
+  const selectedDateEarlyLeaves = attendanceExceptions.filter(
+    (item) => item.exception_type === 'early_leave' && isSameDate(item.requested_at, selectedAttendanceDate)
+  )
+  const lateLogins = selectedDateLateArrivals.length
+  const onTimeLogins = Math.max(firstClockInRows.length - lateLogins, 0)
+  const selectedDateLeaves = leaveRows
+    .filter((row) => {
+      const status = (row.status || '').toLowerCase()
+      return (
+        !['rejected', 'cancelled'].includes(status) &&
+        isDateWithinRange(selectedAttendanceDate, row.from_date, row.to_date)
+      )
+    })
+    .sort((left, right) =>
+      (left.emp_full_name || left.emp_code || '').localeCompare(right.emp_full_name || right.emp_code || '')
+    )
 
   const renderDashboardPanel = () => {
-    const attendancePageCount = Math.max(1, Math.ceil(attendanceTotalCount / attendancePageSize))
-    const safeAttendancePage = Math.min(attendancePage, attendancePageCount)
-    const attendancePageRows = filteredAttendance
+    const attendancePageRows = firstClockInRows
 
     if (dashboardLoading) {
       return <div className="empty-state">Loading admin data...</div>
@@ -1403,26 +1478,20 @@ function App() {
               </div>
             ))}
           </div>
-          )}
         </>
       )
     }
 
     if (activePanel === 'attendance') {
-      const donutRadius = 52
-      const donutCircumference = 2 * Math.PI * donutRadius
-      const donutOffset = donutCircumference * (1 - Math.min(Math.max(efficiencyScore, 0), 100) / 100)
-      const attendanceBarTotal = Math.max(attendanceSummary.attendanceCount, attendanceSummary.compOffDays, 1)
-      const attendanceBarWidth = (attendanceSummary.attendanceCount / attendanceBarTotal) * 100
-      const compOffBarWidth = (attendanceSummary.compOffDays / attendanceBarTotal) * 100
-      const attendanceTabCount = attendanceTotalCount
-      const lateArrivalCount = attendanceExceptionSummary.lateArrivals
-      const earlyLeaveCount = attendanceExceptionSummary.earlyLeaves
+      const attendanceTabCount = attendancePageRows.length
+      const lateArrivalCount = selectedDateLateArrivals.length
+      const earlyLeaveCount = selectedDateEarlyLeaves.length
+      const leaveCount = selectedDateLeaves.length
       const exceptionRows =
         attendanceView === 'late-arrivals'
-          ? attendanceExceptions.filter((item) => item.exception_type === 'late_arrival')
+          ? selectedDateLateArrivals
           : attendanceView === 'early-leaves'
-            ? attendanceExceptions.filter((item) => item.exception_type === 'early_leave')
+            ? selectedDateEarlyLeaves
             : []
 
       return (
@@ -1437,7 +1506,7 @@ function App() {
                   type="button"
                   onClick={() => setAttendanceView('attendance')}
                 >
-                  Attendance
+                  First Clock-Ins
                   <span>{attendanceTabCount}</span>
                 </button>
                 <button
@@ -1456,6 +1525,14 @@ function App() {
                   Early Leaves
                   <span>{earlyLeaveCount}</span>
                 </button>
+                <button
+                  className={`attendance-tab ${attendanceView === 'leaves' ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => setAttendanceView('leaves')}
+                >
+                  Leaves
+                  <span>{leaveCount}</span>
+                </button>
               </div>
             </div>
             {attendanceView === 'attendance' ? (
@@ -1467,28 +1544,8 @@ function App() {
                       id="attendance-date"
                       type="date"
                       value={attendanceDateFilter}
-                      onChange={(event) => {
-                        setAttendanceDateFilter(event.target.value)
-                        setAttendancePage(1)
-                      }}
+                      onChange={(event) => setAttendanceDateFilter(event.target.value)}
                     />
-                  </div>
-                  <div className="attendance-filter">
-                    <label htmlFor="attendance-page">Page</label>
-                    <select
-                      id="attendance-page"
-                      value={safeAttendancePage}
-                      onChange={(event) => setAttendancePage(Number(event.target.value))}
-                    >
-                      {Array.from({ length: attendancePageCount }, (_, index) => {
-                        const pageNumber = index + 1
-                        return (
-                          <option key={pageNumber} value={pageNumber}>
-                            {pageNumber}
-                          </option>
-                        )
-                      })}
-                    </select>
                   </div>
                   <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                     Refresh
@@ -1562,71 +1619,48 @@ function App() {
               </button>
             )}
           </div>
+          <div className="metric-row">
+                <button
+                  className={`metric-card metric-button ${attendanceView === 'attendance' ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => setAttendanceView('attendance')}
+                >
+                  <span>First Clock-Ins</span>
+                  <strong>{attendanceTabCount}</strong>
+                  <small>{selectedAttendanceDate}</small>
+                </button>
+                <button
+                  className={`metric-card metric-button ${attendanceView === 'late-arrivals' ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => setAttendanceView('late-arrivals')}
+                >
+                  <span>Late Arrivals Today</span>
+                  <strong>{lateArrivalCount}</strong>
+                  <small>Show request list</small>
+                </button>
+                <button
+                  className={`metric-card metric-button ${attendanceView === 'early-leaves' ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => setAttendanceView('early-leaves')}
+                >
+                  <span>Early Leaves Today</span>
+                  <strong>{earlyLeaveCount}</strong>
+                  <small>Show request list</small>
+                </button>
+                <button
+                  className={`metric-card metric-button ${attendanceView === 'leaves' ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => setAttendanceView('leaves')}
+                >
+                  <span>Leaves Today</span>
+                  <strong>{leaveCount}</strong>
+                  <small>Employees on leave</small>
+                </button>
+          </div>
           {attendanceView === 'attendance' ? (
-            <>
-              <div className="metric-row">
-            <div className="metric-card">
-              <span>Total Records</span>
-              <strong>{attendanceTotalCount}</strong>
-            </div>
-            <div className="metric-card">
-              <span>Logged Out</span>
-              <strong>{attendanceShiftMetrics.loggedOut}</strong>
-            </div>
-            <div className="metric-card">
-              <span>Late / Exceptions</span>
-              <strong>{attendanceShiftMetrics.lateExceptions}</strong>
-            </div>
-          </div>
-          <div className="chart-row">
-            <div className="chart-card">
-              <div className="chart-head">
-                <strong>Attendance Efficiency Score</strong>
-                <span>{attendanceDateFilter ? `${efficiencyScore.toFixed(1)}%` : '--'}</span>
-              </div>
-              <div className="donut-wrap">
-                <svg width="140" height="140" viewBox="0 0 140 140" className="donut-chart" aria-hidden="true">
-                  <circle className="donut-bg" cx="70" cy="70" r={donutRadius} />
-                  <circle
-                    className="donut-progress"
-                    cx="70"
-                    cy="70"
-                    r={donutRadius}
-                    strokeDasharray={donutCircumference}
-                    strokeDashoffset={donutOffset}
-                  />
-                </svg>
-                <div className="donut-center">
-                  <strong>{attendanceDateFilter ? `${efficiencyScore.toFixed(1)}%` : '0%'}</strong>
-                  <span>Efficiency</span>
-                </div>
-              </div>
-            </div>
-            <div className="chart-card">
-              <div className="chart-head">
-                <strong>Attendance & Comp-Offs</strong>
-                <span>{attendanceDateFilter ? 'Selected date' : 'No date selected'}</span>
-              </div>
-              <div className="bar-chart">
-                <div className="bar-row">
-                  <span>Attendance</span>
-                  <div className="bar-track">
-                    <div className="bar-fill attendance" style={{ width: `${attendanceBarWidth}%` }} />
-                  </div>
-                  <strong>{attendanceSummary.attendanceCount}</strong>
-                </div>
-                <div className="bar-row">
-                  <span>Comp-Offs</span>
-                  <div className="bar-track">
-                    <div className="bar-fill compoff" style={{ width: `${compOffBarWidth}%` }} />
-                  </div>
-                  <strong>{attendanceSummary.compOffDays}</strong>
-                </div>
-              </div>
-            </div>
-          </div>
           <div className="data-card">
-            {attendancePageRows.map((row, index) => (
+            {attendancePageRows.length ? (
+              attendancePageRows.map((row, index) => (
               <div key={`${row.id || row.employee_email || index}`} className="data-row attendance-row">
                 <div>
                   <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
@@ -1648,9 +1682,33 @@ function App() {
                   <span className="table-pill accent">{row.status || 'Unknown'}</span>
                 </div>
               </div>
-            ))}
+              ))
+            ) : (
+              <div className="empty-state">No first clock-in records found for the selected date.</div>
+            )}
           </div>
-            </>
+          ) : attendanceView === 'leaves' ? (
+            <div className="data-card">
+              {selectedDateLeaves.length ? (
+                selectedDateLeaves.map((row, index) => (
+                  <div key={`${row.id || row.emp_code || index}`} className="data-row">
+                    <div>
+                      <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
+                      <span>{row.emp_designation || row.leave_type || 'Leave Request'}</span>
+                    </div>
+                    <div>
+                      <strong>{row.leave_type || 'Leave'}</strong>
+                      <span>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</span>
+                    </div>
+                    <div>
+                      <span className="table-pill">{row.status || 'Unknown'}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="empty-state">No leaves found for the selected date.</div>
+              )}
+            </div>
           ) : (
             <div className="data-card">
               {exceptionRows.length ? (
@@ -1679,7 +1737,7 @@ function App() {
                   </div>
                 ))
               ) : (
-                <div className="empty-state">No {attendanceView === 'late-arrivals' ? 'late arrival' : 'early leave'} requests found.</div>
+                <div className="empty-state">No {attendanceView === 'late-arrivals' ? 'late arrival' : 'early leave'} requests found for the selected date.</div>
               )}
             </div>
           )}

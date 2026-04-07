@@ -84,6 +84,8 @@ from routes.meeting_notes import meeting_notes_bp
 from routes.location import location_report_bp
 from routes.distance import distance_bp
 from routes.approval import approvals_bp
+from routes.teams import teams_bp
+from routes.project_teams import project_teams_bp
 
 # Register existing blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -104,6 +106,8 @@ app.register_blueprint(location_report_bp, url_prefix='/api/reports')
 app.register_blueprint(distance_bp, url_prefix='/api/distance')
 app.register_blueprint(approvals_bp, url_prefix='/api/approvals')
 app.register_blueprint(holidays_bp, url_prefix = '/api/holidays')
+app.register_blueprint(teams_bp, url_prefix='/api/teams')
+app.register_blueprint(project_teams_bp, url_prefix='/api/project-teams')
 
 # ==========================================
 # FRONTEND (VITE BUILD) SERVING

@@ -9,7 +9,8 @@ from services import admin_service
 from middleware.auth_middleware import token_required
 from services.attendance_service import (
     clock_in, clock_out, get_attendance_status, 
-    get_attendance_history, get_day_summary
+    get_attendance_history, get_day_summary,
+    get_attendance_by_id, update_attendance
 )
 from services.attendance_away_service import process_attendance_away_alert
 from datetime import datetime
@@ -355,4 +356,64 @@ def attendance_away(current_user):
         return jsonify({"sent": 0, "failed": 0, "message": "Unauthorized for this user_id"}), 403
 
     result, status_code = process_attendance_away_alert(data)
+    return jsonify(result), status_code
+
+# =========================================================
+# GET ATTENDANCE RECORD BY ID
+# =========================================================
+
+@attendance_bp.route('/<int:attendance_id>', methods=['GET'])
+@token_required
+def get_attendance(current_user, attendance_id):
+    """
+    Get a specific attendance record by ID
+    
+    Query Params (optional):
+        emp_code: Filter by employee code (HR/Admin only if not your own)
+    """
+    result, status_code = get_attendance_by_id(attendance_id)
+    return jsonify(result), status_code
+
+
+# =========================================================
+# EDIT ATTENDANCE RECORD
+# =========================================================
+
+@attendance_bp.route('/<int:attendance_id>', methods=['PUT'])
+@token_required
+def edit_attendance(current_user, attendance_id):
+    """
+    Edit an attendance record
+    
+    Request Body:
+        {
+            "login_time": "2024-01-15 09:30:00",        // optional
+            "logout_time": "2024-01-15 18:30:00",       // optional
+            "login_address": "Office, Hyderabad",        // optional
+            "logout_address": "Office, Hyderabad",       // optional
+            "attendance_type": "office"                  // optional: office | site
+        }
+    
+    Guards:
+        - HR/CMD/Admin can edit anyone's attendance
+        - Employees can only edit their own attendance
+    """
+    if not _is_privileged(current_user):
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. Only HR/CMD/Admin can edit attendance records."
+        }), 403
+    
+    data = request.get_json() or {}
+    
+    result, status_code = update_attendance(
+        attendance_id=attendance_id,
+        login_time=data.get('login_time'),
+        logout_time=data.get('logout_time'),
+        login_address=data.get('login_address'),
+        logout_address=data.get('logout_address'),
+        attendance_type=data.get('attendance_type'),
+        updated_by=current_user['emp_code']
+    )
+    
     return jsonify(result), status_code

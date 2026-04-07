@@ -1050,3 +1050,206 @@ def get_day_summary(emp_email: str, target_date: date = None):
     finally:
         cursor.close()
         conn.close()
+
+def get_attendance_by_id(attendance_id: int):
+    """
+    Get a specific attendance record by ID
+    """
+    if not attendance_id or attendance_id <= 0:
+        return {"success": False, "message": "Invalid attendance ID"}, 400
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT * FROM attendance
+            WHERE id = %s
+        """, (attendance_id,))
+        
+        attendance = cursor.fetchone()
+        
+        if not attendance:
+            return {"success": False, "message": "Attendance record not found"}, 404
+        
+        # Convert datetime objects to strings
+        for key, value in attendance.items():
+            if isinstance(value, datetime):
+                attendance[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+        
+        return {
+            "success": True,
+            "data": attendance
+        }, 200
+    
+    except Exception as e:
+        logger.exception("Error fetching attendance by ID: %s", e)
+        return {"success": False, "message": "Internal server error"}, 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def update_attendance(
+    attendance_id: int,
+    login_time: str = None,
+    logout_time: str = None,
+    login_address: str = None,
+    logout_address: str = None,
+    attendance_type: str = None,
+    updated_by: str = None
+):
+    """
+    Update an attendance record
+    
+    Parameters:
+        attendance_id: ID of attendance record to update
+        login_time: Clock-in time (YYYY-MM-DD HH:MM:SS format)
+        logout_time: Clock-out time (YYYY-MM-DD HH:MM:SS format)
+        login_address: Clock-in address
+        logout_address: Clock-out address
+        attendance_type: 'office' or 'site'
+        updated_by: Employee code of who is updating (for audit)
+    """
+    if not attendance_id or attendance_id <= 0:
+        return {"success": False, "message": "Invalid attendance ID"}, 400
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        conn.autocommit = False  # Start transaction
+        
+        # Check if attendance exists
+        cursor.execute("SELECT * FROM attendance WHERE id = %s", (attendance_id,))
+        attendance = cursor.fetchone()
+        
+        if not attendance:
+            conn.rollback()
+            return {"success": False, "message": "Attendance record not found"}, 404
+        
+        emp_email = attendance['employee_email']
+        
+        # Prepare update fields
+        update_fields = []
+        update_values = []
+        
+        if login_time:
+            try:
+                login_dt = datetime.strptime(login_time, "%Y-%m-%d %H:%M:%S")
+                update_fields.append("login_time = %s")
+                update_values.append(login_dt)
+            except ValueError:
+                conn.rollback()
+                return {"success": False, "message": "Invalid login_time format. Use YYYY-MM-DD HH:MM:SS"}, 400
+        
+        if logout_time:
+            try:
+                logout_dt = datetime.strptime(logout_time, "%Y-%m-%d %H:%M:%S")
+                update_fields.append("logout_time = %s")
+                update_values.append(logout_dt)
+            except ValueError:
+                conn.rollback()
+                return {"success": False, "message": "Invalid logout_time format. Use YYYY-MM-DD HH:MM:SS"}, 400
+        
+        if login_address:
+            update_fields.append("login_address = %s")
+            update_values.append(login_address)
+        
+        if logout_address:
+            update_fields.append("logout_address = %s")
+            update_values.append(logout_address)
+        
+        if attendance_type:
+            try:
+                normalized_type = _normalize_attendance_type(attendance_type)
+                update_fields.append("attendance_type = %s")
+                update_values.append(normalized_type)
+            except ValueError:
+                conn.rollback()
+                return {"success": False, "message": "Invalid attendance_type. Must be 'office' or 'site'"}, 400
+        
+        if not update_fields:
+            conn.rollback()
+            return {"success": False, "message": "No fields to update"}, 400
+        
+        # Recalculate working hours if both clock times are updated
+        if login_time and logout_time:
+            try:
+                login_dt = datetime.strptime(login_time, "%Y-%m-%d %H:%M:%S")
+                logout_dt = datetime.strptime(logout_time, "%Y-%m-%d %H:%M:%S")
+                
+                if logout_dt <= login_dt:
+                    conn.rollback()
+                    return {"success": False, "message": "Clock-out time must be after clock-in time"}, 400
+                
+                working_seconds = (logout_dt - login_dt).total_seconds()
+                working_hours = round(working_seconds / 3600, 2)
+                
+                update_fields.append("working_hours = %s")
+                update_values.append(working_hours)
+            except ValueError as e:
+                conn.rollback()
+                return {"success": False, "message": f"Invalid time format: {str(e)}"}, 400
+        elif login_time or logout_time:
+            # If only one time is updated, try to recalculate from the existing other time
+            existing_login = attendance.get('login_time')
+            existing_logout = attendance.get('logout_time')
+            
+            if login_time:
+                login_dt = datetime.strptime(login_time, "%Y-%m-%d %H:%M:%S")
+                if existing_logout and isinstance(existing_logout, datetime):
+                    if existing_logout <= login_dt:
+                        conn.rollback()
+                        return {"success": False, "message": "Clock-in time must be before clock-out time"}, 400
+                    working_seconds = (existing_logout - login_dt).total_seconds()
+                    working_hours = round(working_seconds / 3600, 2)
+                    update_fields.append("working_hours = %s")
+                    update_values.append(working_hours)
+            
+            if logout_time:
+                logout_dt = datetime.strptime(logout_time, "%Y-%m-%d %H:%M:%S")
+                if existing_login and isinstance(existing_login, datetime):
+                    if logout_dt <= existing_login:
+                        conn.rollback()
+                        return {"success": False, "message": "Clock-out time must be after clock-in time"}, 400
+                    working_seconds = (logout_dt - existing_login).total_seconds()
+                    working_hours = round(working_seconds / 3600, 2)
+                    update_fields.append("working_hours = %s")
+                    update_values.append(working_hours)
+        
+        # Execute update
+        update_values.append(attendance_id)
+        query = f"""
+            UPDATE attendance 
+            SET {', '.join(update_fields)}
+            WHERE id = %s
+        """
+        
+        cursor.execute(query, update_values)
+        
+        conn.commit()
+        
+        # Get updated record
+        cursor.execute("SELECT * FROM attendance WHERE id = %s", (attendance_id,))
+        updated = cursor.fetchone()
+        
+        # Convert datetime objects to strings
+        for key, value in updated.items():
+            if isinstance(value, datetime):
+                updated[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+        
+        return {
+            "success": True,
+            "message": "Attendance record updated successfully",
+            "data": updated
+        }, 200
+    
+    except Exception as e:
+        conn.rollback()
+        logger.exception("Error updating attendance: %s", e)
+        return {"success": False, "message": "Internal server error"}, 500
+    finally:
+        conn.autocommit = True
+        cursor.close()
+        conn.close()

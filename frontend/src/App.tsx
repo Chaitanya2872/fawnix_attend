@@ -217,6 +217,7 @@ type EmployeeRow = {
   emp_full_name: string
   emp_email?: string
   emp_contact?: string
+  emp_grade?: string
   emp_designation?: string
   emp_department?: string
   emp_manager?: string
@@ -590,6 +591,7 @@ function App() {
     emp_full_name: '',
     emp_email: '',
     emp_contact: '',
+    emp_grade: '',
     emp_designation: '',
     emp_department: '',
     emp_manager: '',
@@ -1240,6 +1242,7 @@ function App() {
       emp_full_name: '',
       emp_email: '',
       emp_contact: '',
+      emp_grade: '',
       emp_designation: '',
       emp_department: '',
       emp_manager: '',
@@ -1488,6 +1491,15 @@ function App() {
                     value={newEmployee.emp_designation}
                     onChange={(event) => updateNewEmployee('emp_designation', event.target.value)}
                     placeholder="HR / Sales Executive / DevTester"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-emp-grade">Grade</label>
+                  <input
+                    id="new-emp-grade"
+                    value={newEmployee.emp_grade}
+                    onChange={(event) => updateNewEmployee('emp_grade', event.target.value)}
+                    placeholder="e.g. A1"
                   />
                 </div>
                 <div>
@@ -2186,6 +2198,16 @@ function App() {
                       value={editFormData.emp_contact || ''}
                       onChange={(e) => setEditFormData({ ...editFormData, emp_contact: e.target.value })}
                       placeholder="Phone number"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="edit-emp-grade">Grade</label>
+                    <input
+                      id="edit-emp-grade"
+                      type="text"
+                      value={editFormData.emp_grade || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, emp_grade: e.target.value })}
+                      placeholder="e.g., A1"
                     />
                   </div>
                   <div className="form-group">

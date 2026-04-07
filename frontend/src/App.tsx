@@ -534,6 +534,11 @@ function App() {
   const refreshPromiseRef = useRef<Promise<string> | null>(null)
 
   const [employees, setEmployees] = useState<EmployeeRow[]>([])
+  const [editingEmployee, setEditingEmployee] = useState<EmployeeRow | null>(null)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [editFormData, setEditFormData] = useState<Partial<EmployeeRow>>({})
+  const [editLoading, setEditLoading] = useState(false)
+  const [editStatus, setEditStatus] = useState('')
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
   const [, setAttendanceTotalCount] = useState(0)
   const [, setAttendanceShiftMetrics] = useState({
@@ -1274,6 +1279,65 @@ function App() {
     }
   }
 
+  const handleEditEmployee = (employee: EmployeeRow) => {
+    setEditingEmployee(employee)
+    setEditFormData({ ...employee })
+    setEditModalOpen(true)
+    setEditStatus('')
+  }
+
+  const handleSaveEmployee = async () => {
+    if (!editingEmployee?.emp_code) {
+      setEditStatus('Employee code is required.')
+      return
+    }
+
+    setEditLoading(true)
+    setEditStatus('Updating employee...')
+
+    try {
+      const response = await apiRequest(`/api/users/${editingEmployee.emp_code}`, {
+        method: 'PUT',
+        body: JSON.stringify(editFormData)
+      })
+
+      setEditStatus(response?.message || 'Employee updated successfully.')
+      setEditModalOpen(false)
+      setEditingEmployee(null)
+      setEditFormData({})
+      await loadDashboard(accessToken)
+    } catch (error) {
+      setEditStatus(error instanceof Error ? error.message : 'Failed to update employee')
+    } finally {
+      setEditLoading(false)
+    }
+  }
+
+  const handleDeleteEmployee = async (empCode: string, empName: string) => {
+    if (!confirm(`Are you sure you want to delete ${empName}? This cannot be undone.`)) {
+      return
+    }
+
+    setEditStatus('Deleting employee...')
+    setEditLoading(true)
+
+    try {
+      const response = await apiRequest(`/api/users/${empCode}`, {
+        method: 'DELETE'
+      })
+
+      setEditStatus(response?.message || 'Employee deleted successfully.')
+      setEditModalOpen(false)
+      setEditingEmployee(null)
+      setEditFormData({})
+      await loadDashboard(accessToken)
+    } catch (error) {
+      setEditStatus(error instanceof Error ? error.message : 'Failed to delete employee')
+    } finally {
+      setEditLoading(false)
+    }
+  }
+
   const selectedAttendanceDate = attendanceDateFilter || toDateInputValue(new Date())
 
   const firstClockInRows = Array.from(
@@ -1493,6 +1557,14 @@ function App() {
                 </div>
                 <div>
                   <span className="table-pill">{employee.is_active ? 'Active' : 'Inactive'}</span>
+                </div>
+                <div className="employee-actions">
+                  <button className="action-btn edit-btn" onClick={() => handleEditEmployee(employee)} title="Edit employee">
+                    ✏️ Edit
+                  </button>
+                  <button className="action-btn delete-btn" onClick={() => handleDeleteEmployee(employee.emp_code, employee.emp_full_name || employee.emp_code)} title="Delete employee">
+                    🗑️ Delete
+                  </button>
                 </div>
               </div>
             ))}
@@ -2065,6 +2137,100 @@ function App() {
               renderDashboardPanel()
             )}
           </section>
+
+          {editModalOpen && editingEmployee ? (
+            <div className="modal-backdrop" role="dialog" aria-modal="true">
+              <div className="modal-card">
+                <div className="modal-header">
+                  <strong>Edit Employee</strong>
+                  <button className="ghost" onClick={() => setEditModalOpen(false)} type="button">
+                    Close
+                  </button>
+                </div>
+                <div className="modal-body">
+                  <div className="form-group">
+                    <label htmlFor="edit-emp-code">Employee Code</label>
+                    <input
+                      id="edit-emp-code"
+                      type="text"
+                      value={editingEmployee.emp_code}
+                      disabled
+                      placeholder="Cannot change"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="edit-emp-full-name">Full Name</label>
+                    <input
+                      id="edit-emp-full-name"
+                      type="text"
+                      value={editFormData.emp_full_name || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, emp_full_name: e.target.value })}
+                      placeholder="Full name"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="edit-emp-email">Email</label>
+                    <input
+                      id="edit-emp-email"
+                      type="email"
+                      value={editFormData.emp_email || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, emp_email: e.target.value })}
+                      placeholder="email@company.com"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="edit-emp-contact">Contact</label>
+                    <input
+                      id="edit-emp-contact"
+                      type="text"
+                      value={editFormData.emp_contact || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, emp_contact: e.target.value })}
+                      placeholder="Phone number"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="edit-emp-designation">Designation</label>
+                    <input
+                      id="edit-emp-designation"
+                      type="text"
+                      value={editFormData.emp_designation || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, emp_designation: e.target.value })}
+                      placeholder="Job title"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="edit-emp-department">Department</label>
+                    <input
+                      id="edit-emp-department"
+                      type="text"
+                      value={editFormData.emp_department || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, emp_department: e.target.value })}
+                      placeholder="Department name"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="edit-emp-manager">Manager Code</label>
+                    <input
+                      id="edit-emp-manager"
+                      type="text"
+                      value={editFormData.emp_manager || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, emp_manager: e.target.value })}
+                      placeholder="e.g., EMP001"
+                    />
+                  </div>
+                  {editStatus ? <p className="form-note">{editStatus}</p> : null}
+                </div>
+                <div className="modal-actions">
+                  <button className="ghost" onClick={() => setEditModalOpen(false)} disabled={editLoading}>
+                    Cancel
+                  </button>
+                  <button className="cta" onClick={handleSaveEmployee} disabled={editLoading}>
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </main>
       </div>
     )

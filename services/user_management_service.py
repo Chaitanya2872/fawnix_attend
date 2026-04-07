@@ -298,3 +298,146 @@ def delete_employee(emp_code: str, requested_by_emp_code: str = None, allow_self
     finally:
         cursor.close()
         return_connection(conn)
+
+
+def get_employee(emp_code: str):
+    """
+    Get employee details by emp_code
+    """
+    target_emp_code = (emp_code or "").strip()
+    if not target_emp_code:
+        return {"success": False, "message": "emp_code is required"}, 400
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("SELECT * FROM employees WHERE emp_code = %s", (target_emp_code,))
+        employee = cursor.fetchone()
+        
+        if not employee:
+            return {"success": False, "message": "Employee not found"}, 404
+        
+        # Get user role information if exists
+        cursor.execute("SELECT role, is_active FROM users WHERE emp_code = %s", (target_emp_code,))
+        user_record = cursor.fetchone()
+        
+        return {
+            "success": True,
+            "data": {
+                "employee": _serialize_row(employee),
+                "user": _serialize_row(user_record) if user_record else None
+            }
+        }, 200
+    
+    except Exception as e:
+        logger.error("Get employee error: %s", e)
+        return {"success": False, "message": "Internal server error"}, 500
+    finally:
+        cursor.close()
+        return_connection(conn)
+
+
+def update_employee(emp_code: str, payload: dict, updated_by_emp_code: str = None):
+    """
+    Update employee details
+    
+    Parameters:
+        emp_code: Employee code to update
+        payload: Fields to update
+        updated_by_emp_code: Who is performing the update (for audit)
+    """
+    target_emp_code = (emp_code or "").strip()
+    if not target_emp_code:
+        return {"success": False, "message": "emp_code is required"}, 400
+    
+    if not payload:
+        return {"success": False, "message": "No fields to update"}, 400
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        conn.autocommit = False  # Start transaction
+        
+        # Check if employee exists
+        cursor.execute("SELECT * FROM employees WHERE emp_code = %s", (target_emp_code,))
+        employee = cursor.fetchone()
+        
+        if not employee:
+            conn.rollback()
+            return {"success": False, "message": "Employee not found"}, 404
+        
+        # Get table columns metadata
+        columns_meta = _get_employee_columns(cursor)
+        
+        # Prepare update fields
+        update_fields = []
+        update_values = []
+        
+        # Fields that should never be updated
+        protected_fields = {"emp_code"}
+        
+        # Check for email uniqueness if updating email
+        if "emp_email" in payload:
+            new_email = (payload.get("emp_email") or "").strip()
+            if new_email and new_email != employee.get("emp_email"):
+                cursor.execute(
+                    "SELECT 1 FROM employees WHERE emp_email = %s AND emp_code != %s",
+                    (new_email, target_emp_code)
+                )
+                if cursor.fetchone():
+                    conn.rollback()
+                    return {"success": False, "message": f"Email '{new_email}' is already in use"}, 409
+        
+        for key, value in payload.items():
+            if key in protected_fields:
+                conn.rollback()
+                return {"success": False, "message": f"Cannot update protected field: {key}"}, 400
+            
+            if key not in columns_meta:
+                continue  # Skip unknown fields
+            
+            if value is None:
+                continue  # Skip None values
+            
+            # Normalize emp_joined_date
+            if key == "emp_joined_date" and "emp_joined_date" not in columns_meta:
+                if "emp_joining_date" in columns_meta:
+                    key = "emp_joining_date"
+            
+            update_fields.append(f"{key} = %s")
+            update_values.append(value)
+        
+        if not update_fields:
+            conn.rollback()
+            return {"success": False, "message": "No valid fields to update"}, 400
+        
+        # Execute update
+        update_values.append(target_emp_code)
+        query = f"""
+            UPDATE employees
+            SET {', '.join(update_fields)}
+            WHERE emp_code = %s
+            RETURNING *
+        """
+        
+        cursor.execute(query, update_values)
+        updated_employee = cursor.fetchone()
+        
+        conn.commit()
+        
+        return {
+            "success": True,
+            "message": "Employee updated successfully",
+            "data": _serialize_row(updated_employee)
+        }, 200
+    
+    except Exception as e:
+        conn.rollback()
+        logger.error("Update employee error: %s", e)
+        return {"success": False, "message": "Internal server error"}, 500
+    finally:
+        conn.autocommit = True
+        cursor.close()
+        return_connection(conn)

@@ -282,6 +282,11 @@ type ActivityRow = {
   field_visit_status?: string
   field_visit_start_address?: string
   field_visit_end_address?: string
+  total_distance_km?: number | string
+  start_latitude?: number | string
+  start_longitude?: number | string
+  end_latitude?: number | string
+  end_longitude?: number | string
 }
 
 type FieldVisitRow = {
@@ -292,6 +297,11 @@ type FieldVisitRow = {
   purpose: string
   status: string
   location: string
+  startAddress?: string
+  endAddress?: string
+  distanceKm?: number | null
+  startCoords?: { lat: number; lon: number } | null
+  endCoords?: { lat: number; lon: number } | null
 }
 
 const ACCESS_TOKEN_KEY = 'fawnix_admin_access_token'
@@ -340,6 +350,55 @@ function formatDate(value?: string) {
     month: 'short',
     year: 'numeric'
   })
+}
+
+function formatDistanceKm(value?: number | null) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '--'
+  }
+  return `${value.toFixed(2)} km`
+}
+
+function parseCoords(lat?: number | string, lon?: number | string) {
+  const latNum = Number(lat)
+  const lonNum = Number(lon)
+  if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) {
+    return null
+  }
+  return { lat: latNum, lon: lonNum }
+}
+
+function formatCoordsValue(coords?: { lat: number; lon: number } | null) {
+  if (!coords) {
+    return undefined
+  }
+  return `${coords.lat.toFixed(6)}, ${coords.lon.toFixed(6)}`
+}
+
+function calculateDistanceKm(points: Array<{ lat: number; lon: number }>) {
+  if (points.length < 2) {
+    return 0
+  }
+
+  const toRad = (value: number) => (value * Math.PI) / 180
+  const earthRadius = 6371
+  let total = 0
+
+  for (let i = 1; i < points.length; i += 1) {
+    const prev = points[i - 1]
+    const curr = points[i]
+    const deltaLat = toRad(curr.lat - prev.lat)
+    const deltaLon = toRad(curr.lon - prev.lon)
+    const lat1 = toRad(prev.lat)
+    const lat2 = toRad(curr.lat)
+    const a =
+      Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+      Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    total += earthRadius * c
+  }
+
+  return total
 }
 
 function toDateInputValue(value: Date) {
@@ -475,6 +534,11 @@ function App() {
   const refreshPromiseRef = useRef<Promise<string> | null>(null)
 
   const [employees, setEmployees] = useState<EmployeeRow[]>([])
+  const [editingEmployee, setEditingEmployee] = useState<EmployeeRow | null>(null)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [editFormData, setEditFormData] = useState<Partial<EmployeeRow>>({})
+  const [editLoading, setEditLoading] = useState(false)
+  const [editStatus, setEditStatus] = useState('')
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
   const [, setAttendanceTotalCount] = useState(0)
   const [, setAttendanceShiftMetrics] = useState({
@@ -508,6 +572,14 @@ function App() {
   const [mapDialogError, setMapDialogError] = useState('')
   const [mapPoints, setMapPoints] = useState<Array<{ lat: number; lon: number }>>([])
   const [mapCenter, setMapCenter] = useState<{ lat: number; lon: number } | null>(null)
+  const [mapSummary, setMapSummary] = useState<{
+    startAddress?: string
+    endAddress?: string
+    startCoords?: { lat: number; lon: number } | null
+    endCoords?: { lat: number; lon: number } | null
+    distanceKm?: number | null
+    pointsCount?: number
+  } | null>(null)
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
   const [showAddEmployee, setShowAddEmployee] = useState(false)
@@ -820,15 +892,33 @@ function App() {
 
       const fieldVisits = activitiesData
         .filter((item: ActivityRow) => item.field_visit_id)
-        .map((item: ActivityRow) => ({
-          activityId: item.id || item.field_visit_id || '',
-          fieldVisitId: item.field_visit_id ? Number(item.field_visit_id) : undefined,
-          employee: item.employee_name || item.employee_email || 'Unknown employee',
-          visitType: item.field_visit_type || 'Field Visit',
-          purpose: item.field_visit_purpose || item.activity_type || 'Visit',
-          status: item.field_visit_status || item.status || 'Unknown',
-          location: item.field_visit_start_address || item.field_visit_end_address || 'Location unavailable'
-        }))
+        .map((item: ActivityRow) => {
+          const startCoords = parseCoords(item.start_latitude, item.start_longitude)
+          const endCoords = parseCoords(item.end_latitude, item.end_longitude)
+          const startAddress = item.field_visit_start_address || formatCoordsValue(startCoords)
+          const endAddress = item.field_visit_end_address || formatCoordsValue(endCoords)
+          const distanceKmValue =
+            item.total_distance_km !== undefined
+              ? Number(item.total_distance_km)
+              : startCoords && endCoords
+                ? calculateDistanceKm([startCoords, endCoords])
+                : null
+
+          return {
+            activityId: item.id || item.field_visit_id || '',
+            fieldVisitId: item.field_visit_id ? Number(item.field_visit_id) : undefined,
+            employee: item.employee_name || item.employee_email || 'Unknown employee',
+            visitType: item.field_visit_type || 'Field Visit',
+            purpose: item.field_visit_purpose || item.activity_type || 'Visit',
+            status: item.field_visit_status || item.status || 'Unknown',
+            location: startAddress || endAddress || 'Location unavailable',
+            startAddress: startAddress || undefined,
+            endAddress: endAddress || undefined,
+            distanceKm: Number.isFinite(distanceKmValue) ? distanceKmValue : null,
+            startCoords,
+            endCoords
+          }
+        })
 
       setFieldVisitRows(fieldVisits)
     } catch (error) {
@@ -999,21 +1089,30 @@ function App() {
     setShowAdminLogin(false)
   }
 
-  const openMapForLocation = async (location: string, fieldVisitId?: number) => {
-    if (!location) {
+  const openMapForFieldVisit = async (row: FieldVisitRow) => {
+    if (!row.location) {
       return
     }
-    const trimmed = location.trim()
+    const trimmed = row.location.trim()
     const coordMatch = trimmed.match(/-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?/)
-    setMapDialogTitle('Field Visit Location')
+    setMapDialogTitle('Activity Route')
     setMapDialogOpen(true)
     setMapDialogError('')
     setMapDialogLoading(true)
     setMapPoints([])
     setMapCenter(null)
-    if (fieldVisitId) {
+    setMapSummary({
+      startAddress: row.startAddress,
+      endAddress: row.endAddress,
+      startCoords: row.startCoords,
+      endCoords: row.endCoords,
+      distanceKm: row.distanceKm,
+      pointsCount: undefined
+    })
+    if (row.fieldVisitId) {
       try {
-        const trackingResponse = await apiRequest(`/api/admin/field-visits/${fieldVisitId}/tracking`, {})
+        const trackingResponse = await apiRequest(`/api/admin/field-visits/${row.fieldVisitId}/tracking`, {})
+        const visit = trackingResponse?.data?.field_visit || {}
         const points = Array.isArray(trackingResponse?.data?.tracking_points)
           ? trackingResponse.data.tracking_points
           : []
@@ -1023,10 +1122,34 @@ function App() {
             lon: Number(point.longitude)
           }))
           .filter((point: { lat: number; lon: number }) => !Number.isNaN(point.lat) && !Number.isNaN(point.lon))
-        setMapPoints(mappedPoints)
-        if (mappedPoints.length) {
-          setMapCenter(mappedPoints[0])
-          setMapDialogLoading(false)
+        const startCoordsFromVisit = parseCoords(visit.start_latitude, visit.start_longitude)
+        const endCoordsFromVisit = parseCoords(visit.end_latitude, visit.end_longitude)
+        const startCoords = mappedPoints.length ? mappedPoints[0] : startCoordsFromVisit
+        const endCoords = mappedPoints.length ? mappedPoints[mappedPoints.length - 1] : endCoordsFromVisit
+        const nextPoints =
+          mappedPoints.length > 0
+            ? mappedPoints
+            : startCoords && endCoords
+              ? [startCoords, endCoords]
+              : []
+        setMapPoints(nextPoints)
+        if (nextPoints.length) {
+          setMapCenter(nextPoints[0])
+        }
+        const totalDistanceValue = Number(trackingResponse?.data?.total_distance_km)
+        const computedDistance = Number.isFinite(totalDistanceValue)
+          ? totalDistanceValue
+          : calculateDistanceKm(nextPoints)
+        setMapSummary({
+          startAddress: visit.start_address || row.startAddress,
+          endAddress: visit.end_address || row.endAddress,
+          startCoords,
+          endCoords,
+          distanceKm: computedDistance || row.distanceKm || null,
+          pointsCount: nextPoints.length
+        })
+        setMapDialogLoading(false)
+        if (nextPoints.length) {
           return
         }
       } catch (error) {
@@ -1153,6 +1276,65 @@ function App() {
       setCreateEmployeeStatus(error instanceof Error ? error.message : 'Failed to create employee')
     } finally {
       setCreateEmployeeLoading(false)
+    }
+  }
+
+  const handleEditEmployee = (employee: EmployeeRow) => {
+    setEditingEmployee(employee)
+    setEditFormData({ ...employee })
+    setEditModalOpen(true)
+    setEditStatus('')
+  }
+
+  const handleSaveEmployee = async () => {
+    if (!editingEmployee?.emp_code) {
+      setEditStatus('Employee code is required.')
+      return
+    }
+
+    setEditLoading(true)
+    setEditStatus('Updating employee...')
+
+    try {
+      const response = await apiRequest(`/api/users/${editingEmployee.emp_code}`, {
+        method: 'PUT',
+        body: JSON.stringify(editFormData)
+      })
+
+      setEditStatus(response?.message || 'Employee updated successfully.')
+      setEditModalOpen(false)
+      setEditingEmployee(null)
+      setEditFormData({})
+      await loadDashboard(accessToken)
+    } catch (error) {
+      setEditStatus(error instanceof Error ? error.message : 'Failed to update employee')
+    } finally {
+      setEditLoading(false)
+    }
+  }
+
+  const handleDeleteEmployee = async (empCode: string, empName: string) => {
+    if (!confirm(`Are you sure you want to delete ${empName}? This cannot be undone.`)) {
+      return
+    }
+
+    setEditStatus('Deleting employee...')
+    setEditLoading(true)
+
+    try {
+      const response = await apiRequest(`/api/users/${empCode}`, {
+        method: 'DELETE'
+      })
+
+      setEditStatus(response?.message || 'Employee deleted successfully.')
+      setEditModalOpen(false)
+      setEditingEmployee(null)
+      setEditFormData({})
+      await loadDashboard(accessToken)
+    } catch (error) {
+      setEditStatus(error instanceof Error ? error.message : 'Failed to delete employee')
+    } finally {
+      setEditLoading(false)
     }
   }
 
@@ -1375,6 +1557,14 @@ function App() {
                 </div>
                 <div>
                   <span className="table-pill">{employee.is_active ? 'Active' : 'Inactive'}</span>
+                </div>
+                <div className="employee-actions">
+                  <button className="action-btn edit-btn" onClick={() => handleEditEmployee(employee)} title="Edit employee">
+                    ✏️ Edit
+                  </button>
+                  <button className="action-btn delete-btn" onClick={() => handleDeleteEmployee(employee.emp_code, employee.emp_full_name || employee.emp_code)} title="Delete employee">
+                    🗑️ Delete
+                  </button>
                 </div>
               </div>
             ))}
@@ -1726,10 +1916,23 @@ function App() {
                   <span>{row.visitType}</span>
                 </div>
                 <div className="location-cell">
-                  <span>{row.location}</span>
+                  <div className="location-details">
+                    <div>
+                      <span className="location-label">Start</span>
+                      <span>{row.startAddress || row.location || 'Start location unavailable'}</span>
+                    </div>
+                    <div>
+                      <span className="location-label">End</span>
+                      <span>{row.endAddress || 'End location unavailable'}</span>
+                    </div>
+                    <div>
+                      <span className="location-label">Distance</span>
+                      <span>{formatDistanceKm(row.distanceKm)}</span>
+                    </div>
+                  </div>
                   <button
                     className="map-button"
-                    onClick={() => openMapForLocation(row.location, row.fieldVisitId)}
+                    onClick={() => openMapForFieldVisit(row)}
                     aria-label="Open map"
                     title="Open map"
                     type="button"
@@ -1866,7 +2069,36 @@ function App() {
                   ) : mapDialogError ? (
                     <div className="map-dialog-state">{mapDialogError}</div>
                   ) : mapCenter ? (
-                    <div ref={mapContainerRef} className="map-dialog-map" />
+                    <>
+                      <div className="map-dialog-meta">
+                        <div>
+                          <span className="meta-label">Start</span>
+                          <strong>{mapSummary?.startAddress || 'Start location unavailable'}</strong>
+                          {mapSummary?.startCoords ? (
+                            <span className="meta-coords">
+                              {mapSummary.startCoords.lat.toFixed(6)}, {mapSummary.startCoords.lon.toFixed(6)}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div>
+                          <span className="meta-label">End</span>
+                          <strong>{mapSummary?.endAddress || 'End location unavailable'}</strong>
+                          {mapSummary?.endCoords ? (
+                            <span className="meta-coords">
+                              {mapSummary.endCoords.lat.toFixed(6)}, {mapSummary.endCoords.lon.toFixed(6)}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div>
+                          <span className="meta-label">Distance</span>
+                          <strong>{formatDistanceKm(mapSummary?.distanceKm)}</strong>
+                          <span className="meta-coords">
+                            {mapSummary?.pointsCount ? `${mapSummary.pointsCount} points` : 'No points'}
+                          </span>
+                        </div>
+                      </div>
+                      <div ref={mapContainerRef} className="map-dialog-map" />
+                    </>
                   ) : (
                     <div className="map-dialog-state">No location data available.</div>
                   )}
@@ -1905,6 +2137,100 @@ function App() {
               renderDashboardPanel()
             )}
           </section>
+
+          {editModalOpen && editingEmployee ? (
+            <div className="modal-backdrop" role="dialog" aria-modal="true">
+              <div className="modal-card">
+                <div className="modal-header">
+                  <strong>Edit Employee</strong>
+                  <button className="ghost" onClick={() => setEditModalOpen(false)} type="button">
+                    Close
+                  </button>
+                </div>
+                <div className="modal-body">
+                  <div className="form-group">
+                    <label htmlFor="edit-emp-code">Employee Code</label>
+                    <input
+                      id="edit-emp-code"
+                      type="text"
+                      value={editingEmployee.emp_code}
+                      disabled
+                      placeholder="Cannot change"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="edit-emp-full-name">Full Name</label>
+                    <input
+                      id="edit-emp-full-name"
+                      type="text"
+                      value={editFormData.emp_full_name || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, emp_full_name: e.target.value })}
+                      placeholder="Full name"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="edit-emp-email">Email</label>
+                    <input
+                      id="edit-emp-email"
+                      type="email"
+                      value={editFormData.emp_email || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, emp_email: e.target.value })}
+                      placeholder="email@company.com"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="edit-emp-contact">Contact</label>
+                    <input
+                      id="edit-emp-contact"
+                      type="text"
+                      value={editFormData.emp_contact || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, emp_contact: e.target.value })}
+                      placeholder="Phone number"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="edit-emp-designation">Designation</label>
+                    <input
+                      id="edit-emp-designation"
+                      type="text"
+                      value={editFormData.emp_designation || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, emp_designation: e.target.value })}
+                      placeholder="Job title"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="edit-emp-department">Department</label>
+                    <input
+                      id="edit-emp-department"
+                      type="text"
+                      value={editFormData.emp_department || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, emp_department: e.target.value })}
+                      placeholder="Department name"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="edit-emp-manager">Manager Code</label>
+                    <input
+                      id="edit-emp-manager"
+                      type="text"
+                      value={editFormData.emp_manager || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, emp_manager: e.target.value })}
+                      placeholder="e.g., EMP001"
+                    />
+                  </div>
+                  {editStatus ? <p className="form-note">{editStatus}</p> : null}
+                </div>
+                <div className="modal-actions">
+                  <button className="ghost" onClick={() => setEditModalOpen(false)} disabled={editLoading}>
+                    Cancel
+                  </button>
+                  <button className="cta" onClick={handleSaveEmployee} disabled={editLoading}>
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </main>
       </div>
     )

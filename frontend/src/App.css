@@ -625,8 +625,25 @@ a {
 
 .location-cell {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.location-details {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: #4b5c61;
+}
+
+.location-label {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #7a8b90;
+  margin-bottom: 2px;
 }
 
 .map-button {
@@ -693,6 +710,41 @@ a {
 
 .map-dialog-body {
   height: 70vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.map-dialog-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  padding: 14px 16px;
+  background: #fbf9f5;
+  border-bottom: 1px solid rgba(17, 44, 50, 0.08);
+  font-size: 12px;
+  color: #4b5c61;
+}
+
+.map-dialog-meta strong {
+  display: block;
+  color: #112c32;
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.meta-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #7a8b90;
+}
+
+.meta-coords {
+  display: block;
+  font-size: 11px;
+  color: #7a8b90;
+  margin-top: 4px;
 }
 
 .map-dialog-body iframe {
@@ -719,6 +771,7 @@ a {
   color: #5b6b70;
   font-size: 14px;
   background: #f1f2f2;
+  grid-row: 1 / -1;
 }
 
 .employee-row {
@@ -1269,6 +1322,10 @@ a {
   }
 
   .data-row {
+    grid-template-columns: 1fr;
+  }
+
+  .map-dialog-meta {
     grid-template-columns: 1fr;
   }
 }

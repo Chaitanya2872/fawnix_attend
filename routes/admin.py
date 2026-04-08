@@ -94,33 +94,48 @@ def download_employees_report(current_user):
     headers = [
         "Employee Code",
         "Full Name",
+        "Designation",
+        "Grade",
+        "Department",
         "Email",
         "Contact",
-        "Designation",
-        "Department",
-        "Grade",
-        "Manager Code",
         "Manager Name",
         "Manager Email",
-        "Role",
-        "Active",
+        "Manager Code",
     ]
+
+    def _format_grade(value):
+        raw = (value or "").strip()
+        if not raw:
+            return ""
+
+        normalized = raw.upper()
+        compact = normalized.replace(" ", "").replace("-", "").replace("_", "")
+
+        if normalized == "NF" or compact == "NONFLEXIBLE":
+            return "NF"
+        if normalized == "F" or compact == "FLEXIBLE":
+            return "F"
+        if normalized == "M" or compact == "MODERATE":
+            return "M"
+        return raw
 
     rows = []
     for emp in employees:
+        manager_name = emp.get("manager_name") or emp.get("emp_manager") or ""
+        manager_email = emp.get("manager_email") or emp.get("manager_code") or ""
+
         rows.append([
             emp.get("emp_code", ""),
             emp.get("emp_full_name", ""),
+            emp.get("emp_designation", ""),
+            _format_grade(emp.get("emp_grade")),
+            emp.get("emp_department", ""),
             emp.get("emp_email", ""),
             emp.get("emp_contact", ""),
-            emp.get("emp_designation", ""),
-            emp.get("emp_department", ""),
-            emp.get("emp_grade", ""),
-            emp.get("emp_manager", ""),
-            emp.get("manager_name", ""),
-            emp.get("manager_email", ""),
-            emp.get("role", ""),
-            "Yes" if emp.get("is_active") else "No",
+            manager_name,
+            manager_email,
+            emp.get("emp_manager", "") or "",
         ])
 
     today_str = datetime.utcnow().strftime("%Y-%m-%d")
@@ -137,7 +152,7 @@ def download_employees_report(current_user):
         y -= 0.35 * inch
 
         pdf.setFont("Helvetica-Bold", 8)
-        col_widths = [1.0, 2.2, 2.4, 1.3, 1.6, 1.6, 0.9, 1.2, 2.0, 2.2, 1.0, 0.8]
+        col_widths = [1.0, 2.2, 1.6, 0.9, 1.6, 2.2, 1.3, 2.0, 2.2, 1.2]
         col_widths = [w * inch for w in col_widths]
 
         def draw_row(values, y_pos, bold=False):
@@ -182,7 +197,7 @@ def download_employees_report(current_user):
         for row in rows:
             ws.append(row)
 
-        column_widths = [15, 26, 30, 16, 20, 20, 10, 16, 24, 26, 12, 10]
+        column_widths = [15, 26, 18, 10, 20, 28, 16, 24, 26, 16]
         for idx, width in enumerate(column_widths, start=1):
             ws.column_dimensions[openpyxl.utils.get_column_letter(idx)].width = width
 

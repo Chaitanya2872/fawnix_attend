@@ -485,7 +485,10 @@ function PrivacyPolicyPage() {
             <h2>{section.title}</h2>
             {section.body.map((paragraph) => (
               <p key={paragraph}>{paragraph}</p>
-            ))}
+              ))
+            ) : (
+              <div className="empty-state">No employees match this search.</div>
+            )}
             {section.bullets.length ? (
               <ul className="policy-list">
                 {section.bullets.map((item) => (
@@ -554,6 +557,8 @@ function App() {
   const [editFormData, setEditFormData] = useState<Partial<EmployeeRow>>({})
   const [editLoading, setEditLoading] = useState(false)
   const [editStatus, setEditStatus] = useState('')
+  const [employeeSearch, setEmployeeSearch] = useState('')
+  const [showTodayActivities, setShowTodayActivities] = useState(true)
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
   const [, setAttendanceTotalCount] = useState(0)
   const [, setAttendanceShiftMetrics] = useState({
@@ -1414,6 +1419,7 @@ function App() {
   }
 
   const selectedAttendanceDate = attendanceDateFilter || toDateInputValue(new Date())
+  const todayDateValue = toDateInputValue(new Date())
 
   const firstClockInRows = Array.from(
     attendanceRows.reduce((map, row) => {
@@ -1456,6 +1462,31 @@ function App() {
 
   const renderDashboardPanel = () => {
     const attendancePageRows = firstClockInRows
+    const normalizedEmployeeSearch = employeeSearch.trim().toLowerCase()
+    const filteredEmployees = normalizedEmployeeSearch
+      ? employees.filter((employee) => {
+          const haystack = [
+            employee.emp_code,
+            employee.emp_full_name,
+            employee.emp_email,
+            employee.emp_contact,
+            employee.emp_designation,
+            employee.emp_department,
+            employee.emp_grade,
+            employee.emp_manager,
+            employee.manager_name,
+            employee.manager_email,
+            employee.role
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+          return haystack.includes(normalizedEmployeeSearch)
+        })
+      : employees
+    const filteredActivities = showTodayActivities
+      ? activityRows.filter((row) => isSameDate(row.start_time, todayDateValue))
+      : activityRows
 
     if (dashboardLoading) {
       return <div className="empty-state">Loading admin data...</div>
@@ -1499,20 +1530,32 @@ function App() {
               </button>
             </div>
           </div>
+          <div className="dashboard-section-head">
+            <div className="search-field">
+              <label htmlFor="employee-search">Search employees</label>
+              <input
+                id="employee-search"
+                type="text"
+                value={employeeSearch}
+                onChange={(event) => setEmployeeSearch(event.target.value)}
+                placeholder="Search by name, code, email, or department"
+              />
+            </div>
+          </div>
           <div className="metric-row">
             <div className="metric-card">
               <span>Total Employees</span>
-              <strong>{employees.length}</strong>
+              <strong>{filteredEmployees.length}</strong>
             </div>
             <div className="metric-card">
               <span>Active Users</span>
-              <strong>{employees.filter((employee) => employee.is_active).length}</strong>
+              <strong>{filteredEmployees.filter((employee) => employee.is_active).length}</strong>
             </div>
             <div className="metric-card">
               <span>HR / Admin</span>
               <strong>
                 {
-                  employees.filter((employee) =>
+                  filteredEmployees.filter((employee) =>
                     ['hr', 'cmd', 'admin'].includes((employee.emp_designation || '').toLowerCase())
                   ).length
                 }
@@ -1630,7 +1673,8 @@ function App() {
             </div>
           ) : null}
           <div className="data-card">
-            {employees.map((employee) => (
+            {filteredEmployees.length ? (
+              filteredEmployees.map((employee) => (
               <div key={employee.emp_code} className="data-row employee-row">
                 <div>
                   <strong>{employee.emp_full_name || employee.emp_code}</strong>
@@ -1975,23 +2019,37 @@ function App() {
               <p className="eyebrow">Live Work</p>
               <h2>Activities</h2>
             </div>
-            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-              Refresh
-            </button>
+            <div className="employee-actions">
+              <button
+                className="ghost dashboard-button"
+                onClick={() => setShowTodayActivities((current) => !current)}
+              >
+                {showTodayActivities ? "Show All" : "Show Today"}
+              </button>
+              <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+                Refresh
+              </button>
+            </div>
           </div>
           <div className="data-card">
-            {activityRows.map((row, index) => (
-              <div key={`${row.id || row.employee_email || index}`} className="data-row">
-                <div>
-                  <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
-                  <span>{row.activity_type || 'Activity'}</span>
+            {filteredActivities.length ? (
+              filteredActivities.map((row, index) => (
+                <div key={`${row.id || row.employee_email || index}`} className="data-row">
+                  <div>
+                    <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
+                    <span>{row.activity_type || 'Activity'}</span>
+                  </div>
+                  <div>{formatDateTime(row.start_time)}</div>
+                  <div>
+                    <span className="table-pill accent">{row.status || 'Unknown'}</span>
+                  </div>
                 </div>
-                <div>{formatDateTime(row.start_time)}</div>
-                <div>
-                  <span className="table-pill accent">{row.status || 'Unknown'}</span>
-                </div>
+              ))
+            ) : (
+              <div className="empty-state">
+                {showTodayActivities ? "No activities found for today." : "No activities found."}
               </div>
-            ))}
+            )}
           </div>
         </>
       )

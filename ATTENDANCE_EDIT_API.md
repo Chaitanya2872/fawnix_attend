@@ -91,7 +91,7 @@ Authorization: Bearer <token>
 - 400: `{"success": false, "message": "Invalid login_time format. Use YYYY-MM-DD HH:MM:SS"}`
 - 400: `{"success": false, "message": "Clock-out time must be after clock-in time"}`
 - 400: `{"success": false, "message": "Invalid attendance_type. Must be 'office' or 'site'"}`
-- 403: `{"success": false, "message": "Unauthorized. Only HR/CMD/Admin can edit attendance records."}`
+- 403: `{"success": false, "message": "Unauthorized. Only HR/CMD/Admin can edit Todays Activity."}`
 - 404: `{"success": false, "message": "Attendance record not found"}`
 
 ---
@@ -148,7 +148,7 @@ curl -X GET http://localhost:5000/api/attendance/123 \
    - Validates time format (YYYY-MM-DD HH:MM:SS)
    - Validates attendance type (office or site)
 ✅ **Transaction Safe:** All updates are atomic
-✅ **Role-Based Access:** Only HR/CMD/Admin can edit attendance records
+✅ **Role-Based Access:** Only HR/CMD/Admin can edit Todays Activity
 ✅ **Audit Support:** Tracks who updated the record
 
 ---
@@ -167,7 +167,7 @@ curl -X GET http://localhost:5000/api/attendance/123 \
 
 ## Security Notes
 
-- Only HR/CMD/Admin users can edit attendance records
+- Only HR/CMD/Admin users can edit Todays Activity
 - All input is validated before updating
 - Time formats must be YYYY-MM-DD HH:MM:SS (24-hour format)
 - Updates are atomic (all-or-nothing transactions)

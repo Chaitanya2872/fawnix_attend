@@ -13,7 +13,7 @@ const privacySections: PrivacySection[] = [
   {
     title: 'Information We Collect',
     body: [
-      'Fawnix collects account and workforce management information such as employee ID, name, phone number, email address, role, attendance records, activity records, leave requests, and device/session details needed to authenticate users and operate the service.',
+      'Fawnix collects account and workforce management information such as employee ID, name, phone number, email address, role, Todays Activity, activity records, leave requests, and device/session details needed to authenticate users and operate the service.',
       'Fawnix also collects and processes location data to support attendance and workforce features, including clock-in, clock-out, field visits, route tracking, geofence validation, working-hours pause and resume, and attendance-related notifications.'
     ],
     bullets: []
@@ -45,7 +45,7 @@ const privacySections: PrivacySection[] = [
       'Ensure employees are within the assigned work or geofence area',
       'Automatically pause or resume working hours based on location rules',
       'Enable field visit tracking and route history',
-      'Improve accuracy, security, and compliance of attendance records'
+      'Improve accuracy, security, and compliance of Todays Activity'
     ]
   },
   {
@@ -87,7 +87,7 @@ const privacySections: PrivacySection[] = [
       'Location data is retained only as long as necessary for:'
     ],
     bullets: [
-      'Attendance records',
+      'Todays Activity',
       'Field visit logs',
       'Organizational compliance and reporting',
       'Retention duration may vary based on organizational policies. Data is securely stored and protected.'
@@ -195,7 +195,7 @@ const steps = [
 
 const sidebarItems = [
   { id: 'employees', label: 'Employees List' },
-  { id: 'attendance', label: 'Attendance Records' },
+  { id: 'attendance', label: 'Todays Activity' },
   { id: 'leaves', label: 'Leaves' },
   { id: 'activities', label: 'Activities' },
   { id: 'field-visits', label: 'Field Visits' }
@@ -1647,7 +1647,7 @@ function App() {
           <div className="dashboard-section-head">
             <div>
               <p className="eyebrow">Operations</p>
-              <h2>Attendance Records</h2>
+              <h2>Todays Activity</h2>
               <div className="attendance-tabs">
                 <button
                   className={`attendance-tab ${attendanceView === 'attendance' ? 'active' : ''}`}

@@ -95,7 +95,7 @@ def get_all_attendance_records():
         conn.close()
 
 def get_attendance_report_data(month: int, year: int):
-    """Fetch attendance records filtered by month and year for report export."""
+    """Fetch Todays Activity filtered by month and year for report export."""
     conn = get_db_connection()
     cursor = conn.cursor()
 

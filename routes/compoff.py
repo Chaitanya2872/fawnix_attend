@@ -36,9 +36,9 @@ def _is_privileged(current_user) -> bool:
 @token_required
 def scan_attendance(current_user):
     """
-    Scan attendance records and create overtime records
+    Scan Todays Activity and create overtime records
     
-    This API reads attendance records and pushes them to overtime_records table
+    This API reads Todays Activity and pushes them to overtime_records table
     based on shift times and working day rules.
     
     Use Cases:
@@ -73,7 +73,7 @@ def scan_attendance(current_user):
     Example Response:
     {
         "success": true,
-        "message": "Successfully scanned 45 attendance records",
+        "message": "Successfully scanned 45 Todays Activity",
         "data": {
             "date_range": {
                 "start_date": "2024-01-01",
@@ -132,7 +132,7 @@ def scan_attendance(current_user):
     if emp_code != current_emp_code and user_role not in ['HR', 'CMD', 'ADMIN']:
         return jsonify({
             "success": False,
-            "message": "Unauthorized. You can only scan your own attendance records."
+            "message": "Unauthorized. You can only scan your own Todays Activity."
         }), 403
     
     # Admin/HR/CMD can scan all employees by not passing emp_code
@@ -161,7 +161,7 @@ def overtime_records(current_user):
     Get employee's overtime records
     
     AUTOMATICALLY TRIGGERS: Comp-off calculation on every API call
-    - Scans recent attendance records
+    - Scans recent Todays Activity
     - Calculates comp-off days based on extra hours
     - Creates overtime records if missing
     

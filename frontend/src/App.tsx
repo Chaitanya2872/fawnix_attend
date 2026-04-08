@@ -485,10 +485,7 @@ function PrivacyPolicyPage() {
             <h2>{section.title}</h2>
             {section.body.map((paragraph) => (
               <p key={paragraph}>{paragraph}</p>
-              ))
-            ) : (
-              <div className="empty-state">No employees match this search.</div>
-            )}
+            ))}
             {section.bullets.length ? (
               <ul className="policy-list">
                 {section.bullets.map((item) => (
@@ -1675,44 +1672,57 @@ function App() {
           <div className="data-card">
             {filteredEmployees.length ? (
               filteredEmployees.map((employee) => (
-              <div key={employee.emp_code} className="data-row employee-row">
-                <div>
-                  <strong>{employee.emp_full_name || employee.emp_code}</strong>
-                  <span>{employee.emp_code}</span>
+                <div key={employee.emp_code} className="data-row employee-row">
+                  <div>
+                    <strong>{employee.emp_full_name || employee.emp_code}</strong>
+                    <span>{employee.emp_code}</span>
+                  </div>
+                  <div>
+                    <strong>{employee.emp_designation || employee.role || '--'}</strong>
+                    <span>Designation</span>
+                  </div>
+                  <div>
+                    <strong>{formatEmployeeGrade(employee.emp_grade)}</strong>
+                    <span>Grade</span>
+                  </div>
+                  <div>
+                    <strong>{employee.emp_department || '--'}</strong>
+                    <span>Department</span>
+                  </div>
+                  <div>
+                    <strong className="employee-email">{employee.emp_email || '--'}</strong>
+                    <span>{employee.emp_contact || 'Contact unavailable'}</span>
+                  </div>
+                  <div>
+                    <strong>{employee.manager_name || employee.emp_manager || '--'}</strong>
+                    <span>{employee.manager_email || employee.manager_code || 'Manager'}</span>
+                  </div>
+                  <div>
+                    <span className="table-pill">{employee.is_active ? 'Active' : 'Inactive'}</span>
+                  </div>
+                  <div className="employee-actions">
+                    <button
+                      className="action-btn edit-btn"
+                      onClick={() => handleEditEmployee(employee)}
+                      title="Edit employee"
+                    >
+                      ?????? Edit
+                    </button>
+                    <button
+                      className="action-btn delete-btn"
+                      onClick={() =>
+                        handleDeleteEmployee(employee.emp_code, employee.emp_full_name || employee.emp_code)
+                      }
+                      title="Delete employee"
+                    >
+                      ??????? Delete
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <strong>{employee.emp_designation || employee.role || '--'}</strong>
-                  <span>Designation</span>
-                </div>
-                <div>
-                  <strong>{formatEmployeeGrade(employee.emp_grade)}</strong>
-                  <span>Grade</span>
-                </div>
-                <div>
-                  <strong>{employee.emp_department || '--'}</strong>
-                  <span>Department</span>
-                </div>
-                <div>
-                  <strong className="employee-email">{employee.emp_email || '--'}</strong>
-                  <span>{employee.emp_contact || 'Contact unavailable'}</span>
-                </div>
-                <div>
-                  <strong>{employee.manager_name || employee.emp_manager || '--'}</strong>
-                  <span>{employee.manager_email || employee.manager_code || 'Manager'}</span>
-                </div>
-                <div>
-                  <span className="table-pill">{employee.is_active ? 'Active' : 'Inactive'}</span>
-                </div>
-                <div className="employee-actions">
-                  <button className="action-btn edit-btn" onClick={() => handleEditEmployee(employee)} title="Edit employee">
-                    ✏️ Edit
-                  </button>
-                  <button className="action-btn delete-btn" onClick={() => handleDeleteEmployee(employee.emp_code, employee.emp_full_name || employee.emp_code)} title="Delete employee">
-                    🗑️ Delete
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <div className="empty-state">No employees match this search.</div>
+            )}
           </div>
         </>
       )

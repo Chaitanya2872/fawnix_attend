@@ -173,7 +173,8 @@ def submit_late_arrival(current_user):
     Submit late arrival exception with reason
     
     This should be called BEFORE clock-in, after shift start time.
-    The request is linked to the attendance session automatically once the employee clocks in.
+    The request creates a pending attendance row immediately so an attendance_id is available
+    before the employee performs the actual clock-in.
     
     Request Body:
         {
@@ -194,7 +195,7 @@ def submit_late_arrival(current_user):
             "message": "Late arrival exception submitted",
             "data": {
                 "exception_id": 12,
-                "attendance_id": null,
+                "attendance_id": 45,
                 "exception_type": "late_arrival",
                 "late_by_minutes": 25,
                 "manager": "Rajesh Kumar",
@@ -549,8 +550,9 @@ Late Arrival Flow:
     2. User submits: POST /api/attendance-exceptions/late-arrival
     3. Manager reviews: GET /api/attendance-exceptions/team-exceptions
     4. Manager approves: POST /api/attendance-exceptions/approve
-    5. User clocks in
-    6. System links the request to the new attendance row
+    5. System creates a pending attendance row and returns attendance_id
+    6. User clocks in
+    7. System updates that same attendance row with the real clock-in details
 
 Early Leave Flow:
     1. User wants to leave early

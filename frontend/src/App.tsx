@@ -1545,10 +1545,6 @@ function App() {
               <strong>{filteredEmployees.length}</strong>
             </div>
             <div className="metric-card">
-              <span>Active Users</span>
-              <strong>{filteredEmployees.filter((employee) => employee.is_active).length}</strong>
-            </div>
-            <div className="metric-card">
               <span>HR / Admin</span>
               <strong>
                 {

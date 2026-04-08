@@ -1378,6 +1378,41 @@ function App() {
     }
   }
 
+  const downloadEmployeesReport = async (format: 'csv' | 'pdf' | 'xlsx') => {
+    try {
+      const makeRequest = async (token: string) =>
+        fetch(`/api/admin/employees/report?format=${format}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        })
+
+      let response = await makeRequest(accessToken)
+      if (response.status === 401) {
+        const nextAccessToken = await refreshAccessToken()
+        response = await makeRequest(nextAccessToken)
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || 'Failed to download employees report')
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `employees_${toDateInputValue(new Date())}.${format}`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      setDashboardError(error instanceof Error ? error.message : 'Failed to download employees report')
+    }
+  }
+
   const selectedAttendanceDate = attendanceDateFilter || toDateInputValue(new Date())
 
   const firstClockInRows = Array.from(
@@ -1449,6 +1484,15 @@ function App() {
             <div className="employee-actions">
               <button className="ghost dashboard-button" onClick={() => setShowAddEmployee((current) => !current)}>
                 {showAddEmployee ? 'Close Form' : 'Add Employee'}
+              </button>
+              <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('csv')}>
+                Download CSV
+              </button>
+              <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('pdf')}>
+                Download PDF
+              </button>
+              <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('xlsx')}>
+                Download XLSX
               </button>
               <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                 Refresh

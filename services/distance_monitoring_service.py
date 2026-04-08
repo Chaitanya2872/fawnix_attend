@@ -10,6 +10,7 @@ from datetime import datetime, date
 from database.connection import get_db_connection
 from math import radians, sin, cos, sqrt, atan2
 from typing import Dict, Tuple, Optional
+from services.attendance_constants import ATTENDANCE_STATUS_LOGGED_IN
 from services.attendance_notification_service import (
     notify_working_hours_paused,
     notify_working_hours_resumed,
@@ -161,9 +162,11 @@ def check_distance_from_clock_in(emp_email: str, current_lat: str, current_lon: 
                 login_address,
                 date
             FROM attendance
-            WHERE employee_email = %s AND logout_time IS NULL
+            WHERE employee_email = %s
+              AND logout_time IS NULL
+              AND status = %s
             ORDER BY login_time DESC LIMIT 1
-        """, (emp_email,))
+        """, (emp_email, ATTENDANCE_STATUS_LOGGED_IN))
         
         attendance = cursor.fetchone()
         

@@ -1,5 +1,6 @@
 from datetime import datetime
 from database.connection import get_db_connection
+from services.attendance_constants import ATTENDANCE_STATUS_LOGGED_IN
 from services.geocoding_service import get_address_from_coordinates
 from config import ActivityType
 import logging
@@ -78,8 +79,10 @@ def start_activity(emp_email: str, emp_name: str, activity_type: str,
         # 🔒 GUARD 1: Check for active attendance session
         cursor.execute("""
             SELECT id FROM attendance
-            WHERE employee_email = %s AND logout_time IS NULL
-        """, (emp_email,))
+            WHERE employee_email = %s
+              AND logout_time IS NULL
+              AND status = %s
+        """, (emp_email, ATTENDANCE_STATUS_LOGGED_IN))
         
         attendance = cursor.fetchone()
         
@@ -977,8 +980,10 @@ def get_active_activity(emp_email: str):
         # Get active attendance session
         cursor.execute("""
             SELECT id FROM attendance
-            WHERE employee_email = %s AND logout_time IS NULL
-        """, (emp_email,))
+            WHERE employee_email = %s
+              AND logout_time IS NULL
+              AND status = %s
+        """, (emp_email, ATTENDANCE_STATUS_LOGGED_IN))
         
         attendance = cursor.fetchone()
         

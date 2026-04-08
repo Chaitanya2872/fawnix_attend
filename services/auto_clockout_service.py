@@ -12,6 +12,7 @@ Automatically clocks out employees at shift end time.
 
 from datetime import datetime, time, date
 from database.connection import get_db_connection, return_connection
+from services.attendance_constants import ATTENDANCE_STATUS_LOGGED_IN
 from services.geocoding_service import get_address_from_coordinates
 from services.CompLeaveService import calculate_and_record_compoff
 from utils.time_utils import now_local_naive
@@ -160,8 +161,9 @@ def auto_clockout_all_active_sessions():
             LEFT JOIN employees e ON a.employee_email = e.emp_email
             LEFT JOIN shifts s ON e.emp_shift_id = s.shift_id
             WHERE a.logout_time IS NULL
+              AND a.status = %s
             ORDER BY a.login_time ASC
-        """)
+        """, (ATTENDANCE_STATUS_LOGGED_IN,))
 
         active_sessions = cursor.fetchall()
 
@@ -365,8 +367,9 @@ def manual_trigger_auto_clockout():
             LEFT JOIN employees e ON a.employee_email = e.emp_email
             LEFT JOIN shifts s ON e.emp_shift_id = s.shift_id
             WHERE a.logout_time IS NULL
+              AND a.status = %s
             ORDER BY a.login_time ASC
-        """)
+        """, (ATTENDANCE_STATUS_LOGGED_IN,))
 
         active_sessions = cursor.fetchall()
 

@@ -6,6 +6,7 @@ Business logic for admin-only operations
 from database.connection import get_db_connection
 from datetime import date, datetime, time
 import calendar
+from services.attendance_constants import ATTENDANCE_STATUS_LOGGED_IN
 from services.CompLeaveService import (
     attach_attendance_context_to_overtime_records,
     serialize_temporal_values,
@@ -233,7 +234,10 @@ def get_all_attendance_status():
         result = []
 
         for record in records:
-            is_logged_in = record['logout_time'] is None
+            is_logged_in = (
+                record['logout_time'] is None and
+                record.get('status') == ATTENDANCE_STATUS_LOGGED_IN
+            )
             attendance_id = record['id']
 
             active_activities = []

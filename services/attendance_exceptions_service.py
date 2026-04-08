@@ -5,6 +5,11 @@ Business logic for late arrival and early leave handling
 
 from datetime import datetime, date, time
 from database.connection import get_db_connection
+from services.attendance_constants import (
+    ATTENDANCE_STATUS_LOGGED_IN,
+    ATTENDANCE_STATUS_LOGGED_OUT,
+    ATTENDANCE_STATUS_PENDING_CLOCK_IN,
+)
 from services.leaves_service import is_employee_on_leave
 from typing import Dict, Tuple, Optional, List
 from utils.time_utils import now_local_naive
@@ -317,7 +322,7 @@ def attach_pending_late_arrival_to_attendance(
     login_time: datetime
 ) -> Optional[Dict]:
     """
-    Link today's pre-clock-in late-arrival request to the actual attendance row.
+    Refresh today's pre-clock-in late-arrival request once the actual clock-in happens.
 
     Returns linked exception details when a pending request is found, else None.
     """
@@ -340,13 +345,13 @@ def attach_pending_late_arrival_to_attendance(
                 manager_email,
                 planned_arrival_time
             FROM attendance_exceptions
-            WHERE emp_code = %s
+            WHERE attendance_id = %s
+              AND emp_code = %s
               AND exception_type = 'late_arrival'
               AND exception_date = %s
-              AND attendance_id IS NULL
             ORDER BY requested_at DESC
             LIMIT 1
-        """, (emp_code, current_date))
+        """, (attendance_id, emp_code, current_date))
 
         exception = cursor.fetchone()
         if not exception:
@@ -358,11 +363,10 @@ def attach_pending_late_arrival_to_attendance(
         cursor.execute("""
             UPDATE attendance_exceptions
             SET
-                attendance_id = %s,
                 exception_time = %s,
                 late_by_minutes = %s
             WHERE id = %s
-        """, (attendance_id, exception_time_value, late_by_minutes, exception['id']))
+        """, (exception_time_value, late_by_minutes, exception['id']))
 
         conn.commit()
 
@@ -422,14 +426,21 @@ def request_late_arrival_exception(emp_code: str, reason: str,
         current_time = current_dt.time()
         exception_time_value = _exception_time_value(cursor, current_dt)
 
-        # Late arrival must be raised before clock-in, not after.
+        # Late arrival must be raised before real clock-in, not after.
         cursor.execute("""
             SELECT 
                 id
             FROM attendance
-            WHERE employee_email = %s AND date = %s
+            WHERE employee_email = %s
+              AND date = %s
+              AND status IN (%s, %s)
             LIMIT 1
-        """, (emp_info['emp_email'], current_date))
+        """, (
+            emp_info['emp_email'],
+            current_date,
+            ATTENDANCE_STATUS_LOGGED_IN,
+            ATTENDANCE_STATUS_LOGGED_OUT,
+        ))
 
         if cursor.fetchone():
             return ({
@@ -462,6 +473,45 @@ def request_late_arrival_exception(emp_code: str, reason: str,
             }, 400)
 
         cursor.execute("""
+            SELECT id
+            FROM attendance
+            WHERE employee_email = %s
+              AND date = %s
+              AND status = %s
+              AND logout_time IS NULL
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+        """, (
+            emp_info['emp_email'],
+            current_date,
+            ATTENDANCE_STATUS_PENDING_CLOCK_IN,
+        ))
+        pending_attendance = cursor.fetchone()
+
+        if pending_attendance:
+            attendance_id = pending_attendance['id']
+        else:
+            cursor.execute("""
+                INSERT INTO attendance (
+                    employee_email,
+                    employee_name,
+                    login_time,
+                    date,
+                    status,
+                    attendance_type
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (
+                emp_info['emp_email'],
+                emp_info['emp_name'],
+                current_dt,
+                current_date,
+                ATTENDANCE_STATUS_PENDING_CLOCK_IN,
+                'office',
+            ))
+            attendance_id = cursor.fetchone()['id']
+
+        cursor.execute("""
             INSERT INTO attendance_exceptions (
                 emp_code,
                 emp_name,
@@ -484,7 +534,7 @@ def request_late_arrival_exception(emp_code: str, reason: str,
             emp_code,
             emp_info['emp_name'],
             emp_info['emp_email'],
-            None,
+            attendance_id,
             'late_arrival',
             current_date,
             exception_time_value,
@@ -508,7 +558,7 @@ def request_late_arrival_exception(emp_code: str, reason: str,
             "message": "Late arrival exception submitted successfully",
             "data": {
                 "exception_id": exception_id,
-                "attendance_id": None,
+                "attendance_id": attendance_id,
                 "exception_type": "late_arrival",
                 "employee_name": emp_info['emp_name'],
                 "late_by_minutes": late_by_minutes,
@@ -520,6 +570,7 @@ def request_late_arrival_exception(emp_code: str, reason: str,
                 "manager_email": emp_info['approver_email'],
                 "status": "pending",
                 "submitted_before_clock_in": True,
+                "attendance_status": ATTENDANCE_STATUS_PENDING_CLOCK_IN,
             }
         }, 201)
         
@@ -974,8 +1025,9 @@ def get_my_late_arrival_records(emp_code: str, status: str = None) -> Tuple[Dict
             FROM attendance
             WHERE employee_email = %s
               AND login_time IS NOT NULL
+              AND status != %s
             ORDER BY date DESC, login_time DESC
-        """, (emp_info['emp_email'],))
+        """, (emp_info['emp_email'], ATTENDANCE_STATUS_PENDING_CLOCK_IN))
         attendances = cursor.fetchall()
 
         attendance_ids = [row['id'] for row in attendances]
@@ -1075,8 +1127,9 @@ def get_my_early_leave_records(emp_code: str, status: str = None) -> Tuple[Dict,
             SELECT id, date, login_time, logout_time
             FROM attendance
             WHERE employee_email = %s
+              AND status != %s
             ORDER BY date DESC, COALESCE(logout_time, login_time) DESC
-        """, (emp_info['emp_email'],))
+        """, (emp_info['emp_email'], ATTENDANCE_STATUS_PENDING_CLOCK_IN))
         attendances = cursor.fetchall()
 
         attendance_ids = [row['id'] for row in attendances]

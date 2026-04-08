@@ -13,6 +13,11 @@ NEW FEATURES:
 from datetime import datetime, timedelta, date
 import json
 from database.connection import get_db_connection
+from services.attendance_constants import (
+    ATTENDANCE_STATUS_LOGGED_IN,
+    ATTENDANCE_STATUS_LOGGED_OUT,
+    ATTENDANCE_STATUS_PENDING_CLOCK_IN,
+)
 from services.geocoding_service import get_address_from_coordinates
 from services.CompLeaveService import calculate_and_record_compoff, is_working_day
 from services.attendance_exceptions_service import (
@@ -171,8 +176,10 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str, atte
         # 🔒 GUARD: Check for active session
         cursor.execute("""
             SELECT id, login_time FROM attendance
-            WHERE employee_email = %s AND logout_time IS NULL
-        """, (emp_email,))
+            WHERE employee_email = %s
+              AND logout_time IS NULL
+              AND status = %s
+        """, (emp_email, ATTENDANCE_STATUS_LOGGED_IN))
 
         active_session = cursor.fetchone()
 
@@ -234,22 +241,57 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str, atte
             else:
                 logger.info(f"📅 Non-working day ({login_date.strftime('%A')}) detected for {emp_email} - First clock-in allowed, will be eligible for comp-off")
         
-        # ✅ Normal clock-in flow
-        
         cursor.execute("""
-            INSERT INTO attendance (
-                employee_email, employee_name, phone_number,
-                login_time, login_location, login_address,
-                date, status, attendance_type
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id
-        """, (
-            emp_email, emp_name, phone,
-            login_time, location, address,
-            login_time.date(), 'logged_in', normalized_attendance_type
-        ))
-        
-        attendance_id = cursor.fetchone()['id']
+            SELECT id
+            FROM attendance
+            WHERE employee_email = %s
+              AND date = %s
+              AND status = %s
+              AND logout_time IS NULL
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+        """, (emp_email, login_date, ATTENDANCE_STATUS_PENDING_CLOCK_IN))
+        pending_attendance = cursor.fetchone()
+
+        if pending_attendance:
+            attendance_id = pending_attendance['id']
+            cursor.execute("""
+                UPDATE attendance
+                SET
+                    employee_name = %s,
+                    phone_number = %s,
+                    login_time = %s,
+                    login_location = %s,
+                    login_address = %s,
+                    date = %s,
+                    status = %s,
+                    attendance_type = %s
+                WHERE id = %s
+            """, (
+                emp_name,
+                phone,
+                login_time,
+                location,
+                address,
+                login_date,
+                ATTENDANCE_STATUS_LOGGED_IN,
+                normalized_attendance_type,
+                attendance_id,
+            ))
+        else:
+            cursor.execute("""
+                INSERT INTO attendance (
+                    employee_email, employee_name, phone_number,
+                    login_time, login_location, login_address,
+                    date, status, attendance_type
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (
+                emp_email, emp_name, phone,
+                login_time, location, address,
+                login_time.date(), ATTENDANCE_STATUS_LOGGED_IN, normalized_attendance_type
+            ))
+            attendance_id = cursor.fetchone()['id']
         
         site_visit_info = None
 
@@ -405,9 +447,11 @@ def clock_out(emp_email: str, lat: str, lon: str):
         # Find active session
         cursor.execute("""
             SELECT * FROM attendance
-            WHERE employee_email = %s AND logout_time IS NULL
+            WHERE employee_email = %s
+              AND logout_time IS NULL
+              AND status = %s
             ORDER BY login_time DESC LIMIT 1
-        """, (emp_email,))
+        """, (emp_email, ATTENDANCE_STATUS_LOGGED_IN))
         
         record = cursor.fetchone()
         
@@ -585,7 +629,7 @@ def clock_out(emp_email: str, lat: str, lon: str):
                 working_hours = %s, 
                 status = %s
             WHERE id = %s
-        """, (logout_time, location, address, round(hours, 2), 'logged_out', attendance_id))
+        """, (logout_time, location, address, round(hours, 2), ATTENDANCE_STATUS_LOGGED_OUT, attendance_id))
         
         conn.commit()
 
@@ -713,7 +757,10 @@ def get_attendance_status(emp_email: str):
                 }
             }, 200)
         
-        is_logged_in = record['logout_time'] is None
+        is_logged_in = (
+            record['logout_time'] is None and
+            record.get('status') == ATTENDANCE_STATUS_LOGGED_IN
+        )
         attendance_id = record['id']
         
         # If logged in, get active activities and field visits
@@ -812,8 +859,9 @@ def get_attendance_history(emp_email: str, limit: int = 30):
         cursor.execute("""
             SELECT * FROM attendance
             WHERE employee_email = %s
+              AND status != %s
             ORDER BY login_time DESC LIMIT %s
-        """, (emp_email, limit))
+        """, (emp_email, ATTENDANCE_STATUS_PENDING_CLOCK_IN, limit))
         
         records = cursor.fetchall()
 

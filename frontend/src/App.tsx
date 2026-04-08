@@ -353,6 +353,20 @@ function formatDate(value?: string) {
   })
 }
 
+function formatEmployeeGrade(value?: string) {
+  const normalized = (value || '').trim().toUpperCase()
+  if (normalized === 'F') {
+    return 'Flexible'
+  }
+  if (normalized === 'M') {
+    return 'Moderate'
+  }
+  if (normalized === 'NF') {
+    return 'Non-Flexible'
+  }
+  return value || '--'
+}
+
 function formatDistanceKm(value?: number | null) {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return '--'
@@ -1518,12 +1532,16 @@ function App() {
                 </div>
                 <div>
                   <label htmlFor="new-emp-grade">Grade</label>
-                  <input
+                  <select
                     id="new-emp-grade"
                     value={newEmployee.emp_grade}
                     onChange={(event) => updateNewEmployee('emp_grade', event.target.value)}
-                    placeholder="e.g. A1"
-                  />
+                  >
+                    <option value="">Select grade</option>
+                    <option value="F">Flexible (F)</option>
+                    <option value="M">Moderate (M)</option>
+                    <option value="NF">Non-Flexible (NF)</option>
+                  </select>
                 </div>
                 <div>
                   <label htmlFor="new-emp-department">Department</label>
@@ -1577,6 +1595,10 @@ function App() {
                 <div>
                   <strong>{employee.emp_designation || employee.role || '--'}</strong>
                   <span>Designation</span>
+                </div>
+                <div>
+                  <strong>{formatEmployeeGrade(employee.emp_grade)}</strong>
+                  <span>Grade</span>
                 </div>
                 <div>
                   <strong>{employee.emp_department || '--'}</strong>
@@ -2229,13 +2251,16 @@ function App() {
                   </div>
                   <div className="form-group">
                     <label htmlFor="edit-emp-grade">Grade</label>
-                    <input
+                    <select
                       id="edit-emp-grade"
-                      type="text"
                       value={editFormData.emp_grade || ''}
                       onChange={(e) => setEditFormData({ ...editFormData, emp_grade: e.target.value })}
-                      placeholder="e.g., A1"
-                    />
+                    >
+                      <option value="">Select grade</option>
+                      <option value="F">Flexible (F)</option>
+                      <option value="M">Moderate (M)</option>
+                      <option value="NF">Non-Flexible (NF)</option>
+                    </select>
                   </div>
                   <div className="form-group">
                     <label htmlFor="edit-emp-designation">Designation</label>

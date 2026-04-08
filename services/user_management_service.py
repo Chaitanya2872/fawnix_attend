@@ -8,6 +8,7 @@ from datetime import datetime
 
 from config import UserRole
 from database.connection import get_db_connection, return_connection
+from services.attendance_constants import ATTENDANCE_STATUS_LOGGED_IN
 
 logger = logging.getLogger(__name__)
 
@@ -258,9 +259,10 @@ def delete_employee(emp_code: str, requested_by_emp_code: str = None, allow_self
             FROM attendance
             WHERE employee_email = %s
               AND logout_time IS NULL
+              AND status = %s
             LIMIT 1
             """,
-            (employee["emp_email"],),
+            (employee["emp_email"], ATTENDANCE_STATUS_LOGGED_IN),
         )
         if cursor.fetchone():
             return (

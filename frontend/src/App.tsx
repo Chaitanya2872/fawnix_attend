@@ -355,14 +355,14 @@ function formatDate(value?: string) {
 
 function formatEmployeeGrade(value?: string) {
   const normalized = (value || '').trim().toUpperCase()
+  if (normalized === 'NF') {
+    return 'NF'
+  }
   if (normalized === 'F') {
-    return 'Flexible'
+    return 'F'
   }
   if (normalized === 'M') {
-    return 'Moderate'
-  }
-  if (normalized === 'NF') {
-    return 'Non-Flexible'
+    return 'M'
   }
   return value || '--'
 }

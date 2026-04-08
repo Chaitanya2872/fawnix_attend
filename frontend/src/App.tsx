@@ -1605,10 +1605,6 @@ function App() {
                   <span>Department</span>
                 </div>
                 <div>
-                  <strong>{employee.emp_grade || '--'}</strong>
-                  <span>Grade</span>
-                </div>
-                <div>
                   <strong className="employee-email">{employee.emp_email || '--'}</strong>
                   <span>{employee.emp_contact || 'Contact unavailable'}</span>
                 </div>

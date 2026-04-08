@@ -1697,9 +1697,6 @@ function App() {
                     <strong>{employee.manager_name || employee.emp_manager || '--'}</strong>
                     <span>{employee.manager_email || employee.manager_code || 'Manager'}</span>
                   </div>
-                  <div>
-                    <span className="table-pill">{employee.is_active ? 'Active' : 'Inactive'}</span>
-                  </div>
                   <div className="employee-actions">
                     <button
                       className="action-btn edit-btn"
@@ -1730,6 +1727,7 @@ function App() {
 
     if (activePanel === 'attendance') {
       const attendanceTabCount = attendancePageRows.length
+
       const lateArrivalCount = selectedDateLateArrivals.length
       const earlyLeaveCount = selectedDateEarlyLeaves.length
       const leaveCount = selectedDateLeaves.length

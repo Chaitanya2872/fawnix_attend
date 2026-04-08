@@ -1299,9 +1299,32 @@ function App() {
     setEditStatus('Updating employee...')
 
     try {
+      const allowedFields = new Set([
+        'emp_full_name',
+        'emp_contact',
+        'emp_email',
+        'emp_designation',
+        'emp_department',
+        'emp_manager',
+        'emp_grade',
+        'emp_shift_id',
+        'emp_joined_date'
+      ])
+
+      const payload = Object.fromEntries(
+        Object.entries(editFormData).map(([key, value]) => [
+          key,
+          typeof value === 'string' ? value.trim() : value
+        ])
+      )
+
+      const updatePayload = Object.fromEntries(
+        Object.entries(payload).filter(([key, value]) => allowedFields.has(key) && value !== undefined)
+      )
+
       const response = await apiRequest(`/api/users/${editingEmployee.emp_code}`, {
         method: 'PUT',
-        body: JSON.stringify(editFormData)
+        body: JSON.stringify(updatePayload)
       })
 
       setEditStatus(response?.message || 'Employee updated successfully.')
@@ -1558,6 +1581,10 @@ function App() {
                 <div>
                   <strong>{employee.emp_department || '--'}</strong>
                   <span>Department</span>
+                </div>
+                <div>
+                  <strong>{employee.emp_grade || '--'}</strong>
+                  <span>Grade</span>
                 </div>
                 <div>
                   <strong className="employee-email">{employee.emp_email || '--'}</strong>

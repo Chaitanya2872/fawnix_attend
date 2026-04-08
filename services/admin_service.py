@@ -44,6 +44,7 @@ def get_all_employees():
                 e.emp_full_name,
                 e.emp_email,
                 e.emp_contact,
+                e.emp_grade,
                 e.emp_designation,
                 e.emp_department,
                 e.emp_branch_id,

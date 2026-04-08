@@ -354,17 +354,25 @@ function formatDate(value?: string) {
 }
 
 function formatEmployeeGrade(value?: string) {
-  const normalized = (value || '').trim().toUpperCase()
-  if (normalized === 'NF') {
+  const raw = (value || '').trim()
+  if (!raw) {
+    return '--'
+  }
+
+  const normalized = raw.toUpperCase()
+  const compact = normalized.replace(/[\s\-_]/g, '')
+
+  if (normalized === 'NF' || compact === 'NONFLEXIBLE') {
     return 'NF'
   }
-  if (normalized === 'F') {
+  if (normalized === 'F' || compact === 'FLEXIBLE') {
     return 'F'
   }
-  if (normalized === 'M') {
+  if (normalized === 'M' || compact === 'MODERATE') {
     return 'M'
   }
-  return value || '--'
+
+  return raw
 }
 
 function formatDistanceKm(value?: number | null) {

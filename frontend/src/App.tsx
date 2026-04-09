@@ -619,6 +619,7 @@ function App() {
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
   const [attendanceDateFilter, setAttendanceDateFilter] = useState(() => toDateInputValue(new Date()))
+  const [attendanceSearch, setAttendanceSearch] = useState('')
   const [attendanceReportMonth, setAttendanceReportMonth] = useState(() => String(new Date().getMonth() + 1))
   const [attendanceReportYear, setAttendanceReportYear] = useState(() => String(new Date().getFullYear()))
   const [attendanceReportFormat, setAttendanceReportFormat] = useState<'csv' | 'pdf'>('csv')
@@ -1499,6 +1500,25 @@ function App() {
 
   const renderDashboardPanel = () => {
     const attendancePageRows = firstClockInRows
+    const normalizedAttendanceSearch = attendanceSearch.trim().toLowerCase()
+    const filteredAttendanceRows = normalizedAttendanceSearch
+      ? attendancePageRows.filter((row) => {
+          const haystack = [
+            row.employee_name,
+            row.employee_email,
+            row.emp_designation,
+            row.attendance_type,
+            row.login_location,
+            row.login_address,
+            row.logout_location,
+            row.logout_address
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+          return haystack.includes(normalizedAttendanceSearch)
+        })
+      : attendancePageRows
     const normalizedEmployeeSearch = employeeSearch.trim().toLowerCase()
     const filteredEmployees = normalizedEmployeeSearch
       ? employees.filter((employee) => {
@@ -1827,6 +1847,16 @@ function App() {
                       onChange={(event) => setAttendanceDateFilter(event.target.value)}
                     />
                   </div>
+                  <div className="attendance-filter">
+                    <label htmlFor="attendance-search">Search</label>
+                    <input
+                      id="attendance-search"
+                      type="text"
+                      value={attendanceSearch}
+                      onChange={(event) => setAttendanceSearch(event.target.value)}
+                      placeholder="Search name, email, type, or location"
+                    />
+                  </div>
                   <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                     Refresh
                   </button>
@@ -1939,8 +1969,8 @@ function App() {
           </div>
           {attendanceView === 'attendance' ? (
           <div className="data-card">
-            {attendancePageRows.length ? (
-              attendancePageRows.map((row, index) => (
+            {filteredAttendanceRows.length ? (
+              filteredAttendanceRows.map((row, index) => (
               <div key={`${row.id || row.employee_email || index}`} className="data-row attendance-row">
                 <div>
                   <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
@@ -1964,7 +1994,11 @@ function App() {
               </div>
               ))
             ) : (
-              <div className="empty-state">No first clock-in records found for the selected date.</div>
+              <div className="empty-state">
+                {attendanceSearch.trim()
+                  ? 'No attendance records match this search.'
+                  : 'No first clock-in records found for the selected date.'}
+              </div>
             )}
           </div>
           ) : attendanceView === 'leaves' ? (

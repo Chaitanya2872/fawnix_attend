@@ -251,6 +251,8 @@ type LeaveRow = {
   emp_full_name?: string
   emp_designation?: string
   leave_type?: string
+  duration?: string
+  leave_count?: number | string
   from_date?: string
   to_date?: string
   status?: string
@@ -380,6 +382,36 @@ function formatDistanceKm(value?: number | null) {
     return '--'
   }
   return `${value.toFixed(2)} km`
+}
+
+function toTitleCase(value: string) {
+  return value.replace(/\b\w/g, (match) => match.toUpperCase())
+}
+
+function formatLeaveTypeLabel(leave: LeaveRow) {
+  const rawType = (leave.leave_type || '').trim()
+  const normalizedType = rawType.toLowerCase()
+  if (!rawType) {
+    return 'Leave'
+  }
+
+  let count: number | null = null
+  if (normalizedType === 'sick' || normalizedType === 'casual') {
+    const duration = (leave.duration || '').trim().toLowerCase()
+    if (duration === 'first_half' || duration === 'second_half') {
+      count = 0.5
+    } else if (duration === 'full_day') {
+      count = 1
+    } else if (leave.leave_count !== undefined && leave.leave_count !== null) {
+      const numericCount = Number(leave.leave_count)
+      if (Number.isFinite(numericCount)) {
+        count = numericCount
+      }
+    }
+  }
+
+  const display = toTitleCase(rawType.replace(/_/g, ' '))
+  return count !== null ? `${display} (${count})` : display
 }
 
 function parseCoords(lat?: number | string, lon?: number | string) {
@@ -1942,10 +1974,10 @@ function App() {
                   <div key={`${row.id || row.emp_code || index}`} className="data-row">
                     <div>
                       <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
-                      <span>{row.emp_designation || row.leave_type || 'Leave Request'}</span>
+                      <span>{row.emp_designation || formatLeaveTypeLabel(row) || 'Leave Request'}</span>
                     </div>
                     <div>
-                      <strong>{row.leave_type || 'Leave'}</strong>
+                      <strong>{formatLeaveTypeLabel(row)}</strong>
                       <span>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</span>
                     </div>
                     <div>
@@ -2010,7 +2042,7 @@ function App() {
               <div key={`${row.id || row.emp_code || index}`} className="data-row">
                 <div>
                   <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
-                  <span>{row.leave_type || 'Leave Request'}</span>
+                  <span>{formatLeaveTypeLabel(row)}</span>
                 </div>
                 <div>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</div>
                 <div>

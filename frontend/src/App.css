@@ -870,13 +870,6 @@ a {
   display: block;
 }
 
-.compact-log-list {
-  margin-top: 8px;
-}
-
-.scheduled-log-row {
-  grid-template-columns: minmax(0, 1.5fr) minmax(140px, 0.7fr) minmax(180px, 0.9fr);
-}
 
 .form-card {
   background: #fff;
@@ -905,13 +898,6 @@ a {
   gap: 14px;
 }
 
-.scheduled-alert-grid {
-  align-items: end;
-}
-
-.scheduled-message-field {
-  grid-column: 1 / -1;
-}
 
 .form-grid label {
   display: block;
@@ -931,17 +917,6 @@ a {
   font-size: 13px;
 }
 
-.form-grid textarea {
-  width: 100%;
-  border-radius: 12px;
-  border: 1px solid rgba(17, 44, 50, 0.16);
-  padding: 10px 12px;
-  background: #fff;
-  color: #112c32;
-  font-size: 13px;
-  font-family: 'Poppins', sans-serif;
-  resize: vertical;
-}
 
 .form-actions {
   display: flex;

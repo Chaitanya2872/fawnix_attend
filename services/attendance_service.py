@@ -753,7 +753,7 @@ def get_attendance_status(emp_email: str):
                 "data": {
                     "is_logged_in": False,
                     "status": "not_logged_in",
-                    "message": "No attendance records found"
+                    "message": "No Todays Activity found"
                 }
             }, 200)
         

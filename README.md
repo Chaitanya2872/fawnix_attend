@@ -191,7 +191,7 @@ The application automatically creates tables on startup. Ensure:
 Required tables created automatically:
 - `users` - User authentication and roles
 - `otp_codes` - OTP management
-- `attendance` - Attendance records
+- `attendance` - Todays Activity
 - `activities` - Activity tracking
 
 ## 🧪 Testing

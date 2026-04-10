@@ -13,7 +13,7 @@ const privacySections: PrivacySection[] = [
   {
     title: 'Information We Collect',
     body: [
-      'Fawnix collects account and workforce management information such as employee ID, name, phone number, email address, role, attendance records, activity records, leave requests, and device/session details needed to authenticate users and operate the service.',
+      'Fawnix collects account and workforce management information such as employee ID, name, phone number, email address, role, Todays Activity, activity records, leave requests, and device/session details needed to authenticate users and operate the service.',
       'Fawnix also collects and processes location data to support attendance and workforce features, including clock-in, clock-out, field visits, route tracking, geofence validation, working-hours pause and resume, and attendance-related notifications.'
     ],
     bullets: []
@@ -45,7 +45,7 @@ const privacySections: PrivacySection[] = [
       'Ensure employees are within the assigned work or geofence area',
       'Automatically pause or resume working hours based on location rules',
       'Enable field visit tracking and route history',
-      'Improve accuracy, security, and compliance of attendance records'
+      'Improve accuracy, security, and compliance of Todays Activity'
     ]
   },
   {
@@ -87,7 +87,7 @@ const privacySections: PrivacySection[] = [
       'Location data is retained only as long as necessary for:'
     ],
     bullets: [
-      'Attendance records',
+      'Todays Activity',
       'Field visit logs',
       'Organizational compliance and reporting',
       'Retention duration may vary based on organizational policies. Data is securely stored and protected.'
@@ -195,7 +195,7 @@ const steps = [
 
 const sidebarItems = [
   { id: 'employees', label: 'Employees List' },
-  { id: 'attendance', label: 'Attendance Records' },
+  { id: 'attendance', label: 'Todays Activity' },
   { id: 'leaves', label: 'Leaves' },
   { id: 'activities', label: 'Activities' },
   { id: 'field-visits', label: 'Field Visits' }
@@ -251,6 +251,8 @@ type LeaveRow = {
   emp_full_name?: string
   emp_designation?: string
   leave_type?: string
+  duration?: string
+  leave_count?: number | string
   from_date?: string
   to_date?: string
   status?: string
@@ -357,17 +359,25 @@ function formatDate(value?: string) {
 }
 
 function formatEmployeeGrade(value?: string) {
-  const normalized = (value || '').trim().toUpperCase()
-  if (normalized === 'F') {
-    return 'Flexible'
+  const raw = (value || '').trim()
+  if (!raw) {
+    return '--'
   }
-  if (normalized === 'M') {
-    return 'Moderate'
+
+  const normalized = raw.toUpperCase()
+  const compact = normalized.replace(/[\s\-_]/g, '')
+
+  if (normalized === 'NF' || compact === 'NONFLEXIBLE') {
+    return 'NF'
   }
-  if (normalized === 'NF') {
-    return 'Non-Flexible'
+  if (normalized === 'F' || compact === 'FLEXIBLE') {
+    return 'F'
   }
-  return value || '--'
+  if (normalized === 'M' || compact === 'MODERATE') {
+    return 'M'
+  }
+
+  return raw
 }
 
 function formatDistanceKm(value?: number | null) {
@@ -375,6 +385,36 @@ function formatDistanceKm(value?: number | null) {
     return '--'
   }
   return `${value.toFixed(2)} km`
+}
+
+function toTitleCase(value: string) {
+  return value.replace(/\b\w/g, (match) => match.toUpperCase())
+}
+
+function formatLeaveTypeLabel(leave: LeaveRow) {
+  const rawType = (leave.leave_type || '').trim()
+  const normalizedType = rawType.toLowerCase()
+  if (!rawType) {
+    return 'Leave'
+  }
+
+  let count: number | null = null
+  if (normalizedType === 'sick' || normalizedType === 'casual') {
+    const duration = (leave.duration || '').trim().toLowerCase()
+    if (duration === 'first_half' || duration === 'second_half') {
+      count = 0.5
+    } else if (duration === 'full_day') {
+      count = 1
+    } else if (leave.leave_count !== undefined && leave.leave_count !== null) {
+      const numericCount = Number(leave.leave_count)
+      if (Number.isFinite(numericCount)) {
+        count = numericCount
+      }
+    }
+  }
+
+  const display = toTitleCase(rawType.replace(/_/g, ' '))
+  return count !== null ? `${display} (${count})` : display
 }
 
 function parseCoords(lat?: number | string, lon?: number | string) {
@@ -561,6 +601,8 @@ function App() {
   const [editFormData, setEditFormData] = useState<Partial<EmployeeRow>>({})
   const [editLoading, setEditLoading] = useState(false)
   const [editStatus, setEditStatus] = useState('')
+  const [employeeSearch, setEmployeeSearch] = useState('')
+  const [showTodayActivities, setShowTodayActivities] = useState(true)
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
   const [, setAttendanceTotalCount] = useState(0)
   const [, setAttendanceShiftMetrics] = useState({
@@ -584,6 +626,7 @@ function App() {
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
   const [attendanceDateFilter, setAttendanceDateFilter] = useState(() => toDateInputValue(new Date()))
+  const [attendanceSearch, setAttendanceSearch] = useState('')
   const [attendanceReportMonth, setAttendanceReportMonth] = useState(() => String(new Date().getMonth() + 1))
   const [attendanceReportYear, setAttendanceReportYear] = useState(() => String(new Date().getFullYear()))
   const [attendanceReportFormat, setAttendanceReportFormat] = useState<'csv' | 'pdf'>('csv')
@@ -1320,9 +1363,32 @@ function App() {
     setEditStatus('Updating employee...')
 
     try {
+      const allowedFields = new Set([
+        'emp_full_name',
+        'emp_contact',
+        'emp_email',
+        'emp_designation',
+        'emp_department',
+        'emp_manager',
+        'emp_grade',
+        'emp_shift_id',
+        'emp_joined_date'
+      ])
+
+      const payload = Object.fromEntries(
+        Object.entries(editFormData).map(([key, value]) => [
+          key,
+          typeof value === 'string' ? value.trim() : value
+        ])
+      )
+
+      const updatePayload = Object.fromEntries(
+        Object.entries(payload).filter(([key, value]) => allowedFields.has(key) && value !== undefined)
+      )
+
       const response = await apiRequest(`/api/users/${editingEmployee.emp_code}`, {
         method: 'PUT',
-        body: JSON.stringify(editFormData)
+        body: JSON.stringify(updatePayload)
       })
 
       setEditStatus(response?.message || 'Employee updated successfully.')
@@ -1362,7 +1428,43 @@ function App() {
     }
   }
 
+  const downloadEmployeesReport = async (format: 'csv' | 'pdf' | 'xlsx') => {
+    try {
+      const makeRequest = async (token: string) =>
+        fetch(`/api/admin/employees/report?format=${format}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        })
+
+      let response = await makeRequest(accessToken)
+      if (response.status === 401) {
+        const nextAccessToken = await refreshAccessToken()
+        response = await makeRequest(nextAccessToken)
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || 'Failed to download employees report')
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `employees_${toDateInputValue(new Date())}.${format}`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      setDashboardError(error instanceof Error ? error.message : 'Failed to download employees report')
+    }
+  }
+
   const selectedAttendanceDate = attendanceDateFilter || toDateInputValue(new Date())
+  const todayDateValue = toDateInputValue(new Date())
 
   const firstClockInRows = Array.from(
     attendanceRows.reduce((map, row) => {
@@ -1405,6 +1507,50 @@ function App() {
 
   const renderDashboardPanel = () => {
     const attendancePageRows = firstClockInRows
+    const normalizedAttendanceSearch = attendanceSearch.trim().toLowerCase()
+    const filteredAttendanceRows = normalizedAttendanceSearch
+      ? attendancePageRows.filter((row) => {
+          const haystack = [
+            row.employee_name,
+            row.employee_email,
+            row.emp_designation,
+            row.attendance_type,
+            row.login_location,
+            row.login_address,
+            row.logout_location,
+            row.logout_address
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+          return haystack.includes(normalizedAttendanceSearch)
+        })
+      : attendancePageRows
+    const normalizedEmployeeSearch = employeeSearch.trim().toLowerCase()
+    const filteredEmployees = normalizedEmployeeSearch
+      ? employees.filter((employee) => {
+          const haystack = [
+            employee.emp_code,
+            employee.emp_full_name,
+            employee.emp_email,
+            employee.emp_contact,
+            employee.emp_designation,
+            employee.emp_department,
+            employee.emp_grade,
+            employee.emp_manager,
+            employee.manager_name,
+            employee.manager_email,
+            employee.role
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+          return haystack.includes(normalizedEmployeeSearch)
+        })
+      : employees
+    const filteredActivities = showTodayActivities
+      ? activityRows.filter((row) => isSameDate(row.start_time, todayDateValue))
+      : activityRows
 
     if (dashboardLoading) {
       return <div className="empty-state">Loading admin data...</div>
@@ -1434,25 +1580,42 @@ function App() {
               <button className="ghost dashboard-button" onClick={() => setShowAddEmployee((current) => !current)}>
                 {showAddEmployee ? 'Close Form' : 'Add Employee'}
               </button>
+              <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('csv')}>
+                Download CSV
+              </button>
+              <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('pdf')}>
+                Download PDF
+              </button>
+              <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('xlsx')}>
+                Download XLSX
+              </button>
               <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                 Refresh
               </button>
             </div>
           </div>
+          <div className="dashboard-section-head">
+            <div className="search-field">
+              <label htmlFor="employee-search">Search employees</label>
+              <input
+                id="employee-search"
+                type="text"
+                value={employeeSearch}
+                onChange={(event) => setEmployeeSearch(event.target.value)}
+                placeholder="Search by name, code, email, or department"
+              />
+            </div>
+          </div>
           <div className="metric-row">
             <div className="metric-card">
               <span>Total Employees</span>
-              <strong>{employees.length}</strong>
-            </div>
-            <div className="metric-card">
-              <span>Active Users</span>
-              <strong>{employees.filter((employee) => employee.is_active).length}</strong>
+              <strong>{filteredEmployees.length}</strong>
             </div>
             <div className="metric-card">
               <span>HR / Admin</span>
               <strong>
                 {
-                  employees.filter((employee) =>
+                  filteredEmployees.filter((employee) =>
                     ['hr', 'cmd', 'admin'].includes((employee.emp_designation || '').toLowerCase())
                   ).length
                 }
@@ -1596,6 +1759,9 @@ function App() {
                   <strong>{employee.manager_name || employee.emp_manager || '--'}</strong>
                   <span>{employee.manager_email || employee.manager_code || 'Manager'}</span>
                 </div>
+                <div>
+                  <span className="table-pill">{employee.is_active ? 'Active' : 'Inactive'}</span>
+                </div>
                 <div className="employee-actions">
                   <button className="action-btn edit-btn" onClick={() => handleEditEmployee(employee)} title="Edit employee">
                     ✏️ Edit
@@ -1613,6 +1779,7 @@ function App() {
 
     if (activePanel === 'attendance') {
       const attendanceTabCount = attendancePageRows.length
+
       const lateArrivalCount = selectedDateLateArrivals.length
       const earlyLeaveCount = selectedDateEarlyLeaves.length
       const leaveCount = selectedDateLeaves.length
@@ -1628,7 +1795,7 @@ function App() {
           <div className="dashboard-section-head">
             <div>
               <p className="eyebrow">Operations</p>
-              <h2>Attendance Records</h2>
+              <h2>Todays Activity</h2>
               <div className="attendance-tabs">
                 <button
                   className={`attendance-tab ${attendanceView === 'attendance' ? 'active' : ''}`}
@@ -1674,6 +1841,16 @@ function App() {
                       type="date"
                       value={attendanceDateFilter}
                       onChange={(event) => setAttendanceDateFilter(event.target.value)}
+                    />
+                  </div>
+                  <div className="attendance-filter">
+                    <label htmlFor="attendance-search">Search</label>
+                    <input
+                      id="attendance-search"
+                      type="text"
+                      value={attendanceSearch}
+                      onChange={(event) => setAttendanceSearch(event.target.value)}
+                      placeholder="Search name, email, type, or location"
                     />
                   </div>
                   <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
@@ -1788,8 +1965,8 @@ function App() {
           </div>
           {attendanceView === 'attendance' ? (
           <div className="data-card">
-            {attendancePageRows.length ? (
-              attendancePageRows.map((row, index) => (
+            {filteredAttendanceRows.length ? (
+              filteredAttendanceRows.map((row, index) => (
               <div key={`${row.id || row.employee_email || index}`} className="data-row attendance-row">
                 <div>
                   <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
@@ -1813,7 +1990,11 @@ function App() {
               </div>
               ))
             ) : (
-              <div className="empty-state">No first clock-in records found for the selected date.</div>
+              <div className="empty-state">
+                {attendanceSearch.trim()
+                  ? 'No attendance records match this search.'
+                  : 'No first clock-in records found for the selected date.'}
+              </div>
             )}
           </div>
           ) : attendanceView === 'leaves' ? (
@@ -1823,10 +2004,10 @@ function App() {
                   <div key={`${row.id || row.emp_code || index}`} className="data-row">
                     <div>
                       <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
-                      <span>{row.emp_designation || row.leave_type || 'Leave Request'}</span>
+                      <span>{row.emp_designation || formatLeaveTypeLabel(row) || 'Leave Request'}</span>
                     </div>
                     <div>
-                      <strong>{row.leave_type || 'Leave'}</strong>
+                      <strong>{formatLeaveTypeLabel(row)}</strong>
                       <span>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</span>
                     </div>
                     <div>
@@ -1891,7 +2072,7 @@ function App() {
               <div key={`${row.id || row.emp_code || index}`} className="data-row">
                 <div>
                   <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
-                  <span>{row.leave_type || 'Leave Request'}</span>
+                  <span>{formatLeaveTypeLabel(row)}</span>
                 </div>
                 <div>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</div>
                 <div>
@@ -1912,23 +2093,37 @@ function App() {
               <p className="eyebrow">Live Work</p>
               <h2>Activities</h2>
             </div>
-            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-              Refresh
-            </button>
+            <div className="employee-actions">
+              <button
+                className="ghost dashboard-button"
+                onClick={() => setShowTodayActivities((current) => !current)}
+              >
+                {showTodayActivities ? "Show All" : "Show Today"}
+              </button>
+              <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+                Refresh
+              </button>
+            </div>
           </div>
           <div className="data-card">
-            {activityRows.map((row, index) => (
-              <div key={`${row.id || row.employee_email || index}`} className="data-row">
-                <div>
-                  <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
-                  <span>{row.activity_type || 'Activity'}</span>
+            {filteredActivities.length ? (
+              filteredActivities.map((row, index) => (
+                <div key={`${row.id || row.employee_email || index}`} className="data-row">
+                  <div>
+                    <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
+                    <span>{row.activity_type || 'Activity'}</span>
+                  </div>
+                  <div>{formatDateTime(row.start_time)}</div>
+                  <div>
+                    <span className="table-pill accent">{row.status || 'Unknown'}</span>
+                  </div>
                 </div>
-                <div>{formatDateTime(row.start_time)}</div>
-                <div>
-                  <span className="table-pill accent">{row.status || 'Unknown'}</span>
-                </div>
+              ))
+            ) : (
+              <div className="empty-state">
+                {showTodayActivities ? "No activities found for today." : "No activities found."}
               </div>
-            ))}
+            )}
           </div>
         </>
       )

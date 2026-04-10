@@ -460,6 +460,25 @@ a {
   color: #112c32;
 }
 
+.search-field {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: #4b5c61;
+  min-width: 220px;
+  max-width: 360px;
+  flex: 1;
+}
+
+.search-field input {
+  border-radius: 999px;
+  border: 1px solid rgba(17, 44, 50, 0.2);
+  padding: 8px 12px;
+  font-size: 13px;
+  background: #fff;
+  color: #112c32;
+}
+
 .muted-email {
   font-size: 11px;
   color: #6b7b80;

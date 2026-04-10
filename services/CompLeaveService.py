@@ -450,7 +450,7 @@ def scan_attendance_and_create_overtime_records(
     days_back: int = 30
 ) -> Tuple[Dict, int]:
     """
-    Scan attendance records and create missing overtime records
+    Scan Todays Activity and create missing overtime records
     
     ADAPTED TO YOUR TABLE STRUCTURE
     """
@@ -464,9 +464,9 @@ def scan_attendance_and_create_overtime_records(
         if not start_date:
             start_date = end_date - timedelta(days=days_back)
         
-        logger.info(f"🔍 Scanning attendance records from {start_date} to {end_date}")
+        logger.info(f"🔍 Scanning Todays Activity from {start_date} to {end_date}")
         
-        # Build query - Get attendance records
+        # Build query - Get Todays Activity
         query = """
             SELECT 
                 a.id as attendance_id,
@@ -496,7 +496,7 @@ def scan_attendance_and_create_overtime_records(
         cursor.execute(query, params)
         attendance_records = cursor.fetchall()
         
-        logger.info(f"📊 Found {len(attendance_records)} completed attendance records")
+        logger.info(f"📊 Found {len(attendance_records)} completed Todays Activity")
         
         # Process each record
         processed = 0
@@ -639,7 +639,7 @@ def scan_attendance_and_create_overtime_records(
         
         response_data = {
             "success": True,
-            "message": f"Successfully scanned {len(attendance_records)} attendance records",
+            "message": f"Successfully scanned {len(attendance_records)} Todays Activity",
             "data": {
                 "date_range": {
                     "start_date": start_date.strftime('%Y-%m-%d'),
@@ -669,12 +669,12 @@ def scan_attendance_and_create_overtime_records(
         return (response_data, 200)
         
     except Exception as e:
-        logger.error(f"❌ Error scanning attendance records: {e}")
+        logger.error(f"❌ Error scanning Todays Activity: {e}")
         import traceback
         logger.error(traceback.format_exc())
         return ({
             "success": False,
-            "message": f"Error scanning attendance records: {str(e)}"
+            "message": f"Error scanning Todays Activity: {str(e)}"
         }, 500)
         
     finally:

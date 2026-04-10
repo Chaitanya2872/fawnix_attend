@@ -401,7 +401,7 @@ def edit_attendance(current_user, attendance_id):
     if not _is_privileged(current_user):
         return jsonify({
             "success": False,
-            "message": "Unauthorized. Only HR/CMD/Admin can edit attendance records."
+            "message": "Unauthorized. Only HR/CMD/Admin can edit Todays Activity."
         }), 403
     
     data = request.get_json() or {}

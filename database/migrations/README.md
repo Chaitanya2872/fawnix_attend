@@ -69,7 +69,7 @@ The migration system is managed by the `database/connection.py` module and track
    - `trigger_populate_compoff_on_clockout`: Creates overtime record on clock-out
 
 6. **Backfill**:
-   - Updates all existing non-working day attendance records to mark them as comp-off sessions
+   - Updates all existing non-working day Todays Activity to mark them as comp-off sessions
 
 ## Adding New Migrations
 

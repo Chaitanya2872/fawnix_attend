@@ -13,6 +13,7 @@ from io import StringIO, BytesIO
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
+import openpyxl
 from services.notification_service import send_push_notification_to_employee
 from database.connection import get_db_connection, return_connection
 from datetime import datetime, date, time
@@ -77,6 +78,149 @@ def get_employees(current_user):
         "count": len(employees),
         "data": [serialize_row(emp) for emp in employees]
     }), 200
+
+
+@admin_bp.route('/employees/report', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def download_employees_report(current_user):
+    """
+    Download employee directory report (CSV, PDF, or XLSX).
+    Query params: format=csv|pdf|xlsx
+    """
+    report_format = (request.args.get('format') or 'csv').lower()
+    employees = admin_service.get_all_employees()
+
+    headers = [
+        "Employee Code",
+        "Full Name",
+        "Designation",
+        "Grade",
+        "Department",
+        "Email",
+        "Contact",
+        "Manager Name",
+        "Manager Email",
+        "Manager Code",
+    ]
+
+    def _format_grade(value):
+        raw = (value or "").strip()
+        if not raw:
+            return ""
+
+        normalized = raw.upper()
+        compact = normalized.replace(" ", "").replace("-", "").replace("_", "")
+
+        if normalized == "NF" or compact == "NONFLEXIBLE":
+            return "NF"
+        if normalized == "F" or compact == "FLEXIBLE":
+            return "F"
+        if normalized == "M" or compact == "MODERATE":
+            return "M"
+        return raw
+
+    rows = []
+    for emp in employees:
+        manager_name = emp.get("manager_name") or emp.get("emp_manager") or ""
+        manager_email = emp.get("manager_email") or emp.get("manager_code") or ""
+
+        rows.append([
+            emp.get("emp_code", ""),
+            emp.get("emp_full_name", ""),
+            emp.get("emp_designation", ""),
+            _format_grade(emp.get("emp_grade")),
+            emp.get("emp_department", ""),
+            emp.get("emp_email", ""),
+            emp.get("emp_contact", ""),
+            manager_name,
+            manager_email,
+            emp.get("emp_manager", "") or "",
+        ])
+
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+
+    if report_format == 'pdf':
+        buffer = BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=landscape(letter))
+        width, height = landscape(letter)
+        x_start = 0.4 * inch
+        y = height - 0.6 * inch
+
+        pdf.setFont("Helvetica-Bold", 14)
+        pdf.drawString(x_start, y, f"Employee Directory Report - {today_str}")
+        y -= 0.35 * inch
+
+        pdf.setFont("Helvetica-Bold", 8)
+        col_widths = [1.0, 2.2, 1.6, 0.9, 1.6, 2.2, 1.3, 2.0, 2.2, 1.2]
+        col_widths = [w * inch for w in col_widths]
+
+        def draw_row(values, y_pos, bold=False):
+            pdf.setFont("Helvetica-Bold" if bold else "Helvetica", 7)
+            x = x_start
+            for value, width_col in zip(values, col_widths):
+                text = str(value or "")
+                if len(text) > 45:
+                    text = text[:42] + "..."
+                pdf.drawString(x, y_pos, text)
+                x += width_col
+
+        draw_row(headers, y, bold=True)
+        y -= 0.22 * inch
+
+        for row in rows:
+            if y < 0.6 * inch:
+                pdf.showPage()
+                y = height - 0.6 * inch
+                draw_row(headers, y, bold=True)
+                y -= 0.22 * inch
+
+            draw_row(row, y)
+            y -= 0.18 * inch
+
+        pdf.save()
+        buffer.seek(0)
+        filename = f"employees_{today_str}.pdf"
+        return send_file(
+            buffer,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/pdf'
+        )
+
+    if report_format == 'xlsx':
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Employees"
+        ws.append(headers)
+
+        for row in rows:
+            ws.append(row)
+
+        column_widths = [15, 26, 18, 10, 20, 28, 16, 24, 26, 16]
+        for idx, width in enumerate(column_widths, start=1):
+            ws.column_dimensions[openpyxl.utils.get_column_letter(idx)].width = width
+
+        buffer = BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        filename = f"employees_{today_str}.xlsx"
+        return send_file(
+            buffer,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    writer.writerows(rows)
+
+    filename = f"employees_{today_str}.csv"
+    response = Response(output.getvalue(), mimetype='text/csv')
+    response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+    return response
     
 
 @admin_bp.route('/attendance/status', methods=['GET'])

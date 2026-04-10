@@ -4,6 +4,7 @@ Business logic for late arrival and early leave handling
 """
 
 from datetime import datetime, date, time
+from config import Config
 from database.connection import get_db_connection
 from services.attendance_constants import (
     ATTENDANCE_STATUS_LOGGED_IN,
@@ -21,6 +22,34 @@ logger = logging.getLogger(__name__)
 # =========================
 # HELPER FUNCTIONS
 # =========================
+
+
+def _parse_config_time(value: str, fallback: str) -> time:
+    raw_value = (value or fallback).strip()
+    for fmt in ('%H:%M:%S', '%H:%M'):
+        try:
+            return datetime.strptime(raw_value, fmt).time()
+        except ValueError:
+            continue
+    return datetime.strptime(fallback, '%H:%M').time()
+
+
+def _is_time_in_range(current_value: time, start_value: time, end_value: time) -> bool:
+    return start_value <= current_value <= end_value
+
+
+def _get_late_arrival_submission_window() -> Tuple[time, time]:
+    return (
+        _parse_config_time(Config.LATE_ARRIVAL_SUBMISSION_START, '04:00'),
+        _parse_config_time(Config.LATE_ARRIVAL_SUBMISSION_END, '12:00'),
+    )
+
+
+def _get_early_leave_submission_window() -> Tuple[time, time]:
+    return (
+        _parse_config_time(Config.EARLY_LEAVE_SUBMISSION_START, '16:00'),
+        _parse_config_time(Config.EARLY_LEAVE_SUBMISSION_END, '18:30'),
+    )
 
 def get_employee_shift_times(emp_code: str) -> Tuple[Optional[time], Optional[time]]:
     """
@@ -472,6 +501,16 @@ def request_late_arrival_exception(emp_code: str, reason: str,
                 "message": "Late arrival can only be submitted after shift start time"
             }, 400)
 
+        late_window_start, late_window_end = _get_late_arrival_submission_window()
+        if not _is_time_in_range(current_time, late_window_start, late_window_end):
+            return ({
+                "success": False,
+                "message": (
+                    "Late arrival can only be submitted between "
+                    f"{late_window_start.strftime('%H:%M')} and {late_window_end.strftime('%H:%M')}"
+                )
+            }, 400)
+
         cursor.execute("""
             SELECT id
             FROM attendance
@@ -633,6 +672,18 @@ def request_early_leave_exception(emp_code: str, attendance_id: int,
         
         if attendance['logout_time']:
             return ({"success": False, "message": "Already clocked out"}, 400)
+
+        current_dt = now_local_naive()
+        current_time = current_dt.time()
+        early_window_start, early_window_end = _get_early_leave_submission_window()
+        if not _is_time_in_range(current_time, early_window_start, early_window_end):
+            return ({
+                "success": False,
+                "message": (
+                    "Early leave can only be submitted between "
+                    f"{early_window_start.strftime('%H:%M')} and {early_window_end.strftime('%H:%M')}"
+                )
+            }, 400)
         
         # Check if exception already exists for this attendance
         cursor.execute("""
@@ -696,7 +747,7 @@ def request_early_leave_exception(emp_code: str, attendance_id: int,
             emp_info['approver_code'],
             emp_info['approver_email'],
             'pending',
-            datetime.now()
+            current_dt
         ))
         
         exception_id = cursor.fetchone()['id']

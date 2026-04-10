@@ -261,6 +261,7 @@ type AttendanceExceptionRow = {
   emp_code?: string
   emp_name?: string
   exception_type?: string
+  exception_date?: string
   exception_time?: string
   planned_leave_time?: string
   late_by_minutes?: number
@@ -268,6 +269,8 @@ type AttendanceExceptionRow = {
   reason?: string
   status?: string
   requested_at?: string
+  actual_login_time?: string
+  actual_logout_time?: string
 }
 
 type ActivityRow = {
@@ -432,6 +435,10 @@ function isSameDate(value: string | undefined, targetDate: string) {
   }
 
   return value.slice(0, 10) === targetDate
+}
+
+function getExceptionDateValue(row: AttendanceExceptionRow) {
+  return row.exception_date || row.requested_at
 }
 
 function isDateWithinRange(
@@ -1377,10 +1384,10 @@ function App() {
   })
 
   const selectedDateLateArrivals = attendanceExceptions.filter(
-    (item) => item.exception_type === 'late_arrival' && isSameDate(item.requested_at, selectedAttendanceDate)
+    (item) => item.exception_type === 'late_arrival' && isSameDate(getExceptionDateValue(item), selectedAttendanceDate)
   )
   const selectedDateEarlyLeaves = attendanceExceptions.filter(
-    (item) => item.exception_type === 'early_leave' && isSameDate(item.requested_at, selectedAttendanceDate)
+    (item) => item.exception_type === 'early_leave' && isSameDate(getExceptionDateValue(item), selectedAttendanceDate)
   )
   const lateLogins = selectedDateLateArrivals.length
   const onTimeLogins = Math.max(firstClockInRows.length - lateLogins, 0)
@@ -1588,9 +1595,6 @@ function App() {
                 <div>
                   <strong>{employee.manager_name || employee.emp_manager || '--'}</strong>
                   <span>{employee.manager_email || employee.manager_code || 'Manager'}</span>
-                </div>
-                <div>
-                  <span className="table-pill">{employee.is_active ? 'Active' : 'Inactive'}</span>
                 </div>
                 <div className="employee-actions">
                   <button className="action-btn edit-btn" onClick={() => handleEditEmployee(employee)} title="Edit employee">
@@ -1850,14 +1854,14 @@ function App() {
                     <div>
                       <strong>
                         {attendanceView === 'late-arrivals'
-                          ? row.exception_time || '--'
-                          : row.planned_leave_time || '--'}
+                          ? row.exception_time || row.actual_login_time || '--'
+                          : row.planned_leave_time || row.actual_logout_time || '--'}
                       </strong>
                       <span>{row.reason || 'No reason provided'}</span>
                     </div>
                     <div>
                       <span className="table-pill">{row.status || 'Pending'}</span>
-                      <span>{formatDateTime(row.requested_at)}</span>
+                      <span>{formatDateTime(row.requested_at || row.exception_date)}</span>
                     </div>
                   </div>
                 ))

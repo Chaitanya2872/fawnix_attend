@@ -127,6 +127,7 @@ def _scheduled_datetime_for(reminder_date: date, raw_time: str | None) -> dateti
 
 
 def _log_scheduled_notification_attempt(
+    schedule_id: int | None,
     notification_type: str,
     emp_code: str,
     title: str,
@@ -146,6 +147,7 @@ def _log_scheduled_notification_attempt(
         cursor.execute(
             """
             INSERT INTO scheduled_notification_logs (
+                schedule_id,
                 notification_type,
                 emp_code,
                 title,
@@ -160,6 +162,7 @@ def _log_scheduled_notification_attempt(
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW(), NOW())
             """,
             (
+                schedule_id,
                 notification_type,
                 emp_code,
                 title,
@@ -840,6 +843,7 @@ def send_attendance_reminder_notifications(target_date: date | None = None) -> D
                 {"type": "attendance_reminder"},
             )
             _log_scheduled_notification_attempt(
+                None,
                 "attendance_reminder",
                 candidate["emp_code"],
                 "Attendance Reminder",
@@ -940,6 +944,7 @@ def send_lunch_reminder_notifications(target_date: date | None = None) -> Dict[s
                 {"type": "lunch_reminder"},
             )
             _log_scheduled_notification_attempt(
+                None,
                 "lunch_reminder",
                 candidate["emp_code"],
                 "Lunch Time",
@@ -992,6 +997,319 @@ SCHEDULED_NOTIFICATION_HANDLERS = {
     "attendance_reminder": send_attendance_reminder_notifications,
     "lunch_reminder": send_lunch_reminder_notifications,
 }
+
+
+def create_scheduled_notification(
+    title: str,
+    body: str,
+    scheduled_for: datetime,
+    created_by_emp_code: str | None = None,
+    notification_type: str = "custom_scheduled",
+) -> Dict[str, Any]:
+    """Create a custom scheduled notification row."""
+    normalized_title = (title or "").strip() or "Scheduled Alert"
+    normalized_body = (body or "").strip()
+    normalized_type = (notification_type or "").strip().lower() or "custom_scheduled"
+    normalized_creator = (created_by_emp_code or "").strip() or None
+
+    if not normalized_body:
+        return {
+            "success": False,
+            "message": "body is required",
+        }
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            INSERT INTO scheduled_notifications (
+                notification_type,
+                title,
+                body,
+                scheduled_for,
+                created_by_emp_code,
+                status,
+                created_at,
+                updated_at
+            ) VALUES (%s, %s, %s, %s, %s, 'pending', NOW(), NOW())
+            RETURNING *
+            """,
+            (
+                normalized_type,
+                normalized_title,
+                normalized_body,
+                scheduled_for,
+                normalized_creator,
+            ),
+        )
+        row = cursor.fetchone()
+        conn.commit()
+        return {
+            "success": True,
+            "message": "Scheduled notification created",
+            "data": _serialize_row(dict(row)),
+        }
+    except Exception as e:
+        conn.rollback()
+        logger.error("Create scheduled notification error: %s", e)
+        return {
+            "success": False,
+            "message": str(e),
+        }
+    finally:
+        cursor.close()
+        return_connection(conn)
+
+
+def get_scheduled_notifications(
+    limit: int = 50,
+    status: str | None = None,
+) -> List[Dict[str, Any]]:
+    """Fetch recent scheduled notification rows."""
+    normalized_limit = max(1, min(int(limit or 50), 200))
+    normalized_status = (status or "").strip().lower() or None
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        if normalized_status:
+            cursor.execute(
+                """
+                SELECT *
+                FROM scheduled_notifications
+                WHERE status = %s
+                ORDER BY scheduled_for DESC, id DESC
+                LIMIT %s
+                """,
+                (normalized_status, normalized_limit),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT *
+                FROM scheduled_notifications
+                ORDER BY scheduled_for DESC, id DESC
+                LIMIT %s
+                """,
+                (normalized_limit,),
+            )
+
+        return [_serialize_row(dict(row)) for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+        return_connection(conn)
+
+
+def _update_scheduled_notification_status(
+    schedule_id: int,
+    status: str,
+    *,
+    total_candidates: int = 0,
+    sent_count: int = 0,
+    failed_count: int = 0,
+    last_error: str | None = None,
+    processed_at: datetime | None = None,
+) -> None:
+    """Persist the outcome of scheduled notification processing."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            UPDATE scheduled_notifications
+            SET
+                status = %s,
+                total_candidates = %s,
+                sent_count = %s,
+                failed_count = %s,
+                last_error = %s,
+                processed_at = %s,
+                updated_at = NOW()
+            WHERE id = %s
+            """,
+            (
+                status,
+                total_candidates,
+                sent_count,
+                failed_count,
+                last_error,
+                processed_at,
+                schedule_id,
+            ),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        logger.exception("Scheduled notification status update failed | schedule_id=%s", schedule_id)
+    finally:
+        cursor.close()
+        return_connection(conn)
+
+
+def _claim_due_scheduled_notifications(limit: int = 20) -> List[Dict[str, Any]]:
+    """Claim pending notifications that are due for sending."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now_dt = now_local_naive()
+
+    try:
+        cursor.execute(
+            """
+            SELECT *
+            FROM scheduled_notifications
+            WHERE status = 'pending'
+              AND scheduled_for <= %s
+            ORDER BY scheduled_for ASC, id ASC
+            LIMIT %s
+            """,
+            (now_dt, limit),
+        )
+        rows = cursor.fetchall()
+        claimed = []
+
+        for row in rows:
+            cursor.execute(
+                """
+                UPDATE scheduled_notifications
+                SET status = 'processing', updated_at = NOW()
+                WHERE id = %s AND status = 'pending'
+                RETURNING *
+                """,
+                (row["id"],),
+            )
+            claimed_row = cursor.fetchone()
+            if claimed_row:
+                claimed.append(dict(claimed_row))
+
+        conn.commit()
+        return claimed
+    except Exception:
+        conn.rollback()
+        logger.exception("Claim due scheduled notifications failed")
+        return []
+    finally:
+        cursor.close()
+        return_connection(conn)
+
+
+def process_due_scheduled_notifications(limit: int = 20) -> Dict[str, Any]:
+    """Send custom scheduled notifications that are due."""
+    schedules = _claim_due_scheduled_notifications(limit=limit)
+    if not schedules:
+        return {
+            "success": True,
+            "message": "No scheduled notifications due",
+            "processed_count": 0,
+            "sent_count": 0,
+            "failed_count": 0,
+        }
+
+    processed_count = 0
+    sent_schedules = 0
+    failed_schedules = 0
+
+    for schedule in schedules:
+        schedule_id = int(schedule["id"])
+        scheduled_for_value = schedule.get("scheduled_for")
+        scheduled_date = scheduled_for_value.date() if isinstance(scheduled_for_value, datetime) else date.today()
+
+        try:
+            candidates = get_lunch_reminder_candidates(scheduled_date)
+            processed_at = now_local_naive()
+
+            if not candidates:
+                _update_scheduled_notification_status(
+                    schedule_id,
+                    "skipped",
+                    processed_at=processed_at,
+                )
+                processed_count += 1
+                continue
+
+            is_working, day_type = is_working_day(scheduled_date, candidates[0]["emp_code"])
+            if not is_working:
+                _update_scheduled_notification_status(
+                    schedule_id,
+                    "skipped",
+                    total_candidates=len(candidates),
+                    last_error=f"Skipped on {day_type}",
+                    processed_at=processed_at,
+                )
+                processed_count += 1
+                continue
+
+            sent_count = 0
+            failed_count = 0
+
+            for candidate in candidates:
+                result = send_push_notification_to_employee(
+                    candidate["emp_code"],
+                    schedule["title"],
+                    schedule["body"],
+                    {
+                        "type": "scheduled_notification",
+                        "notification_type": schedule["notification_type"],
+                        "schedule_id": schedule_id,
+                    },
+                )
+                _log_scheduled_notification_attempt(
+                    schedule_id,
+                    schedule["notification_type"],
+                    candidate["emp_code"],
+                    schedule["title"],
+                    schedule["body"],
+                    schedule.get("scheduled_for"),
+                    result,
+                )
+
+                if result.get("success"):
+                    sent_count += 1
+                else:
+                    failed_count += 1
+
+            final_status = "sent"
+            if sent_count and failed_count:
+                final_status = "partial"
+            elif not sent_count and failed_count:
+                final_status = "failed"
+
+            _update_scheduled_notification_status(
+                schedule_id,
+                final_status,
+                total_candidates=len(candidates),
+                sent_count=sent_count,
+                failed_count=failed_count,
+                last_error=None if final_status in {"sent", "partial"} else "Push notification failed for all candidates",
+                processed_at=processed_at,
+            )
+
+            processed_count += 1
+            if final_status in {"sent", "partial"}:
+                sent_schedules += 1
+            else:
+                failed_schedules += 1
+        except Exception as e:
+            _update_scheduled_notification_status(
+                schedule_id,
+                "failed",
+                last_error=str(e),
+                processed_at=now_local_naive(),
+            )
+            failed_schedules += 1
+            processed_count += 1
+            logger.exception("Process scheduled notification failed | schedule_id=%s", schedule_id)
+
+    return {
+        "success": failed_schedules == 0,
+        "message": "Scheduled notification processing completed",
+        "processed_count": processed_count,
+        "sent_count": sent_schedules,
+        "failed_count": failed_schedules,
+    }
 
 
 def trigger_scheduled_notification(

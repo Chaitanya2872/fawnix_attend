@@ -15,6 +15,8 @@ from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
 import openpyxl
 from services.notification_service import (
+    create_scheduled_notification,
+    get_scheduled_notifications,
     get_scheduled_notification_logs,
     send_push_notification_to_employee,
     trigger_scheduled_notification,
@@ -670,6 +672,81 @@ def trigger_scheduled_notification_route(current_user):
     result["requested_by"] = current_user.get('emp_code')
     status_code = 200 if result.get("success") else 400
     return jsonify(result), status_code
+
+
+@admin_bp.route('/scheduled-notifications', methods=['POST'])
+@token_required
+@hr_or_devtester_required
+def create_scheduled_notification_route(current_user):
+    """
+    Create a custom scheduled push notification.
+
+    Request body:
+        {
+            "title": "Scheduled Alert",     // optional
+            "body": "Custom message",       // required
+            "scheduled_date": "YYYY-MM-DD", // required
+            "scheduled_time": "HH:MM"       // required
+        }
+    """
+    data = request.get_json() or {}
+    title = (data.get('title') or 'Scheduled Alert').strip()
+    body = (data.get('body') or '').strip()
+    scheduled_date_raw = (data.get('scheduled_date') or '').strip()
+    scheduled_time_raw = (data.get('scheduled_time') or '').strip()
+
+    if not body:
+        return jsonify({
+            "success": False,
+            "message": "body is required"
+        }), 400
+
+    if not scheduled_date_raw or not scheduled_time_raw:
+        return jsonify({
+            "success": False,
+            "message": "scheduled_date and scheduled_time are required"
+        }), 400
+
+    try:
+        scheduled_date = datetime.strptime(scheduled_date_raw, "%Y-%m-%d").date()
+        scheduled_time = datetime.strptime(scheduled_time_raw, "%H:%M").time()
+    except ValueError:
+        return jsonify({
+            "success": False,
+            "message": "Invalid scheduled_date or scheduled_time format"
+        }), 400
+
+    scheduled_for = datetime.combine(scheduled_date, scheduled_time)
+    result = create_scheduled_notification(
+        title=title,
+        body=body,
+        scheduled_for=scheduled_for,
+        created_by_emp_code=current_user.get('emp_code'),
+    )
+    status_code = 201 if result.get("success") else 400
+    return jsonify(result), status_code
+
+
+@admin_bp.route('/scheduled-notifications', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_scheduled_notifications_route(current_user):
+    """
+    Get recent scheduled notifications.
+
+    Query params:
+    - limit: 1-200, default 25
+    - status: optional filter
+    """
+    limit = request.args.get('limit', default=25, type=int)
+    status = (request.args.get('status') or '').strip().lower() or None
+
+    rows = get_scheduled_notifications(limit=limit, status=status)
+    return jsonify({
+        "success": True,
+        "count": len(rows),
+        "data": rows
+    }), 200
 
 
 @admin_bp.route('/scheduled-notifications/logs', methods=['GET'])

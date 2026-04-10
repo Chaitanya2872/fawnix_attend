@@ -312,6 +312,7 @@ type FieldVisitRow = {
 
 type ScheduledNotificationLogRow = {
   id?: number
+  schedule_id?: number
   notification_type?: string
   emp_code?: string
   title?: string
@@ -320,6 +321,22 @@ type ScheduledNotificationLogRow = {
   delivery_status?: string
   sent_at?: string
   failure_message?: string
+  created_at?: string
+}
+
+type ScheduledNotificationRow = {
+  id?: number
+  notification_type?: string
+  title?: string
+  body?: string
+  scheduled_for?: string
+  created_by_emp_code?: string
+  status?: string
+  processed_at?: string
+  total_candidates?: number
+  sent_count?: number
+  failed_count?: number
+  last_error?: string
   created_at?: string
 }
 
@@ -638,9 +655,12 @@ function App() {
   const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([])
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
+  const [scheduledNotifications, setScheduledNotifications] = useState<ScheduledNotificationRow[]>([])
   const [scheduledNotificationLogs, setScheduledNotificationLogs] = useState<ScheduledNotificationLogRow[]>([])
-  const [scheduledNotificationType, setScheduledNotificationType] = useState<'attendance_reminder' | 'lunch_reminder'>('attendance_reminder')
   const [scheduledNotificationDate, setScheduledNotificationDate] = useState(() => toDateInputValue(new Date()))
+  const [scheduledNotificationTime, setScheduledNotificationTime] = useState('09:55')
+  const [scheduledNotificationTitle, setScheduledNotificationTitle] = useState('Scheduled Alert')
+  const [scheduledNotificationMessage, setScheduledNotificationMessage] = useState('')
   const [scheduledNotificationLoading, setScheduledNotificationLoading] = useState(false)
   const [scheduledNotificationStatus, setScheduledNotificationStatus] = useState('')
   const [attendanceDateFilter, setAttendanceDateFilter] = useState(() => toDateInputValue(new Date()))
@@ -877,6 +897,7 @@ function App() {
     setLeaveRows([])
     setActivityRows([])
     setFieldVisitRows([])
+    setScheduledNotifications([])
     setScheduledNotificationLogs([])
     setScheduledNotificationStatus('')
     window.localStorage.removeItem(ACCESS_TOKEN_KEY)
@@ -896,11 +917,19 @@ function App() {
       }
       const attendancePath = `/api/admin/attendance/history?${attendanceParams.toString()}`
 
-      const [employeesResponse, attendanceResponse, leavesResponse, activitiesResponse, scheduledLogsResponse] = await Promise.all([
+      const [
+        employeesResponse,
+        attendanceResponse,
+        leavesResponse,
+        activitiesResponse,
+        scheduledNotificationsResponse,
+        scheduledLogsResponse
+      ] = await Promise.all([
         apiRequest('/api/admin/employees', {}, token),
         apiRequest(attendancePath, {}, token),
         apiRequest('/api/admin/leaves?limit=30', {}, token),
         apiRequest('/api/admin/activities?limit=30&include_tracking=false&include_activity_tracking=false', {}, token),
+        apiRequest('/api/admin/scheduled-notifications?limit=20', {}, token),
         apiRequest('/api/admin/scheduled-notifications/logs?limit=20', {}, token)
       ])
       let exceptionsResponse: any = null
@@ -922,6 +951,9 @@ function App() {
       const nextSummary = attendanceResponse?.data?.attendance_summary || {}
       const leavesData = Array.isArray(leavesResponse?.data?.leaves) ? leavesResponse.data.leaves : []
       const activitiesData = Array.isArray(activitiesResponse?.data?.activities) ? activitiesResponse.data.activities : []
+      const scheduledNotificationsData: ScheduledNotificationRow[] = Array.isArray(scheduledNotificationsResponse?.data)
+        ? scheduledNotificationsResponse.data
+        : []
       const scheduledLogsData: ScheduledNotificationLogRow[] = Array.isArray(scheduledLogsResponse?.data)
         ? scheduledLogsResponse.data
         : []
@@ -974,6 +1006,7 @@ function App() {
       )
       setLeaveRows(leavesData)
       setActivityRows(activitiesData)
+      setScheduledNotifications(scheduledNotificationsData)
       setScheduledNotificationLogs(scheduledLogsData)
       setAttendanceExceptions(exceptionsData)
       setAttendanceExceptionSummary({
@@ -1489,32 +1522,46 @@ function App() {
   }
 
   const loadScheduledNotificationLogs = async (token: string) => {
-    const response = await apiRequest('/api/admin/scheduled-notifications/logs?limit=20', {}, token)
-    const rows: ScheduledNotificationLogRow[] = Array.isArray(response?.data) ? response.data : []
-    setScheduledNotificationLogs(rows)
+    const [scheduleResponse, logResponse] = await Promise.all([
+      apiRequest('/api/admin/scheduled-notifications?limit=20', {}, token),
+      apiRequest('/api/admin/scheduled-notifications/logs?limit=20', {}, token)
+    ])
+    const schedules: ScheduledNotificationRow[] = Array.isArray(scheduleResponse?.data) ? scheduleResponse.data : []
+    const logs: ScheduledNotificationLogRow[] = Array.isArray(logResponse?.data) ? logResponse.data : []
+    setScheduledNotifications(schedules)
+    setScheduledNotificationLogs(logs)
   }
 
-  const handleTriggerScheduledNotification = async () => {
+  const handleCreateScheduledNotification = async () => {
+    if (!scheduledNotificationMessage.trim()) {
+      setScheduledNotificationStatus('Enter a message for the scheduled alert.')
+      return
+    }
+
+    if (!scheduledNotificationDate || !scheduledNotificationTime) {
+      setScheduledNotificationStatus('Select both a date and time for the scheduled alert.')
+      return
+    }
+
     setScheduledNotificationLoading(true)
-    setScheduledNotificationStatus('Triggering scheduled alert...')
+    setScheduledNotificationStatus('Saving scheduled alert...')
 
     try {
-      const response = await apiRequest('/api/admin/scheduled-notifications/trigger', {
+      const response = await apiRequest('/api/admin/scheduled-notifications', {
         method: 'POST',
         body: JSON.stringify({
-          notification_type: scheduledNotificationType,
-          target_date: scheduledNotificationDate
+          title: scheduledNotificationTitle.trim() || 'Scheduled Alert',
+          body: scheduledNotificationMessage.trim(),
+          scheduled_date: scheduledNotificationDate,
+          scheduled_time: scheduledNotificationTime
         })
       })
 
-      const sentCount = Number(response?.sent_count || 0)
-      const failedCount = Number(response?.failed_count || 0)
-      setScheduledNotificationStatus(
-        response?.message || `Triggered ${scheduledNotificationType}. Sent: ${sentCount}, Failed: ${failedCount}.`
-      )
+      setScheduledNotificationStatus(response?.message || 'Scheduled alert created.')
+      setScheduledNotificationMessage('')
       await loadScheduledNotificationLogs(accessToken)
     } catch (error) {
-      setScheduledNotificationStatus(error instanceof Error ? error.message : 'Failed to trigger scheduled alert')
+      setScheduledNotificationStatus(error instanceof Error ? error.message : 'Failed to create scheduled alert')
     } finally {
       setScheduledNotificationLoading(false)
     }
@@ -2024,24 +2071,19 @@ function App() {
             <div className="form-head">
               <div>
                 <strong>Scheduled Alerts</strong>
-                <span>Manually trigger reminder pushes and review recent delivery logs.</span>
+                <span>Create a custom push message with your own date and time, then review its status below.</span>
               </div>
             </div>
             <div className="form-grid scheduled-alert-grid">
               <div>
-                <label htmlFor="scheduled-notification-type">Alert Type</label>
-                <select
-                  id="scheduled-notification-type"
-                  value={scheduledNotificationType}
-                  onChange={(event) =>
-                    setScheduledNotificationType(
-                      event.target.value as 'attendance_reminder' | 'lunch_reminder'
-                    )
-                  }
-                >
-                  <option value="attendance_reminder">Attendance reminder</option>
-                  <option value="lunch_reminder">Lunch reminder</option>
-                </select>
+                <label htmlFor="scheduled-notification-title">Title</label>
+                <input
+                  id="scheduled-notification-title"
+                  type="text"
+                  value={scheduledNotificationTitle}
+                  onChange={(event) => setScheduledNotificationTitle(event.target.value)}
+                  placeholder="Scheduled Alert"
+                />
               </div>
               <div>
                 <label htmlFor="scheduled-notification-date">Target Date</label>
@@ -2052,15 +2094,34 @@ function App() {
                   onChange={(event) => setScheduledNotificationDate(event.target.value)}
                 />
               </div>
+              <div>
+                <label htmlFor="scheduled-notification-time">Target Time</label>
+                <input
+                  id="scheduled-notification-time"
+                  type="time"
+                  value={scheduledNotificationTime}
+                  onChange={(event) => setScheduledNotificationTime(event.target.value)}
+                />
+              </div>
+              <div className="scheduled-message-field">
+                <label htmlFor="scheduled-notification-message">Message</label>
+                <textarea
+                  id="scheduled-notification-message"
+                  value={scheduledNotificationMessage}
+                  onChange={(event) => setScheduledNotificationMessage(event.target.value)}
+                  placeholder="Type the push notification message"
+                  rows={4}
+                />
+              </div>
             </div>
             <div className="form-actions">
               <button
                 className="cta"
                 type="button"
-                onClick={() => void handleTriggerScheduledNotification()}
+                onClick={() => void handleCreateScheduledNotification()}
                 disabled={scheduledNotificationLoading}
               >
-                {scheduledNotificationLoading ? 'Triggering...' : 'Trigger Alert'}
+                {scheduledNotificationLoading ? 'Saving...' : 'Schedule Alert'}
               </button>
               <button
                 className="ghost"
@@ -2072,6 +2133,35 @@ function App() {
               </button>
             </div>
             {scheduledNotificationStatus ? <p className="form-note">{scheduledNotificationStatus}</p> : null}
+            <div className="data-card compact-log-list">
+              {scheduledNotifications.length ? (
+                scheduledNotifications.map((item) => (
+                  <div key={item.id || `${item.title}-${item.scheduled_for}`} className="data-row scheduled-log-row">
+                    <div>
+                      <strong>{item.title || 'Scheduled Alert'}</strong>
+                      <span>{item.body || '--'}</span>
+                      <span>{toTitleCase((item.notification_type || 'custom_scheduled').replace(/_/g, ' '))}</span>
+                    </div>
+                    <div>
+                      <strong>{formatDateTime(item.scheduled_for)}</strong>
+                      <span>{item.created_by_emp_code || '--'}</span>
+                      <span>Created by</span>
+                    </div>
+                    <div>
+                      <span className={`table-pill ${item.status === 'sent' ? 'accent' : ''}`}>
+                        {item.status || 'pending'}
+                      </span>
+                      <span>
+                        Sent: {Number(item.sent_count || 0)} / Failed: {Number(item.failed_count || 0)}
+                      </span>
+                      <span>{item.last_error || formatDateTime(item.processed_at || item.created_at)}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="empty-state">No scheduled alerts created yet.</div>
+              )}
+            </div>
             <div className="data-card compact-log-list">
               {scheduledNotificationLogs.length ? (
                 scheduledNotificationLogs.map((log) => (

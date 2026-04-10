@@ -1,6 +1,6 @@
 """
 Attendance Reminder Scheduler
-Registers the daily attendance reminder job.
+Registers daily reminder jobs and the scheduled notification processor.
 """
 
 import logging
@@ -9,6 +9,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from config import Config
 from services.notification_service import (
+    process_due_scheduled_notifications,
     send_attendance_reminder_notifications,
     send_lunch_reminder_notifications,
 )
@@ -40,8 +41,20 @@ def lunch_reminder_job():
     return result
 
 
+def scheduled_notification_processor_job():
+    """Scheduled wrapper that processes due custom scheduled notifications."""
+    result = process_due_scheduled_notifications()
+
+    if result.get("success"):
+        logger.info("Scheduled notification processor completed: %s", result.get("message"))
+    else:
+        logger.warning("Scheduled notification processor completed with issues: %s", result.get("message"))
+
+    return result
+
+
 def register_attendance_reminder_job(scheduler, scheduler_timezone, misfire_grace_time: int):
-    """Register the daily attendance and lunch reminder jobs on the shared scheduler."""
+    """Register reminder jobs and the custom scheduled notification processor."""
     raw_time = (Config.ATTENDANCE_REMINDER_TIME or "09:55").strip()
 
     try:
@@ -89,5 +102,17 @@ def register_attendance_reminder_job(scheduler, scheduler_timezone, misfire_grac
         "Lunch reminder job scheduled for %02d:%02d (%s)",
         lunch_hour,
         lunch_minute,
+        scheduler_timezone,
+    )
+
+    scheduler.add_job(
+        scheduled_notification_processor_job,
+        CronTrigger(minute="*", timezone=scheduler_timezone),
+        id="scheduled_notification_processor_job",
+        replace_existing=True,
+        misfire_grace_time=misfire_grace_time,
+    )
+    logger.info(
+        "Scheduled notification processor job scheduled every minute (%s)",
         scheduler_timezone,
     )

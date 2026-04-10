@@ -909,6 +909,10 @@ a {
   align-items: end;
 }
 
+.scheduled-message-field {
+  grid-column: 1 / -1;
+}
+
 .form-grid label {
   display: block;
   margin-bottom: 6px;
@@ -925,6 +929,18 @@ a {
   background: #fff;
   color: #112c32;
   font-size: 13px;
+}
+
+.form-grid textarea {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(17, 44, 50, 0.16);
+  padding: 10px 12px;
+  background: #fff;
+  color: #112c32;
+  font-size: 13px;
+  font-family: 'Poppins', sans-serif;
+  resize: vertical;
 }
 
 .form-actions {

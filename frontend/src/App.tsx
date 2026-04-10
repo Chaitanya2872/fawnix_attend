@@ -310,6 +310,19 @@ type FieldVisitRow = {
   endCoords?: { lat: number; lon: number } | null
 }
 
+type ScheduledNotificationLogRow = {
+  id?: number
+  notification_type?: string
+  emp_code?: string
+  title?: string
+  body?: string
+  scheduled_for?: string
+  delivery_status?: string
+  sent_at?: string
+  failure_message?: string
+  created_at?: string
+}
+
 const ACCESS_TOKEN_KEY = 'fawnix_admin_access_token'
 const REFRESH_TOKEN_KEY = 'fawnix_admin_refresh_token'
 const USER_KEY = 'fawnix_admin_user'
@@ -625,6 +638,11 @@ function App() {
   const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([])
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
+  const [scheduledNotificationLogs, setScheduledNotificationLogs] = useState<ScheduledNotificationLogRow[]>([])
+  const [scheduledNotificationType, setScheduledNotificationType] = useState<'attendance_reminder' | 'lunch_reminder'>('attendance_reminder')
+  const [scheduledNotificationDate, setScheduledNotificationDate] = useState(() => toDateInputValue(new Date()))
+  const [scheduledNotificationLoading, setScheduledNotificationLoading] = useState(false)
+  const [scheduledNotificationStatus, setScheduledNotificationStatus] = useState('')
   const [attendanceDateFilter, setAttendanceDateFilter] = useState(() => toDateInputValue(new Date()))
   const [attendanceSearch, setAttendanceSearch] = useState('')
   const [attendanceReportMonth, setAttendanceReportMonth] = useState(() => String(new Date().getMonth() + 1))
@@ -859,6 +877,8 @@ function App() {
     setLeaveRows([])
     setActivityRows([])
     setFieldVisitRows([])
+    setScheduledNotificationLogs([])
+    setScheduledNotificationStatus('')
     window.localStorage.removeItem(ACCESS_TOKEN_KEY)
     window.localStorage.removeItem(REFRESH_TOKEN_KEY)
     window.localStorage.removeItem(USER_KEY)
@@ -876,11 +896,12 @@ function App() {
       }
       const attendancePath = `/api/admin/attendance/history?${attendanceParams.toString()}`
 
-      const [employeesResponse, attendanceResponse, leavesResponse, activitiesResponse] = await Promise.all([
+      const [employeesResponse, attendanceResponse, leavesResponse, activitiesResponse, scheduledLogsResponse] = await Promise.all([
         apiRequest('/api/admin/employees', {}, token),
         apiRequest(attendancePath, {}, token),
         apiRequest('/api/admin/leaves?limit=30', {}, token),
-        apiRequest('/api/admin/activities?limit=30&include_tracking=false&include_activity_tracking=false', {}, token)
+        apiRequest('/api/admin/activities?limit=30&include_tracking=false&include_activity_tracking=false', {}, token),
+        apiRequest('/api/admin/scheduled-notifications/logs?limit=20', {}, token)
       ])
       let exceptionsResponse: any = null
       try {
@@ -901,6 +922,9 @@ function App() {
       const nextSummary = attendanceResponse?.data?.attendance_summary || {}
       const leavesData = Array.isArray(leavesResponse?.data?.leaves) ? leavesResponse.data.leaves : []
       const activitiesData = Array.isArray(activitiesResponse?.data?.activities) ? activitiesResponse.data.activities : []
+      const scheduledLogsData: ScheduledNotificationLogRow[] = Array.isArray(scheduledLogsResponse?.data)
+        ? scheduledLogsResponse.data
+        : []
       const exceptionsData: AttendanceExceptionRow[] = Array.isArray(exceptionsResponse?.data?.exceptions)
         ? exceptionsResponse.data.exceptions
         : []
@@ -950,6 +974,7 @@ function App() {
       )
       setLeaveRows(leavesData)
       setActivityRows(activitiesData)
+      setScheduledNotificationLogs(scheduledLogsData)
       setAttendanceExceptions(exceptionsData)
       setAttendanceExceptionSummary({
         lateArrivals: exceptionsData.filter((item) => item.exception_type === 'late_arrival').length,
@@ -1463,6 +1488,38 @@ function App() {
     }
   }
 
+  const loadScheduledNotificationLogs = async (token: string) => {
+    const response = await apiRequest('/api/admin/scheduled-notifications/logs?limit=20', {}, token)
+    const rows: ScheduledNotificationLogRow[] = Array.isArray(response?.data) ? response.data : []
+    setScheduledNotificationLogs(rows)
+  }
+
+  const handleTriggerScheduledNotification = async () => {
+    setScheduledNotificationLoading(true)
+    setScheduledNotificationStatus('Triggering scheduled alert...')
+
+    try {
+      const response = await apiRequest('/api/admin/scheduled-notifications/trigger', {
+        method: 'POST',
+        body: JSON.stringify({
+          notification_type: scheduledNotificationType,
+          target_date: scheduledNotificationDate
+        })
+      })
+
+      const sentCount = Number(response?.sent_count || 0)
+      const failedCount = Number(response?.failed_count || 0)
+      setScheduledNotificationStatus(
+        response?.message || `Triggered ${scheduledNotificationType}. Sent: ${sentCount}, Failed: ${failedCount}.`
+      )
+      await loadScheduledNotificationLogs(accessToken)
+    } catch (error) {
+      setScheduledNotificationStatus(error instanceof Error ? error.message : 'Failed to trigger scheduled alert')
+    } finally {
+      setScheduledNotificationLoading(false)
+    }
+  }
+
   const selectedAttendanceDate = attendanceDateFilter || toDateInputValue(new Date())
   const todayDateValue = toDateInputValue(new Date())
 
@@ -1962,6 +2019,86 @@ function App() {
                   <strong>{leaveCount}</strong>
                   <small>Employees on leave</small>
                 </button>
+          </div>
+          <div className="form-card">
+            <div className="form-head">
+              <div>
+                <strong>Scheduled Alerts</strong>
+                <span>Manually trigger reminder pushes and review recent delivery logs.</span>
+              </div>
+            </div>
+            <div className="form-grid scheduled-alert-grid">
+              <div>
+                <label htmlFor="scheduled-notification-type">Alert Type</label>
+                <select
+                  id="scheduled-notification-type"
+                  value={scheduledNotificationType}
+                  onChange={(event) =>
+                    setScheduledNotificationType(
+                      event.target.value as 'attendance_reminder' | 'lunch_reminder'
+                    )
+                  }
+                >
+                  <option value="attendance_reminder">Attendance reminder</option>
+                  <option value="lunch_reminder">Lunch reminder</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="scheduled-notification-date">Target Date</label>
+                <input
+                  id="scheduled-notification-date"
+                  type="date"
+                  value={scheduledNotificationDate}
+                  onChange={(event) => setScheduledNotificationDate(event.target.value)}
+                />
+              </div>
+            </div>
+            <div className="form-actions">
+              <button
+                className="cta"
+                type="button"
+                onClick={() => void handleTriggerScheduledNotification()}
+                disabled={scheduledNotificationLoading}
+              >
+                {scheduledNotificationLoading ? 'Triggering...' : 'Trigger Alert'}
+              </button>
+              <button
+                className="ghost"
+                type="button"
+                onClick={() => void loadScheduledNotificationLogs(accessToken)}
+                disabled={scheduledNotificationLoading}
+              >
+                Refresh Logs
+              </button>
+            </div>
+            {scheduledNotificationStatus ? <p className="form-note">{scheduledNotificationStatus}</p> : null}
+            <div className="data-card compact-log-list">
+              {scheduledNotificationLogs.length ? (
+                scheduledNotificationLogs.map((log) => (
+                  <div key={log.id || `${log.notification_type}-${log.created_at}-${log.emp_code}`} className="data-row scheduled-log-row">
+                    <div>
+                      <strong>{toTitleCase((log.notification_type || 'notification').replace(/_/g, ' '))}</strong>
+                      <span>{log.title || '--'}</span>
+                      <span>{log.body || '--'}</span>
+                    </div>
+                    <div>
+                      <strong>{log.emp_code || '--'}</strong>
+                      <span>Employee</span>
+                      <span>{formatDateTime(log.scheduled_for || log.created_at)}</span>
+                    </div>
+                    <div>
+                      <span className={`table-pill ${log.delivery_status === 'sent' ? 'accent' : ''}`}>
+                        {log.delivery_status || 'unknown'}
+                      </span>
+                      <span>{formatDateTime(log.sent_at || log.created_at)}</span>
+                      <span>{log.failure_message || 'No failure message'}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="empty-state">No scheduled alert logs yet.</div>
+              )}
+            </div>
           </div>
           {attendanceView === 'attendance' ? (
           <div className="data-card">

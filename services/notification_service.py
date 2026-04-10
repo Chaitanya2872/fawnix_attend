@@ -986,3 +986,94 @@ def send_lunch_reminder_notifications(target_date: date | None = None) -> Dict[s
         "failed_count": failed_count,
         "failures": failures,
     }
+
+
+SCHEDULED_NOTIFICATION_HANDLERS = {
+    "attendance_reminder": send_attendance_reminder_notifications,
+    "lunch_reminder": send_lunch_reminder_notifications,
+}
+
+
+def trigger_scheduled_notification(
+    notification_type: str,
+    target_date: date | None = None,
+) -> Dict[str, Any]:
+    """Manually trigger a scheduled notification flow by type."""
+    normalized_type = (notification_type or "").strip().lower()
+    handler = SCHEDULED_NOTIFICATION_HANDLERS.get(normalized_type)
+
+    if handler is None:
+        return {
+            "success": False,
+            "message": "Unsupported notification_type",
+            "supported_types": sorted(SCHEDULED_NOTIFICATION_HANDLERS.keys()),
+        }
+
+    result = handler(target_date=target_date)
+    result["notification_type"] = normalized_type
+    result["trigger_mode"] = "manual"
+    return result
+
+
+def get_scheduled_notification_logs(
+    limit: int = 50,
+    notification_type: str | None = None,
+) -> List[Dict[str, Any]]:
+    """Fetch recent scheduled notification audit rows."""
+    normalized_limit = max(1, min(int(limit or 50), 200))
+    normalized_type = (notification_type or "").strip().lower() or None
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        if normalized_type:
+            cursor.execute(
+                """
+                SELECT
+                    id,
+                    notification_type,
+                    emp_code,
+                    title,
+                    body,
+                    scheduled_for,
+                    delivery_status,
+                    sent_at,
+                    failure_message,
+                    response_payload,
+                    created_at,
+                    updated_at
+                FROM scheduled_notification_logs
+                WHERE notification_type = %s
+                ORDER BY created_at DESC, id DESC
+                LIMIT %s
+                """,
+                (normalized_type, normalized_limit),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT
+                    id,
+                    notification_type,
+                    emp_code,
+                    title,
+                    body,
+                    scheduled_for,
+                    delivery_status,
+                    sent_at,
+                    failure_message,
+                    response_payload,
+                    created_at,
+                    updated_at
+                FROM scheduled_notification_logs
+                ORDER BY created_at DESC, id DESC
+                LIMIT %s
+                """,
+                (normalized_limit,),
+            )
+
+        return [_serialize_row(dict(row)) for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+        return_connection(conn)

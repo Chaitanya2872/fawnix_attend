@@ -870,6 +870,14 @@ a {
   display: block;
 }
 
+.compact-log-list {
+  margin-top: 8px;
+}
+
+.scheduled-log-row {
+  grid-template-columns: minmax(0, 1.5fr) minmax(140px, 0.7fr) minmax(180px, 0.9fr);
+}
+
 .form-card {
   background: #fff;
   border: 1px solid rgba(17, 44, 50, 0.08);
@@ -895,6 +903,10 @@ a {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
+}
+
+.scheduled-alert-grid {
+  align-items: end;
 }
 
 .form-grid label {

@@ -14,7 +14,11 @@ from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
 import openpyxl
-from services.notification_service import send_push_notification_to_employee
+from services.notification_service import (
+    get_scheduled_notification_logs,
+    send_push_notification_to_employee,
+    trigger_scheduled_notification,
+)
 from database.connection import get_db_connection, return_connection
 from datetime import datetime, date, time
 from flask import request
@@ -627,3 +631,64 @@ def send_test_push(current_user):
     })
     status_code = 200 if result.get("success") else 400
     return jsonify(result), status_code
+
+
+@admin_bp.route('/scheduled-notifications/trigger', methods=['POST'])
+@token_required
+@hr_or_devtester_required
+def trigger_scheduled_notification_route(current_user):
+    """
+    Manually trigger a scheduled notification flow.
+
+    Request body:
+        {
+            "notification_type": "attendance_reminder" | "lunch_reminder",
+            "target_date": "YYYY-MM-DD"  // optional, defaults to today
+        }
+    """
+    data = request.get_json() or {}
+    notification_type = (data.get('notification_type') or '').strip().lower()
+    target_date = None
+    target_date_raw = (data.get('target_date') or '').strip()
+
+    if not notification_type:
+        return jsonify({
+            "success": False,
+            "message": "notification_type is required"
+        }), 400
+
+    if target_date_raw:
+        try:
+            target_date = datetime.strptime(target_date_raw, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid target_date format. Use YYYY-MM-DD"
+            }), 400
+
+    result = trigger_scheduled_notification(notification_type, target_date=target_date)
+    result["requested_by"] = current_user.get('emp_code')
+    status_code = 200 if result.get("success") else 400
+    return jsonify(result), status_code
+
+
+@admin_bp.route('/scheduled-notifications/logs', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_scheduled_notification_logs_route(current_user):
+    """
+    Get recent scheduled notification log rows.
+
+    Query params:
+    - limit: 1-200, default 25
+    - notification_type: optional filter
+    """
+    limit = request.args.get('limit', default=25, type=int)
+    notification_type = (request.args.get('notification_type') or '').strip().lower() or None
+
+    rows = get_scheduled_notification_logs(limit=limit, notification_type=notification_type)
+    return jsonify({
+        "success": True,
+        "count": len(rows),
+        "data": rows
+    }), 200

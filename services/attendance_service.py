@@ -26,6 +26,7 @@ from services.attendance_exceptions_service import (
     check_early_leave_approval,
     get_employee_shift_times,
     _fetch_exception_rows_by_attendance_ids,
+    is_flexible_grade_employee,
 )
 from services.attendance_notification_service import notify_tracking_started, notify_tracking_stopped
 from utils.time_utils import now_local_naive
@@ -567,6 +568,8 @@ def clock_out(emp_email: str, lat: str, lon: str):
                         logger.info(f"✅ Non-working day ({day_type}) - early clock-out allowed for {emp_email}")
                     elif is_compoff_session:
                         logger.info(f"✅ Comp-off session - early clock-out allowed for {emp_email}")
+                    elif is_flexible_grade_employee(emp_code):
+                        logger.info(f"Flexible grade - early clock-out allowed for {emp_email}")
                     else:
                         # Check for early leave approval
                         is_approved, approval_message = check_early_leave_approval(

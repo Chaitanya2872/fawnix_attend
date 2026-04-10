@@ -173,6 +173,39 @@ def _is_privileged_emp(emp_code: str) -> bool:
     return designation in ['HR', 'CMD', 'ADMIN'] or department == 'HR'
 
 
+def _normalize_emp_grade(emp_grade: Optional[str]) -> str:
+    """Normalize employee grade values for policy checks."""
+    raw = (emp_grade or '').strip().upper()
+    compact = raw.replace(' ', '').replace('-', '').replace('_', '')
+
+    if raw == 'F' or compact == 'FLEXIBLE':
+        return 'FLEXIBLE'
+    if raw == 'NF' or compact == 'NONFLEXIBLE':
+        return 'NONFLEXIBLE'
+    if raw == 'M' or compact == 'MODERATE':
+        return 'MODERATE'
+    return raw
+
+
+def is_flexible_grade_employee(emp_code: str) -> bool:
+    """Return True when the employee grade exempts early-leave approval."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT emp_grade FROM employees WHERE emp_code = %s",
+            (emp_code,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return False
+        emp_grade = row.get('emp_grade') if hasattr(row, 'keys') else row[0]
+        return _normalize_emp_grade(emp_grade) == 'FLEXIBLE'
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def _get_table_columns(cursor, table_name: str) -> set:
     """Return the available columns for a table to handle schema drift safely."""
     cursor.execute("""
@@ -645,6 +678,12 @@ def request_early_leave_exception(emp_code: str, attendance_id: int,
     cursor = conn.cursor()
     
     try:
+        if is_flexible_grade_employee(emp_code):
+            return ({
+                "success": False,
+                "message": "Flexible grade employees do not need early leave approval."
+            }, 400)
+
         # Get employee and manager info
         emp_info = get_employee_and_manager_info(emp_code)
         

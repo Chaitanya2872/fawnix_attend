@@ -12,6 +12,7 @@ from typing import Any, Dict, List
 from config import Config
 from database.connection import get_db_connection, return_connection
 from services.CompLeaveService import is_working_day
+from utils.time_utils import now_local_naive
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,78 @@ def _normalize_data_payload(data: Dict[str, Any] | None) -> Dict[str, str] | Non
 def _chunked(items: List[str], size: int) -> List[List[str]]:
     """Split a list into FCM-sized chunks."""
     return [items[index:index + size] for index in range(0, len(items), size)]
+
+
+def _scheduled_datetime_for(reminder_date: date, raw_time: str | None) -> datetime | None:
+    """Build a naive local scheduled datetime from an HH:MM string."""
+    value = (raw_time or "").strip()
+    if not value:
+        return None
+
+    try:
+        hour, minute = [int(part) for part in value.split(":", 1)]
+    except (TypeError, ValueError):
+        return None
+
+    return datetime.combine(reminder_date, time(hour=hour, minute=minute))
+
+
+def _log_scheduled_notification_attempt(
+    notification_type: str,
+    emp_code: str,
+    title: str,
+    body: str,
+    scheduled_for: datetime | None,
+    send_result: Dict[str, Any],
+) -> None:
+    """Persist audit data for scheduled push notification attempts."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        delivery_status = "sent" if send_result.get("success") else "failed"
+        sent_at = now_local_naive() if send_result.get("success") else None
+        failure_message = None if send_result.get("success") else send_result.get("message")
+
+        cursor.execute(
+            """
+            INSERT INTO scheduled_notification_logs (
+                notification_type,
+                emp_code,
+                title,
+                body,
+                scheduled_for,
+                delivery_status,
+                sent_at,
+                failure_message,
+                response_payload,
+                created_at,
+                updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW(), NOW())
+            """,
+            (
+                notification_type,
+                emp_code,
+                title,
+                body,
+                scheduled_for,
+                delivery_status,
+                sent_at,
+                failure_message,
+                json.dumps(send_result, default=_serialize_value),
+            ),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        logger.exception(
+            "Scheduled notification log insert failed | type=%s emp_code=%s",
+            notification_type,
+            emp_code,
+        )
+    finally:
+        cursor.close()
+        return_connection(conn)
 
 
 def _get_firebase_app():
@@ -718,6 +791,7 @@ def get_lunch_reminder_candidates(target_date: date | None = None) -> List[Dict[
 def send_attendance_reminder_notifications(target_date: date | None = None) -> Dict[str, Any]:
     """Send attendance reminders to employees who have not updated attendance."""
     reminder_date = target_date or date.today()
+    scheduled_for = _scheduled_datetime_for(reminder_date, Config.ATTENDANCE_REMINDER_TIME)
 
     try:
         candidates = get_attendance_reminder_candidates(reminder_date)
@@ -765,6 +839,14 @@ def send_attendance_reminder_notifications(target_date: date | None = None) -> D
                 "Clock in. If you already did, please ignore.",
                 {"type": "attendance_reminder"},
             )
+            _log_scheduled_notification_attempt(
+                "attendance_reminder",
+                candidate["emp_code"],
+                "Attendance Reminder",
+                "Clock in. If you already did, please ignore.",
+                scheduled_for,
+                result,
+            )
 
             if result.get("success"):
                 sent_count += 1
@@ -809,6 +891,7 @@ def send_attendance_reminder_notifications(target_date: date | None = None) -> D
 def send_lunch_reminder_notifications(target_date: date | None = None) -> Dict[str, Any]:
     """Send lunch reminder notifications to active employees."""
     reminder_date = target_date or date.today()
+    scheduled_for = _scheduled_datetime_for(reminder_date, Config.LUNCH_REMINDER_TIME)
 
     try:
         candidates = get_lunch_reminder_candidates(reminder_date)
@@ -855,6 +938,14 @@ def send_lunch_reminder_notifications(target_date: date | None = None) -> Dict[s
                 "Lunch Time",
                 "It's 1:25 PM. It's lunch time, Fawnix cares about your health.",
                 {"type": "lunch_reminder"},
+            )
+            _log_scheduled_notification_attempt(
+                "lunch_reminder",
+                candidate["emp_code"],
+                "Lunch Time",
+                "It's 1:25 PM. It's lunch time, Fawnix cares about your health.",
+                scheduled_for,
+                result,
             )
 
             if result.get("success"):

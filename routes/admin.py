@@ -108,6 +108,7 @@ def download_employees_report(current_user):
         "Manager Name",
         "Manager Email",
         "Manager Code",
+        "Status",
     ]
 
     def _format_grade(value):
@@ -130,6 +131,8 @@ def download_employees_report(current_user):
     for emp in employees:
         manager_name = emp.get("manager_name") or emp.get("emp_manager") or ""
         manager_email = emp.get("manager_email") or emp.get("manager_code") or ""
+        status_value = emp.get("is_active")
+        status_label = "Active" if status_value is True else "Inactive" if status_value is False else ""
 
         rows.append([
             emp.get("emp_code", ""),
@@ -142,6 +145,7 @@ def download_employees_report(current_user):
             manager_name,
             manager_email,
             emp.get("emp_manager", "") or "",
+            status_label,
         ])
 
     today_str = datetime.utcnow().strftime("%Y-%m-%d")
@@ -158,7 +162,7 @@ def download_employees_report(current_user):
         y -= 0.35 * inch
 
         pdf.setFont("Helvetica-Bold", 8)
-        col_widths = [1.0, 2.2, 1.6, 0.9, 1.6, 2.2, 1.3, 2.0, 2.2, 1.2]
+        col_widths = [0.9, 2.1, 1.4, 0.8, 1.5, 2.0, 1.2, 1.9, 2.0, 1.1, 0.9]
         col_widths = [w * inch for w in col_widths]
 
         def draw_row(values, y_pos, bold=False):

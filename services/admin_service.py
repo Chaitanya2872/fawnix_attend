@@ -5,6 +5,7 @@ Business logic for admin-only operations
 
 from database.connection import get_db_connection
 from datetime import date, datetime, time
+from config import Config
 import calendar
 from services.attendance_constants import ATTENDANCE_STATUS_LOGGED_IN
 from services.CompLeaveService import (
@@ -309,6 +310,7 @@ def get_all_attendance_history(limit: int = None, target_date: date = None,
         cursor.execute(f"SELECT COUNT(*) AS total_records {base_query}", params)
         total_records = cursor.fetchone()['total_records']
 
+        late_cutoff = datetime.strptime(Config.LATE_LOGIN_CUTOFF, "%H:%M").time()
         cursor.execute(
             f"""
                 SELECT
@@ -322,7 +324,7 @@ def get_all_attendance_history(limit: int = None, target_date: date = None,
                     SUM(
                         CASE
                             WHEN login_time IS NOT NULL
-                                 AND CAST(login_time AS time) < %s THEN 1
+                                 AND CAST(login_time AS time) <= %s THEN 1
                             ELSE 0
                         END
                     ) AS on_time_logins,
@@ -341,7 +343,7 @@ def get_all_attendance_history(limit: int = None, target_date: date = None,
                     ) AS late_exception_count
                 {base_query}
             """,
-            [time(10, 15), time(10, 15)] + params
+            [late_cutoff, late_cutoff] + params
         )
         shift_metrics = cursor.fetchone() or {}
 

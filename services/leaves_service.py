@@ -5,6 +5,7 @@ Leave management business logic with cumulative monthly accrual
 
 from datetime import datetime, timedelta, date
 from database.connection import get_db_connection
+from config import Config
 from typing import List, Tuple, Dict
 import logging
 
@@ -189,22 +190,7 @@ def get_late_arrival_count(emp_code: str, from_date: date, to_date: date) -> int
     cursor = conn.cursor()
     
     try:
-        cursor.execute("""
-            SELECT s.shift_start_time
-            FROM employees e
-            LEFT JOIN shifts s ON e.emp_shift_id = s.shift_id
-            WHERE e.emp_code = %s
-        """, (emp_code,))
-        
-        shift = cursor.fetchone()
-        if not shift or not shift['shift_start_time']:
-            cursor.execute("SELECT shift_start_time FROM employees WHERE emp_code = %s", (emp_code,))
-            shift = cursor.fetchone()
-            
-        if not shift or not shift['shift_start_time']:
-            return 0
-        
-        shift_start = shift['shift_start_time']
+        late_cutoff = datetime.strptime(Config.LATE_LOGIN_CUTOFF, "%H:%M").time()
         
         cursor.execute("""
             SELECT COUNT(*) as late_count
@@ -213,7 +199,7 @@ def get_late_arrival_count(emp_code: str, from_date: date, to_date: date) -> int
             AND date BETWEEN %s AND %s
             AND EXTRACT(HOUR FROM login_time) * 60 + EXTRACT(MINUTE FROM login_time) > 
                 EXTRACT(HOUR FROM %s::time) * 60 + EXTRACT(MINUTE FROM %s::time)
-        """, (emp_code, from_date, to_date, shift_start, shift_start))
+        """, (emp_code, from_date, to_date, late_cutoff, late_cutoff))
         
         result = cursor.fetchone()
         return result['late_count'] if result else 0

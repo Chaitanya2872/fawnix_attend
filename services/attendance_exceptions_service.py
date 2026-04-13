@@ -51,6 +51,9 @@ def _get_early_leave_submission_window() -> Tuple[time, time]:
         _parse_config_time(Config.EARLY_LEAVE_SUBMISSION_END, '18:30'),
     )
 
+def get_late_login_cutoff_time() -> time:
+    return _parse_config_time(Config.LATE_LOGIN_CUTOFF, '10:00')
+
 def get_employee_shift_times(emp_code: str) -> Tuple[Optional[time], Optional[time]]:
     """
     Get employee's shift start and end times
@@ -333,21 +336,15 @@ def auto_detect_late_arrival(emp_code: str, attendance_id: int,
     Returns:
         Detection result dict if late, None if on time
     """
-    shift_start, _ = get_employee_shift_times(emp_code)
-    
-    if not shift_start:
-        logger.warning(f"No shift time configured for {emp_code}")
-        return None
-    
     login_time_only = login_time.time()
-    
-    # Check if late
-    if login_time_only <= shift_start:
+    late_cutoff = get_late_login_cutoff_time()
+
+    if login_time_only <= late_cutoff:
         return None  # On time
     
     # Calculate late duration
     login_datetime = datetime.combine(datetime.today(), login_time_only)
-    shift_datetime = datetime.combine(datetime.today(), shift_start)
+    shift_datetime = datetime.combine(datetime.today(), late_cutoff)
     late_by_seconds = (login_datetime - shift_datetime).total_seconds()
     late_by_minutes = int(late_by_seconds / 60)
     
@@ -356,7 +353,7 @@ def auto_detect_late_arrival(emp_code: str, attendance_id: int,
     return {
         "is_late": True,
         "late_by_minutes": late_by_minutes,
-        "shift_start_time": shift_start.strftime('%H:%M'),
+        "shift_start_time": late_cutoff.strftime('%H:%M'),
         "actual_login_time": login_time_only.strftime('%H:%M'),
         "attendance_id": attendance_id,
         "message": f"You are {late_by_minutes} minutes late. Please submit a reason."
@@ -394,9 +391,9 @@ def attach_pending_late_arrival_to_attendance(
     try:
         current_date = login_time.date()
         login_time_only = login_time.time()
-        shift_start, _ = get_employee_shift_times(emp_code)
+        late_cutoff = get_late_login_cutoff_time()
 
-        if not shift_start or login_time_only <= shift_start:
+        if login_time_only <= late_cutoff:
             return None
 
         cursor.execute("""
@@ -419,7 +416,7 @@ def attach_pending_late_arrival_to_attendance(
         if not exception:
             return None
 
-        late_by_minutes = _calculate_late_by_minutes(login_time_only, shift_start)
+        late_by_minutes = _calculate_late_by_minutes(login_time_only, late_cutoff)
         exception_time_value = _exception_time_value(cursor, login_time)
 
         cursor.execute("""
@@ -521,17 +518,12 @@ def request_late_arrival_exception(emp_code: str, reason: str,
         if cursor.fetchone():
             return ({"success": False, "message": "Late arrival exception already submitted"}, 400)
         
-        # Get shift times to determine planned arrival time
-        shift_start, _ = get_employee_shift_times(emp_code)
-        
-        if not shift_start:
-            return ({"success": False, "message": "Shift time not configured"}, 400)
-
-        late_by_minutes = _calculate_late_by_minutes(current_time, shift_start)
+        late_cutoff = get_late_login_cutoff_time()
+        late_by_minutes = _calculate_late_by_minutes(current_time, late_cutoff)
         if late_by_minutes <= 0:
             return ({
                 "success": False,
-                "message": "Late arrival can only be submitted after shift start time"
+                "message": "Late arrival can only be submitted after 10:00 AM"
             }, 400)
 
         late_window_start, late_window_end = _get_late_arrival_submission_window()
@@ -610,7 +602,7 @@ def request_late_arrival_exception(emp_code: str, reason: str,
             'late_arrival',
             current_date,
             exception_time_value,
-            shift_start,
+            late_cutoff,
             late_by_minutes,
             reason,
             notes,
@@ -1093,9 +1085,9 @@ def get_my_late_arrival_records(emp_code: str, status: str = None) -> Tuple[Dict
 
     try:
         emp_info = get_employee_and_manager_info(emp_code)
-        shift_start, _ = get_employee_shift_times(emp_code)
+        late_cutoff = get_late_login_cutoff_time()
 
-        if not emp_info or not emp_info.get('emp_email') or not shift_start:
+        if not emp_info or not emp_info.get('emp_email'):
             return ({
                 "success": True,
                 "data": {
@@ -1132,7 +1124,7 @@ def get_my_late_arrival_records(emp_code: str, status: str = None) -> Tuple[Dict
             login_time = attendance.get('login_time')
             login_time_only = login_time.time() if isinstance(login_time, datetime) else login_time
 
-            if not login_time_only or login_time_only <= shift_start:
+            if not login_time_only or login_time_only <= late_cutoff:
                 continue
 
             exception = exceptions_by_attendance.get(attendance['id'], {})
@@ -1140,7 +1132,7 @@ def get_my_late_arrival_records(emp_code: str, status: str = None) -> Tuple[Dict
             if late_by_minutes is None:
                 late_by_minutes = int((
                     datetime.combine(datetime.today(), login_time_only) -
-                    datetime.combine(datetime.today(), shift_start)
+                    datetime.combine(datetime.today(), late_cutoff)
                 ).total_seconds() / 60)
 
             record = {
@@ -1149,7 +1141,7 @@ def get_my_late_arrival_records(emp_code: str, status: str = None) -> Tuple[Dict
                 "exception_type": "late_arrival",
                 "exception_date": attendance.get('date'),
                 "actual_login_time": login_time_only,
-                "planned_arrival_time": exception.get('planned_arrival_time') or shift_start,
+                "planned_arrival_time": exception.get('planned_arrival_time') or late_cutoff,
                 "late_by_minutes": late_by_minutes,
                 "status": exception.get('status') or 'not_requested',
                 "reason": exception.get('reason'),

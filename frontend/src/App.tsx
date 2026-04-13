@@ -1503,9 +1503,83 @@ function App() {
     return leftTime - rightTime
   })
 
-  const selectedDateLateArrivals = attendanceExceptions.filter(
+  const lateLoginCutoff = new Date(`${selectedAttendanceDate}T10:00:00`)
+  const employeeByEmail = new Map(
+    employees
+      .filter((employee) => employee.emp_email)
+      .map((employee) => [employee.emp_email!.toLowerCase(), employee])
+  )
+  const employeeEmailByCode = new Map(
+    employees
+      .filter((employee) => employee.emp_code && employee.emp_email)
+      .map((employee) => [employee.emp_code!, employee.emp_email!.toLowerCase()])
+  )
+
+  const exceptionLateArrivals = attendanceExceptions.filter(
     (item) => item.exception_type === 'late_arrival' && isSameDate(getExceptionDateValue(item), selectedAttendanceDate)
   )
+  const lateArrivalsFromAttendance = firstClockInRows
+    .filter((row) => {
+      if (!row.login_time) {
+        return false
+      }
+      if (!isSameDate(row.login_time, selectedAttendanceDate)) {
+        return false
+      }
+      const loginDate = new Date(row.login_time)
+      return !Number.isNaN(loginDate.getTime()) && loginDate > lateLoginCutoff
+    })
+    .map((row) => {
+      const loginDate = new Date(row.login_time as string)
+      const lateByMinutes = Math.max(
+        Math.floor((loginDate.getTime() - lateLoginCutoff.getTime()) / 60000),
+        0
+      )
+      const employee =
+        row.employee_email ? employeeByEmail.get(row.employee_email.toLowerCase()) : undefined
+      return {
+        emp_code: employee?.emp_code,
+        emp_name: row.employee_name || employee?.emp_full_name || row.employee_email,
+        exception_type: 'late_arrival',
+        exception_date: selectedAttendanceDate,
+        actual_login_time: row.login_time,
+        late_by_minutes: lateByMinutes,
+        reason: undefined,
+        status: 'not_informed',
+        requested_at: row.login_time
+      } as AttendanceExceptionRow
+    })
+
+  const selectedDateLateArrivals = (() => {
+    const merged = new Map<string, AttendanceExceptionRow>()
+    const getKey = (row: AttendanceExceptionRow) => {
+      const emailFromCode = row.emp_code ? employeeEmailByCode.get(row.emp_code) : undefined
+      const rawKey =
+        emailFromCode ||
+        row.emp_code ||
+        row.emp_name ||
+        row.actual_login_time ||
+        row.exception_time ||
+        row.requested_at ||
+        ''
+      return rawKey.toString().toLowerCase()
+    }
+
+    exceptionLateArrivals.forEach((row) => {
+      const key = getKey(row)
+      merged.set(key, row)
+    })
+    lateArrivalsFromAttendance.forEach((row) => {
+      const key = getKey(row)
+      if (!merged.has(key)) {
+        merged.set(key, row)
+      }
+    })
+
+    return Array.from(merged.values()).sort((left, right) =>
+      (left.emp_name || left.emp_code || '').localeCompare(right.emp_name || right.emp_code || '')
+    )
+  })()
   const selectedDateEarlyLeaves = attendanceExceptions.filter(
     (item) => item.exception_type === 'early_leave' && isSameDate(getExceptionDateValue(item), selectedAttendanceDate)
   )

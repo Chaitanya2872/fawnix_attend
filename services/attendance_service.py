@@ -25,6 +25,7 @@ from services.attendance_exceptions_service import (
     attach_pending_late_arrival_to_attendance,
     check_early_leave_approval,
     get_employee_shift_times,
+    get_late_login_cutoff_time,
     _fetch_exception_rows_by_attendance_ids,
     is_flexible_grade_employee,
 )
@@ -907,11 +908,11 @@ def get_attendance_history(emp_email: str, limit: int = 30):
             late_exception = late_exceptions.get(record['id'])
             early_exception = early_exceptions.get(record['id'])
 
+            late_cutoff = get_late_login_cutoff_time()
             is_late_arrival = bool(
                 not is_compoff_session and
-                shift_start and
                 login_time_only and
-                login_time_only > shift_start
+                login_time_only > late_cutoff
             )
             late_informed = bool(late_exception)
             is_early_departure = bool(
@@ -935,7 +936,7 @@ def get_attendance_history(emp_email: str, limit: int = 30):
             if late_by_minutes is None and is_late_arrival:
                 late_by_minutes = int((
                     datetime.combine(datetime.today(), login_time_only) -
-                    datetime.combine(datetime.today(), shift_start)
+                    datetime.combine(datetime.today(), late_cutoff)
                 ).total_seconds() / 60)
 
             early_by_minutes = early_exception.get('early_by_minutes') if early_exception else None
@@ -960,7 +961,7 @@ def get_attendance_history(emp_email: str, limit: int = 30):
                     "informed": late_informed,
                     "status": late_exception.get('status') if late_exception else ('not_informed' if is_late_arrival else None),
                     "planned_arrival_time": format_time_value(
-                        late_exception.get('planned_arrival_time') if late_exception else shift_start
+                        late_exception.get('planned_arrival_time') if late_exception else late_cutoff
                     ) if (is_late_arrival or late_informed) else None,
                     "actual_login_time": format_time_value(login_time_only),
                     "late_by_minutes": late_by_minutes,

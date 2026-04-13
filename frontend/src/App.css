@@ -940,6 +940,68 @@ a {
   font-size: 11px;
 }
 
+.leave-form {
+  background: #ffffff;
+  border: 1px solid rgba(17, 44, 50, 0.12);
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 0 10px 24px rgba(17, 44, 50, 0.08);
+  display: grid;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.leave-form-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.leave-form-head strong {
+  font-size: 18px;
+  color: #112c32;
+}
+
+.leave-form-head span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6a7a7f;
+}
+
+.leave-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px 18px;
+}
+
+.leave-form-grid label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: #4b5c61;
+}
+
+.leave-form-grid select,
+.leave-form-grid input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(17, 44, 50, 0.2);
+  padding: 10px 12px;
+  background: #f7f9f9;
+  color: #112c32;
+  font-size: 13px;
+}
+
+.leave-form-grid select:focus,
+.leave-form-grid input:focus {
+  outline: none;
+  border-color: #1fa7a4;
+  box-shadow: 0 0 0 3px rgba(31, 167, 164, 0.12);
+}
+
 .table-pill {
   display: inline-flex;
   width: fit-content;

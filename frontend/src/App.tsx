@@ -253,6 +253,11 @@ type LeaveRow = {
   leave_type?: string
   duration?: string
   leave_count?: number | string
+  manager_code?: string
+  manager_email?: string
+  reviewed_by?: string
+  notes?: string
+  remarks?: string
   from_date?: string
   to_date?: string
   status?: string
@@ -415,6 +420,14 @@ function formatLeaveTypeLabel(leave: LeaveRow) {
 
   const display = toTitleCase(rawType.replace(/_/g, ' '))
   return count !== null ? `${display} (${count})` : display
+}
+
+function getLeaveApproverLabel(leave: LeaveRow) {
+  return leave.reviewed_by || leave.manager_code || leave.manager_email || '--'
+}
+
+function getLeaveReasonLabel(leave: LeaveRow) {
+  return leave.notes || leave.remarks || '--'
 }
 
 function parseCoords(lat?: number | string, lon?: number | string) {
@@ -2073,6 +2086,8 @@ function App() {
                 <div>
                   <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
                   <span>{formatLeaveTypeLabel(row)}</span>
+                  <span>Approver: {getLeaveApproverLabel(row)}</span>
+                  <span>Reason: {getLeaveReasonLabel(row)}</span>
                 </div>
                 <div>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</div>
                 <div>

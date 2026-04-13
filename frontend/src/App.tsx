@@ -623,14 +623,6 @@ function App() {
     efficiencyScore: 0
   })
   const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([])
-  const [leaveForm, setLeaveForm] = useState({
-    employee: '',
-    startDate: '',
-    endDate: '',
-    leaveType: '',
-    approver: '',
-    reason: ''
-  })
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
   const [attendanceDateFilter, setAttendanceDateFilter] = useState(() => toDateInputValue(new Date()))
@@ -2064,27 +2056,6 @@ function App() {
     }
 
     if (activePanel === 'leaves') {
-      const employeeOptions = employees
-        .slice()
-        .sort((left, right) =>
-          (left.emp_full_name || left.emp_code || '').localeCompare(right.emp_full_name || right.emp_code || '')
-        )
-      const leaveTypeOptions = [
-        { value: '', label: 'Select leave type' },
-        { value: 'casual', label: 'Casual Leave' },
-        { value: 'sick', label: 'Sick Leave' },
-        { value: 'annual', label: 'Annual Leave' },
-        { value: 'monthly', label: 'Monthly Leave' }
-      ]
-      const reasonOptions = [
-        { value: '', label: 'Select reason' },
-        { value: 'medical', label: 'Medical' },
-        { value: 'personal', label: 'Personal' },
-        { value: 'family', label: 'Family' },
-        { value: 'travel', label: 'Travel' },
-        { value: 'other', label: 'Other' }
-      ]
-
       return (
         <>
           <div className="dashboard-section-head">
@@ -2095,96 +2066,6 @@ function App() {
             <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
               Refresh
             </button>
-          </div>
-          <div className="leave-form">
-            <div className="leave-form-head">
-              <div>
-                <strong>Leave Request</strong>
-                <span>SharePoint-style request entry</span>
-              </div>
-              <button className="ghost" type="button" onClick={() => setLeaveForm({
-                employee: '',
-                startDate: '',
-                endDate: '',
-                leaveType: '',
-                approver: '',
-                reason: ''
-              })}>
-                Clear
-              </button>
-            </div>
-            <div className="leave-form-grid">
-              <label>
-                Employee Name
-                <select
-                  value={leaveForm.employee}
-                  onChange={(event) => setLeaveForm({ ...leaveForm, employee: event.target.value })}
-                >
-                  <option value="">Select employee</option>
-                  {employeeOptions.map((employee) => (
-                    <option key={employee.emp_code} value={employee.emp_code}>
-                      {employee.emp_full_name || employee.emp_code}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Start Date
-                <input
-                  type="date"
-                  value={leaveForm.startDate}
-                  onChange={(event) => setLeaveForm({ ...leaveForm, startDate: event.target.value })}
-                />
-              </label>
-              <label>
-                End Date
-                <input
-                  type="date"
-                  value={leaveForm.endDate}
-                  onChange={(event) => setLeaveForm({ ...leaveForm, endDate: event.target.value })}
-                />
-              </label>
-              <label>
-                Leave Type
-                <select
-                  value={leaveForm.leaveType}
-                  onChange={(event) => setLeaveForm({ ...leaveForm, leaveType: event.target.value })}
-                >
-                  {leaveTypeOptions.map((option) => (
-                    <option key={option.value || option.label} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Approver Name
-                <select
-                  value={leaveForm.approver}
-                  onChange={(event) => setLeaveForm({ ...leaveForm, approver: event.target.value })}
-                >
-                  <option value="">Select approver</option>
-                  {employeeOptions.map((employee) => (
-                    <option key={`approver-${employee.emp_code}`} value={employee.emp_code}>
-                      {employee.emp_full_name || employee.emp_code}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Reason
-                <select
-                  value={leaveForm.reason}
-                  onChange={(event) => setLeaveForm({ ...leaveForm, reason: event.target.value })}
-                >
-                  {reasonOptions.map((option) => (
-                    <option key={option.value || option.label} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
           </div>
           <div className="data-card">
             {leaveRows.map((row, index) => (

@@ -422,8 +422,13 @@ function formatLeaveTypeLabel(leave: LeaveRow) {
   return count !== null ? `${display} (${count})` : display
 }
 
-function getLeaveApproverLabel(leave: LeaveRow) {
-  return leave.reviewed_by || leave.manager_code || leave.manager_email || '--'
+function getLeaveApproverLabel(leave: LeaveRow, employees: EmployeeRow[]) {
+  const fallback = leave.reviewed_by || leave.manager_code || leave.manager_email || '--'
+  const match =
+    employees.find((employee) => employee.emp_code && employee.emp_code === leave.reviewed_by) ||
+    employees.find((employee) => employee.emp_code && employee.emp_code === leave.manager_code) ||
+    employees.find((employee) => employee.emp_email && employee.emp_email === leave.manager_email)
+  return match?.emp_full_name || fallback
 }
 
 function getLeaveReasonLabel(leave: LeaveRow) {
@@ -2086,7 +2091,7 @@ function App() {
                 <div>
                   <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
                   <span>{formatLeaveTypeLabel(row)}</span>
-                  <span>Approver: {getLeaveApproverLabel(row)}</span>
+                  <span>Approver: {getLeaveApproverLabel(row, employees)}</span>
                   <span>Reason: {getLeaveReasonLabel(row)}</span>
                 </div>
                 <div>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</div>

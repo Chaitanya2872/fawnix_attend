@@ -499,6 +499,19 @@ function getExceptionDateValue(row: AttendanceExceptionRow) {
   return row.exception_date || row.requested_at
 }
 
+function getSortTime(row: AttendanceExceptionRow): number {
+  const times = [
+    row.actual_login_time,
+    row.exception_time, 
+    row.requested_at
+  ].filter(Boolean) as string[]
+  
+  if (times.length === 0) return 0
+  
+  const earliest = times.map(time => new Date(time).getTime()).reduce((a, b) => Math.min(a, b))
+  return earliest
+}
+
 function isDateWithinRange(
   targetDate: string,
   startDate?: string,
@@ -647,7 +660,7 @@ function App() {
   const [attendanceSearch, setAttendanceSearch] = useState('')
   const [attendanceReportMonth, setAttendanceReportMonth] = useState(() => String(new Date().getMonth() + 1))
   const [attendanceReportYear, setAttendanceReportYear] = useState(() => String(new Date().getFullYear()))
-  const [attendanceReportFormat, setAttendanceReportFormat] = useState<'csv' | 'pdf'>('csv')
+  const [attendanceReportFormat, setAttendanceReportFormat] = useState<'csv' | 'pdf' | 'xlsx'>('csv')
   const [attendanceReportStatus, setAttendanceReportStatus] = useState('')
   const [mapDialogOpen, setMapDialogOpen] = useState(false)
   const [mapDialogTitle, setMapDialogTitle] = useState('')
@@ -1576,9 +1589,11 @@ function App() {
       }
     })
 
-    return Array.from(merged.values()).sort((left, right) =>
-      (left.emp_name || left.emp_code || '').localeCompare(right.emp_name || right.emp_code || '')
-    )
+    return Array.from(merged.values()).sort((left, right) => {
+      const leftTime = getSortTime(left)
+      const rightTime = getSortTime(right)
+      return leftTime - rightTime
+    })
   })()
   const selectedDateEarlyLeaves = attendanceExceptions.filter(
     (item) => item.exception_type === 'early_leave' && isSameDate(getExceptionDateValue(item), selectedAttendanceDate)
@@ -1679,7 +1694,7 @@ function App() {
               </button>
             </div>
           </div>
-          <div className="attendance-filter">
+          <div className="employee-search">
             <label htmlFor="employee-search">Search Employees</label>
             <input
               id="employee-search"
@@ -1990,10 +2005,11 @@ function App() {
                     <select
                       id="attendance-format"
                       value={attendanceReportFormat}
-                      onChange={(event) => setAttendanceReportFormat(event.target.value as 'csv' | 'pdf')}
+                      onChange={(event) => setAttendanceReportFormat(event.target.value as 'csv' | 'pdf' | 'xlsx')}
                     >
                       <option value="csv">CSV</option>
                       <option value="pdf">PDF</option>
+                      <option value="xlsx">XLSX</option>
                     </select>
                   </div>
                   <button className="cta dashboard-button" onClick={downloadAttendanceReport}>

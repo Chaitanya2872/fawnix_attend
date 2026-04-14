@@ -460,6 +460,11 @@ a {
   color: #112c32;
 }
 
+.employee-search {
+  max-width: 320px;
+  margin-bottom: 24px;
+}
+
 .search-field {
   display: grid;
   gap: 6px;

@@ -1,12 +1,14 @@
-# TODO: Remove search option from employees list
+# TODO: Re-add employee search + Duplicate /team-exceptions endpoint in admin.py
 
 ## Steps
+1. ✅ [Complete] Create TODO.md with updated plan
+2. ✅ [Complete] Restore employee search functionality in frontend/src/App.tsx:
+   - Verify `employeeSearch` state & filter logic (name, code, email, designation, dept, manager)
+   - Confirm search input UI in Employees panel
+3. ✅ [Complete] Duplicate @exceptions_bp.route('/team-exceptions') endpoint into routes/admin.py (on admin_bp):
+   - Added import from services.attendance_exceptions_service
+   - Added @admin_bp.route('/team-exceptions') with @hr_or_devtester_required
+4. ⏳ [Pending] Test frontend: `cd frontend && npm run dev`, admin dashboard → Employees List → Verify search works
+5. ⏳ [Pending] Test endpoint: Admin login → GET /api/admin/team-exceptions?status=pending
+6. ⏳ [Pending] attempt_completion
 
-1. ✅ [Complete] Create TODO.md with plan breakdown
-2. ✅ [Complete] Edit frontend/src/App.tsx to remove:
-   - employeeSearch state
-   - normalizedEmployeeSearch / filteredEmployees logic
-   - Search input UI section
-   - Update list to use raw 'employees'
-3. ✅ [Complete] Test: Frontend changes implemented. Employees list now shows unfiltered full list without search UI. Run `cd frontend && npm run dev` to verify in browser.
-4. [Pending] Use attempt_completion to finalize task

@@ -619,7 +619,7 @@ function App() {
   const [editFormData, setEditFormData] = useState<Partial<EmployeeRow>>({})
   const [editLoading, setEditLoading] = useState(false)
   const [editStatus, setEditStatus] = useState('')
-  // employeeSearch state removed
+  const [employeeSearch, setEmployeeSearch] = useState('')
   const [showTodayActivities, setShowTodayActivities] = useState(true)
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
   const [, setAttendanceTotalCount] = useState(0)
@@ -1618,7 +1618,21 @@ function App() {
           return haystack.includes(normalizedAttendanceSearch)
         })
       : attendancePageRows
-    const filteredEmployees = employees
+    const normalizedEmployeeSearch = employeeSearch.trim().toLowerCase()
+    const filteredEmployees = normalizedEmployeeSearch
+      ? employees.filter((employee) => {
+          const haystack = [
+            employee.emp_full_name || '',
+            employee.emp_code || '',
+            employee.emp_email || '',
+            employee.emp_designation || '',
+            employee.emp_department || '',
+            employee.manager_name || '',
+            employee.emp_manager || ''
+          ].join(' ').toLowerCase()
+          return haystack.includes(normalizedEmployeeSearch)
+        })
+      : employees
     const filteredActivities = showTodayActivities
       ? activityRows.filter((row) => isSameDate(row.start_time, todayDateValue))
       : activityRows
@@ -1665,11 +1679,20 @@ function App() {
               </button>
             </div>
           </div>
-          {/* Search field removed */}
+          <div className="attendance-filter">
+            <label htmlFor="employee-search">Search Employees</label>
+            <input
+              id="employee-search"
+              type="text"
+              value={employeeSearch}
+              onChange={(event) => setEmployeeSearch(event.target.value)}
+              placeholder="Search by name, code, email, designation, department, or manager"
+            />
+          </div>
           <div className="metric-row">
             <div className="metric-card">
               <span>Total Employees</span>
-              <strong>{filteredEmployees.length}</strong>
+              <strong>{employees.length}</strong>
             </div>
             <div className="metric-card">
               <span>HR / Admin</span>
@@ -1793,7 +1816,7 @@ function App() {
             </div>
           ) : null}
           <div className="data-card">
-            {employees.map((employee) => (
+            {filteredEmployees.map((employee) => (
               <div key={employee.emp_code} className="data-row employee-row">
                 <div>
                   <strong>{employee.emp_full_name || employee.emp_code}</strong>

@@ -21,6 +21,8 @@ from services.notification_service import (
     send_push_notification_to_employee,
     trigger_scheduled_notification,
 )
+from services.attendance_exceptions_service import get_team_exceptions
+
 from database.connection import get_db_connection, return_connection
 from datetime import datetime, date, time
 from flask import request
@@ -773,3 +775,44 @@ def get_scheduled_notification_logs_route(current_user):
         "count": len(rows),
         "data": rows
     }), 200
+
+
+@admin_bp.route('/team-exceptions', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def admin_team_exceptions(current_user):
+    """
+    Get attendance exceptions for manager's team (Admin view)
+    
+    Authorization:
+        - HR/DevTester only
+        - Shows exceptions where current_user is the assigned manager
+    
+    Query Params:
+        status: pending, approved, rejected (optional)
+        type: late_arrival, early_leave (optional)
+    
+    Example:
+        GET /api/admin/team-exceptions?status=pending
+    
+    Response:
+        {
+            "success": true,
+            "data": {
+                "exceptions": [...],
+                "count": 2,
+                "pending_count": 2
+            }
+        }
+    """
+    status = request.args.get('status')
+    exception_type = request.args.get('type')
+    
+    result = get_team_exceptions(
+        current_user['emp_code'],
+        status,
+        exception_type
+    )
+    
+    return jsonify(result[0]), result[1]
+

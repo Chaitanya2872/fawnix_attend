@@ -341,6 +341,71 @@
             font-size: 14px;
         }
 
+        .search-box-wrapper {
+            position: relative;
+            margin-bottom: 15px;
+        }
+
+        .search-box-wrapper .search-box {
+            margin-bottom: 0;
+        }
+
+        .search-results {
+            display: none;
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            right: 0;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+            max-height: 280px;
+            overflow-y: auto;
+            z-index: 20;
+        }
+
+        .search-results.active {
+            display: block;
+        }
+
+        .search-result-item {
+            width: 100%;
+            border: none;
+            background: transparent;
+            text-align: left;
+            padding: 12px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f1f1;
+        }
+
+        .search-result-item:last-child {
+            border-bottom: none;
+        }
+
+        .search-result-item:hover {
+            background: #f8f9fa;
+        }
+
+        .search-result-name {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .search-result-meta {
+            display: block;
+            color: #666;
+            font-size: 12px;
+        }
+
+        .search-result-empty {
+            padding: 12px 14px;
+            color: #666;
+            font-size: 13px;
+        }
+
         .badge {
             display: inline-block;
             padding: 4px 8px;
@@ -426,9 +491,10 @@
             <!-- Employee List -->
             <div class="card">
                 <h2>👥 Employee List</h2>
-                <input type="text" class="search-box" id="searchBox" placeholder="Search employees...">
-                
-                <div id="searchResults"></div>
+                <div class="search-box-wrapper">
+                    <input type="text" class="search-box" id="searchBox" placeholder="Search employees by name, code, or email...">
+                    <div id="searchResults" class="search-results"></div>
+                </div>
                 
                 <div class="tabs">
                     <button class="tab-button active" onclick="switchTab('table')">Table View</button>
@@ -554,6 +620,7 @@
         let employees = [];
         let currentEditingEmpCode = null;
         let allEmployeesData = [];
+        let employeeLoadPromise = null;
 
         // Load configuration
         function loadConfig() {
@@ -593,6 +660,152 @@
             };
         }
 
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function getEmployeeSearchText(emp) {
+            return [
+                emp.emp_full_name,
+                emp.emp_code,
+                emp.emp_email,
+                emp.emp_designation,
+                emp.emp_department
+            ]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase();
+        }
+
+        function getFilteredEmployees(query) {
+            const normalizedQuery = (query || '').trim().toLowerCase();
+
+            if (!normalizedQuery) {
+                return allEmployeesData;
+            }
+
+            return allEmployeesData.filter(emp => getEmployeeSearchText(emp).includes(normalizedQuery));
+        }
+
+        function clearSearchResults() {
+            const searchResults = document.getElementById('searchResults');
+            searchResults.innerHTML = '';
+            searchResults.classList.remove('active');
+        }
+
+        function renderSearchResults(matches, query) {
+            const normalizedQuery = (query || '').trim();
+            const searchResults = document.getElementById('searchResults');
+
+            if (!normalizedQuery) {
+                clearSearchResults();
+                return;
+            }
+
+            if (!matches.length) {
+                searchResults.innerHTML = '<div class="search-result-empty">No matching employees found</div>';
+                searchResults.classList.add('active');
+                return;
+            }
+
+            searchResults.innerHTML = matches.slice(0, 8).map(emp => `
+                <button type="button" class="search-result-item" data-emp-code="${escapeHtml(emp.emp_code)}">
+                    <span class="search-result-name">${escapeHtml(emp.emp_full_name || 'Unnamed Employee')}</span>
+                    <span class="search-result-meta">${escapeHtml(emp.emp_code)} | ${escapeHtml(emp.emp_email || 'No email')}</span>
+                </button>
+            `).join('');
+            searchResults.classList.add('active');
+        }
+
+        function applyEmployeeSearch(query) {
+            const isFiltered = Boolean((query || '').trim());
+            const filteredEmployees = getFilteredEmployees(query);
+
+            renderEmployees(filteredEmployees, isFiltered);
+            renderSearchResults(filteredEmployees, query);
+        }
+
+        async function ensureEmployeesLoaded() {
+            if (allEmployeesData.length) {
+                return true;
+            }
+
+            if (employeeLoadPromise) {
+                await employeeLoadPromise;
+                return allEmployeesData.length > 0;
+            }
+
+            employeeLoadPromise = loadEmployees();
+
+            try {
+                await employeeLoadPromise;
+                return allEmployeesData.length > 0;
+            } finally {
+                employeeLoadPromise = null;
+            }
+        }
+
+        async function handleEmployeeSearchInput() {
+            const query = document.getElementById('searchBox').value;
+
+            if (query.trim() && !allEmployeesData.length) {
+                await ensureEmployeesLoaded();
+            }
+
+            applyEmployeeSearch(query);
+        }
+
+        function selectEmployeeFromSearch(empCode) {
+            const selectedEmployee = allEmployeesData.find(emp => emp.emp_code === empCode);
+            const searchBox = document.getElementById('searchBox');
+
+            if (selectedEmployee) {
+                searchBox.value = selectedEmployee.emp_full_name || selectedEmployee.emp_code;
+                renderEmployees([selectedEmployee], true);
+            }
+
+            clearSearchResults();
+            selectEmployeeForEdit(empCode);
+        }
+
+        function setupEmployeeSearch() {
+            const searchBox = document.getElementById('searchBox');
+            const searchResults = document.getElementById('searchResults');
+
+            searchBox.addEventListener('input', handleEmployeeSearchInput);
+            searchBox.addEventListener('focus', () => {
+                if (searchBox.value.trim()) {
+                    applyEmployeeSearch(searchBox.value);
+                }
+            });
+            searchBox.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    clearSearchResults();
+                }
+            });
+
+            searchResults.addEventListener('click', (event) => {
+                const resultItem = event.target.closest('.search-result-item');
+
+                if (!resultItem) {
+                    return;
+                }
+
+                selectEmployeeFromSearch(resultItem.dataset.empCode);
+            });
+
+            document.addEventListener('click', (event) => {
+                if (!event.target.closest('.search-box-wrapper')) {
+                    clearSearchResults();
+                }
+            });
+        }
+
         // Tab switching
         function switchTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -627,26 +840,39 @@
                 
                 if (data.success) {
                     allEmployeesData = data.data || [];
-                    renderEmployees(allEmployeesData);
+                    applyEmployeeSearch(document.getElementById('searchBox').value);
                     showAlert(`Loaded ${allEmployeesData.length} employees`, 'success', resultDiv);
+                    return allEmployeesData;
                 } else {
                     showAlert(data.message || 'Failed to load employees', 'error', resultDiv);
+                    return [];
                 }
             } catch (error) {
                 showAlert('Error: ' + error.message, 'error', resultDiv);
+                return [];
             }
         }
 
         // Render employees
-        function renderEmployees(employeeList) {
-            // Render table
+        function renderEmployeesLegacy(employeeList, isFiltered = false) {
+            const emptyMessage = isFiltered
+                ? 'No employees match the current search.'
+                : 'Load employees to see data';
+
             const tableBody = document.getElementById('tableBody');
+            const listContainer = document.getElementById('employeeListContainer');
+
+            if (!employeeList.length) {
+                tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #999;">${emptyMessage}</td></tr>`;
+                listContainer.innerHTML = `<p style="text-align: center; color: #999;">${emptyMessage}</p>`;
+                return;
+            }
             tableBody.innerHTML = employeeList.map(emp => `
                 <tr>
-                    <td><strong>${emp.emp_code}</strong></td>
-                    <td>${emp.emp_full_name}</td>
-                    <td>${emp.emp_email}</td>
-                    <td>${emp.emp_designation || 'N/A'}</td>
+                    <td><strong>${escapeHtml(emp.emp_code)}</strong></td>
+                    <td>${escapeHtml(emp.emp_full_name || 'N/A')}</td>
+                    <td>${escapeHtml(emp.emp_email || 'N/A')}</td>
+                    <td>${escapeHtml(emp.emp_designation || 'N/A')}</td>
                     <td>
                         <button class="btn btn-sm btn-primary" onclick="selectEmployeeForEdit('${emp.emp_code}')">✏️ Edit</button>
                         <button class="btn btn-sm btn-secondary" onclick="viewEmployeeDetails('${emp.emp_code}')">👁️ View</button>
@@ -655,7 +881,6 @@
             `).join('');
 
             // Render list
-            const listContainer = document.getElementById('employeeListContainer');
             listContainer.innerHTML = employeeList.map(emp => `
                 <div class="employee-item">
                     <h4>${emp.emp_full_name} <span class="badge badge-success">${emp.emp_code}</span></h4>
@@ -665,6 +890,47 @@
                     <div class="employee-item-actions">
                         <button class="btn btn-sm btn-primary" onclick="selectEmployeeForEdit('${emp.emp_code}')">✏️ Edit</button>
                         <button class="btn btn-sm btn-secondary" onclick="viewEmployeeDetails('${emp.emp_code}')">👁️ View</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderEmployees(employeeList, isFiltered = false) {
+            const emptyMessage = isFiltered
+                ? 'No employees match the current search.'
+                : 'Load employees to see data';
+
+            const tableBody = document.getElementById('tableBody');
+            const listContainer = document.getElementById('employeeListContainer');
+
+            if (!employeeList.length) {
+                tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #999;">${emptyMessage}</td></tr>`;
+                listContainer.innerHTML = `<p style="text-align: center; color: #999;">${emptyMessage}</p>`;
+                return;
+            }
+
+            tableBody.innerHTML = employeeList.map(emp => `
+                <tr>
+                    <td><strong>${escapeHtml(emp.emp_code)}</strong></td>
+                    <td>${escapeHtml(emp.emp_full_name || 'N/A')}</td>
+                    <td>${escapeHtml(emp.emp_email || 'N/A')}</td>
+                    <td>${escapeHtml(emp.emp_designation || 'N/A')}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick='selectEmployeeForEdit(${JSON.stringify(emp.emp_code)})'>Edit</button>
+                        <button class="btn btn-sm btn-secondary" onclick='viewEmployeeDetails(${JSON.stringify(emp.emp_code)})'>View</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            listContainer.innerHTML = employeeList.map(emp => `
+                <div class="employee-item">
+                    <h4>${escapeHtml(emp.emp_full_name || 'N/A')} <span class="badge badge-success">${escapeHtml(emp.emp_code)}</span></h4>
+                    <p><strong>Email:</strong> ${escapeHtml(emp.emp_email || 'N/A')}</p>
+                    <p><strong>Designation:</strong> ${escapeHtml(emp.emp_designation || 'N/A')}</p>
+                    <p><strong>Department:</strong> ${escapeHtml(emp.emp_department || 'N/A')}</p>
+                    <div class="employee-item-actions">
+                        <button class="btn btn-sm btn-primary" onclick='selectEmployeeForEdit(${JSON.stringify(emp.emp_code)})'>Edit</button>
+                        <button class="btn btn-sm btn-secondary" onclick='viewEmployeeDetails(${JSON.stringify(emp.emp_code)})'>View</button>
                     </div>
                 </div>
             `).join('');
@@ -816,7 +1082,10 @@
         }
 
         // Initialize
-        window.addEventListener('load', loadConfig);
+        window.addEventListener('load', () => {
+            loadConfig();
+            setupEmployeeSearch();
+        });
     </script>
 </body>
 </html>

@@ -26,8 +26,15 @@ jobs:
             set -e
  
             cd /root/backend/fawnix_attend
- 
-            git pull origin main
+
+            git fetch origin main
+
+            if ! git diff --quiet || ! git diff --cached --quiet; then
+              echo "Stashing local tracked changes before deploy..."
+              git stash push -m "github-actions-predeploy-$(date +%Y%m%d-%H%M%S)"
+            fi
+
+            git pull --ff-only origin main
 
             cd ..
 

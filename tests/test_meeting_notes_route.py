@@ -73,10 +73,11 @@ def test_generate_meeting_notes_route_accepts_audio_upload(monkeypatch):
 
     captured = {}
 
-    def fake_generate_meeting_notes(audio_file, meeting_title=None, language=None):
+    def fake_generate_meeting_notes(audio_file, meeting_title=None, language=None, emp_code=None):
         captured["filename"] = audio_file.filename if audio_file else None
         captured["meeting_title"] = meeting_title
         captured["language"] = language
+        captured["emp_code"] = emp_code
         return (
             {
                 "success": True,
@@ -109,4 +110,4 @@ def test_generate_meeting_notes_route_accepts_audio_upload(monkeypatch):
     assert captured["filename"] == "meeting.mp3"
     assert captured["meeting_title"] == "Weekly Review"
     assert captured["language"] == "en"
-
+    assert captured["emp_code"] == "E001"

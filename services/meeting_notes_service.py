@@ -16,6 +16,7 @@ from typing import Any, Dict, Tuple
 import requests
 
 from config import Config
+from services.minio_storage_service import is_minio_configured, upload_meeting_audio
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +261,12 @@ def _configured_provider() -> str | None:
     return None
 
 
-def generate_meeting_notes(audio_file, meeting_title: str | None = None, language: str | None = None):
+def generate_meeting_notes(
+    audio_file,
+    meeting_title: str | None = None,
+    language: str | None = None,
+    emp_code: str | None = None,
+):
     """Generate meeting outputs from an uploaded audio file."""
     if not Config.FEATURE_MEETING_NOTES:
         return _error("Meeting notes feature is disabled", 503)
@@ -277,6 +283,7 @@ def generate_meeting_notes(audio_file, meeting_title: str | None = None, languag
         return _error(validation_message or "Invalid audio file", 400)
 
     filename = (audio_file.filename or "").strip()
+    audio_storage = None
 
     try:
         audio_file.stream.seek(0, os.SEEK_END)
@@ -292,6 +299,8 @@ def generate_meeting_notes(audio_file, meeting_title: str | None = None, languag
             400,
         )
 
+    audio_bytes = _read_audio_bytes(audio_file)
+
     try:
         if provider == "gemini":
             structured_notes = _generate_notes_with_gemini(
@@ -306,6 +315,15 @@ def generate_meeting_notes(audio_file, meeting_title: str | None = None, languag
                 language=language,
             )
 
+        if is_minio_configured():
+            audio_storage = upload_meeting_audio(
+                audio_bytes,
+                filename,
+                content_type=audio_file.mimetype or "application/octet-stream",
+                emp_code=emp_code,
+                meeting_title=meeting_title,
+            )
+
         return (
             {
                 "success": True,
@@ -318,6 +336,7 @@ def generate_meeting_notes(audio_file, meeting_title: str | None = None, languag
                     "summary": structured_notes["summary"],
                     "minutes_of_meeting": structured_notes["minutes_of_meeting"],
                     "important_points": structured_notes["important_points"],
+                    "audio_storage": audio_storage,
                 },
             },
             200,
@@ -328,4 +347,3 @@ def generate_meeting_notes(audio_file, meeting_title: str | None = None, languag
     except Exception as exc:
         logger.exception("Meeting notes generation error")
         return _error(str(exc), 500)
-

@@ -32,6 +32,7 @@ def generate(current_user):
         audio_file,
         meeting_title=meeting_title,
         language=language,
+        emp_code=current_user.get("emp_code"),
     )
 
     if response_body.get("success"):
@@ -42,4 +43,3 @@ def generate(current_user):
         )
 
     return jsonify(response_body), status_code
-

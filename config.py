@@ -127,6 +127,12 @@ class Config:
         ).split(',')
         if extension.strip()
     ]
+    MINIO_ENDPOINT = os.getenv('MINIO_ENDPOINT', '').strip()
+    MINIO_ACCESS_KEY = os.getenv('MINIO_ACCESS_KEY', '').strip()
+    MINIO_SECRET_KEY = os.getenv('MINIO_SECRET_KEY', '').strip()
+    MINIO_SECURE = os.getenv('MINIO_SECURE', 'False').lower() == 'true'
+    MINIO_BUCKET = os.getenv('MINIO_BUCKET', 'fawnix-meeting-notes').strip()
+    MINIO_MEETING_AUDIO_PREFIX = os.getenv('MINIO_MEETING_AUDIO_PREFIX', 'meeting-audio').strip().strip('/')
     
     @classmethod
     def get_database_uri(cls) -> str:

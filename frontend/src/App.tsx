@@ -619,7 +619,7 @@ function App() {
   const [editFormData, setEditFormData] = useState<Partial<EmployeeRow>>({})
   const [editLoading, setEditLoading] = useState(false)
   const [editStatus, setEditStatus] = useState('')
-  const [employeeSearch, setEmployeeSearch] = useState('')
+  // employeeSearch state removed
   const [showTodayActivities, setShowTodayActivities] = useState(true)
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
   const [, setAttendanceTotalCount] = useState(0)
@@ -1618,28 +1618,7 @@ function App() {
           return haystack.includes(normalizedAttendanceSearch)
         })
       : attendancePageRows
-    const normalizedEmployeeSearch = employeeSearch.trim().toLowerCase()
-    const filteredEmployees = normalizedEmployeeSearch
-      ? employees.filter((employee) => {
-          const haystack = [
-            employee.emp_code,
-            employee.emp_full_name,
-            employee.emp_email,
-            employee.emp_contact,
-            employee.emp_designation,
-            employee.emp_department,
-            employee.emp_grade,
-            employee.emp_manager,
-            employee.manager_name,
-            employee.manager_email,
-            employee.role
-          ]
-            .filter(Boolean)
-            .join(' ')
-            .toLowerCase()
-          return haystack.includes(normalizedEmployeeSearch)
-        })
-      : employees
+    const filteredEmployees = employees
     const filteredActivities = showTodayActivities
       ? activityRows.filter((row) => isSameDate(row.start_time, todayDateValue))
       : activityRows
@@ -1686,18 +1665,7 @@ function App() {
               </button>
             </div>
           </div>
-          <div className="dashboard-section-head">
-            <div className="search-field">
-              <label htmlFor="employee-search">Search employees</label>
-              <input
-                id="employee-search"
-                type="text"
-                value={employeeSearch}
-                onChange={(event) => setEmployeeSearch(event.target.value)}
-                placeholder="Search by name, code, email, or department"
-              />
-            </div>
-          </div>
+          {/* Search field removed */}
           <div className="metric-row">
             <div className="metric-card">
               <span>Total Employees</span>

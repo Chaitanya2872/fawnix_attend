@@ -1429,6 +1429,37 @@ def trigger_scheduled_notification(
     return result
 
 
+def get_notification_candidates(
+    notification_type: str,
+    target_date: date | None = None,
+) -> Dict[str, Any]:
+    """Return eligible employees for a notification type and date."""
+    normalized_type = (notification_type or "").strip().lower()
+    reminder_date = target_date or date.today()
+
+    if normalized_type == "attendance_reminder":
+        candidates = get_attendance_reminder_candidates(reminder_date)
+    elif normalized_type == "lunch_reminder":
+        candidates = get_lunch_reminder_candidates(reminder_date)
+    else:
+        return {
+            "success": False,
+            "message": "Unsupported notification_type",
+            "supported_types": sorted(SCHEDULED_NOTIFICATION_HANDLERS.keys()),
+            "reminder_date": reminder_date.isoformat(),
+            "data": [],
+        }
+
+    return {
+        "success": True,
+        "message": "Notification candidates fetched",
+        "notification_type": normalized_type,
+        "reminder_date": reminder_date.isoformat(),
+        "count": len(candidates),
+        "data": candidates,
+    }
+
+
 def get_scheduled_notification_logs(
     limit: int = 50,
     notification_type: str | None = None,

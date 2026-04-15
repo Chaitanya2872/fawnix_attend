@@ -688,6 +688,9 @@ function App() {
   const [alertDate, setAlertDate] = useState(() => toDateInputValue(new Date()))
   const [alertEmployeeSearch, setAlertEmployeeSearch] = useState('')
   const [selectedAlertEmployees, setSelectedAlertEmployees] = useState<string[]>([])
+  const [alertEligibleEmpCodes, setAlertEligibleEmpCodes] = useState<string[]>([])
+  const [showOnlyEligibleAlertEmployees, setShowOnlyEligibleAlertEmployees] = useState(false)
+  const [alertCandidatesLoading, setAlertCandidatesLoading] = useState(false)
   const [alertTriggerLoading, setAlertTriggerLoading] = useState(false)
   const [alertTriggerStatus, setAlertTriggerStatus] = useState('')
   const [newEmployee, setNewEmployee] = useState({
@@ -738,6 +741,49 @@ function App() {
 
     void loadDashboard(accessToken)
   }, [accessToken, showDashboard, showAdminLogin, attendanceDateFilter])
+
+  useEffect(() => {
+    if (!accessToken || !showDashboard || showAdminLogin || activePanel !== 'alerts') {
+      return
+    }
+
+    let cancelled = false
+
+    const loadAlertCandidates = async () => {
+      setAlertCandidatesLoading(true)
+
+      try {
+        const params = new URLSearchParams({
+          notification_type: alertType,
+          target_date: alertDate
+        })
+        const response = await apiRequest(`/api/admin/scheduled-notifications/candidates?${params.toString()}`, {}, accessToken)
+        const nextCodes = Array.isArray(response?.data)
+          ? response.data
+              .map((row: { emp_code?: string }) => row.emp_code || '')
+              .filter(Boolean)
+          : []
+
+        if (!cancelled) {
+          setAlertEligibleEmpCodes(nextCodes)
+        }
+      } catch {
+        if (!cancelled) {
+          setAlertEligibleEmpCodes([])
+        }
+      } finally {
+        if (!cancelled) {
+          setAlertCandidatesLoading(false)
+        }
+      }
+    }
+
+    void loadAlertCandidates()
+
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, showDashboard, showAdminLogin, activePanel, alertType, alertDate])
 
   const updateTokens = (nextAccessToken: string, nextRefreshToken: string) => {
     setAccessToken(nextAccessToken)
@@ -1706,18 +1752,28 @@ function App() {
       ? activityRows.filter((row) => isSameDate(row.start_time, todayDateValue))
       : activityRows
     const normalizedAlertEmployeeSearch = alertEmployeeSearch.trim().toLowerCase()
-    const filteredAlertEmployees = normalizedAlertEmployeeSearch
-      ? employees.filter((employee) => {
-          const haystack = [
+    const eligibleAlertEmpCodeSet = new Set(alertEligibleEmpCodes)
+    const filteredAlertEmployees = employees.filter((employee) => {
+      const matchesSearch = normalizedAlertEmployeeSearch
+        ? [
             employee.emp_full_name || '',
             employee.emp_code || '',
             employee.emp_email || '',
             employee.emp_designation || '',
             employee.emp_department || ''
-          ].join(' ').toLowerCase()
-          return haystack.includes(normalizedAlertEmployeeSearch)
-        })
-      : employees
+          ].join(' ').toLowerCase().includes(normalizedAlertEmployeeSearch)
+        : true
+
+      if (!matchesSearch) {
+        return false
+      }
+
+      if (!showOnlyEligibleAlertEmployees) {
+        return true
+      }
+
+      return eligibleAlertEmpCodeSet.has(employee.emp_code)
+    })
 
     if (dashboardLoading) {
       return <div className="empty-state">Loading admin data...</div>
@@ -2299,6 +2355,7 @@ function App() {
 
     if (activePanel === 'alerts') {
       const selectedCount = selectedAlertEmployees.length
+      const eligibleCount = alertEligibleEmpCodes.length
       const attendanceHelp =
         'Only employees who have not clocked in and are not on leave will receive this reminder.'
       const lunchHelp =
@@ -2365,6 +2422,21 @@ function App() {
             <p className="form-note">
               Leave the selection empty to send the alert to all eligible employees for the chosen date.
             </p>
+            <div className="alert-filter-row">
+              <label className="alert-toggle">
+                <input
+                  type="checkbox"
+                  checked={showOnlyEligibleAlertEmployees}
+                  onChange={(event) => setShowOnlyEligibleAlertEmployees(event.target.checked)}
+                />
+                <span>
+                  Show only employees who have not applied leave and are still not logged in
+                </span>
+              </label>
+              <span className="alert-filter-meta">
+                {alertCandidatesLoading ? 'Checking eligible employees...' : `Eligible employees: ${eligibleCount}`}
+              </span>
+            </div>
 
             <div className="form-actions">
               <button

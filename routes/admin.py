@@ -16,6 +16,7 @@ from reportlab.pdfgen import canvas
 import openpyxl
 from services.notification_service import (
     create_scheduled_notification,
+    get_notification_candidates,
     get_scheduled_notifications,
     get_scheduled_notification_logs,
     send_push_notification_to_employee,
@@ -695,6 +696,41 @@ def trigger_scheduled_notification_route(current_user):
         emp_codes=selected_emp_codes,
     )
     result["requested_by"] = current_user.get('emp_code')
+    status_code = 200 if result.get("success") else 400
+    return jsonify(result), status_code
+
+
+@admin_bp.route('/scheduled-notifications/candidates', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_scheduled_notification_candidates_route(current_user):
+    """
+    Get eligible employees for a scheduled notification flow.
+
+    Query params:
+        notification_type: attendance_reminder | lunch_reminder
+        target_date: YYYY-MM-DD, optional
+    """
+    notification_type = (request.args.get('notification_type') or '').strip().lower()
+    target_date_raw = (request.args.get('target_date') or '').strip()
+    target_date = None
+
+    if not notification_type:
+        return jsonify({
+            "success": False,
+            "message": "notification_type is required"
+        }), 400
+
+    if target_date_raw:
+        try:
+            target_date = datetime.strptime(target_date_raw, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid target_date format. Use YYYY-MM-DD"
+            }), 400
+
+    result = get_notification_candidates(notification_type, target_date=target_date)
     status_code = 200 if result.get("success") else 400
     return jsonify(result), status_code
 

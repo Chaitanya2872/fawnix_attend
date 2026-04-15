@@ -658,6 +658,7 @@ def trigger_scheduled_notification_route(current_user):
     notification_type = (data.get('notification_type') or '').strip().lower()
     target_date = None
     target_date_raw = (data.get('target_date') or '').strip()
+    selected_emp_codes_raw = data.get('emp_codes')
 
     if not notification_type:
         return jsonify({
@@ -671,10 +672,28 @@ def trigger_scheduled_notification_route(current_user):
         except ValueError:
             return jsonify({
                 "success": False,
-                "message": "Invalid target_date format. Use YYYY-MM-DD"
-            }), 400
+            "message": "Invalid target_date format. Use YYYY-MM-DD"
+        }), 400
 
-    result = trigger_scheduled_notification(notification_type, target_date=target_date)
+    if selected_emp_codes_raw is None:
+        selected_emp_codes = []
+    elif isinstance(selected_emp_codes_raw, list):
+        selected_emp_codes = [
+            str(emp_code).strip()
+            for emp_code in selected_emp_codes_raw
+            if str(emp_code).strip()
+        ]
+    else:
+        return jsonify({
+            "success": False,
+            "message": "emp_codes must be an array of employee codes"
+        }), 400
+
+    result = trigger_scheduled_notification(
+        notification_type,
+        target_date=target_date,
+        emp_codes=selected_emp_codes,
+    )
     result["requested_by"] = current_user.get('emp_code')
     status_code = 200 if result.get("success") else 400
     return jsonify(result), status_code

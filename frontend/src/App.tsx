@@ -198,7 +198,8 @@ const sidebarItems = [
   { id: 'attendance', label: 'Todays Activity' },
   { id: 'leaves', label: 'Leaves' },
   { id: 'activities', label: 'Activities' },
-  { id: 'field-visits', label: 'Field Visits' }
+  { id: 'field-visits', label: 'Field Visits' },
+  { id: 'alerts', label: 'Alerts' }
 ] as const
 
 type SidebarId = (typeof sidebarItems)[number]['id']
@@ -314,6 +315,8 @@ type FieldVisitRow = {
   startCoords?: { lat: number; lon: number } | null
   endCoords?: { lat: number; lon: number } | null
 }
+
+type AlertType = 'attendance_reminder' | 'lunch_reminder'
 
 const ACCESS_TOKEN_KEY = 'fawnix_admin_access_token'
 const REFRESH_TOKEN_KEY = 'fawnix_admin_refresh_token'
@@ -681,6 +684,12 @@ function App() {
   const [showAddEmployee, setShowAddEmployee] = useState(false)
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
   const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
+  const [alertType, setAlertType] = useState<AlertType>('attendance_reminder')
+  const [alertDate, setAlertDate] = useState(() => toDateInputValue(new Date()))
+  const [alertEmployeeSearch, setAlertEmployeeSearch] = useState('')
+  const [selectedAlertEmployees, setSelectedAlertEmployees] = useState<string[]>([])
+  const [alertTriggerLoading, setAlertTriggerLoading] = useState(false)
+  const [alertTriggerStatus, setAlertTriggerStatus] = useState('')
   const [newEmployee, setNewEmployee] = useState({
     emp_code: '',
     emp_full_name: '',
@@ -1028,6 +1037,51 @@ function App() {
       }
     } finally {
       setDashboardLoading(false)
+    }
+  }
+
+  const toggleAlertEmployee = (empCode: string) => {
+    setSelectedAlertEmployees((current) =>
+      current.includes(empCode)
+        ? current.filter((value) => value !== empCode)
+        : [...current, empCode]
+    )
+  }
+
+  const handleSelectAllAlertEmployees = (empCodes: string[]) => {
+    setSelectedAlertEmployees(empCodes)
+  }
+
+  const handleClearAlertEmployees = () => {
+    setSelectedAlertEmployees([])
+  }
+
+  const handleTriggerAlert = async () => {
+    setAlertTriggerLoading(true)
+    setAlertTriggerStatus('Triggering alert...')
+
+    try {
+      const response = await apiRequest('/api/admin/scheduled-notifications/trigger', {
+        method: 'POST',
+        body: JSON.stringify({
+          notification_type: alertType,
+          target_date: alertDate,
+          emp_codes: selectedAlertEmployees
+        })
+      })
+
+      const sentCount = Number(response?.sent_count || 0)
+      const candidateCount = Number(response?.total_candidates || 0)
+      const failedCount = Number(response?.failed_count || 0)
+      const message = response?.message || 'Alert triggered.'
+
+      setAlertTriggerStatus(
+        `${message} Sent: ${sentCount}, eligible: ${candidateCount}, failed: ${failedCount}.`
+      )
+    } catch (error) {
+      setAlertTriggerStatus(error instanceof Error ? error.message : 'Failed to trigger alert')
+    } finally {
+      setAlertTriggerLoading(false)
     }
   }
 
@@ -1651,6 +1705,19 @@ function App() {
     const filteredActivities = showTodayActivities
       ? activityRows.filter((row) => isSameDate(row.start_time, todayDateValue))
       : activityRows
+    const normalizedAlertEmployeeSearch = alertEmployeeSearch.trim().toLowerCase()
+    const filteredAlertEmployees = normalizedAlertEmployeeSearch
+      ? employees.filter((employee) => {
+          const haystack = [
+            employee.emp_full_name || '',
+            employee.emp_code || '',
+            employee.emp_email || '',
+            employee.emp_designation || '',
+            employee.emp_department || ''
+          ].join(' ').toLowerCase()
+          return haystack.includes(normalizedAlertEmployeeSearch)
+        })
+      : employees
 
     if (dashboardLoading) {
       return <div className="empty-state">Loading admin data...</div>
@@ -2224,6 +2291,124 @@ function App() {
               <div className="empty-state">
                 {showTodayActivities ? "No activities found for today." : "No activities found."}
               </div>
+            )}
+          </div>
+        </>
+      )
+    }
+
+    if (activePanel === 'alerts') {
+      const selectedCount = selectedAlertEmployees.length
+      const attendanceHelp =
+        'Only employees who have not clocked in and are not on leave will receive this reminder.'
+      const lunchHelp =
+        'Lunch reminder skips employees who are on leave and sends a more engaging health-focused message.'
+
+      return (
+        <>
+          <div className="dashboard-section-head">
+            <div>
+              <p className="eyebrow">Notifications</p>
+              <h2>Alerts</h2>
+            </div>
+            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+              Refresh Employees
+            </button>
+          </div>
+
+          <div className="form-card">
+            <div className="form-head">
+              <div>
+                <strong>Trigger Attendance Alerts</strong>
+                <span>
+                  Select a reminder type, choose the employees, and send the push notification instantly.
+                </span>
+              </div>
+            </div>
+
+            <div className="form-grid">
+              <div>
+                <label htmlFor="alert-type">Alert Type</label>
+                <select
+                  id="alert-type"
+                  value={alertType}
+                  onChange={(event) => setAlertType(event.target.value as AlertType)}
+                >
+                  <option value="attendance_reminder">Attendance Reminder</option>
+                  <option value="lunch_reminder">Lunch Reminder</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="alert-date">Target Date</label>
+                <input
+                  id="alert-date"
+                  type="date"
+                  value={alertDate}
+                  onChange={(event) => setAlertDate(event.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor="alert-employee-search">Search Employees</label>
+                <input
+                  id="alert-employee-search"
+                  type="text"
+                  value={alertEmployeeSearch}
+                  onChange={(event) => setAlertEmployeeSearch(event.target.value)}
+                  placeholder="Search by name, code, email, or department"
+                />
+              </div>
+            </div>
+
+            <p className="form-note">
+              {alertType === 'attendance_reminder' ? attendanceHelp : lunchHelp}
+            </p>
+            <p className="form-note">
+              Leave the selection empty to send the alert to all eligible employees for the chosen date.
+            </p>
+
+            <div className="form-actions">
+              <button
+                className="ghost"
+                type="button"
+                onClick={() => handleSelectAllAlertEmployees(filteredAlertEmployees.map((employee) => employee.emp_code))}
+              >
+                Select Visible
+              </button>
+              <button className="ghost" type="button" onClick={handleClearAlertEmployees}>
+                Clear Selection
+              </button>
+              <button className="cta" type="button" onClick={handleTriggerAlert} disabled={alertTriggerLoading}>
+                Trigger Alert
+              </button>
+            </div>
+            <p className="form-note">
+              Selected employees: {selectedCount}
+            </p>
+            {alertTriggerStatus ? <p className="form-note">{alertTriggerStatus}</p> : null}
+          </div>
+
+          <div className="alert-employee-list">
+            {filteredAlertEmployees.length ? (
+              filteredAlertEmployees.map((employee) => {
+                const isSelected = selectedAlertEmployees.includes(employee.emp_code)
+
+                return (
+                  <label key={employee.emp_code} className={`alert-employee-card ${isSelected ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleAlertEmployee(employee.emp_code)}
+                    />
+                    <div>
+                      <strong>{employee.emp_full_name || employee.emp_code}</strong>
+                      <span>{employee.emp_code}</span>
+                      <span>{employee.emp_designation || employee.emp_department || employee.emp_email || '--'}</span>
+                    </div>
+                  </label>
+                )
+              })
+            ) : (
+              <div className="empty-state">No employees match this search.</div>
             )}
           </div>
         </>

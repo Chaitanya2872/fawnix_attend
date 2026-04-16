@@ -299,6 +299,13 @@ type ActivityRow = {
   start_longitude?: number | string
   end_latitude?: number | string
   end_longitude?: number | string
+  field_visit_tracking?: Array<{
+    latitude?: number | string
+    longitude?: number | string
+    address?: string
+    tracked_at?: string
+    tracking_type?: string
+  }>
 }
 
 type FieldVisitRow = {
@@ -478,6 +485,41 @@ function calculateDistanceKm(points: Array<{ lat: number; lon: number }>) {
   }
 
   return total
+}
+
+function areSameCoords(
+  left?: { lat: number; lon: number } | null,
+  right?: { lat: number; lon: number } | null
+) {
+  if (!left || !right) {
+    return false
+  }
+
+  return Math.abs(left.lat - right.lat) < 0.000001 && Math.abs(left.lon - right.lon) < 0.000001
+}
+
+function buildRoutePoints(
+  start?: { lat: number; lon: number } | null,
+  tracked: Array<{ lat: number; lon: number }> = [],
+  end?: { lat: number; lon: number } | null
+) {
+  const route: Array<{ lat: number; lon: number }> = []
+
+  if (start) {
+    route.push(start)
+  }
+
+  for (const point of tracked) {
+    if (!route.length || !areSameCoords(route[route.length - 1], point)) {
+      route.push(point)
+    }
+  }
+
+  if (end && (!route.length || !areSameCoords(route[route.length - 1], end))) {
+    route.push(end)
+  }
+
+  return route
 }
 
 function toDateInputValue(value: Date) {
@@ -966,7 +1008,7 @@ function App() {
         apiRequest('/api/admin/employees', {}, token),
         apiRequest(attendancePath, {}, token),
         apiRequest('/api/admin/leaves?limit=30', {}, token),
-        apiRequest('/api/admin/activities?limit=30&include_tracking=false&include_activity_tracking=false', {}, token)
+        apiRequest('/api/admin/activities?limit=30&include_tracking=true&include_activity_tracking=false', {}, token)
       ])
       let exceptionsResponse: any = null
       try {
@@ -1047,13 +1089,26 @@ function App() {
         .map((item: ActivityRow) => {
           const startCoords = parseCoords(item.start_latitude, item.start_longitude)
           const endCoords = parseCoords(item.end_latitude, item.end_longitude)
-          const startAddress = item.field_visit_start_address || formatCoordsValue(startCoords)
-          const endAddress = item.field_visit_end_address || formatCoordsValue(endCoords)
+          const trackingPoints = Array.isArray(item.field_visit_tracking) ? item.field_visit_tracking : []
+          const latestTrackingPoint = trackingPoints.length ? trackingPoints[trackingPoints.length - 1] : null
+          const trackedCoords = trackingPoints
+            .map((point) => parseCoords(point.latitude, point.longitude))
+            .filter((point): point is { lat: number; lon: number } => Boolean(point))
+          const routePoints = buildRoutePoints(startCoords, trackedCoords, endCoords)
+          const startAddress =
+            item.field_visit_start_address ||
+            trackingPoints.find((point) => point?.address)?.address ||
+            formatCoordsValue(startCoords)
+          const endAddress =
+            item.field_visit_end_address ||
+            latestTrackingPoint?.address ||
+            formatCoordsValue(endCoords) ||
+            (item.field_visit_status === 'active' ? 'Ongoing visit' : '')
           const distanceKmValue =
-            item.total_distance_km !== undefined
+            Number(item.total_distance_km) > 0
               ? Number(item.total_distance_km)
-              : startCoords && endCoords
-                ? calculateDistanceKm([startCoords, endCoords])
+              : routePoints.length >= 2
+                ? calculateDistanceKm(routePoints)
                 : null
 
           return {
@@ -1313,6 +1368,8 @@ function App() {
         const points = Array.isArray(trackingResponse?.data?.tracking_points)
           ? trackingResponse.data.tracking_points
           : []
+        const latestTrackedPoint = points.length ? points[points.length - 1] : null
+        const firstTrackedPoint = points.find((point: { address?: string }) => point?.address)
         const mappedPoints = points
           .map((point: { latitude?: number | string; longitude?: number | string }) => ({
             lat: Number(point.latitude),
@@ -1321,25 +1378,24 @@ function App() {
           .filter((point: { lat: number; lon: number }) => !Number.isNaN(point.lat) && !Number.isNaN(point.lon))
         const startCoordsFromVisit = parseCoords(visit.start_latitude, visit.start_longitude)
         const endCoordsFromVisit = parseCoords(visit.end_latitude, visit.end_longitude)
-        const startCoords = mappedPoints.length ? mappedPoints[0] : startCoordsFromVisit
-        const endCoords = mappedPoints.length ? mappedPoints[mappedPoints.length - 1] : endCoordsFromVisit
-        const nextPoints =
-          mappedPoints.length > 0
-            ? mappedPoints
-            : startCoords && endCoords
-              ? [startCoords, endCoords]
-              : []
+        const startCoords = startCoordsFromVisit || mappedPoints[0]
+        const endCoords = endCoordsFromVisit || mappedPoints[mappedPoints.length - 1]
+        const nextPoints = buildRoutePoints(startCoords, mappedPoints, endCoords)
         setMapPoints(nextPoints)
         if (nextPoints.length) {
           setMapCenter(nextPoints[0])
         }
         const totalDistanceValue = Number(trackingResponse?.data?.total_distance_km)
-        const computedDistance = Number.isFinite(totalDistanceValue)
+        const computedDistance = totalDistanceValue > 0
           ? totalDistanceValue
           : calculateDistanceKm(nextPoints)
         setMapSummary({
-          startAddress: visit.start_address || row.startAddress,
-          endAddress: visit.end_address || row.endAddress,
+          startAddress: visit.start_address || firstTrackedPoint?.address || row.startAddress,
+          endAddress:
+            visit.end_address ||
+            latestTrackedPoint?.address ||
+            row.endAddress ||
+            (visit.status === 'active' ? 'Ongoing visit' : undefined),
           startCoords,
           endCoords,
           distanceKm: computedDistance || row.distanceKm || null,

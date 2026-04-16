@@ -519,6 +519,22 @@ def get_activities(emp_email: str, limit: int = 50, activity_type: str = None,
                     activity['destinations'] = json.loads(activity['destinations'])
                 except:
                     pass
+
+            activity['purpose'] = (
+                activity.get('field_visit_purpose')
+                or activity.get('notes')
+                or activity.get('activity_type')
+            )
+            activity['start_address'] = (
+                activity.get('field_visit_start_address')
+                or activity.get('start_address')
+                or ''
+            )
+            activity['end_address'] = (
+                activity.get('field_visit_end_address')
+                or activity.get('end_address')
+                or ''
+            )
             
             # Include activity GPS tracking points if requested
             if include_activity_tracking and activity.get('id'):
@@ -636,6 +652,22 @@ def get_team_activities(manager_code: str, limit: int = 100, activity_type: str 
                     activity['destinations'] = json.loads(activity['destinations'])
                 except Exception:
                     pass
+
+            activity['purpose'] = (
+                activity.get('field_visit_purpose')
+                or activity.get('notes')
+                or activity.get('activity_type')
+            )
+            activity['start_address'] = (
+                activity.get('field_visit_start_address')
+                or activity.get('start_address')
+                or ''
+            )
+            activity['end_address'] = (
+                activity.get('field_visit_end_address')
+                or activity.get('end_address')
+                or ''
+            )
 
         # Include all field visit tracking points if requested
         if include_tracking:

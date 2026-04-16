@@ -685,6 +685,19 @@ a {
   color: #4b5c61;
 }
 
+.location-name {
+  display: block;
+  color: #112c32;
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.location-address {
+  display: block;
+  margin-top: 2px;
+}
+
 .location-label {
   display: block;
   font-size: 10px;
@@ -773,12 +786,23 @@ a {
   color: #4b5c61;
 }
 
+.map-dialog-meta.single-column {
+  grid-template-columns: 1fr;
+}
+
 .map-dialog-meta strong {
   display: block;
   color: #112c32;
   font-size: 14px;
   font-weight: 600;
   margin-top: 2px;
+}
+
+.meta-address {
+  display: block;
+  font-size: 11px;
+  color: #4b5c61;
+  margin-top: 4px;
 }
 
 .meta-label {

@@ -454,6 +454,10 @@ function parseCoords(lat?: number | string, lon?: number | string) {
   if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) {
     return null
   }
+  // Treat backend-default "0,0" as missing location data.
+  if (latNum === 0 && lonNum === 0) {
+    return null
+  }
   return { lat: latNum, lon: lonNum }
 }
 
@@ -1114,33 +1118,31 @@ function App() {
         .map((item: ActivityRow) => {
           const startCoords = parseCoords(item.start_latitude, item.start_longitude)
           const endCoords = parseCoords(item.end_latitude, item.end_longitude)
-<<<<<<< HEAD
-          const startAddress = item.field_visit_start_address || formatCoordsValue(startCoords)
-          const endAddress = item.field_visit_end_address || formatCoordsValue(endCoords)
-          const status = item.field_visit_status || item.status || 'Unknown'
-=======
           const trackingPoints = Array.isArray(item.field_visit_tracking) ? item.field_visit_tracking : []
           const latestTrackingPoint = trackingPoints.length ? trackingPoints[trackingPoints.length - 1] : null
           const trackedCoords = trackingPoints
             .map((point) => parseCoords(point.latitude, point.longitude))
             .filter((point): point is { lat: number; lon: number } => Boolean(point))
-          const routePoints = buildRoutePoints(startCoords, trackedCoords, endCoords)
+          const status = item.field_visit_status || item.status || 'Unknown'
+          const isCompleted = isCompletedVisitStatus(status)
+          const routePoints = isCompleted
+            ? buildRoutePoints(startCoords, trackedCoords, endCoords)
+            : compactCoords([startCoords])
           const startAddress =
             item.field_visit_start_address ||
             trackingPoints.find((point) => point?.address)?.address ||
             formatCoordsValue(startCoords)
-          const endAddress =
-            item.field_visit_end_address ||
-            latestTrackingPoint?.address ||
-            formatCoordsValue(endCoords) ||
-            (item.field_visit_status === 'active' ? 'Ongoing visit' : '')
->>>>>>> 8ed0f68c4de40c69d5cc19025ca8fd6e943a76eb
+          const endAddress = isCompleted
+            ? item.field_visit_end_address || latestTrackingPoint?.address || formatCoordsValue(endCoords)
+            : undefined
           const distanceKmValue =
-            Number(item.total_distance_km) > 0
-              ? Number(item.total_distance_km)
-              : routePoints.length >= 2
-                ? calculateDistanceKm(routePoints)
-                : null
+            isCompleted
+              ? Number(item.total_distance_km) > 0
+                ? Number(item.total_distance_km)
+                : routePoints.length >= 2
+                  ? calculateDistanceKm(routePoints)
+                  : null
+              : null
 
           return {
             activityId: item.id || item.field_visit_id || '',
@@ -1149,7 +1151,7 @@ function App() {
             visitType: item.field_visit_type || 'Field Visit',
             purpose: item.field_visit_purpose || item.activity_type || 'Visit',
             status,
-            isCompleted: isCompletedVisitStatus(status),
+            isCompleted,
             location: startAddress || endAddress || 'Location unavailable',
             startName: getLocationName(startAddress || endAddress, 'Start Location'),
             endName: getLocationName(endAddress, 'End Location'),
@@ -1416,48 +1418,32 @@ function App() {
         setMapDialogTitle(visitIsCompleted ? 'Field Visit Route' : 'Field Visit Start Location')
         const startCoordsFromVisit = parseCoords(visit.start_latitude, visit.start_longitude)
         const endCoordsFromVisit = parseCoords(visit.end_latitude, visit.end_longitude)
-<<<<<<< HEAD
         const startCoords = startCoordsFromVisit || row.startCoords || (mappedPoints.length ? mappedPoints[0] : null)
         const endCoords =
           endCoordsFromVisit || row.endCoords || (mappedPoints.length ? mappedPoints[mappedPoints.length - 1] : null)
         const nextPoints =
           visitIsCompleted
-            ? compactCoords([startCoords, endCoords])
+            ? buildRoutePoints(startCoords, mappedPoints, endCoords)
             : compactCoords([startCoords])
-=======
-        const startCoords = startCoordsFromVisit || mappedPoints[0]
-        const endCoords = endCoordsFromVisit || mappedPoints[mappedPoints.length - 1]
-        const nextPoints = buildRoutePoints(startCoords, mappedPoints, endCoords)
->>>>>>> 8ed0f68c4de40c69d5cc19025ca8fd6e943a76eb
         setMapPoints(nextPoints)
         if (nextPoints.length) {
           setMapCenter(nextPoints[0])
         }
-        const startAddress = visit.start_address || row.startAddress || row.location
-        const endAddress = visit.end_address || row.endAddress
+        const startAddress = visit.start_address || firstTrackedPoint?.address || row.startAddress || row.location
+        const endAddress = visitIsCompleted
+          ? visit.end_address || latestTrackedPoint?.address || row.endAddress
+          : undefined
         const totalDistanceValue = Number(trackingResponse?.data?.total_distance_km)
-<<<<<<< HEAD
-        const directDistance =
-          visitIsCompleted && startCoords && endCoords ? calculateDistanceKm([startCoords, endCoords]) : null
-        const computedDistance =
-          Number.isFinite(totalDistanceValue) && totalDistanceValue > 0 ? totalDistanceValue : directDistance
+        const computedDistance = visitIsCompleted
+          ? Number.isFinite(totalDistanceValue) && totalDistanceValue > 0
+            ? totalDistanceValue
+            : calculateDistanceKm(nextPoints)
+          : null
         setMapSummary({
           startName: getLocationName(startAddress, 'Start Location'),
           startAddress,
           endName: visitIsCompleted ? getLocationName(endAddress, 'End Location') : undefined,
           endAddress: visitIsCompleted ? endAddress : undefined,
-=======
-        const computedDistance = totalDistanceValue > 0
-          ? totalDistanceValue
-          : calculateDistanceKm(nextPoints)
-        setMapSummary({
-          startAddress: visit.start_address || firstTrackedPoint?.address || row.startAddress,
-          endAddress:
-            visit.end_address ||
-            latestTrackedPoint?.address ||
-            row.endAddress ||
-            (visit.status === 'active' ? 'Ongoing visit' : undefined),
->>>>>>> 8ed0f68c4de40c69d5cc19025ca8fd6e943a76eb
           startCoords,
           endCoords: visitIsCompleted ? endCoords : undefined,
           distanceKm: visitIsCompleted ? (computedDistance ?? row.distanceKm ?? null) : null,

@@ -566,6 +566,22 @@ def get_all_activities(limit: int = 100, activity_type: str = None,
                 except Exception:
                     pass
 
+            activity['purpose'] = (
+                activity.get('field_visit_purpose')
+                or activity.get('notes')
+                or activity.get('activity_type')
+            )
+            activity['start_address'] = (
+                activity.get('field_visit_start_address')
+                or activity.get('start_address')
+                or ''
+            )
+            activity['end_address'] = (
+                activity.get('field_visit_end_address')
+                or activity.get('end_address')
+                or ''
+            )
+
         # Include all field visit tracking points if requested
         if include_tracking:
             field_visit_ids = [a['field_visit_id'] for a in activities if a.get('field_visit_id')]

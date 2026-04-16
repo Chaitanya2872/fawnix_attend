@@ -40,7 +40,7 @@ def _is_time_in_range(current_value: time, start_value: time, end_value: time) -
 
 def _get_late_arrival_submission_window() -> Tuple[time, time]:
     return (
-        _parse_config_time(Config.LATE_ARRIVAL_SUBMISSION_START, '04:00'),
+        _parse_config_time(Config.LATE_ARRIVAL_SUBMISSION_START, '00:00'),
         _parse_config_time(Config.LATE_ARRIVAL_SUBMISSION_END, '12:00'),
     )
 

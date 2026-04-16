@@ -750,6 +750,114 @@ def get_attendance_reminder_candidates(target_date: date | None = None) -> List[
         return_connection(conn)
 
 
+def get_selected_attendance_reminder_candidates(
+    emp_codes: List[str],
+    target_date: date | None = None,
+) -> List[Dict[str, Any]]:
+    """Fetch selected employees who still need an attendance reminder."""
+    reminder_date = target_date or date.today()
+    normalized_emp_codes = sorted({
+        _normalize_emp_code(emp_code)
+        for emp_code in emp_codes
+        if (emp_code or "").strip()
+    })
+
+    if not normalized_emp_codes:
+        return []
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT DISTINCT
+                e.emp_code,
+                e.emp_full_name,
+                e.emp_email
+            FROM employees e
+            LEFT JOIN users u ON u.emp_code = e.emp_code
+            WHERE e.emp_code = ANY(%s)
+              AND COALESCE(u.is_active, TRUE) = TRUE
+              AND EXISTS (
+                  SELECT 1
+                  FROM user_devices ud
+                  WHERE ud.emp_code = e.emp_code
+                    AND ud.is_active = TRUE
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM attendance a
+                  WHERE a.employee_email = e.emp_email
+                    AND a.date = %s
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM leaves l
+                  WHERE l.emp_code = e.emp_code
+                    AND l.status IN ('pending', 'approved')
+                    AND %s BETWEEN l.from_date AND l.to_date
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM attendance_exceptions ae
+                  JOIN attendance a2 ON a2.id = ae.attendance_id
+                  WHERE a2.employee_email = e.emp_email
+                    AND a2.date = %s
+                    AND ae.exception_type = 'late_arrival'
+              )
+            ORDER BY e.emp_full_name
+            """,
+            (normalized_emp_codes, reminder_date, reminder_date, reminder_date),
+        )
+
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+        return_connection(conn)
+
+
+def get_attendance_filter_candidates(target_date: date | None = None) -> List[Dict[str, Any]]:
+    """Fetch employees who are not on leave and have not logged in yet."""
+    reminder_date = target_date or date.today()
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT DISTINCT
+                e.emp_code,
+                e.emp_full_name,
+                e.emp_email
+            FROM employees e
+            LEFT JOIN users u ON u.emp_code = e.emp_code
+            WHERE COALESCE(u.is_active, TRUE) = TRUE
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM attendance a
+                  WHERE a.employee_email = e.emp_email
+                    AND a.date = %s
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM leaves l
+                  WHERE l.emp_code = e.emp_code
+                    AND l.status IN ('pending', 'approved')
+                    AND %s BETWEEN l.from_date AND l.to_date
+              )
+            ORDER BY e.emp_full_name
+            """,
+            (reminder_date, reminder_date),
+        )
+
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+        return_connection(conn)
+
+
 def get_lunch_reminder_candidates(target_date: date | None = None) -> List[Dict[str, Any]]:
     """Fetch active employees with devices who should receive the daily lunch reminder."""
     reminder_date = target_date or date.today()
@@ -791,13 +899,172 @@ def get_lunch_reminder_candidates(target_date: date | None = None) -> List[Dict[
         return_connection(conn)
 
 
-def send_attendance_reminder_notifications(target_date: date | None = None) -> Dict[str, Any]:
+def get_selected_lunch_reminder_candidates(
+    emp_codes: List[str],
+    target_date: date | None = None,
+) -> List[Dict[str, Any]]:
+    """Fetch selected employees eligible for the lunch reminder."""
+    reminder_date = target_date or date.today()
+    normalized_emp_codes = sorted({
+        _normalize_emp_code(emp_code)
+        for emp_code in emp_codes
+        if (emp_code or "").strip()
+    })
+
+    if not normalized_emp_codes:
+        return []
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT DISTINCT
+                e.emp_code,
+                e.emp_full_name,
+                e.emp_email
+            FROM employees e
+            LEFT JOIN users u ON u.emp_code = e.emp_code
+            WHERE e.emp_code = ANY(%s)
+              AND COALESCE(u.is_active, TRUE) = TRUE
+              AND EXISTS (
+                  SELECT 1
+                  FROM user_devices ud
+                  WHERE ud.emp_code = e.emp_code
+                    AND ud.is_active = TRUE
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM leaves l
+                  WHERE l.emp_code = e.emp_code
+                    AND l.status IN ('pending', 'approved')
+                    AND %s BETWEEN l.from_date AND l.to_date
+              )
+            ORDER BY e.emp_full_name
+            """,
+            (normalized_emp_codes, reminder_date),
+        )
+
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+        return_connection(conn)
+
+
+def _send_targeted_notification_campaign(
+    *,
+    notification_type: str,
+    title: str,
+    body: str,
+    candidates: List[Dict[str, Any]],
+    scheduled_for: datetime | None,
+    extra_payload: Dict[str, Any] | None = None,
+    success_message: str,
+    empty_message: str,
+    reminder_date: date,
+) -> Dict[str, Any]:
+    """Send a notification to a prepared candidate list and collect results."""
+    if not candidates:
+        return {
+            "success": True,
+            "message": empty_message,
+            "reminder_date": reminder_date.isoformat(),
+            "total_candidates": 0,
+            "sent_count": 0,
+            "failed_count": 0,
+            "failures": [],
+        }
+
+    is_working, day_type = is_working_day(reminder_date, candidates[0]["emp_code"])
+    if not is_working:
+        return {
+            "success": True,
+            "message": f"{success_message} skipped on {day_type}",
+            "reminder_date": reminder_date.isoformat(),
+            "total_candidates": len(candidates),
+            "sent_count": 0,
+            "failed_count": 0,
+            "failures": [],
+        }
+
+    sent_count = 0
+    failed_count = 0
+    failures = []
+
+    for candidate in candidates:
+        try:
+            payload = {"type": notification_type}
+            if extra_payload:
+                payload.update(extra_payload)
+
+            result = send_push_notification_to_employee(
+                candidate["emp_code"],
+                title,
+                body,
+                payload,
+            )
+            _log_scheduled_notification_attempt(
+                None,
+                notification_type,
+                candidate["emp_code"],
+                title,
+                body,
+                scheduled_for,
+                result,
+            )
+
+            if result.get("success"):
+                sent_count += 1
+            else:
+                failed_count += 1
+                failures.append(
+                    {
+                        "emp_code": candidate["emp_code"],
+                        "message": result.get("message", "Push notification failed"),
+                    }
+                )
+                logger.warning(
+                    "%s push failed for %s: %s",
+                    notification_type,
+                    candidate["emp_code"],
+                    result.get("message"),
+                )
+        except Exception as e:
+            failed_count += 1
+            failures.append({"emp_code": candidate["emp_code"], "message": str(e)})
+            logger.exception("%s push error for %s", notification_type, candidate["emp_code"])
+
+    message = success_message
+    if not sent_count and failed_count:
+        message = f"{success_message} failed for all candidates"
+    elif sent_count and failed_count:
+        message = f"{success_message} sent with partial failures"
+
+    return {
+        "success": sent_count > 0 or not candidates,
+        "message": message,
+        "reminder_date": reminder_date.isoformat(),
+        "total_candidates": len(candidates),
+        "sent_count": sent_count,
+        "failed_count": failed_count,
+        "failures": failures,
+    }
+
+
+def send_attendance_reminder_notifications(
+    target_date: date | None = None,
+    emp_codes: List[str] | None = None,
+) -> Dict[str, Any]:
     """Send attendance reminders to employees who have not updated attendance."""
     reminder_date = target_date or date.today()
     scheduled_for = _scheduled_datetime_for(reminder_date, Config.ATTENDANCE_REMINDER_TIME)
 
     try:
-        candidates = get_attendance_reminder_candidates(reminder_date)
+        if emp_codes:
+            candidates = get_selected_attendance_reminder_candidates(emp_codes, reminder_date)
+        else:
+            candidates = get_attendance_reminder_candidates(reminder_date)
     except Exception as e:
         logger.error("Attendance reminder candidate lookup failed: %s", e)
         return {
@@ -809,96 +1076,31 @@ def send_attendance_reminder_notifications(target_date: date | None = None) -> D
             "failed_count": 0,
         }
 
-    if not candidates:
-        return {
-            "success": True,
-            "message": "No attendance reminders required",
-            "reminder_date": reminder_date.isoformat(),
-            "total_candidates": 0,
-            "sent_count": 0,
-            "failed_count": 0,
-        }
-
-    is_working, day_type = is_working_day(reminder_date, candidates[0]["emp_code"])
-    if not is_working:
-        return {
-            "success": True,
-            "message": f"Attendance reminders skipped on {day_type}",
-            "reminder_date": reminder_date.isoformat(),
-            "total_candidates": len(candidates),
-            "sent_count": 0,
-            "failed_count": 0,
-        }
-
-    sent_count = 0
-    failed_count = 0
-    failures = []
-
-    for candidate in candidates:
-        try:
-            result = send_push_notification_to_employee(
-                candidate["emp_code"],
-                "Attendance Reminder",
-                "Clock in. If you already did, please ignore.",
-                {"type": "attendance_reminder"},
-            )
-            _log_scheduled_notification_attempt(
-                None,
-                "attendance_reminder",
-                candidate["emp_code"],
-                "Attendance Reminder",
-                "Clock in. If you already did, please ignore.",
-                scheduled_for,
-                result,
-            )
-
-            if result.get("success"):
-                sent_count += 1
-            else:
-                failed_count += 1
-                failures.append(
-                    {
-                        "emp_code": candidate["emp_code"],
-                        "message": result.get("message", "Push notification failed"),
-                    }
-                )
-                logger.warning(
-                    "Attendance reminder push failed for %s: %s",
-                    candidate["emp_code"],
-                    result.get("message"),
-                )
-        except Exception as e:
-            failed_count += 1
-            failures.append({"emp_code": candidate["emp_code"], "message": str(e)})
-            logger.exception(
-                "Attendance reminder push error for %s",
-                candidate["emp_code"],
-            )
-
-    message = "Attendance reminders processed"
-    if not sent_count and failed_count:
-        message = "Attendance reminders failed for all candidates"
-    elif sent_count and failed_count:
-        message = "Attendance reminders sent with partial failures"
-
-    return {
-        "success": sent_count > 0 or not candidates,
-        "message": message,
-        "reminder_date": reminder_date.isoformat(),
-        "total_candidates": len(candidates),
-        "sent_count": sent_count,
-        "failed_count": failed_count,
-        "failures": failures,
-    }
+    return _send_targeted_notification_campaign(
+        notification_type="attendance_reminder",
+        title="Attendance Reminder",
+        body="Clock in. If you already did, please ignore.",
+        candidates=candidates,
+        scheduled_for=scheduled_for,
+        success_message="Attendance reminders processed",
+        empty_message="No attendance reminders required",
+        reminder_date=reminder_date,
+    )
 
 
-def send_lunch_reminder_notifications(target_date: date | None = None) -> Dict[str, Any]:
+def send_lunch_reminder_notifications(
+    target_date: date | None = None,
+    emp_codes: List[str] | None = None,
+) -> Dict[str, Any]:
     """Send lunch reminder notifications to active employees."""
     reminder_date = target_date or date.today()
     scheduled_for = _scheduled_datetime_for(reminder_date, Config.LUNCH_REMINDER_TIME)
 
     try:
-        candidates = get_lunch_reminder_candidates(reminder_date)
+        if emp_codes:
+            candidates = get_selected_lunch_reminder_candidates(emp_codes, reminder_date)
+        else:
+            candidates = get_lunch_reminder_candidates(reminder_date)
     except Exception as e:
         logger.error("Lunch reminder candidate lookup failed: %s", e)
         return {
@@ -910,87 +1112,16 @@ def send_lunch_reminder_notifications(target_date: date | None = None) -> Dict[s
             "failed_count": 0,
         }
 
-    if not candidates:
-        return {
-            "success": True,
-            "message": "No lunch reminders required",
-            "reminder_date": reminder_date.isoformat(),
-            "total_candidates": 0,
-            "sent_count": 0,
-            "failed_count": 0,
-        }
-
-    is_working, day_type = is_working_day(reminder_date, candidates[0]["emp_code"])
-    if not is_working:
-        return {
-            "success": True,
-            "message": f"Lunch reminders skipped on {day_type}",
-            "reminder_date": reminder_date.isoformat(),
-            "total_candidates": len(candidates),
-            "sent_count": 0,
-            "failed_count": 0,
-        }
-
-    sent_count = 0
-    failed_count = 0
-    failures = []
-
-    for candidate in candidates:
-        try:
-            result = send_push_notification_to_employee(
-                candidate["emp_code"],
-                "Lunch Time",
-                "It's 1:25 PM. It's lunch time, Fawnix cares about your health.",
-                {"type": "lunch_reminder"},
-            )
-            _log_scheduled_notification_attempt(
-                None,
-                "lunch_reminder",
-                candidate["emp_code"],
-                "Lunch Time",
-                "It's 1:25 PM. It's lunch time, Fawnix cares about your health.",
-                scheduled_for,
-                result,
-            )
-
-            if result.get("success"):
-                sent_count += 1
-            else:
-                failed_count += 1
-                failures.append(
-                    {
-                        "emp_code": candidate["emp_code"],
-                        "message": result.get("message", "Push notification failed"),
-                    }
-                )
-                logger.warning(
-                    "Lunch reminder push failed for %s: %s",
-                    candidate["emp_code"],
-                    result.get("message"),
-                )
-        except Exception as e:
-            failed_count += 1
-            failures.append({"emp_code": candidate["emp_code"], "message": str(e)})
-            logger.exception(
-                "Lunch reminder push error for %s",
-                candidate["emp_code"],
-            )
-
-    message = "Lunch reminders processed"
-    if not sent_count and failed_count:
-        message = "Lunch reminders failed for all candidates"
-    elif sent_count and failed_count:
-        message = "Lunch reminders sent with partial failures"
-
-    return {
-        "success": sent_count > 0 or not candidates,
-        "message": message,
-        "reminder_date": reminder_date.isoformat(),
-        "total_candidates": len(candidates),
-        "sent_count": sent_count,
-        "failed_count": failed_count,
-        "failures": failures,
-    }
+    return _send_targeted_notification_campaign(
+        notification_type="lunch_reminder",
+        title="Lunch Time",
+        body="Take five, grab a real lunch, and recharge for a stronger second half. Fawnix cares about your health.",
+        candidates=candidates,
+        scheduled_for=scheduled_for,
+        success_message="Lunch reminders processed",
+        empty_message="No lunch reminders required",
+        reminder_date=reminder_date,
+    )
 
 
 SCHEDULED_NOTIFICATION_HANDLERS = {
@@ -1315,6 +1446,7 @@ def process_due_scheduled_notifications(limit: int = 20) -> Dict[str, Any]:
 def trigger_scheduled_notification(
     notification_type: str,
     target_date: date | None = None,
+    emp_codes: List[str] | None = None,
 ) -> Dict[str, Any]:
     """Manually trigger a scheduled notification flow by type."""
     normalized_type = (notification_type or "").strip().lower()
@@ -1327,10 +1459,46 @@ def trigger_scheduled_notification(
             "supported_types": sorted(SCHEDULED_NOTIFICATION_HANDLERS.keys()),
         }
 
-    result = handler(target_date=target_date)
+    result = handler(target_date=target_date, emp_codes=emp_codes)
     result["notification_type"] = normalized_type
     result["trigger_mode"] = "manual"
+    result["selected_emp_codes"] = sorted({
+        _normalize_emp_code(emp_code)
+        for emp_code in (emp_codes or [])
+        if (emp_code or "").strip()
+    })
     return result
+
+
+def get_notification_candidates(
+    notification_type: str,
+    target_date: date | None = None,
+) -> Dict[str, Any]:
+    """Return eligible employees for a notification type and date."""
+    normalized_type = (notification_type or "").strip().lower()
+    reminder_date = target_date or date.today()
+
+    if normalized_type == "attendance_reminder":
+        candidates = get_attendance_filter_candidates(reminder_date)
+    elif normalized_type == "lunch_reminder":
+        candidates = get_lunch_reminder_candidates(reminder_date)
+    else:
+        return {
+            "success": False,
+            "message": "Unsupported notification_type",
+            "supported_types": sorted(SCHEDULED_NOTIFICATION_HANDLERS.keys()),
+            "reminder_date": reminder_date.isoformat(),
+            "data": [],
+        }
+
+    return {
+        "success": True,
+        "message": "Notification candidates fetched",
+        "notification_type": normalized_type,
+        "reminder_date": reminder_date.isoformat(),
+        "count": len(candidates),
+        "data": candidates,
+    }
 
 
 def get_scheduled_notification_logs(

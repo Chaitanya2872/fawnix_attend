@@ -198,7 +198,8 @@ const sidebarItems = [
   { id: 'attendance', label: 'Todays Activity' },
   { id: 'leaves', label: 'Leaves' },
   { id: 'activities', label: 'Activities' },
-  { id: 'field-visits', label: 'Field Visits' }
+  { id: 'field-visits', label: 'Field Visits' },
+  { id: 'alerts', label: 'Alerts' }
 ] as const
 
 type SidebarId = (typeof sidebarItems)[number]['id']
@@ -298,6 +299,13 @@ type ActivityRow = {
   start_longitude?: number | string
   end_latitude?: number | string
   end_longitude?: number | string
+  field_visit_tracking?: Array<{
+    latitude?: number | string
+    longitude?: number | string
+    address?: string
+    tracked_at?: string
+    tracking_type?: string
+  }>
 }
 
 type FieldVisitRow = {
@@ -317,6 +325,8 @@ type FieldVisitRow = {
   startCoords?: { lat: number; lon: number } | null
   endCoords?: { lat: number; lon: number } | null
 }
+
+type AlertType = 'attendance_reminder' | 'lunch_reminder'
 
 const ACCESS_TOKEN_KEY = 'fawnix_admin_access_token'
 const REFRESH_TOKEN_KEY = 'fawnix_admin_refresh_token'
@@ -497,6 +507,41 @@ function calculateDistanceKm(points: Array<{ lat: number; lon: number }>) {
   }
 
   return total
+}
+
+function areSameCoords(
+  left?: { lat: number; lon: number } | null,
+  right?: { lat: number; lon: number } | null
+) {
+  if (!left || !right) {
+    return false
+  }
+
+  return Math.abs(left.lat - right.lat) < 0.000001 && Math.abs(left.lon - right.lon) < 0.000001
+}
+
+function buildRoutePoints(
+  start?: { lat: number; lon: number } | null,
+  tracked: Array<{ lat: number; lon: number }> = [],
+  end?: { lat: number; lon: number } | null
+) {
+  const route: Array<{ lat: number; lon: number }> = []
+
+  if (start) {
+    route.push(start)
+  }
+
+  for (const point of tracked) {
+    if (!route.length || !areSameCoords(route[route.length - 1], point)) {
+      route.push(point)
+    }
+  }
+
+  if (end && (!route.length || !areSameCoords(route[route.length - 1], end))) {
+    route.push(end)
+  }
+
+  return route
 }
 
 function toDateInputValue(value: Date) {
@@ -706,6 +751,15 @@ function App() {
   const [showAddEmployee, setShowAddEmployee] = useState(false)
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
   const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
+  const [alertType, setAlertType] = useState<AlertType>('attendance_reminder')
+  const [alertDate, setAlertDate] = useState(() => toDateInputValue(new Date()))
+  const [alertEmployeeSearch, setAlertEmployeeSearch] = useState('')
+  const [selectedAlertEmployees, setSelectedAlertEmployees] = useState<string[]>([])
+  const [alertEligibleEmpCodes, setAlertEligibleEmpCodes] = useState<string[]>([])
+  const [showOnlyEligibleAlertEmployees, setShowOnlyEligibleAlertEmployees] = useState(false)
+  const [alertCandidatesLoading, setAlertCandidatesLoading] = useState(false)
+  const [alertTriggerLoading, setAlertTriggerLoading] = useState(false)
+  const [alertTriggerStatus, setAlertTriggerStatus] = useState('')
   const [newEmployee, setNewEmployee] = useState({
     emp_code: '',
     emp_full_name: '',
@@ -754,6 +808,49 @@ function App() {
 
     void loadDashboard(accessToken)
   }, [accessToken, showDashboard, showAdminLogin, attendanceDateFilter])
+
+  useEffect(() => {
+    if (!accessToken || !showDashboard || showAdminLogin || activePanel !== 'alerts') {
+      return
+    }
+
+    let cancelled = false
+
+    const loadAlertCandidates = async () => {
+      setAlertCandidatesLoading(true)
+
+      try {
+        const params = new URLSearchParams({
+          notification_type: alertType,
+          target_date: alertDate
+        })
+        const response = await apiRequest(`/api/admin/scheduled-notifications/candidates?${params.toString()}`, {}, accessToken)
+        const nextCodes = Array.isArray(response?.data)
+          ? response.data
+              .map((row: { emp_code?: string }) => row.emp_code || '')
+              .filter(Boolean)
+          : []
+
+        if (!cancelled) {
+          setAlertEligibleEmpCodes(nextCodes)
+        }
+      } catch {
+        if (!cancelled) {
+          setAlertEligibleEmpCodes([])
+        }
+      } finally {
+        if (!cancelled) {
+          setAlertCandidatesLoading(false)
+        }
+      }
+    }
+
+    void loadAlertCandidates()
+
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, showDashboard, showAdminLogin, activePanel, alertType, alertDate])
 
   const updateTokens = (nextAccessToken: string, nextRefreshToken: string) => {
     setAccessToken(nextAccessToken)
@@ -936,7 +1033,7 @@ function App() {
         apiRequest('/api/admin/employees', {}, token),
         apiRequest(attendancePath, {}, token),
         apiRequest('/api/admin/leaves?limit=30', {}, token),
-        apiRequest('/api/admin/activities?limit=30&include_tracking=false&include_activity_tracking=false', {}, token)
+        apiRequest('/api/admin/activities?limit=30&include_tracking=true&include_activity_tracking=false', {}, token)
       ])
       let exceptionsResponse: any = null
       try {
@@ -1017,14 +1114,32 @@ function App() {
         .map((item: ActivityRow) => {
           const startCoords = parseCoords(item.start_latitude, item.start_longitude)
           const endCoords = parseCoords(item.end_latitude, item.end_longitude)
+<<<<<<< HEAD
           const startAddress = item.field_visit_start_address || formatCoordsValue(startCoords)
           const endAddress = item.field_visit_end_address || formatCoordsValue(endCoords)
           const status = item.field_visit_status || item.status || 'Unknown'
+=======
+          const trackingPoints = Array.isArray(item.field_visit_tracking) ? item.field_visit_tracking : []
+          const latestTrackingPoint = trackingPoints.length ? trackingPoints[trackingPoints.length - 1] : null
+          const trackedCoords = trackingPoints
+            .map((point) => parseCoords(point.latitude, point.longitude))
+            .filter((point): point is { lat: number; lon: number } => Boolean(point))
+          const routePoints = buildRoutePoints(startCoords, trackedCoords, endCoords)
+          const startAddress =
+            item.field_visit_start_address ||
+            trackingPoints.find((point) => point?.address)?.address ||
+            formatCoordsValue(startCoords)
+          const endAddress =
+            item.field_visit_end_address ||
+            latestTrackingPoint?.address ||
+            formatCoordsValue(endCoords) ||
+            (item.field_visit_status === 'active' ? 'Ongoing visit' : '')
+>>>>>>> 8ed0f68c4de40c69d5cc19025ca8fd6e943a76eb
           const distanceKmValue =
-            item.total_distance_km !== undefined
+            Number(item.total_distance_km) > 0
               ? Number(item.total_distance_km)
-              : startCoords && endCoords
-                ? calculateDistanceKm([startCoords, endCoords])
+              : routePoints.length >= 2
+                ? calculateDistanceKm(routePoints)
                 : null
 
           return {
@@ -1057,6 +1172,51 @@ function App() {
       }
     } finally {
       setDashboardLoading(false)
+    }
+  }
+
+  const toggleAlertEmployee = (empCode: string) => {
+    setSelectedAlertEmployees((current) =>
+      current.includes(empCode)
+        ? current.filter((value) => value !== empCode)
+        : [...current, empCode]
+    )
+  }
+
+  const handleSelectAllAlertEmployees = (empCodes: string[]) => {
+    setSelectedAlertEmployees(empCodes)
+  }
+
+  const handleClearAlertEmployees = () => {
+    setSelectedAlertEmployees([])
+  }
+
+  const handleTriggerAlert = async () => {
+    setAlertTriggerLoading(true)
+    setAlertTriggerStatus('Triggering alert...')
+
+    try {
+      const response = await apiRequest('/api/admin/scheduled-notifications/trigger', {
+        method: 'POST',
+        body: JSON.stringify({
+          notification_type: alertType,
+          target_date: alertDate,
+          emp_codes: selectedAlertEmployees
+        })
+      })
+
+      const sentCount = Number(response?.sent_count || 0)
+      const candidateCount = Number(response?.total_candidates || 0)
+      const failedCount = Number(response?.failed_count || 0)
+      const message = response?.message || 'Alert triggered.'
+
+      setAlertTriggerStatus(
+        `${message} Sent: ${sentCount}, eligible: ${candidateCount}, failed: ${failedCount}.`
+      )
+    } catch (error) {
+      setAlertTriggerStatus(error instanceof Error ? error.message : 'Failed to trigger alert')
+    } finally {
+      setAlertTriggerLoading(false)
     }
   }
 
@@ -1243,6 +1403,8 @@ function App() {
         const points = Array.isArray(trackingResponse?.data?.tracking_points)
           ? trackingResponse.data.tracking_points
           : []
+        const latestTrackedPoint = points.length ? points[points.length - 1] : null
+        const firstTrackedPoint = points.find((point: { address?: string }) => point?.address)
         const mappedPoints = points
           .map((point: { latitude?: number | string; longitude?: number | string }) => ({
             lat: Number(point.latitude),
@@ -1254,6 +1416,7 @@ function App() {
         setMapDialogTitle(visitIsCompleted ? 'Field Visit Route' : 'Field Visit Start Location')
         const startCoordsFromVisit = parseCoords(visit.start_latitude, visit.start_longitude)
         const endCoordsFromVisit = parseCoords(visit.end_latitude, visit.end_longitude)
+<<<<<<< HEAD
         const startCoords = startCoordsFromVisit || row.startCoords || (mappedPoints.length ? mappedPoints[0] : null)
         const endCoords =
           endCoordsFromVisit || row.endCoords || (mappedPoints.length ? mappedPoints[mappedPoints.length - 1] : null)
@@ -1261,6 +1424,11 @@ function App() {
           visitIsCompleted
             ? compactCoords([startCoords, endCoords])
             : compactCoords([startCoords])
+=======
+        const startCoords = startCoordsFromVisit || mappedPoints[0]
+        const endCoords = endCoordsFromVisit || mappedPoints[mappedPoints.length - 1]
+        const nextPoints = buildRoutePoints(startCoords, mappedPoints, endCoords)
+>>>>>>> 8ed0f68c4de40c69d5cc19025ca8fd6e943a76eb
         setMapPoints(nextPoints)
         if (nextPoints.length) {
           setMapCenter(nextPoints[0])
@@ -1268,6 +1436,7 @@ function App() {
         const startAddress = visit.start_address || row.startAddress || row.location
         const endAddress = visit.end_address || row.endAddress
         const totalDistanceValue = Number(trackingResponse?.data?.total_distance_km)
+<<<<<<< HEAD
         const directDistance =
           visitIsCompleted && startCoords && endCoords ? calculateDistanceKm([startCoords, endCoords]) : null
         const computedDistance =
@@ -1277,6 +1446,18 @@ function App() {
           startAddress,
           endName: visitIsCompleted ? getLocationName(endAddress, 'End Location') : undefined,
           endAddress: visitIsCompleted ? endAddress : undefined,
+=======
+        const computedDistance = totalDistanceValue > 0
+          ? totalDistanceValue
+          : calculateDistanceKm(nextPoints)
+        setMapSummary({
+          startAddress: visit.start_address || firstTrackedPoint?.address || row.startAddress,
+          endAddress:
+            visit.end_address ||
+            latestTrackedPoint?.address ||
+            row.endAddress ||
+            (visit.status === 'active' ? 'Ongoing visit' : undefined),
+>>>>>>> 8ed0f68c4de40c69d5cc19025ca8fd6e943a76eb
           startCoords,
           endCoords: visitIsCompleted ? endCoords : undefined,
           distanceKm: visitIsCompleted ? (computedDistance ?? row.distanceKm ?? null) : null,
@@ -1697,6 +1878,29 @@ function App() {
     const filteredActivities = showTodayActivities
       ? activityRows.filter((row) => isSameDate(row.start_time, todayDateValue))
       : activityRows
+    const normalizedAlertEmployeeSearch = alertEmployeeSearch.trim().toLowerCase()
+    const eligibleAlertEmpCodeSet = new Set(alertEligibleEmpCodes)
+    const filteredAlertEmployees = employees.filter((employee) => {
+      const matchesSearch = normalizedAlertEmployeeSearch
+        ? [
+            employee.emp_full_name || '',
+            employee.emp_code || '',
+            employee.emp_email || '',
+            employee.emp_designation || '',
+            employee.emp_department || ''
+          ].join(' ').toLowerCase().includes(normalizedAlertEmployeeSearch)
+        : true
+
+      if (!matchesSearch) {
+        return false
+      }
+
+      if (!showOnlyEligibleAlertEmployees) {
+        return true
+      }
+
+      return eligibleAlertEmpCodeSet.has(employee.emp_code)
+    })
 
     if (dashboardLoading) {
       return <div className="empty-state">Loading admin data...</div>
@@ -2270,6 +2474,140 @@ function App() {
               <div className="empty-state">
                 {showTodayActivities ? "No activities found for today." : "No activities found."}
               </div>
+            )}
+          </div>
+        </>
+      )
+    }
+
+    if (activePanel === 'alerts') {
+      const selectedCount = selectedAlertEmployees.length
+      const eligibleCount = alertEligibleEmpCodes.length
+      const attendanceHelp =
+        'Only employees who have not clocked in and are not on leave will receive this reminder.'
+      const lunchHelp =
+        'Lunch reminder skips employees who are on leave and sends a more engaging health-focused message.'
+
+      return (
+        <>
+          <div className="dashboard-section-head">
+            <div>
+              <p className="eyebrow">Notifications</p>
+              <h2>Alerts</h2>
+            </div>
+            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+              Refresh Employees
+            </button>
+          </div>
+
+          <div className="form-card">
+            <div className="form-head">
+              <div>
+                <strong>Trigger Attendance Alerts</strong>
+                <span>
+                  Select a reminder type, choose the employees, and send the push notification instantly.
+                </span>
+              </div>
+            </div>
+
+            <div className="form-grid">
+              <div>
+                <label htmlFor="alert-type">Alert Type</label>
+                <select
+                  id="alert-type"
+                  value={alertType}
+                  onChange={(event) => setAlertType(event.target.value as AlertType)}
+                >
+                  <option value="attendance_reminder">Attendance Reminder</option>
+                  <option value="lunch_reminder">Lunch Reminder</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="alert-date">Target Date</label>
+                <input
+                  id="alert-date"
+                  type="date"
+                  value={alertDate}
+                  onChange={(event) => setAlertDate(event.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor="alert-employee-search">Search Employees</label>
+                <input
+                  id="alert-employee-search"
+                  type="text"
+                  value={alertEmployeeSearch}
+                  onChange={(event) => setAlertEmployeeSearch(event.target.value)}
+                  placeholder="Search by name, code, email, or department"
+                />
+              </div>
+            </div>
+
+            <p className="form-note">
+              {alertType === 'attendance_reminder' ? attendanceHelp : lunchHelp}
+            </p>
+            <p className="form-note">
+              Leave the selection empty to send the alert to all eligible employees for the chosen date.
+            </p>
+            <div className="alert-filter-row">
+              <label className="alert-toggle">
+                <input
+                  type="checkbox"
+                  checked={showOnlyEligibleAlertEmployees}
+                  onChange={(event) => setShowOnlyEligibleAlertEmployees(event.target.checked)}
+                />
+                <span>
+                  Show only employees who have not applied leave and are still not logged in
+                </span>
+              </label>
+              <span className="alert-filter-meta">
+                {alertCandidatesLoading ? 'Checking eligible employees...' : `Eligible employees: ${eligibleCount}`}
+              </span>
+            </div>
+
+            <div className="form-actions">
+              <button
+                className="ghost"
+                type="button"
+                onClick={() => handleSelectAllAlertEmployees(filteredAlertEmployees.map((employee) => employee.emp_code))}
+              >
+                Select Visible
+              </button>
+              <button className="ghost" type="button" onClick={handleClearAlertEmployees}>
+                Clear Selection
+              </button>
+              <button className="cta" type="button" onClick={handleTriggerAlert} disabled={alertTriggerLoading}>
+                Trigger Alert
+              </button>
+            </div>
+            <p className="form-note">
+              Selected employees: {selectedCount}
+            </p>
+            {alertTriggerStatus ? <p className="form-note">{alertTriggerStatus}</p> : null}
+          </div>
+
+          <div className="alert-employee-list">
+            {filteredAlertEmployees.length ? (
+              filteredAlertEmployees.map((employee) => {
+                const isSelected = selectedAlertEmployees.includes(employee.emp_code)
+
+                return (
+                  <label key={employee.emp_code} className={`alert-employee-card ${isSelected ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleAlertEmployee(employee.emp_code)}
+                    />
+                    <div>
+                      <strong>{employee.emp_full_name || employee.emp_code}</strong>
+                      <span>{employee.emp_code}</span>
+                      <span>{employee.emp_designation || employee.emp_department || employee.emp_email || '--'}</span>
+                    </div>
+                  </label>
+                )
+              })
+            ) : (
+              <div className="empty-state">No employees match this search.</div>
             )}
           </div>
         </>

@@ -305,6 +305,15 @@ type ActivityRow = {
     address?: string
     tracked_at?: string
     tracking_type?: string
+    location?: string
+  }>
+  activity_tracking?: Array<{
+    latitude?: number | string
+    longitude?: number | string
+    address?: string
+    tracked_at?: string
+    tracking_type?: string
+    location?: string
   }>
 }
 
@@ -324,6 +333,8 @@ type FieldVisitRow = {
   distanceKm?: number | null
   startCoords?: { lat: number; lon: number } | null
   endCoords?: { lat: number; lon: number } | null
+  activityTracking?: FieldVisitTrackingPoint[]
+  fieldTracking?: FieldVisitTrackingPoint[]
 }
 
 type FieldVisitTrackingPoint = {
@@ -332,6 +343,14 @@ type FieldVisitTrackingPoint = {
   tracked_at?: string
   tracking_type?: string
   address?: string
+  location?: string
+}
+
+type MapTrackingPoint = {
+  lat: number
+  lon: number
+  trackedAt?: string
+  trackingType?: string
 }
 
 type AlertType = 'attendance_reminder' | 'lunch_reminder'
@@ -753,9 +772,8 @@ function App() {
   const [mapDialogLoading, setMapDialogLoading] = useState(false)
   const [mapDialogError, setMapDialogError] = useState('')
   const [mapPoints, setMapPoints] = useState<Array<{ lat: number; lon: number }>>([])
-  const [mapTrackingPoints, setMapTrackingPoints] = useState<
-    Array<{ lat: number; lon: number; trackedAt?: string; trackingType?: string }>
-  >([])
+  const [mapTrackingPoints, setMapTrackingPoints] = useState<MapTrackingPoint[]>([])
+  const [mapFieldTrackingPoints, setMapFieldTrackingPoints] = useState<MapTrackingPoint[]>([])
   const [mapCenter, setMapCenter] = useState<{ lat: number; lon: number } | null>(null)
   const [mapSummary, setMapSummary] = useState<{
     startName?: string
@@ -1055,7 +1073,7 @@ function App() {
         apiRequest('/api/admin/employees', {}, token),
         apiRequest(attendancePath, {}, token),
         apiRequest('/api/admin/leaves?limit=30', {}, token),
-        apiRequest('/api/admin/activities?limit=30&include_tracking=true&include_activity_tracking=false', {}, token)
+        apiRequest('/api/admin/activities?limit=30&include_tracking=true&include_activity_tracking=true', {}, token)
       ])
       let exceptionsResponse: any = null
       try {
@@ -1136,31 +1154,38 @@ function App() {
         .map((item: ActivityRow) => {
           const startCoords = parseCoords(item.start_latitude, item.start_longitude)
           const endCoords = parseCoords(item.end_latitude, item.end_longitude)
-          const trackingPoints = Array.isArray(item.field_visit_tracking) ? item.field_visit_tracking : []
-          const latestTrackingPoint = trackingPoints.length ? trackingPoints[trackingPoints.length - 1] : null
-          const trackedCoords = trackingPoints
+          const fieldTrackingPoints = Array.isArray(item.field_visit_tracking) ? item.field_visit_tracking : []
+          const activityTrackingPoints = Array.isArray(item.activity_tracking) ? item.activity_tracking : []
+          const latestFieldTrackingPoint = fieldTrackingPoints.length ? fieldTrackingPoints[fieldTrackingPoints.length - 1] : null
+          const latestActivityTrackingPoint =
+            activityTrackingPoints.length ? activityTrackingPoints[activityTrackingPoints.length - 1] : null
+          const activityTrackedCoords = activityTrackingPoints
             .map((point) => parseCoords(point.latitude, point.longitude))
             .filter((point): point is { lat: number; lon: number } => Boolean(point))
+          const fieldTrackedCoords = fieldTrackingPoints
+            .map((point) => parseCoords(point.latitude, point.longitude))
+            .filter((point): point is { lat: number; lon: number } => Boolean(point))
+          const trackedCoords = activityTrackedCoords.length ? activityTrackedCoords : fieldTrackedCoords
           const status = item.field_visit_status || item.status || 'Unknown'
           const isCompleted = isCompletedVisitStatus(status)
-          const routePoints = isCompleted
-            ? buildRoutePoints(startCoords, trackedCoords, endCoords)
-            : compactCoords([startCoords])
+          const routePoints = buildRoutePoints(startCoords, trackedCoords, isCompleted ? endCoords : null)
           const startAddress =
             item.field_visit_start_address ||
-            trackingPoints.find((point) => point?.address)?.address ||
+            activityTrackingPoints.find((point) => point?.address)?.address ||
+            fieldTrackingPoints.find((point) => point?.address)?.address ||
             formatCoordsValue(startCoords)
           const endAddress = isCompleted
-            ? item.field_visit_end_address || latestTrackingPoint?.address || formatCoordsValue(endCoords)
+            ? item.field_visit_end_address ||
+              latestActivityTrackingPoint?.address ||
+              latestFieldTrackingPoint?.address ||
+              formatCoordsValue(endCoords)
             : undefined
           const distanceKmValue =
-            isCompleted
-              ? Number(item.total_distance_km) > 0
-                ? Number(item.total_distance_km)
-                : routePoints.length >= 2
-                  ? calculateDistanceKm(routePoints)
-                  : null
-              : null
+            Number(item.total_distance_km) > 0
+              ? Number(item.total_distance_km)
+              : routePoints.length >= 2
+                ? calculateDistanceKm(routePoints)
+                : null
 
           return {
             activityId: item.id || item.field_visit_id || '',
@@ -1177,7 +1202,9 @@ function App() {
             endAddress: endAddress || undefined,
             distanceKm: Number.isFinite(distanceKmValue) ? distanceKmValue : null,
             startCoords,
-            endCoords
+            endCoords,
+            activityTracking: activityTrackingPoints,
+            fieldTracking: fieldTrackingPoints
           }
         })
 
@@ -1399,12 +1426,43 @@ function App() {
     const startLocationText = (row.startAddress || row.location || '').trim()
     const isCompleted = isCompletedVisitStatus(row.status)
     const coordMatch = startLocationText.match(/-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?/)
+    const normalizeTrackingPoints = (points: FieldVisitTrackingPoint[] = []): MapTrackingPoint[] => {
+      const normalized: MapTrackingPoint[] = []
+
+      points.forEach((point) => {
+        const parsedFromLatLon = parseCoords(point.latitude, point.longitude)
+        const parsedFromLocation = point.location
+          ? (() => {
+              const [latValue = '', lonValue = ''] = point.location.split(',').map((value) => value.trim())
+              return parseCoords(latValue, lonValue)
+            })()
+          : null
+        const coords = parsedFromLatLon || parsedFromLocation
+        if (!coords) {
+          return
+        }
+
+        normalized.push({
+          lat: coords.lat,
+          lon: coords.lon,
+          trackedAt: point.tracked_at,
+          trackingType: point.tracking_type
+        })
+      })
+
+      return normalized
+    }
+
+    const activityTrackingFromRow = normalizeTrackingPoints(Array.isArray(row.activityTracking) ? row.activityTracking : [])
+    const fieldTrackingFromRow = normalizeTrackingPoints(Array.isArray(row.fieldTracking) ? row.fieldTracking : [])
+
     setMapDialogTitle(isCompleted ? 'Activity Route' : 'Activity Location')
     setMapDialogOpen(true)
     setMapDialogError('')
     setMapDialogLoading(true)
     setMapPoints([])
     setMapTrackingPoints([])
+    setMapFieldTrackingPoints([])
     setMapCenter(null)
     setMapSummary({
       startName: row.startName || getLocationName(row.startAddress || row.location, 'Start Location'),
@@ -1417,6 +1475,81 @@ function App() {
       pointsCount: undefined,
       isCompleted
     })
+
+    if (row.activityId) {
+      try {
+        const routeResponse = await apiRequest(`/api/activities/route/${row.activityId}`, {})
+        const routeData = routeResponse?.data || {}
+        const activityTrackingPoints = normalizeTrackingPoints(
+          Array.isArray(routeData?.tracking_points) ? routeData.tracking_points : []
+        )
+        const fieldTrackingPoints = normalizeTrackingPoints(
+          Array.isArray(routeData?.field_visit_checkpoints) ? routeData.field_visit_checkpoints : []
+        )
+        const nextActivityTracking = activityTrackingPoints.length ? activityTrackingPoints : activityTrackingFromRow
+        const nextFieldTracking = fieldTrackingPoints.length ? fieldTrackingPoints : fieldTrackingFromRow
+        const trackingForRoute = nextActivityTracking.length ? nextActivityTracking : nextFieldTracking
+        const startCoordsFromRoute = parseCoords(routeData?.start_location?.latitude, routeData?.start_location?.longitude)
+        const endCoordsFromRoute = parseCoords(routeData?.end_location?.latitude, routeData?.end_location?.longitude)
+        const startCoords =
+          startCoordsFromRoute ||
+          row.startCoords ||
+          (trackingForRoute.length ? { lat: trackingForRoute[0].lat, lon: trackingForRoute[0].lon } : null)
+        const endCoords =
+          endCoordsFromRoute ||
+          row.endCoords ||
+          (trackingForRoute.length
+            ? { lat: trackingForRoute[trackingForRoute.length - 1].lat, lon: trackingForRoute[trackingForRoute.length - 1].lon }
+            : null)
+        const routeStatus = routeData?.status || row.status
+        const routeIsCompleted = isCompletedVisitStatus(routeStatus)
+        const nextPoints = buildRoutePoints(
+          startCoords,
+          trackingForRoute.map((point) => ({ lat: point.lat, lon: point.lon })),
+          routeIsCompleted ? endCoords : null
+        )
+        const fallbackPoints = nextPoints.length ? nextPoints : compactCoords([startCoords, endCoords])
+
+        setMapTrackingPoints(nextActivityTracking)
+        setMapFieldTrackingPoints(nextFieldTracking)
+        setMapPoints(fallbackPoints)
+        if (fallbackPoints.length) {
+          setMapCenter(fallbackPoints[0])
+        }
+
+        const startAddress = routeData?.start_location?.address || row.startAddress || row.location
+        const endAddress = routeData?.end_location?.address || row.endAddress
+        const totalDistanceValue = Number(routeData?.total_distance_km)
+        const computedDistance =
+          Number.isFinite(totalDistanceValue) && totalDistanceValue > 0
+            ? totalDistanceValue
+            : fallbackPoints.length >= 2
+              ? calculateDistanceKm(fallbackPoints)
+              : (row.distanceKm ?? null)
+
+        setMapSummary({
+          startName: getLocationName(startAddress, 'Start Location'),
+          startAddress,
+          endName: routeIsCompleted ? getLocationName(endAddress, 'End Location') : undefined,
+          endAddress: routeIsCompleted ? endAddress : undefined,
+          startCoords,
+          endCoords: routeIsCompleted ? endCoords : undefined,
+          distanceKm:
+            computedDistance !== null && computedDistance !== undefined && Number.isFinite(computedDistance)
+              ? computedDistance
+              : null,
+          pointsCount: nextActivityTracking.length,
+          isCompleted: routeIsCompleted
+        })
+        setMapDialogLoading(false)
+        if (fallbackPoints.length || nextActivityTracking.length || nextFieldTracking.length) {
+          return
+        }
+      } catch {
+        // Continue to field-visit and geocode fallbacks.
+      }
+    }
+
     if (row.fieldVisitId) {
       try {
         const trackingResponse = await apiRequest(`/api/admin/field-visits/${row.fieldVisitId}/tracking`, {})
@@ -1424,18 +1557,14 @@ function App() {
         const points: FieldVisitTrackingPoint[] = Array.isArray(trackingResponse?.data?.tracking_points)
           ? trackingResponse.data.tracking_points
           : []
-        const normalizedTrackingPoints = points
-          .map((point) => ({
-            lat: Number(point.latitude),
-            lon: Number(point.longitude),
-            trackedAt: point.tracked_at,
-            trackingType: point.tracking_type
-          }))
-          .filter((point: { lat: number; lon: number }) => !Number.isNaN(point.lat) && !Number.isNaN(point.lon))
-        setMapTrackingPoints(normalizedTrackingPoints)
+        const normalizedFieldPoints = normalizeTrackingPoints(points)
+        const normalizedActivityPoints = activityTrackingFromRow
+        const trackedRoutePoints = normalizedActivityPoints.length ? normalizedActivityPoints : normalizedFieldPoints
+        setMapTrackingPoints(normalizedActivityPoints)
+        setMapFieldTrackingPoints(normalizedFieldPoints)
         const latestTrackedPoint = points.length ? points[points.length - 1] : null
         const firstTrackedPoint = points.find((point: { address?: string }) => point?.address)
-        const mappedPoints = normalizedTrackingPoints.map((point) => ({
+        const mappedPoints = trackedRoutePoints.map((point) => ({
           lat: point.lat,
           lon: point.lon
         }))
@@ -1448,12 +1577,11 @@ function App() {
         const endCoords =
           endCoordsFromVisit || row.endCoords || (mappedPoints.length ? mappedPoints[mappedPoints.length - 1] : null)
         const nextPoints =
-          visitIsCompleted
-            ? buildRoutePoints(startCoords, mappedPoints, endCoords)
-            : compactCoords([startCoords])
-        setMapPoints(nextPoints)
-        if (nextPoints.length) {
-          setMapCenter(nextPoints[0])
+          buildRoutePoints(startCoords, mappedPoints, visitIsCompleted ? endCoords : null)
+        const fallbackPoints = nextPoints.length ? nextPoints : compactCoords([startCoords, endCoords])
+        setMapPoints(fallbackPoints)
+        if (fallbackPoints.length) {
+          setMapCenter(fallbackPoints[0])
         }
         const startAddress = visit.start_address || firstTrackedPoint?.address || row.startAddress || row.location
         const endAddress = visitIsCompleted
@@ -1463,7 +1591,7 @@ function App() {
         const computedDistance = visitIsCompleted
           ? Number.isFinite(totalDistanceValue) && totalDistanceValue > 0
             ? totalDistanceValue
-            : calculateDistanceKm(nextPoints)
+            : calculateDistanceKm(fallbackPoints)
           : null
         setMapSummary({
           startName: getLocationName(startAddress, 'Start Location'),
@@ -1473,11 +1601,11 @@ function App() {
           startCoords,
           endCoords: visitIsCompleted ? endCoords : undefined,
           distanceKm: visitIsCompleted ? (computedDistance ?? row.distanceKm ?? null) : null,
-          pointsCount: normalizedTrackingPoints.length || nextPoints.length,
+          pointsCount: normalizedActivityPoints.length || trackedRoutePoints.length || fallbackPoints.length,
           isCompleted: visitIsCompleted
         })
         setMapDialogLoading(false)
-        if (nextPoints.length) {
+        if (fallbackPoints.length || normalizedActivityPoints.length || normalizedFieldPoints.length) {
           return
         }
       } catch (error) {
@@ -2710,10 +2838,7 @@ function App() {
   }
 
   if (showDashboard) {
-    const fieldPointCount = mapTrackingPoints.filter((point) => {
-      const pointType = (point.trackingType || '').trim().toLowerCase()
-      return pointType === 'checkpoint' || pointType === 'manual'
-    }).length
+    const fieldPointCount = mapFieldTrackingPoints.length
     const activityPointCount = mapTrackingPoints.length || mapSummary?.pointsCount || 0
     const startPoint =
       mapSummary?.startCoords ||
@@ -2839,7 +2964,9 @@ function App() {
                         <div className="map-dialog-chip-row">
                           <span className="map-dialog-chip">Field points: {fieldPointCount}</span>
                           <span className="map-dialog-chip">Activity points: {activityPointCount}</span>
-                          {mapSummary?.distanceKm ? (
+                          {mapSummary?.distanceKm !== null &&
+                          mapSummary?.distanceKm !== undefined &&
+                          !Number.isNaN(mapSummary.distanceKm) ? (
                             <span className="map-dialog-chip">Distance: {formatDistanceKm(mapSummary.distanceKm)}</span>
                           ) : null}
                         </div>

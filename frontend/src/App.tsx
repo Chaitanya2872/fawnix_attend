@@ -326,6 +326,14 @@ type FieldVisitRow = {
   endCoords?: { lat: number; lon: number } | null
 }
 
+type FieldVisitTrackingPoint = {
+  latitude?: number | string
+  longitude?: number | string
+  tracked_at?: string
+  tracking_type?: string
+  address?: string
+}
+
 type AlertType = 'attendance_reminder' | 'lunch_reminder'
 
 const ACCESS_TOKEN_KEY = 'fawnix_admin_access_token'
@@ -403,6 +411,13 @@ function formatDistanceKm(value?: number | null) {
     return '--'
   }
   return `${value.toFixed(2)} km`
+}
+
+function formatCoords(value?: { lat: number; lon: number } | null) {
+  if (!value) {
+    return '--'
+  }
+  return `${value.lat.toFixed(6)}, ${value.lon.toFixed(6)}`
 }
 
 function toTitleCase(value: string) {
@@ -738,6 +753,9 @@ function App() {
   const [mapDialogLoading, setMapDialogLoading] = useState(false)
   const [mapDialogError, setMapDialogError] = useState('')
   const [mapPoints, setMapPoints] = useState<Array<{ lat: number; lon: number }>>([])
+  const [mapTrackingPoints, setMapTrackingPoints] = useState<
+    Array<{ lat: number; lon: number; trackedAt?: string; trackingType?: string }>
+  >([])
   const [mapCenter, setMapCenter] = useState<{ lat: number; lon: number } | null>(null)
   const [mapSummary, setMapSummary] = useState<{
     startName?: string
@@ -1381,11 +1399,12 @@ function App() {
     const startLocationText = (row.startAddress || row.location || '').trim()
     const isCompleted = isCompletedVisitStatus(row.status)
     const coordMatch = startLocationText.match(/-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?/)
-    setMapDialogTitle(isCompleted ? 'Field Visit Route' : 'Field Visit Start Location')
+    setMapDialogTitle(isCompleted ? 'Activity Route' : 'Activity Location')
     setMapDialogOpen(true)
     setMapDialogError('')
     setMapDialogLoading(true)
     setMapPoints([])
+    setMapTrackingPoints([])
     setMapCenter(null)
     setMapSummary({
       startName: row.startName || getLocationName(row.startAddress || row.location, 'Start Location'),
@@ -1402,20 +1421,27 @@ function App() {
       try {
         const trackingResponse = await apiRequest(`/api/admin/field-visits/${row.fieldVisitId}/tracking`, {})
         const visit = trackingResponse?.data?.field_visit || {}
-        const points = Array.isArray(trackingResponse?.data?.tracking_points)
+        const points: FieldVisitTrackingPoint[] = Array.isArray(trackingResponse?.data?.tracking_points)
           ? trackingResponse.data.tracking_points
           : []
-        const latestTrackedPoint = points.length ? points[points.length - 1] : null
-        const firstTrackedPoint = points.find((point: { address?: string }) => point?.address)
-        const mappedPoints = points
-          .map((point: { latitude?: number | string; longitude?: number | string }) => ({
+        const normalizedTrackingPoints = points
+          .map((point) => ({
             lat: Number(point.latitude),
-            lon: Number(point.longitude)
+            lon: Number(point.longitude),
+            trackedAt: point.tracked_at,
+            trackingType: point.tracking_type
           }))
           .filter((point: { lat: number; lon: number }) => !Number.isNaN(point.lat) && !Number.isNaN(point.lon))
+        setMapTrackingPoints(normalizedTrackingPoints)
+        const latestTrackedPoint = points.length ? points[points.length - 1] : null
+        const firstTrackedPoint = points.find((point: { address?: string }) => point?.address)
+        const mappedPoints = normalizedTrackingPoints.map((point) => ({
+          lat: point.lat,
+          lon: point.lon
+        }))
         const visitStatus = visit.status || row.status
         const visitIsCompleted = isCompletedVisitStatus(visitStatus)
-        setMapDialogTitle(visitIsCompleted ? 'Field Visit Route' : 'Field Visit Start Location')
+        setMapDialogTitle(visitIsCompleted ? 'Activity Route' : 'Activity Location')
         const startCoordsFromVisit = parseCoords(visit.start_latitude, visit.start_longitude)
         const endCoordsFromVisit = parseCoords(visit.end_latitude, visit.end_longitude)
         const startCoords = startCoordsFromVisit || row.startCoords || (mappedPoints.length ? mappedPoints[0] : null)
@@ -1447,7 +1473,7 @@ function App() {
           startCoords,
           endCoords: visitIsCompleted ? endCoords : undefined,
           distanceKm: visitIsCompleted ? (computedDistance ?? row.distanceKm ?? null) : null,
-          pointsCount: nextPoints.length,
+          pointsCount: normalizedTrackingPoints.length || nextPoints.length,
           isCompleted: visitIsCompleted
         })
         setMapDialogLoading(false)
@@ -1464,6 +1490,7 @@ function App() {
       const latNum = Number(lat)
       const lonNum = Number(lon)
       setMapPoints([{ lat: latNum, lon: lonNum }])
+      setMapTrackingPoints([{ lat: latNum, lon: lonNum, trackingType: 'initial' }])
       setMapCenter({ lat: latNum, lon: lonNum })
       setMapDialogLoading(false)
       return
@@ -1487,6 +1514,7 @@ function App() {
       const latNum = Number(match.lat)
       const lonNum = Number(match.lon)
       setMapPoints([{ lat: latNum, lon: lonNum }])
+      setMapTrackingPoints([{ lat: latNum, lon: lonNum, trackingType: 'initial' }])
       setMapCenter({ lat: latNum, lon: lonNum })
     } catch (error) {
       setMapDialogError(error instanceof Error ? error.message : 'Unable to load map.')
@@ -1522,9 +1550,20 @@ function App() {
 
     if (mapPoints.length > 1) {
       const latlngs = mapPoints.map((point) => [point.lat, point.lon] as [number, number])
-      L.polyline(latlngs, { color: '#1fa7a4', weight: 4 }).addTo(map)
+      L.polyline(latlngs, { color: '#2f6fe4', weight: 4 }).addTo(map)
       L.marker(latlngs[0], { icon: defaultIcon }).addTo(map)
       L.marker(latlngs[latlngs.length - 1], { icon: defaultIcon }).addTo(map)
+      if (latlngs.length > 2) {
+        latlngs.slice(1, -1).forEach((latlng) => {
+          L.circleMarker(latlng, {
+            radius: 4,
+            color: '#2f6fe4',
+            fillColor: '#2f6fe4',
+            fillOpacity: 0.95,
+            weight: 1
+          }).addTo(map)
+        })
+      }
       map.fitBounds(latlngs, { padding: [30, 30] })
     } else {
       map.setView([mapCenter.lat, mapCenter.lon], 14)
@@ -2667,6 +2706,22 @@ function App() {
   }
 
   if (showDashboard) {
+    const fieldPointCount = mapTrackingPoints.filter((point) => {
+      const pointType = (point.trackingType || '').trim().toLowerCase()
+      return pointType === 'checkpoint' || pointType === 'manual'
+    }).length
+    const activityPointCount = mapTrackingPoints.length || mapSummary?.pointsCount || 0
+    const startPoint =
+      mapSummary?.startCoords ||
+      (mapTrackingPoints.length ? { lat: mapTrackingPoints[0].lat, lon: mapTrackingPoints[0].lon } : null) ||
+      (mapPoints.length ? mapPoints[0] : null)
+    const endPoint =
+      mapSummary?.endCoords ||
+      (mapTrackingPoints.length
+        ? { lat: mapTrackingPoints[mapTrackingPoints.length - 1].lat, lon: mapTrackingPoints[mapTrackingPoints.length - 1].lon }
+        : null) ||
+      (mapPoints.length ? mapPoints[mapPoints.length - 1] : null)
+
     return (
       <div className="admin-shell">
         <aside className="sidebar">
@@ -2766,13 +2821,7 @@ function App() {
             <div className="map-dialog-backdrop" role="dialog" aria-modal="true">
               <div className="map-dialog">
                 <div className="map-dialog-header">
-                  <div>
-                    <strong>{mapDialogTitle}</strong>
-                    <span>OpenStreetMap</span>
-                  </div>
-                  <button className="ghost" onClick={() => setMapDialogOpen(false)} type="button">
-                    Close
-                  </button>
+                  <strong>{mapDialogTitle || 'Activity Route'}</strong>
                 </div>
                 <div className="map-dialog-body">
                   {mapDialogLoading ? (
@@ -2781,48 +2830,47 @@ function App() {
                     <div className="map-dialog-state">{mapDialogError}</div>
                   ) : mapCenter ? (
                     <>
-                      <div className={`map-dialog-meta ${mapSummary?.isCompleted ? '' : 'single-column'}`}>
-                        <div>
-                          <span className="meta-label">Start Location</span>
-                          <strong>{mapSummary?.startName || 'Start location unavailable'}</strong>
-                          {mapSummary?.startAddress ? (
-                            <span className="meta-address">{mapSummary.startAddress}</span>
-                          ) : null}
-                          {mapSummary?.startCoords ? (
-                            <span className="meta-coords">
-                              {mapSummary.startCoords.lat.toFixed(6)}, {mapSummary.startCoords.lon.toFixed(6)}
-                            </span>
+                      <div ref={mapContainerRef} className="map-dialog-map" />
+                      <div className="map-dialog-meta">
+                        <div className="map-dialog-chip-row">
+                          <span className="map-dialog-chip">Field points: {fieldPointCount}</span>
+                          <span className="map-dialog-chip">Activity points: {activityPointCount}</span>
+                          {mapSummary?.distanceKm ? (
+                            <span className="map-dialog-chip">Distance: {formatDistanceKm(mapSummary.distanceKm)}</span>
                           ) : null}
                         </div>
-                        {mapSummary?.isCompleted ? (
-                          <div>
-                            <span className="meta-label">End Location</span>
-                            <strong>{mapSummary?.endName || 'End location unavailable'}</strong>
-                            {mapSummary?.endAddress ? (
-                              <span className="meta-address">{mapSummary.endAddress}</span>
-                            ) : null}
-                            {mapSummary?.endCoords ? (
-                              <span className="meta-coords">
-                                {mapSummary.endCoords.lat.toFixed(6)}, {mapSummary.endCoords.lon.toFixed(6)}
-                              </span>
-                            ) : null}
-                          </div>
-                        ) : null}
-                        {mapSummary?.isCompleted ? (
-                          <div>
-                            <span className="meta-label">Distance</span>
-                            <strong>{formatDistanceKm(mapSummary?.distanceKm)}</strong>
-                            <span className="meta-coords">
-                              {mapSummary?.pointsCount ? `${mapSummary.pointsCount} points` : 'No points'}
-                            </span>
-                          </div>
-                        ) : null}
+                        <div className="map-dialog-coords-row">
+                          <div>Start: {formatCoords(startPoint)}</div>
+                          <div>End: {formatCoords(endPoint)}</div>
+                        </div>
+                        <div className="map-dialog-points">
+                          <strong>Activity GPS Points</strong>
+                          {mapTrackingPoints.length ? (
+                            <ol>
+                              {mapTrackingPoints.map((point, index) => {
+                                const typeLabel = (point.trackingType || 'auto').trim().toLowerCase()
+                                return (
+                                  <li key={`${point.lat}-${point.lon}-${point.trackedAt || index}`}>
+                                    {`${point.lat.toFixed(6)}, ${point.lon.toFixed(6)} [${typeLabel}]`}
+                                    {point.trackedAt ? ` at ${point.trackedAt}` : ''}
+                                  </li>
+                                )
+                              })}
+                            </ol>
+                          ) : (
+                            <div className="map-dialog-empty-points">No activity GPS points found.</div>
+                          )}
+                        </div>
                       </div>
-                      <div ref={mapContainerRef} className="map-dialog-map" />
                     </>
                   ) : (
                     <div className="map-dialog-state">No location data available.</div>
                   )}
+                </div>
+                <div className="map-dialog-footer">
+                  <button className="map-dialog-close" onClick={() => setMapDialogOpen(false)} type="button">
+                    Close
+                  </button>
                 </div>
               </div>
             </div>

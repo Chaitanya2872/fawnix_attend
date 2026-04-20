@@ -775,9 +775,10 @@ a {
 }
 
 .map-dialog {
-  width: min(920px, 95vw);
-  background: #fff;
-  border-radius: 18px;
+  width: min(1020px, 96vw);
+  max-height: 90vh;
+  background: #edeaf1;
+  border-radius: 30px;
   overflow: hidden;
   box-shadow: 0 24px 60px rgba(17, 44, 50, 0.2);
   display: grid;
@@ -785,71 +786,31 @@ a {
 }
 
 .map-dialog-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background: #f7f4ef;
+  padding: 14px 30px 10px;
+  background: #edeaf1;
 }
 
 .map-dialog-header strong {
   display: block;
-  font-size: 16px;
-}
-
-.map-dialog-header span {
-  font-size: 12px;
-  color: #5b6b70;
+  font-size: clamp(26px, 3vw, 40px);
+  font-weight: 500;
+  line-height: 1.05;
+  color: #2a2b34;
 }
 
 .map-dialog-body {
-  height: 70vh;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: minmax(260px, 56vh) minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .map-dialog-meta {
+  padding: 16px 30px 8px;
+  background: #edeaf1;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  padding: 14px 16px;
-  background: #fbf9f5;
-  border-bottom: 1px solid rgba(17, 44, 50, 0.08);
-  font-size: 12px;
-  color: #4b5c61;
-}
-
-.map-dialog-meta.single-column {
-  grid-template-columns: 1fr;
-}
-
-.map-dialog-meta strong {
-  display: block;
-  color: #112c32;
-  font-size: 14px;
-  font-weight: 600;
-  margin-top: 2px;
-}
-
-.meta-address {
-  display: block;
-  font-size: 11px;
-  color: #4b5c61;
-  margin-top: 4px;
-}
-
-.meta-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #7a8b90;
-}
-
-.meta-coords {
-  display: block;
-  font-size: 11px;
-  color: #7a8b90;
-  margin-top: 4px;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  overflow: hidden;
 }
 
 .map-dialog-body iframe {
@@ -861,11 +822,68 @@ a {
 .map-dialog-map {
   width: 100%;
   height: 100%;
+  border-top: 1px solid rgba(53, 55, 68, 0.08);
+  border-bottom: 1px solid rgba(53, 55, 68, 0.08);
 }
 
 .map-dialog-map.leaflet-container {
   width: 100%;
   height: 100%;
+}
+
+.map-dialog-chip-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.map-dialog-chip {
+  border: 1px solid rgba(77, 79, 97, 0.22);
+  color: #4a4b58;
+  background: #f4f1f7;
+  padding: 6px 16px;
+  border-radius: 11px;
+  font-size: 15px;
+}
+
+.map-dialog-coords-row {
+  display: grid;
+  gap: 4px;
+  color: #30313c;
+  font-size: 17px;
+}
+
+.map-dialog-points {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.map-dialog-points strong {
+  font-size: 20px;
+  color: #262733;
+}
+
+.map-dialog-points ol {
+  margin: 0;
+  padding: 8px 12px 8px 34px;
+  border-radius: 12px;
+  border: 1px solid rgba(61, 76, 132, 0.12);
+  background: #f1f5ff;
+  overflow-y: auto;
+  font-size: 14px;
+  color: #2f3141;
+  line-height: 1.5;
+}
+
+.map-dialog-empty-points {
+  border-radius: 12px;
+  border: 1px solid rgba(53, 55, 68, 0.12);
+  padding: 12px 14px;
+  color: #5d6074;
+  background: #f4f1f7;
+  font-size: 15px;
 }
 
 .map-dialog-state {
@@ -877,6 +895,23 @@ a {
   font-size: 14px;
   background: #f1f2f2;
   grid-row: 1 / -1;
+}
+
+.map-dialog-footer {
+  padding: 10px 30px 24px;
+  display: flex;
+  justify-content: flex-end;
+  background: #edeaf1;
+}
+
+.map-dialog-close {
+  background: transparent;
+  border: none;
+  color: #6f5ca4;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
 }
 
 .employee-row {
@@ -1747,8 +1782,34 @@ a {
     grid-template-columns: 1fr;
   }
 
+  .map-dialog {
+    width: min(98vw, 760px);
+    max-height: 92vh;
+    border-radius: 20px;
+  }
+
+  .map-dialog-header {
+    padding: 14px 16px 10px;
+  }
+
+  .map-dialog-body {
+    grid-template-rows: minmax(240px, 48vh) minmax(0, 1fr);
+  }
+
   .map-dialog-meta {
-    grid-template-columns: 1fr;
+    padding: 12px 16px 6px;
+  }
+
+  .map-dialog-coords-row {
+    font-size: 15px;
+  }
+
+  .map-dialog-points ol {
+    font-size: 13px;
+  }
+
+  .map-dialog-footer {
+    padding: 8px 16px 14px;
   }
 
   .attendance-section-head {

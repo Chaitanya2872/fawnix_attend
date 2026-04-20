@@ -779,7 +779,9 @@ a {
   max-height: 90vh;
   background: #edeaf1;
   border-radius: 30px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
   box-shadow: 0 24px 60px rgba(17, 44, 50, 0.2);
   display: grid;
   grid-template-rows: auto 1fr auto;

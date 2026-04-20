@@ -383,11 +383,26 @@ a {
   flex-wrap: wrap;
 }
 
+.attendance-section-head {
+  align-items: flex-start;
+}
+
 .attendance-controls {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
   align-items: flex-end;
+}
+
+.attendance-head-actions {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  flex: 1 1 720px;
+}
+
+.attendance-controls-inline {
+  justify-content: flex-end;
 }
 
 .attendance-tabs {
@@ -437,6 +452,10 @@ a {
   align-self: center;
 }
 
+.attendance-report-status {
+  align-self: flex-end;
+}
+
 .employee-actions {
   display: flex;
   gap: 12px;
@@ -448,6 +467,20 @@ a {
   gap: 6px;
   font-size: 12px;
   color: #4b5c61;
+}
+
+.attendance-filter-date {
+  min-width: 160px;
+}
+
+.attendance-filter-search {
+  min-width: 260px;
+  max-width: 360px;
+  flex: 1 1 280px;
+}
+
+.attendance-filter-compact {
+  min-width: 88px;
 }
 
 .attendance-filter input,
@@ -1716,6 +1749,24 @@ a {
 
   .map-dialog-meta {
     grid-template-columns: 1fr;
+  }
+
+  .attendance-section-head {
+    align-items: stretch;
+  }
+
+  .attendance-head-actions {
+    justify-items: start;
+    flex-basis: 100%;
+  }
+
+  .attendance-controls-inline {
+    justify-content: flex-start;
+  }
+
+  .attendance-filter-search {
+    max-width: none;
+    flex-basis: 100%;
   }
 }
 

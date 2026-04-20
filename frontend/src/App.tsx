@@ -2126,7 +2126,7 @@ function App() {
 
       return (
         <>
-          <div className="dashboard-section-head">
+          <div className="dashboard-section-head attendance-section-head">
             <div>
               <p className="eyebrow">Operations</p>
               <h2>Todays Activity</h2>
@@ -2166,9 +2166,9 @@ function App() {
               </div>
             </div>
             {attendanceView === 'attendance' ? (
-              <>
-                <div className="attendance-controls">
-                  <div className="attendance-filter">
+              <div className="attendance-head-actions">
+                <div className="attendance-controls attendance-controls-inline">
+                  <div className="attendance-filter attendance-filter-date">
                     <label htmlFor="attendance-date">Date</label>
                     <input
                       id="attendance-date"
@@ -2177,7 +2177,7 @@ function App() {
                       onChange={(event) => setAttendanceDateFilter(event.target.value)}
                     />
                   </div>
-                  <div className="attendance-filter">
+                  <div className="attendance-filter attendance-filter-search">
                     <label htmlFor="attendance-search">Search</label>
                     <input
                       id="attendance-search"
@@ -2190,9 +2190,7 @@ function App() {
                   <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                     Refresh
                   </button>
-                </div>
-                <div className="attendance-controls">
-                  <div className="attendance-filter">
+                  <div className="attendance-filter attendance-filter-compact">
                     <label htmlFor="attendance-month">Month</label>
                     <select
                       id="attendance-month"
@@ -2219,7 +2217,7 @@ function App() {
                       ))}
                     </select>
                   </div>
-                  <div className="attendance-filter">
+                  <div className="attendance-filter attendance-filter-compact">
                     <label htmlFor="attendance-year">Year</label>
                     <select
                       id="attendance-year"
@@ -2236,7 +2234,7 @@ function App() {
                       })}
                     </select>
                   </div>
-                  <div className="attendance-filter">
+                  <div className="attendance-filter attendance-filter-compact">
                     <label htmlFor="attendance-format">Format</label>
                     <select
                       id="attendance-format"
@@ -2251,9 +2249,9 @@ function App() {
                   <button className="cta dashboard-button" onClick={downloadAttendanceReport}>
                     Download Report
                   </button>
-                  {attendanceReportStatus ? <span className="report-status">{attendanceReportStatus}</span> : null}
                 </div>
-              </>
+                {attendanceReportStatus ? <span className="report-status attendance-report-status">{attendanceReportStatus}</span> : null}
+              </div>
             ) : (
               <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                 Refresh

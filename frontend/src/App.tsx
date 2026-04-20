@@ -1702,6 +1702,11 @@ function App() {
       L.marker([mapCenter.lat, mapCenter.lon], { icon: defaultIcon }).addTo(map)
     }
 
+    // Ensure Leaflet recalculates tiles after modal layout settles.
+    window.setTimeout(() => {
+      map.invalidateSize()
+    }, 0)
+
     return () => {
       map.remove()
       mapRef.current = null

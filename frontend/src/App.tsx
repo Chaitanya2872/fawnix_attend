@@ -1550,20 +1550,24 @@ function App() {
 
     if (mapPoints.length > 1) {
       const latlngs = mapPoints.map((point) => [point.lat, point.lon] as [number, number])
+      const dotLatLngs = (mapTrackingPoints.length ? mapTrackingPoints : mapPoints).map((point) => [
+        point.lat,
+        point.lon
+      ] as [number, number])
       L.polyline(latlngs, { color: '#2f6fe4', weight: 4 }).addTo(map)
       L.marker(latlngs[0], { icon: defaultIcon }).addTo(map)
       L.marker(latlngs[latlngs.length - 1], { icon: defaultIcon }).addTo(map)
-      if (latlngs.length > 2) {
-        latlngs.slice(1, -1).forEach((latlng) => {
-          L.circleMarker(latlng, {
-            radius: 4,
-            color: '#2f6fe4',
-            fillColor: '#2f6fe4',
-            fillOpacity: 0.95,
-            weight: 1
-          }).addTo(map)
-        })
-      }
+
+      dotLatLngs.forEach((latlng) => {
+        L.circleMarker(latlng, {
+          radius: 5,
+          color: '#ffffff',
+          fillColor: '#2f6fe4',
+          fillOpacity: 1,
+          weight: 2
+        }).addTo(map)
+      })
+
       map.fitBounds(latlngs, { padding: [30, 30] })
     } else {
       map.setView([mapCenter.lat, mapCenter.lon], 14)
@@ -1574,7 +1578,7 @@ function App() {
       map.remove()
       mapRef.current = null
     }
-  }, [mapDialogOpen, mapCenter, mapPoints])
+  }, [mapDialogOpen, mapCenter, mapPoints, mapTrackingPoints])
 
   const updateNewEmployee = (field: keyof typeof newEmployee, value: string) => {
     setNewEmployee((current) => ({

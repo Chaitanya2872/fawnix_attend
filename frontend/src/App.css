@@ -871,7 +871,9 @@ a {
   border-radius: 12px;
   border: 1px solid rgba(61, 76, 132, 0.12);
   background: #f1f5ff;
-  overflow-y: auto;
+  max-height: 210px;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
   font-size: 14px;
   color: #2f3141;
   line-height: 1.5;

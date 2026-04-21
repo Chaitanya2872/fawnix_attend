@@ -229,12 +229,18 @@ def _get_table_column_types(cursor, table_name: str) -> Dict[str, str]:
     return {row['column_name']: row['data_type'] for row in cursor.fetchall()}
 
 
-def _build_exception_select(columns: set, include_employee_fields: bool = False) -> str:
+def _build_exception_select(
+    columns: set,
+    include_employee_fields: bool = False,
+    table_alias: Optional[str] = None
+) -> str:
     """Build a portable SELECT list for attendance_exceptions across schema versions."""
+    prefix = f"{table_alias}." if table_alias else ""
+
     def pick(column_name: str, alias: Optional[str] = None) -> str:
         alias = alias or column_name
         if column_name in columns:
-            return f"{column_name} AS {alias}"
+            return f"{prefix}{column_name} AS {alias}"
         return f"NULL AS {alias}"
 
     select_parts = [
@@ -257,16 +263,16 @@ def _build_exception_select(columns: set, include_employee_fields: bool = False)
     ]
 
     if 'reviewed_by' in columns:
-        select_parts.append("reviewed_by AS reviewed_by")
+        select_parts.append(f"{prefix}reviewed_by AS reviewed_by")
     elif 'approved_by' in columns:
-        select_parts.append("approved_by AS reviewed_by")
+        select_parts.append(f"{prefix}approved_by AS reviewed_by")
     else:
         select_parts.append("NULL AS reviewed_by")
 
     if 'reviewed_at' in columns:
-        select_parts.append("reviewed_at AS reviewed_at")
+        select_parts.append(f"{prefix}reviewed_at AS reviewed_at")
     elif 'approved_at' in columns:
-        select_parts.append("approved_at AS reviewed_at")
+        select_parts.append(f"{prefix}approved_at AS reviewed_at")
     else:
         select_parts.append("NULL AS reviewed_at")
 
@@ -1021,24 +1027,35 @@ def get_team_exceptions(manager_code: str, status: str = None,
     
     try:
         exception_columns = _get_table_columns(cursor, 'attendance_exceptions')
-        select_clause = _build_exception_select(exception_columns, include_employee_fields=True)
+        select_clause = _build_exception_select(
+            exception_columns,
+            include_employee_fields=True,
+            table_alias='ae'
+        )
         is_privileged = _is_privileged_emp(manager_code)
 
         query = f"""
             SELECT 
-                {select_clause}
-            FROM attendance_exceptions
+                {select_clause},
+                a.date AS attendance_date,
+                a.login_time AS attendance_login_time,
+                a.logout_time AS attendance_logout_time,
+                COALESCE(a.working_hours, 0) AS working_hours,
+                e.emp_designation AS emp_designation
+            FROM attendance_exceptions ae
+            LEFT JOIN attendance a ON ae.attendance_id = a.id
+            LEFT JOIN employees e ON a.employee_email = e.emp_email
         """
         params = []
 
         if is_privileged:
             query += " WHERE 1=1"
         elif 'manager_code' in exception_columns:
-            query += " WHERE manager_code = %s"
+            query += " WHERE ae.manager_code = %s"
             params.append(manager_code)
         else:
             query += """
-                WHERE attendance_id IN (
+                WHERE ae.attendance_id IN (
                     SELECT a.id
                     FROM attendance a
                     JOIN employees e ON a.employee_email = e.emp_email
@@ -1048,17 +1065,19 @@ def get_team_exceptions(manager_code: str, status: str = None,
             params.extend([manager_code, manager_code])
         
         if status:
-            query += " AND status = %s"
+            query += " AND ae.status = %s"
             params.append(status)
         
         if exception_type:
-            query += " AND exception_type = %s"
+            query += " AND ae.exception_type = %s"
             params.append(exception_type)
         
-        query += " ORDER BY requested_at DESC"
+        query += " ORDER BY ae.requested_at DESC"
         
         cursor.execute(query, params)
         exceptions = cursor.fetchall()
+        for exception in exceptions:
+            exception['working_hours'] = float(exception.get('working_hours') or 0)
         exceptions = _serialize_exception_rows(exceptions)
         
         # Count pending

@@ -451,11 +451,15 @@ function formatDistanceKm(value?: number | null) {
   return `${value.toFixed(2)} km`
 }
 
-function formatWorkingHours(value?: number) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
+function formatWorkingHours(value?: number | string | null) {
+  if (value === null || value === undefined || value === '') {
     return '--'
   }
-  return `${value.toFixed(2)} h`
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) {
+    return '--'
+  }
+  return `${numericValue.toFixed(2)} h`
 }
 
 function formatCoords(value?: { lat: number; lon: number } | null) {

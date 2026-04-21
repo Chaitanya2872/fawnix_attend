@@ -384,6 +384,7 @@ def get_all_attendance_history(limit: int = None, target_date: date = None,
             for key, value in record.items():
                 if isinstance(value, datetime):
                     record[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+            record['working_hours'] = float(record.get('working_hours') or 0)
 
         total_hours = sum(float(r['working_hours'] or 0) for r in records)
         completed_days = len([r for r in records if r['status'] == 'logged_out'])

@@ -871,3 +871,41 @@ def admin_team_exceptions(current_user):
     
     return jsonify(result[0]), result[1]
 
+
+@admin_bp.route('/late-arrivals', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def admin_late_arrivals(current_user):
+    """
+    Get only late-arrival exceptions for admin/team views.
+
+    Query Params:
+        status: pending, approved, rejected, not_informed (optional)
+    """
+    status = request.args.get('status')
+    result = get_team_exceptions(
+        current_user['emp_code'],
+        status,
+        'late_arrival'
+    )
+    return jsonify(result[0]), result[1]
+
+
+@admin_bp.route('/early-leaves', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def admin_early_leaves(current_user):
+    """
+    Get only early-leave exceptions for admin/team views.
+
+    Query Params:
+        status: pending, approved, rejected, not_requested (optional)
+    """
+    status = request.args.get('status')
+    result = get_team_exceptions(
+        current_user['emp_code'],
+        status,
+        'early_leave'
+    )
+    return jsonify(result[0]), result[1]
+

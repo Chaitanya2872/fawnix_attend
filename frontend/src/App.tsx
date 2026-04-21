@@ -2242,46 +2242,61 @@ function App() {
               {createEmployeeStatus ? <p className="form-note">{createEmployeeStatus}</p> : null}
             </div>
           ) : null}
-          <div className="data-card">
-            {filteredEmployees.map((employee) => (
-              <div key={employee.emp_code} className="data-row employee-row">
-                <div>
-                  <strong>{employee.emp_full_name || employee.emp_code}</strong>
-                  <span>{employee.emp_code}</span>
-                </div>
-                <div>
-                  <strong>{employee.emp_designation || employee.role || '--'}</strong>
-                  <span>Designation</span>
-                </div>
-                <div>
-                  <strong>{formatEmployeeGrade(employee.emp_grade)}</strong>
-                  <span>Grade</span>
-                </div>
-                <div>
-                  <strong>{employee.emp_department || '--'}</strong>
-                  <span>Department</span>
-                </div>
-                <div>
-                  <strong className="employee-email">{employee.emp_email || '--'}</strong>
-                  <span>{employee.emp_contact || 'Contact unavailable'}</span>
-                </div>
-                <div>
-                  <strong>{employee.manager_name || employee.emp_manager || '--'}</strong>
-                  <span>{employee.manager_email || employee.manager_code || 'Manager'}</span>
-                </div>
-                <div>
-                  <span className="table-pill">{employee.is_active ? 'Active' : 'Inactive'}</span>
-                </div>
-                <div className="employee-actions">
-                  <button className="action-btn edit-btn" onClick={() => handleEditEmployee(employee)} title="Edit employee">
-                    ✏️ Edit
-                  </button>
-                  <button className="action-btn delete-btn" onClick={() => handleDeleteEmployee(employee.emp_code, employee.emp_full_name || employee.emp_code)} title="Delete employee">
-                    🗑️ Delete
-                  </button>
-                </div>
+          <div className="table-card">
+            {filteredEmployees.length ? (
+              <div className="table-scroll">
+                <table className="dashboard-table employee-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Designation</th>
+                      <th>Grade</th>
+                      <th>Department</th>
+                      <th>Contact</th>
+                      <th>Manager</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredEmployees.map((employee) => (
+                      <tr key={employee.emp_code}>
+                        <td>
+                          <strong>{employee.emp_full_name || employee.emp_code}</strong>
+                          <span className="table-meta">{employee.emp_code}</span>
+                        </td>
+                        <td>{employee.emp_designation || employee.role || '--'}</td>
+                        <td>{formatEmployeeGrade(employee.emp_grade)}</td>
+                        <td>{employee.emp_department || '--'}</td>
+                        <td>
+                          <strong className="employee-email">{employee.emp_email || '--'}</strong>
+                          <span className="table-meta">{employee.emp_contact || 'Contact unavailable'}</span>
+                        </td>
+                        <td>
+                          <strong>{employee.manager_name || employee.emp_manager || '--'}</strong>
+                          <span className="table-meta">{employee.manager_email || employee.manager_code || 'Manager'}</span>
+                        </td>
+                        <td>
+                          <span className="table-pill">{employee.is_active ? 'Active' : 'Inactive'}</span>
+                        </td>
+                        <td>
+                          <div className="table-actions">
+                            <button className="action-btn edit-btn" onClick={() => handleEditEmployee(employee)} title="Edit employee">
+                              Edit
+                            </button>
+                            <button className="action-btn delete-btn" onClick={() => handleDeleteEmployee(employee.emp_code, employee.emp_full_name || employee.emp_code)} title="Delete employee">
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ))}
+            ) : (
+              <div className="empty-state">No employees match this search.</div>
+            )}
           </div>
         </>
       )
@@ -2473,31 +2488,45 @@ function App() {
                 </button>
           </div>
           {attendanceView === 'attendance' ? (
-          <div className="data-card">
+          <div className="table-card">
             {filteredAttendanceRows.length ? (
-              filteredAttendanceRows.map((row, index) => (
-              <div key={`${row.id || row.employee_email || index}`} className="data-row attendance-row">
-                <div>
-                  <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
-                  <span className="muted-email">
-                    {[row.emp_designation || row.employee_email || '--', row.attendance_type || 'office'].join(' • ')}
-                  </span>
-                </div>
-                <div>
-                  <strong>{formatDateTime(row.login_time)}</strong>
-                  <span>{row.login_location || 'Login location unavailable'}</span>
-                  <span>{row.login_address || 'Login address unavailable'}</span>
-                </div>
-                <div>
-                  <strong>{formatDateTime(row.logout_time)}</strong>
-                  <span>{row.logout_location || 'Logout location unavailable'}</span>
-                  <span>{row.logout_address || 'Logout address unavailable'}</span>
-                </div>
-                <div>
-                  <span className="table-pill accent">{row.status || 'Unknown'}</span>
-                </div>
+              <div className="table-scroll">
+                <table className="dashboard-table attendance-table">
+                  <thead>
+                    <tr>
+                      <th>Employee</th>
+                      <th>Clock In</th>
+                      <th>Clock Out</th>
+                      <th>Type</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAttendanceRows.map((row, index) => (
+                      <tr key={`${row.id || row.employee_email || index}`}>
+                        <td>
+                          <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
+                          <span className="table-meta">{row.emp_designation || row.employee_email || '--'}</span>
+                        </td>
+                        <td>
+                          <strong>{formatDateTime(row.login_time)}</strong>
+                          <span className="table-meta">{row.login_location || 'Login location unavailable'}</span>
+                          <span className="table-meta">{row.login_address || 'Login address unavailable'}</span>
+                        </td>
+                        <td>
+                          <strong>{formatDateTime(row.logout_time)}</strong>
+                          <span className="table-meta">{row.logout_location || 'Logout location unavailable'}</span>
+                          <span className="table-meta">{row.logout_address || 'Logout address unavailable'}</span>
+                        </td>
+                        <td>{row.attendance_type || 'office'}</td>
+                        <td>
+                          <span className="table-pill accent">{row.status || 'Unknown'}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              ))
             ) : (
               <div className="empty-state">
                 {attendanceSearch.trim()
@@ -2507,54 +2536,80 @@ function App() {
             )}
           </div>
           ) : attendanceView === 'leaves' ? (
-            <div className="data-card">
+            <div className="table-card">
               {selectedDateLeaves.length ? (
-                selectedDateLeaves.map((row, index) => (
-                  <div key={`${row.id || row.emp_code || index}`} className="data-row">
-                    <div>
-                      <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
-                      <span>{row.emp_designation || formatLeaveTypeLabel(row) || 'Leave Request'}</span>
-                    </div>
-                    <div>
-                      <strong>{formatLeaveTypeLabel(row)}</strong>
-                      <span>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</span>
-                    </div>
-                    <div>
-                      <span className="table-pill">{row.status || 'Unknown'}</span>
-                    </div>
-                  </div>
-                ))
+                <div className="table-scroll">
+                  <table className="dashboard-table leave-table">
+                    <thead>
+                      <tr>
+                        <th>Employee</th>
+                        <th>Leave Type</th>
+                        <th>Dates</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedDateLeaves.map((row, index) => (
+                        <tr key={`${row.id || row.emp_code || index}`}>
+                          <td>
+                            <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
+                            <span className="table-meta">{row.emp_designation || formatLeaveTypeLabel(row) || 'Leave Request'}</span>
+                          </td>
+                          <td>{formatLeaveTypeLabel(row)}</td>
+                          <td>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</td>
+                          <td>
+                            <span className="table-pill">{row.status || 'Unknown'}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <div className="empty-state">No leaves found for the selected date.</div>
               )}
             </div>
           ) : (
-            <div className="data-card">
+            <div className="table-card">
               {exceptionRows.length ? (
-                exceptionRows.map((row, index) => (
-                  <div key={`${row.id || row.emp_code || index}`} className="data-row exception-row">
-                    <div>
-                      <strong>{row.emp_name || row.emp_code || 'Unknown employee'}</strong>
-                      <span>
-                        {attendanceView === 'late-arrivals'
-                          ? `Late by ${row.late_by_minutes ?? '--'} min`
-                          : `Early by ${row.early_by_minutes ?? '--'} min`}
-                      </span>
-                    </div>
-                    <div>
-                      <strong>
-                        {attendanceView === 'late-arrivals'
-                          ? row.exception_time || row.actual_login_time || '--'
-                          : row.planned_leave_time || row.actual_logout_time || '--'}
-                      </strong>
-                      <span>{row.reason || 'No reason provided'}</span>
-                    </div>
-                    <div>
-                      <span className="table-pill">{row.status || 'Pending'}</span>
-                      <span>{formatDateTime(row.requested_at || row.exception_date)}</span>
-                    </div>
-                  </div>
-                ))
+                <div className="table-scroll">
+                  <table className="dashboard-table exception-table">
+                    <thead>
+                      <tr>
+                        <th>Employee</th>
+                        <th>{attendanceView === 'late-arrivals' ? 'Late By' : 'Early By'}</th>
+                        <th>{attendanceView === 'late-arrivals' ? 'Login Time' : 'Leave Time'}</th>
+                        <th>Reason</th>
+                        <th>Status</th>
+                        <th>Requested</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {exceptionRows.map((row, index) => (
+                        <tr key={`${row.id || row.emp_code || index}`}>
+                          <td>
+                            <strong>{row.emp_name || row.emp_code || 'Unknown employee'}</strong>
+                          </td>
+                          <td>
+                            {attendanceView === 'late-arrivals'
+                              ? `${row.late_by_minutes ?? '--'} min`
+                              : `${row.early_by_minutes ?? '--'} min`}
+                          </td>
+                          <td>
+                            {attendanceView === 'late-arrivals'
+                              ? row.exception_time || row.actual_login_time || '--'
+                              : row.planned_leave_time || row.actual_logout_time || '--'}
+                          </td>
+                          <td>{row.reason || 'No reason provided'}</td>
+                          <td>
+                            <span className="table-pill">{row.status || 'Pending'}</span>
+                          </td>
+                          <td>{formatDateTime(row.requested_at || row.exception_date)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <div className="empty-state">No {attendanceView === 'late-arrivals' ? 'late arrival' : 'early leave'} requests found for the selected date.</div>
               )}
@@ -2576,21 +2631,41 @@ function App() {
               Refresh
             </button>
           </div>
-          <div className="data-card">
-            {leaveRows.map((row, index) => (
-              <div key={`${row.id || row.emp_code || index}`} className="data-row">
-                <div>
-                  <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
-                  <span>{formatLeaveTypeLabel(row)}</span>
-                  <span>Approver: {getLeaveApproverLabel(row, employees)}</span>
-                  <span>Reason: {getLeaveReasonLabel(row)}</span>
-                </div>
-                <div>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</div>
-                <div>
-                  <span className="table-pill">{row.status || 'Unknown'}</span>
-                </div>
+          <div className="table-card">
+            {leaveRows.length ? (
+              <div className="table-scroll">
+                <table className="dashboard-table leave-table">
+                  <thead>
+                    <tr>
+                      <th>Employee</th>
+                      <th>Leave Type</th>
+                      <th>Dates</th>
+                      <th>Approver</th>
+                      <th>Reason</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leaveRows.map((row, index) => (
+                      <tr key={`${row.id || row.emp_code || index}`}>
+                        <td>
+                          <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
+                        </td>
+                        <td>{formatLeaveTypeLabel(row)}</td>
+                        <td>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</td>
+                        <td>{getLeaveApproverLabel(row, employees)}</td>
+                        <td>{getLeaveReasonLabel(row)}</td>
+                        <td>
+                          <span className="table-pill">{row.status || 'Unknown'}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ))}
+            ) : (
+              <div className="empty-state">No leave requests found.</div>
+            )}
           </div>
         </>
       )
@@ -2616,20 +2691,34 @@ function App() {
               </button>
             </div>
           </div>
-          <div className="data-card">
+          <div className="table-card">
             {filteredActivities.length ? (
-              filteredActivities.map((row, index) => (
-                <div key={`${row.id || row.employee_email || index}`} className="data-row">
-                  <div>
-                    <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
-                    <span>{row.activity_type || 'Activity'}</span>
-                  </div>
-                  <div>{formatDateTime(row.start_time)}</div>
-                  <div>
-                    <span className="table-pill accent">{row.status || 'Unknown'}</span>
-                  </div>
-                </div>
-              ))
+              <div className="table-scroll">
+                <table className="dashboard-table activity-table">
+                  <thead>
+                    <tr>
+                      <th>Employee</th>
+                      <th>Activity</th>
+                      <th>Started</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredActivities.map((row, index) => (
+                      <tr key={`${row.id || row.employee_email || index}`}>
+                        <td>
+                          <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
+                        </td>
+                        <td>{row.activity_type || 'Activity'}</td>
+                        <td>{formatDateTime(row.start_time)}</td>
+                        <td>
+                          <span className="table-pill accent">{row.status || 'Unknown'}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : (
               <div className="empty-state">
                 {showTodayActivities ? "No activities found for today." : "No activities found."}
@@ -2785,55 +2874,61 @@ function App() {
             Refresh
           </button>
         </div>
-        <div className="data-card">
+        <div className="table-card">
           {fieldVisitRows.length ? (
-            fieldVisitRows.map((row) => {
-              const showRouteDetails = row.isCompleted
-              return (
-                <div key={row.activityId} className="data-row">
-                  <div>
-                    <strong>{row.employee}</strong>
-                    <span>{row.visitType}</span>
-                  </div>
-                  <div className="location-cell">
-                    <div className="location-details">
-                      <div>
-                        <span className="location-label">Start Location</span>
-                        <strong className="location-name">{row.startName || 'Start location unavailable'}</strong>
-                        <span className="location-address">{row.startAddress || row.location || '--'}</span>
-                      </div>
-                      {showRouteDetails ? (
-                        <div>
-                          <span className="location-label">End Location</span>
-                          <strong className="location-name">{row.endName || 'End location unavailable'}</strong>
-                          <span className="location-address">{row.endAddress || '--'}</span>
-                        </div>
-                      ) : null}
-                      {showRouteDetails ? (
-                        <div>
-                          <span className="location-label">Distance</span>
-                          <span>{formatDistanceKm(row.distanceKm)}</span>
-                        </div>
-                      ) : null}
-                    </div>
-                    <button
-                      className="map-button"
-                      onClick={() => openMapForFieldVisit(row)}
-                      aria-label="Open map"
-                      title="Open map"
-                      type="button"
-                    >
-                      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                        <path d="M12 2c-3.6 0-6.5 2.9-6.5 6.5 0 4.7 6.5 12 6.5 12s6.5-7.3 6.5-12C18.5 4.9 15.6 2 12 2zm0 9.2c-1.5 0-2.7-1.2-2.7-2.7S10.5 5.8 12 5.8s2.7 1.2 2.7 2.7S13.5 11.2 12 11.2z" />
-                      </svg>
-                    </button>
-                  </div>
-                  <div>
-                    <span className="table-pill accent">{row.status}</span>
-                  </div>
-                </div>
-              )
-            })
+            <div className="table-scroll">
+              <table className="dashboard-table field-visit-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Visit Type</th>
+                    <th>Start Location</th>
+                    <th>End Location</th>
+                    <th>Distance</th>
+                    <th>Status</th>
+                    <th>Map</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fieldVisitRows.map((row) => {
+                    const showRouteDetails = row.isCompleted
+                    return (
+                      <tr key={row.activityId}>
+                        <td>
+                          <strong>{row.employee}</strong>
+                        </td>
+                        <td>{row.visitType}</td>
+                        <td>
+                          <strong>{row.startName || 'Start location unavailable'}</strong>
+                          <span className="table-meta">{row.startAddress || row.location || '--'}</span>
+                        </td>
+                        <td>
+                          <strong>{showRouteDetails ? row.endName || 'End location unavailable' : '--'}</strong>
+                          <span className="table-meta">{showRouteDetails ? row.endAddress || '--' : 'Visit in progress'}</span>
+                        </td>
+                        <td>{showRouteDetails ? formatDistanceKm(row.distanceKm) : '--'}</td>
+                        <td>
+                          <span className="table-pill accent">{row.status}</span>
+                        </td>
+                        <td>
+                          <button
+                            className="map-button"
+                            onClick={() => openMapForFieldVisit(row)}
+                            aria-label="Open map"
+                            title="Open map"
+                            type="button"
+                          >
+                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                              <path d="M12 2c-3.6 0-6.5 2.9-6.5 6.5 0 4.7 6.5 12 6.5 12s6.5-7.3 6.5-12C18.5 4.9 15.6 2 12 2zm0 9.2c-1.5 0-2.7-1.2-2.7-2.7S10.5 5.8 12 5.8s2.7 1.2 2.7 2.7S13.5 11.2 12 11.2z" />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="empty-state">No field visits found in the latest activity feed.</div>
           )}

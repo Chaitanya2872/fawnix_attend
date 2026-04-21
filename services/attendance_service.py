@@ -10,7 +10,7 @@ NEW FEATURES:
   (holidays, Sundays, 2nd/4th Saturdays, and 1st/3rd/5th Saturdays)
 """
 
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, time
 import json
 from database.connection import get_db_connection
 from services.attendance_constants import (
@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 VALID_ATTENDANCE_TYPES = {"office", "site"}
+WORKING_SATURDAY_EARLY_LEAVE_BYPASS_TIME = time(13, 30)
 
 
 def _normalize_attendance_type(attendance_type: str | None) -> str:
@@ -567,6 +568,14 @@ def clock_out(emp_email: str, lat: str, lon: str):
 
                     if is_nonworking_day:
                         logger.info(f"✅ Non-working day ({day_type}) - early clock-out allowed for {emp_email}")
+                    elif (
+                        day_type == 'working_saturday'
+                        and current_time >= WORKING_SATURDAY_EARLY_LEAVE_BYPASS_TIME
+                    ):
+                        logger.info(
+                            f"{wd.strftime('%A')} ({day_type}) - early clock-out allowed without early leave submission after "
+                            f"{WORKING_SATURDAY_EARLY_LEAVE_BYPASS_TIME.strftime('%H:%M')} for {emp_email}"
+                        )
                     elif is_compoff_session:
                         logger.info(f"✅ Comp-off session - early clock-out allowed for {emp_email}")
                     elif is_flexible_grade_employee(emp_code):

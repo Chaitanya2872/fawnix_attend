@@ -1,8 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
   color-scheme: light;
-  font-family: 'Poppins', 'Segoe UI', sans-serif;
+  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
   background: #f7f4ef;
@@ -37,10 +37,7 @@ a {
 
 .policy-page {
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(31, 167, 164, 0.14), transparent 30%),
-    radial-gradient(circle at top right, rgba(255, 173, 70, 0.18), transparent 28%),
-    linear-gradient(180deg, #fbf7f0, #f4f1ea 46%, #f8f5ef);
+  background: #f5f1e8;
 }
 
 .policy-hero {
@@ -123,9 +120,7 @@ a {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
-  background:
-    radial-gradient(circle at top left, rgba(31, 167, 164, 0.12), transparent 28%),
-    linear-gradient(135deg, #f6f1ea, #eef4f3 48%, #f9f7f2);
+  background: #f3efe6;
 }
 
 .sidebar {
@@ -160,7 +155,7 @@ a {
   display: grid;
   gap: 10px;
   padding-top: 8px;
-  background: linear-gradient(180deg, rgba(16, 40, 45, 0), #10282d 40%);
+  background: #10282d;
   z-index: 1;
 }
 
@@ -201,19 +196,19 @@ a {
 }
 
 .sidebar-link.active {
-  background: linear-gradient(135deg, #1fa7a4, #ffad46);
+  background: #dcefe9;
   color: #112c32;
 }
 
 .sidebar-link.logout-link {
-  background: linear-gradient(135deg, #ffad46, #ff6b4a);
+  background: #f6c17a;
   color: #2b160b;
   border: none;
   font-weight: 700;
 }
 
 .sidebar-link.logout-link:hover {
-  background: linear-gradient(135deg, #ffb85f, #ff7a5d);
+  background: #f3b061;
   transform: translateX(4px);
 }
 
@@ -437,9 +432,9 @@ a {
 }
 
 .attendance-tab.active {
-  background: linear-gradient(135deg, #1fa7a4, #7ed9cd);
+  background: #dcefe9;
   color: #0f2e33;
-  border-color: transparent;
+  border-color: #7ebdb2;
 }
 
 .attendance-tab.active span {
@@ -637,15 +632,15 @@ a {
 }
 
 .bar-fill.attendance {
-  background: linear-gradient(90deg, #1fa7a4, #5cd0c2);
+  background: #1fa7a4;
 }
 
 .bar-fill.compoff {
-  background: linear-gradient(90deg, #ffad46, #ff6b4a);
+  background: #ffad46;
 }
 
 .metric-card {
-  background: linear-gradient(180deg, #ffffff, #f3f0ea);
+  background: #ffffff;
   border-radius: 22px;
   padding: 18px 20px;
   border: 1px solid rgba(17, 44, 50, 0.08);
@@ -665,7 +660,7 @@ a {
 
 .metric-button.active {
   border-color: rgba(31, 167, 164, 0.45);
-  background: linear-gradient(180deg, #effaf8, #dff4f1);
+  background: #eef8f5;
 }
 
 .metric-card span {
@@ -691,6 +686,74 @@ a {
 .data-card {
   display: grid;
   gap: 14px;
+}
+
+.table-card {
+  background: #fff;
+  border: 1px solid rgba(17, 44, 50, 0.08);
+  border-radius: 24px;
+  overflow: hidden;
+}
+
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.dashboard-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.dashboard-table thead th {
+  padding: 14px 18px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #58686d;
+  background: #f4f6f4;
+  border-bottom: 1px solid rgba(17, 44, 50, 0.1);
+}
+
+.dashboard-table tbody td {
+  padding: 16px 18px;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(17, 44, 50, 0.08);
+  color: #112c32;
+  font-size: 14px;
+}
+
+.dashboard-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.dashboard-table strong {
+  display: block;
+  color: #112c32;
+  font-size: 14px;
+}
+
+.table-meta {
+  display: block;
+  margin-top: 4px;
+  color: #607076;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.table-card .empty-state {
+  margin: 16px;
 }
 
 .data-row {
@@ -1109,7 +1172,7 @@ a {
 
 .alert-employee-card.selected {
   border-color: rgba(31, 167, 164, 0.45);
-  background: linear-gradient(180deg, #f5fffd, #ebf8f6);
+  background: #eef8f5;
 }
 
 .alert-employee-card input {
@@ -1163,9 +1226,7 @@ a {
   padding: 32px 6vw 90px;
   position: relative;
   overflow: hidden;
-  background: radial-gradient(circle at 10% 10%, rgba(36, 177, 174, 0.25), transparent 55%),
-    radial-gradient(circle at 80% 20%, rgba(255, 173, 70, 0.22), transparent 50%),
-    linear-gradient(120deg, #fef8f1, #f4f0ea 48%, #f6f4f0);
+  background: #f5f1e8;
 }
 
 .hero::after {
@@ -1173,7 +1234,7 @@ a {
   position: absolute;
   inset: auto -10% -35% -10%;
   height: 320px;
-  background: linear-gradient(90deg, rgba(31, 42, 46, 0.08), rgba(31, 42, 46, 0));
+  background: rgba(17, 44, 50, 0.05);
   transform: rotate(-6deg);
   z-index: 0;
 }
@@ -1197,10 +1258,10 @@ a {
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #112c32, #1fa7a4);
+  background: #112c32;
   display: inline-block;
   position: relative;
-  box-shadow: 0 8px 20px rgba(31, 167, 164, 0.25);
+  box-shadow: 0 8px 20px rgba(17, 44, 50, 0.16);
 }
 
 .brand-name {
@@ -1411,7 +1472,7 @@ a {
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
 }
 
 .employee-row .action-btn {
@@ -1561,7 +1622,7 @@ a {
   border-radius: 8px;
   font-size: 14px;
   color: #112c32;
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   transition: all 0.2s ease;
 }
 
@@ -1608,7 +1669,7 @@ a {
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -1821,6 +1882,10 @@ a {
 
   .data-row {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-table {
+    min-width: 640px;
   }
 
   .map-dialog {

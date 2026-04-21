@@ -244,6 +244,27 @@ type AttendanceRow = {
   logout_address?: string
   working_hours?: number
   status?: string
+  shift_end_time?: string
+  late_arrival?: {
+    is_late?: boolean
+    informed?: boolean
+    status?: string | null
+    planned_arrival_time?: string | null
+    actual_login_time?: string | null
+    late_by_minutes?: number | null
+    reason?: string | null
+    requested_at?: string | null
+  } | null
+  early_leave?: {
+    is_early_departure?: boolean
+    requested?: boolean
+    status?: string | null
+    planned_leave_time?: string | null
+    actual_logout_time?: string | null
+    early_by_minutes?: number | null
+    reason?: string | null
+    requested_at?: string | null
+  } | null
 }
 
 type LeaveRow = {
@@ -428,6 +449,13 @@ function formatDistanceKm(value?: number | null) {
     return '--'
   }
   return `${value.toFixed(2)} km`
+}
+
+function formatWorkingHours(value?: number) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '--'
+  }
+  return `${value.toFixed(2)} h`
 }
 
 function formatCoords(value?: { lat: number; lon: number } | null) {
@@ -1943,6 +1971,9 @@ function App() {
   )
   const lateArrivalsFromAttendance = firstClockInRows
     .filter((row) => {
+      if (row.late_arrival?.is_late || row.late_arrival?.informed) {
+        return true
+      }
       if (!row.login_time) {
         return false
       }
@@ -1960,16 +1991,19 @@ function App() {
       )
       const employee =
         row.employee_email ? employeeByEmail.get(row.employee_email.toLowerCase()) : undefined
+      const lateArrival = row.late_arrival
       return {
+        id: row.id,
         emp_code: employee?.emp_code,
         emp_name: row.employee_name || employee?.emp_full_name || row.employee_email,
         exception_type: 'late_arrival',
         exception_date: selectedAttendanceDate,
-        actual_login_time: row.login_time,
-        late_by_minutes: lateByMinutes,
-        reason: undefined,
-        status: 'not_informed',
-        requested_at: row.login_time
+        actual_login_time: lateArrival?.actual_login_time || row.login_time,
+        exception_time: lateArrival?.planned_arrival_time || undefined,
+        late_by_minutes: lateArrival?.late_by_minutes ?? lateByMinutes,
+        reason: lateArrival?.reason || undefined,
+        status: lateArrival?.status || 'not_informed',
+        requested_at: lateArrival?.requested_at || row.login_time
       } as AttendanceExceptionRow
     })
 
@@ -2000,14 +2034,77 @@ function App() {
     })
 
     return Array.from(merged.values()).sort((left, right) => {
+      const leftInformed = (left.status || '').toLowerCase() !== 'not_informed'
+      const rightInformed = (right.status || '').toLowerCase() !== 'not_informed'
+      if (leftInformed !== rightInformed) {
+        return leftInformed ? -1 : 1
+      }
       const leftTime = getSortTime(left)
       const rightTime = getSortTime(right)
       return leftTime - rightTime
     })
   })()
-  const selectedDateEarlyLeaves = attendanceExceptions.filter(
+  const exceptionEarlyLeaves = attendanceExceptions.filter(
     (item) => item.exception_type === 'early_leave' && isSameDate(getExceptionDateValue(item), selectedAttendanceDate)
   )
+  const earlyLeavesFromAttendance = selectedDateAttendanceRows
+    .filter((row) => {
+      return Boolean(row.early_leave?.is_early_departure || row.early_leave?.requested)
+    })
+    .map((row) => {
+      const employee =
+        row.employee_email ? employeeByEmail.get(row.employee_email.toLowerCase()) : undefined
+      const earlyLeave = row.early_leave
+      return {
+        id: row.id,
+        emp_code: employee?.emp_code,
+        emp_name: row.employee_name || employee?.emp_full_name || row.employee_email,
+        exception_type: 'early_leave',
+        exception_date: selectedAttendanceDate,
+        planned_leave_time: earlyLeave?.planned_leave_time || undefined,
+        actual_logout_time: earlyLeave?.actual_logout_time || row.logout_time,
+        early_by_minutes: earlyLeave?.early_by_minutes ?? undefined,
+        reason: earlyLeave?.reason || undefined,
+        status: earlyLeave?.status || (earlyLeave?.requested ? 'pending' : 'not_requested'),
+        requested_at: earlyLeave?.requested_at || row.logout_time
+      } as AttendanceExceptionRow
+    })
+  const selectedDateEarlyLeaves = (() => {
+    const merged = new Map<string, AttendanceExceptionRow>()
+    const getKey = (row: AttendanceExceptionRow) => {
+      const emailFromCode = row.emp_code ? employeeEmailByCode.get(row.emp_code) : undefined
+      const rawKey =
+        emailFromCode ||
+        row.emp_code ||
+        row.emp_name ||
+        row.actual_logout_time ||
+        row.planned_leave_time ||
+        row.requested_at ||
+        ''
+      return rawKey.toString().toLowerCase()
+    }
+
+    exceptionEarlyLeaves.forEach((row) => {
+      merged.set(getKey(row), row)
+    })
+    earlyLeavesFromAttendance.forEach((row) => {
+      const key = getKey(row)
+      if (!merged.has(key)) {
+        merged.set(key, row)
+      }
+    })
+
+    return Array.from(merged.values()).sort((left, right) => {
+      const leftRequested = !['not_requested', ''].includes((left.status || '').toLowerCase())
+      const rightRequested = !['not_requested', ''].includes((right.status || '').toLowerCase())
+      if (leftRequested !== rightRequested) {
+        return leftRequested ? -1 : 1
+      }
+      const leftTime = new Date(left.requested_at || left.actual_logout_time || left.exception_date || '').getTime() || 0
+      const rightTime = new Date(right.requested_at || right.actual_logout_time || right.exception_date || '').getTime() || 0
+      return leftTime - rightTime
+    })
+  })()
   const lateLogins = selectedDateLateArrivals.length
   const onTimeLogins = Math.max(firstClockInRows.length - lateLogins, 0)
   const selectedDateLeaves = leaveRows
@@ -2402,6 +2499,7 @@ function App() {
                       <th>Employee</th>
                       <th>Clock In</th>
                       <th>Clock Out</th>
+                      <th>Working Hours</th>
                       <th>Type</th>
                       <th>Status</th>
                     </tr>
@@ -2423,6 +2521,7 @@ function App() {
                           <span className="table-meta">{row.logout_location || 'Logout location unavailable'}</span>
                           <span className="table-meta">{row.logout_address || 'Logout address unavailable'}</span>
                         </td>
+                        <td>{formatWorkingHours(row.working_hours)}</td>
                         <td>{row.attendance_type || 'office'}</td>
                         <td>
                           <span className="table-pill accent">{row.status || 'Unknown'}</span>
@@ -2484,8 +2583,8 @@ function App() {
                         <th>Employee</th>
                         <th>{attendanceView === 'late-arrivals' ? 'Late By' : 'Early By'}</th>
                         <th>{attendanceView === 'late-arrivals' ? 'Login Time' : 'Leave Time'}</th>
+                        <th>{attendanceView === 'late-arrivals' ? 'Informed' : 'Status'}</th>
                         <th>Reason</th>
-                        <th>Status</th>
                         <th>Requested</th>
                       </tr>
                     </thead>
@@ -2505,10 +2604,16 @@ function App() {
                               ? row.exception_time || row.actual_login_time || '--'
                               : row.planned_leave_time || row.actual_logout_time || '--'}
                           </td>
-                          <td>{row.reason || 'No reason provided'}</td>
                           <td>
-                            <span className="table-pill">{row.status || 'Pending'}</span>
+                            {attendanceView === 'late-arrivals' ? (
+                              <span className={`table-pill ${(row.status || '').toLowerCase() === 'not_informed' ? '' : 'accent'}`}>
+                                {(row.status || '').toLowerCase() === 'not_informed' ? 'Not informed' : 'Informed'}
+                              </span>
+                            ) : (
+                              <span className="table-pill">{row.status || 'Pending'}</span>
+                            )}
                           </td>
+                          <td>{row.reason || 'No reason provided'}</td>
                           <td>{formatDateTime(row.requested_at || row.exception_date)}</td>
                         </tr>
                       ))}

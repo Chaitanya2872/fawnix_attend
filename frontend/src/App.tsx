@@ -196,10 +196,10 @@ const steps = [
 const sidebarItems = [
   { id: 'employees', label: 'Employees List' },
   { id: 'attendance', label: 'Todays Activity' },
+  { id: 'reports', label: 'Reports & Analytics' },
   { id: 'leaves', label: 'Leaves' },
   { id: 'activities', label: 'Activities' },
-  { id: 'field-visits', label: 'Field Visits' },
-  { id: 'alerts', label: 'Alerts' }
+  { id: 'field-visits', label: 'Field Visits' }
 ] as const
 
 type SidebarId = (typeof sidebarItems)[number]['id']
@@ -352,8 +352,6 @@ type MapTrackingPoint = {
   trackedAt?: string
   trackingType?: string
 }
-
-type AlertType = 'attendance_reminder' | 'lunch_reminder'
 
 const ACCESS_TOKEN_KEY = 'fawnix_admin_access_token'
 const REFRESH_TOKEN_KEY = 'fawnix_admin_refresh_token'
@@ -634,6 +632,98 @@ function normalizePath(pathname: string) {
   return trimmed || '/'
 }
 
+function buildWeeklyAttendanceTrend(rows: AttendanceRow[], endDateValue: string) {
+  const endDate = new Date(`${endDateValue}T00:00:00`)
+  if (Number.isNaN(endDate.getTime())) {
+    return []
+  }
+
+  const uniqueLogins = new Set<string>()
+  rows.forEach((row) => {
+    if (!row.login_time) {
+      return
+    }
+    const loginDate = new Date(row.login_time)
+    if (Number.isNaN(loginDate.getTime())) {
+      return
+    }
+    const dateKey = toDateInputValue(loginDate)
+    const employeeKey = (row.employee_email || row.employee_name || row.id || '').toString().toLowerCase()
+    uniqueLogins.add(`${dateKey}-${employeeKey}`)
+  })
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const currentDate = new Date(endDate)
+    currentDate.setDate(endDate.getDate() - (6 - index))
+    const dateKey = toDateInputValue(currentDate)
+    let count = 0
+
+    uniqueLogins.forEach((entry) => {
+      if (entry.startsWith(`${dateKey}-`)) {
+        count += 1
+      }
+    })
+
+    return {
+      dateKey,
+      count,
+      label: currentDate.toLocaleDateString('en-IN', { weekday: 'short' })
+    }
+  })
+}
+
+function buildAttendanceEfficiencyScores(
+  employees: EmployeeRow[],
+  rows: AttendanceRow[],
+  endDateValue: string
+) {
+  const weeklyTrend = buildWeeklyAttendanceTrend(rows, endDateValue)
+  const rangeDays = Math.max(weeklyTrend.length, 1)
+  const allowedDates = new Set(weeklyTrend.map((item) => item.dateKey))
+  const attendanceByEmployee = new Map<string, Set<string>>()
+
+  rows.forEach((row) => {
+    if (!row.login_time) {
+      return
+    }
+    const loginDate = new Date(row.login_time)
+    if (Number.isNaN(loginDate.getTime())) {
+      return
+    }
+    const dateKey = toDateInputValue(loginDate)
+    if (!allowedDates.has(dateKey)) {
+      return
+    }
+    const employeeKey = (row.employee_email || '').toLowerCase()
+    if (!employeeKey) {
+      return
+    }
+    if (!attendanceByEmployee.has(employeeKey)) {
+      attendanceByEmployee.set(employeeKey, new Set<string>())
+    }
+    attendanceByEmployee.get(employeeKey)!.add(dateKey)
+  })
+
+  return employees
+    .map((employee) => {
+      const employeeKey = (employee.emp_email || '').toLowerCase()
+      const presentDays = employeeKey ? attendanceByEmployee.get(employeeKey)?.size || 0 : 0
+      const score = Math.round((presentDays / rangeDays) * 100)
+      return {
+        empCode: employee.emp_code || '',
+        name: employee.emp_full_name || employee.emp_code || 'Unknown',
+        score,
+        presentDays
+      }
+    })
+    .sort((left, right) => {
+      if (right.score !== left.score) {
+        return right.score - left.score
+      }
+      return left.name.localeCompare(right.name)
+    })
+}
+
 function PrivacyPolicyPage() {
   return (
     <div className="policy-page">
@@ -791,15 +881,8 @@ function App() {
   const [showAddEmployee, setShowAddEmployee] = useState(false)
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
   const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
-  const [alertType, setAlertType] = useState<AlertType>('attendance_reminder')
-  const [alertDate, setAlertDate] = useState(() => toDateInputValue(new Date()))
-  const [alertEmployeeSearch, setAlertEmployeeSearch] = useState('')
-  const [selectedAlertEmployees, setSelectedAlertEmployees] = useState<string[]>([])
   const [alertEligibleEmpCodes, setAlertEligibleEmpCodes] = useState<string[]>([])
-  const [showOnlyEligibleAlertEmployees, setShowOnlyEligibleAlertEmployees] = useState(false)
   const [alertCandidatesLoading, setAlertCandidatesLoading] = useState(false)
-  const [alertTriggerLoading, setAlertTriggerLoading] = useState(false)
-  const [alertTriggerStatus, setAlertTriggerStatus] = useState('')
   const [newEmployee, setNewEmployee] = useState({
     emp_code: '',
     emp_full_name: '',
@@ -847,10 +930,10 @@ function App() {
     }
 
     void loadDashboard(accessToken)
-  }, [accessToken, showDashboard, showAdminLogin, attendanceDateFilter])
+  }, [accessToken, showDashboard, showAdminLogin])
 
   useEffect(() => {
-    if (!accessToken || !showDashboard || showAdminLogin || activePanel !== 'alerts') {
+    if (!accessToken || !showDashboard || showAdminLogin || activePanel !== 'reports') {
       return
     }
 
@@ -861,8 +944,8 @@ function App() {
 
       try {
         const params = new URLSearchParams({
-          notification_type: alertType,
-          target_date: alertDate
+          notification_type: 'attendance_reminder',
+          target_date: attendanceDateFilter || toDateInputValue(new Date())
         })
         const response = await apiRequest(`/api/admin/scheduled-notifications/candidates?${params.toString()}`, {}, accessToken)
         const nextCodes = Array.isArray(response?.data)
@@ -890,7 +973,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [accessToken, showDashboard, showAdminLogin, activePanel, alertType, alertDate])
+  }, [accessToken, showDashboard, showAdminLogin, activePanel, attendanceDateFilter])
 
   const updateTokens = (nextAccessToken: string, nextRefreshToken: string) => {
     setAccessToken(nextAccessToken)
@@ -1064,9 +1147,6 @@ function App() {
     try {
       const attendanceParams = new URLSearchParams()
       attendanceParams.set('page_size', String(attendancePageSize))
-      if (attendanceDateFilter) {
-        attendanceParams.set('date', attendanceDateFilter)
-      }
       const attendancePath = `/api/admin/attendance/history?${attendanceParams.toString()}`
 
       const [employeesResponse, attendanceResponse, leavesResponse, activitiesResponse] = await Promise.all([
@@ -1113,34 +1193,17 @@ function App() {
       )
       setAttendanceRows(attendanceDeduped)
       setAttendanceTotalCount(attendanceCount)
-      setAttendanceShiftMetrics(
-        attendanceDateFilter
-          ? {
-              lateLogins: Number(nextShiftMetrics.late_logins || 0),
-              onTimeLogins: Number(nextShiftMetrics.on_time_logins || 0),
-              loggedOut: Number(nextShiftMetrics.logged_out || 0),
-              lateExceptions: Number(nextShiftMetrics.late_exceptions || 0)
-            }
-          : {
-              lateLogins: 0,
-              onTimeLogins: 0,
-              loggedOut: 0,
-              lateExceptions: 0
-            }
-      )
-      setAttendanceSummary(
-        attendanceDateFilter
-          ? {
-              attendanceCount: Number(nextSummary.attendance_count || attendanceCount),
-              compOffDays: Number(nextSummary.comp_off_days || 0),
-              efficiencyScore: Number(nextSummary.efficiency_score || 0)
-            }
-          : {
-              attendanceCount: 0,
-              compOffDays: 0,
-              efficiencyScore: 0
-            }
-      )
+      setAttendanceShiftMetrics({
+        lateLogins: Number(nextShiftMetrics.late_logins || 0),
+        onTimeLogins: Number(nextShiftMetrics.on_time_logins || 0),
+        loggedOut: Number(nextShiftMetrics.logged_out || 0),
+        lateExceptions: Number(nextShiftMetrics.late_exceptions || 0)
+      })
+      setAttendanceSummary({
+        attendanceCount: Number(nextSummary.attendance_count || attendanceCount),
+        compOffDays: Number(nextSummary.comp_off_days || 0),
+        efficiencyScore: Number(nextSummary.efficiency_score || 0)
+      })
       setLeaveRows(leavesData)
       setActivityRows(activitiesData)
       setAttendanceExceptions(exceptionsData)
@@ -1219,51 +1282,6 @@ function App() {
       }
     } finally {
       setDashboardLoading(false)
-    }
-  }
-
-  const toggleAlertEmployee = (empCode: string) => {
-    setSelectedAlertEmployees((current) =>
-      current.includes(empCode)
-        ? current.filter((value) => value !== empCode)
-        : [...current, empCode]
-    )
-  }
-
-  const handleSelectAllAlertEmployees = (empCodes: string[]) => {
-    setSelectedAlertEmployees(empCodes)
-  }
-
-  const handleClearAlertEmployees = () => {
-    setSelectedAlertEmployees([])
-  }
-
-  const handleTriggerAlert = async () => {
-    setAlertTriggerLoading(true)
-    setAlertTriggerStatus('Triggering alert...')
-
-    try {
-      const response = await apiRequest('/api/admin/scheduled-notifications/trigger', {
-        method: 'POST',
-        body: JSON.stringify({
-          notification_type: alertType,
-          target_date: alertDate,
-          emp_codes: selectedAlertEmployees
-        })
-      })
-
-      const sentCount = Number(response?.sent_count || 0)
-      const candidateCount = Number(response?.total_candidates || 0)
-      const failedCount = Number(response?.failed_count || 0)
-      const message = response?.message || 'Alert triggered.'
-
-      setAlertTriggerStatus(
-        `${message} Sent: ${sentCount}, eligible: ${candidateCount}, failed: ${failedCount}.`
-      )
-    } catch (error) {
-      setAlertTriggerStatus(error instanceof Error ? error.message : 'Failed to trigger alert')
-    } finally {
-      setAlertTriggerLoading(false)
     }
   }
 
@@ -1885,9 +1903,12 @@ function App() {
 
   const selectedAttendanceDate = attendanceDateFilter || toDateInputValue(new Date())
   const todayDateValue = toDateInputValue(new Date())
+  const selectedDateAttendanceRows = attendanceRows.filter((row) =>
+    isSameDate(row.login_time || row.date, selectedAttendanceDate)
+  )
 
   const firstClockInRows = Array.from(
-    attendanceRows.reduce((map, row) => {
+    selectedDateAttendanceRows.reduce((map, row) => {
       const employeeKey = (row.employee_email || row.employee_name || row.id || '').toString().toLowerCase()
       const existingRow = map.get(employeeKey)
       const currentTime = row.login_time ? new Date(row.login_time).getTime() : Number.MAX_SAFE_INTEGER
@@ -2000,6 +2021,19 @@ function App() {
     .sort((left, right) =>
       (left.emp_full_name || left.emp_code || '').localeCompare(right.emp_full_name || right.emp_code || '')
     )
+  const weeklyAttendanceTrend = buildWeeklyAttendanceTrend(attendanceRows, selectedAttendanceDate)
+  const attendanceEfficiencyScores = buildAttendanceEfficiencyScores(employees, attendanceRows, selectedAttendanceDate)
+  const maxWeeklyAttendance = Math.max(...weeklyAttendanceTrend.map((item) => item.count), 1)
+  const weeklyTrendPoints = weeklyAttendanceTrend.map((item, index) => {
+    const x = weeklyAttendanceTrend.length > 1 ? (index / (weeklyAttendanceTrend.length - 1)) * 100 : 50
+    const y = 100 - (item.count / maxWeeklyAttendance) * 100
+    return `${x},${y}`
+  }).join(' ')
+  const missedLoginEmployees = employees
+    .filter((employee) => (employee.emp_code ? alertEligibleEmpCodes.includes(employee.emp_code) : false))
+    .sort((left, right) =>
+      (left.emp_full_name || left.emp_code || '').localeCompare(right.emp_full_name || right.emp_code || '')
+    )
 
   const renderDashboardPanel = () => {
     const attendancePageRows = firstClockInRows
@@ -2040,29 +2074,6 @@ function App() {
     const filteredActivities = showTodayActivities
       ? activityRows.filter((row) => isSameDate(row.start_time, todayDateValue))
       : activityRows
-    const normalizedAlertEmployeeSearch = alertEmployeeSearch.trim().toLowerCase()
-    const eligibleAlertEmpCodeSet = new Set(alertEligibleEmpCodes)
-    const filteredAlertEmployees = employees.filter((employee) => {
-      const matchesSearch = normalizedAlertEmployeeSearch
-        ? [
-            employee.emp_full_name || '',
-            employee.emp_code || '',
-            employee.emp_email || '',
-            employee.emp_designation || '',
-            employee.emp_department || ''
-          ].join(' ').toLowerCase().includes(normalizedAlertEmployeeSearch)
-        : true
-
-      if (!matchesSearch) {
-        return false
-      }
-
-      if (!showOnlyEligibleAlertEmployees) {
-        return true
-      }
-
-      return eligibleAlertEmpCodeSet.has(employee.emp_code)
-    })
 
     if (dashboardLoading) {
       return <div className="empty-state">Loading admin data...</div>
@@ -2091,15 +2102,6 @@ function App() {
             <div className="employee-actions">
               <button className="ghost dashboard-button" onClick={() => setShowAddEmployee((current) => !current)}>
                 {showAddEmployee ? 'Close Form' : 'Add Employee'}
-              </button>
-              <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('csv')}>
-                Download CSV
-              </button>
-              <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('pdf')}>
-                Download PDF
-              </button>
-              <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('xlsx')}>
-                Download XLSX
               </button>
               <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                 Refresh
@@ -2362,6 +2364,7 @@ function App() {
                   <div className="attendance-filter attendance-filter-date">
                     <label htmlFor="attendance-date">Date</label>
                     <input
+                      className="modern-date-input"
                       id="attendance-date"
                       type="date"
                       value={attendanceDateFilter}
@@ -2381,111 +2384,13 @@ function App() {
                   <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                     Refresh
                   </button>
-                  <div className="attendance-filter attendance-filter-compact">
-                    <label htmlFor="attendance-month">Month</label>
-                    <select
-                      id="attendance-month"
-                      value={attendanceReportMonth}
-                      onChange={(event) => setAttendanceReportMonth(event.target.value)}
-                    >
-                      {[
-                        '01',
-                        '02',
-                        '03',
-                        '04',
-                        '05',
-                        '06',
-                        '07',
-                        '08',
-                        '09',
-                        '10',
-                        '11',
-                        '12'
-                      ].map((month, index) => (
-                        <option key={month} value={index + 1}>
-                          {month}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="attendance-filter attendance-filter-compact">
-                    <label htmlFor="attendance-year">Year</label>
-                    <select
-                      id="attendance-year"
-                      value={attendanceReportYear}
-                      onChange={(event) => setAttendanceReportYear(event.target.value)}
-                    >
-                      {Array.from({ length: 6 }, (_, index) => {
-                        const year = new Date().getFullYear() - index
-                        return (
-                          <option key={year} value={year}>
-                            {year}
-                          </option>
-                        )
-                      })}
-                    </select>
-                  </div>
-                  <div className="attendance-filter attendance-filter-compact">
-                    <label htmlFor="attendance-format">Format</label>
-                    <select
-                      id="attendance-format"
-                      value={attendanceReportFormat}
-                      onChange={(event) => setAttendanceReportFormat(event.target.value as 'csv' | 'pdf' | 'xlsx')}
-                    >
-                      <option value="csv">CSV</option>
-                      <option value="pdf">PDF</option>
-                      <option value="xlsx">XLSX</option>
-                    </select>
-                  </div>
-                  <button className="cta dashboard-button" onClick={downloadAttendanceReport}>
-                    Download Report
-                  </button>
                 </div>
-                {attendanceReportStatus ? <span className="report-status attendance-report-status">{attendanceReportStatus}</span> : null}
               </div>
             ) : (
               <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                 Refresh
               </button>
             )}
-          </div>
-          <div className="metric-row">
-                <button
-                  className={`metric-card metric-button ${attendanceView === 'attendance' ? 'active' : ''}`}
-                  type="button"
-                  onClick={() => setAttendanceView('attendance')}
-                >
-                  <span>First Clock-Ins</span>
-                  <strong>{attendanceTabCount}</strong>
-                  <small>{selectedAttendanceDate}</small>
-                </button>
-                <button
-                  className={`metric-card metric-button ${attendanceView === 'late-arrivals' ? 'active' : ''}`}
-                  type="button"
-                  onClick={() => setAttendanceView('late-arrivals')}
-                >
-                  <span>Late Arrivals Today</span>
-                  <strong>{lateArrivalCount}</strong>
-                  <small>Show request list</small>
-                </button>
-                <button
-                  className={`metric-card metric-button ${attendanceView === 'early-leaves' ? 'active' : ''}`}
-                  type="button"
-                  onClick={() => setAttendanceView('early-leaves')}
-                >
-                  <span>Early Leaves Today</span>
-                  <strong>{earlyLeaveCount}</strong>
-                  <small>Show request list</small>
-                </button>
-                <button
-                  className={`metric-card metric-button ${attendanceView === 'leaves' ? 'active' : ''}`}
-                  type="button"
-                  onClick={() => setAttendanceView('leaves')}
-                >
-                  <span>Leaves Today</span>
-                  <strong>{leaveCount}</strong>
-                  <small>Employees on leave</small>
-                </button>
           </div>
           {attendanceView === 'attendance' ? (
           <div className="table-card">
@@ -2619,6 +2524,205 @@ function App() {
       )
     }
 
+    if (activePanel === 'reports') {
+      return (
+        <>
+          <div className="dashboard-section-head">
+            <div>
+              <p className="eyebrow">Insights</p>
+              <h2>Reports & Analytics</h2>
+            </div>
+            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+              Refresh
+            </button>
+          </div>
+
+          <div className="reports-layout">
+            <div className="reports-main">
+              <div className="report-toolbar">
+                <div className="attendance-filter attendance-filter-date">
+                  <label htmlFor="reports-date">Reference Date</label>
+                  <input
+                    className="modern-date-input"
+                    id="reports-date"
+                    type="date"
+                    value={attendanceDateFilter}
+                    onChange={(event) => setAttendanceDateFilter(event.target.value)}
+                  />
+                </div>
+                <div className="attendance-filter attendance-filter-compact">
+                  <label htmlFor="attendance-month">Month</label>
+                  <select
+                    id="attendance-month"
+                    value={attendanceReportMonth}
+                    onChange={(event) => setAttendanceReportMonth(event.target.value)}
+                  >
+                    {[
+                      '01',
+                      '02',
+                      '03',
+                      '04',
+                      '05',
+                      '06',
+                      '07',
+                      '08',
+                      '09',
+                      '10',
+                      '11',
+                      '12'
+                    ].map((month, index) => (
+                      <option key={month} value={index + 1}>
+                        {month}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="attendance-filter attendance-filter-compact">
+                  <label htmlFor="attendance-year">Year</label>
+                  <select
+                    id="attendance-year"
+                    value={attendanceReportYear}
+                    onChange={(event) => setAttendanceReportYear(event.target.value)}
+                  >
+                    {Array.from({ length: 6 }, (_, index) => {
+                      const year = new Date().getFullYear() - index
+                      return (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+                <div className="attendance-filter attendance-filter-compact">
+                  <label htmlFor="attendance-format">Format</label>
+                  <select
+                    id="attendance-format"
+                    value={attendanceReportFormat}
+                    onChange={(event) => setAttendanceReportFormat(event.target.value as 'csv' | 'pdf' | 'xlsx')}
+                  >
+                    <option value="csv">CSV</option>
+                    <option value="pdf">PDF</option>
+                    <option value="xlsx">XLSX</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="report-actions-card">
+                <div>
+                  <strong>Download Reports</strong>
+                  <span>Export employee lists and attendance reports from one place.</span>
+                </div>
+                <div className="report-actions">
+                  <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('csv')}>
+                    Employees CSV
+                  </button>
+                  <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('pdf')}>
+                    Employees PDF
+                  </button>
+                  <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('xlsx')}>
+                    Employees XLSX
+                  </button>
+                  <button className="cta dashboard-button" onClick={downloadAttendanceReport}>
+                    Attendance Report
+                  </button>
+                </div>
+                {attendanceReportStatus ? <span className="report-status attendance-report-status">{attendanceReportStatus}</span> : null}
+              </div>
+
+              <div className="chart-card">
+                <div className="chart-card-head">
+                  <div>
+                    <strong>Weekly Attendance Trend</strong>
+                    <span>Unique employee clock-ins across the last 7 days.</span>
+                  </div>
+                </div>
+                <div className="line-chart-shell">
+                  <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="line-chart">
+                    <polyline
+                      fill="none"
+                      stroke="#1fa7a4"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      points={weeklyTrendPoints}
+                    />
+                    {weeklyAttendanceTrend.map((item, index) => {
+                      const x = weeklyAttendanceTrend.length > 1 ? (index / (weeklyAttendanceTrend.length - 1)) * 100 : 50
+                      const y = 100 - (item.count / maxWeeklyAttendance) * 100
+                      return <circle key={item.dateKey} cx={x} cy={y} r="2.5" fill="#112c32" />
+                    })}
+                  </svg>
+                  <div className="line-chart-labels">
+                    {weeklyAttendanceTrend.map((item) => (
+                      <div key={item.dateKey} className="chart-label-block">
+                        <strong>{item.count}</strong>
+                        <span>{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="chart-card">
+                <div className="chart-card-head">
+                  <div>
+                    <strong>Attendance Efficiency Score</strong>
+                    <span>Employee presence score across the same 7-day window.</span>
+                  </div>
+                </div>
+                <div className="efficiency-list">
+                  {attendanceEfficiencyScores.length ? (
+                    attendanceEfficiencyScores.map((item) => (
+                      <div key={item.empCode || item.name} className="efficiency-row">
+                        <div className="efficiency-meta">
+                          <strong>{item.name}</strong>
+                          <span>{item.presentDays} / 7 days present</span>
+                        </div>
+                        <div className="efficiency-bar-track">
+                          <div className="efficiency-bar-fill" style={{ width: `${item.score}%` }} />
+                        </div>
+                        <strong className="efficiency-score">{item.score}%</strong>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-state">No attendance data available for analytics yet.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <aside className="reports-aside">
+              <div className="alert-side-card">
+                <div className="chart-card-head">
+                  <div>
+                    <strong>Missed Logins</strong>
+                    <span>Employees who have not logged in and are not on leave for {selectedAttendanceDate}.</span>
+                  </div>
+                </div>
+                <div className="alert-side-count">
+                  <strong>{missedLoginEmployees.length}</strong>
+                  <span>{alertCandidatesLoading ? 'Refreshing alerts...' : 'Need attention'}</span>
+                </div>
+                <div className="alert-side-list">
+                  {missedLoginEmployees.length ? (
+                    missedLoginEmployees.map((employee) => (
+                      <div key={employee.emp_code} className="alert-side-item">
+                        <strong>{employee.emp_full_name || employee.emp_code}</strong>
+                        <span>{employee.emp_designation || employee.emp_department || employee.emp_email || '--'}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-state">No missed logins for this date.</div>
+                  )}
+                </div>
+              </div>
+            </aside>
+          </div>
+        </>
+      )
+    }
+
     if (activePanel === 'leaves') {
       return (
         <>
@@ -2723,140 +2827,6 @@ function App() {
               <div className="empty-state">
                 {showTodayActivities ? "No activities found for today." : "No activities found."}
               </div>
-            )}
-          </div>
-        </>
-      )
-    }
-
-    if (activePanel === 'alerts') {
-      const selectedCount = selectedAlertEmployees.length
-      const eligibleCount = alertEligibleEmpCodes.length
-      const attendanceHelp =
-        'Only employees who have not clocked in and are not on leave will receive this reminder.'
-      const lunchHelp =
-        'Lunch reminder skips employees who are on leave and sends a more engaging health-focused message.'
-
-      return (
-        <>
-          <div className="dashboard-section-head">
-            <div>
-              <p className="eyebrow">Notifications</p>
-              <h2>Alerts</h2>
-            </div>
-            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-              Refresh Employees
-            </button>
-          </div>
-
-          <div className="form-card">
-            <div className="form-head">
-              <div>
-                <strong>Trigger Attendance Alerts</strong>
-                <span>
-                  Select a reminder type, choose the employees, and send the push notification instantly.
-                </span>
-              </div>
-            </div>
-
-            <div className="form-grid">
-              <div>
-                <label htmlFor="alert-type">Alert Type</label>
-                <select
-                  id="alert-type"
-                  value={alertType}
-                  onChange={(event) => setAlertType(event.target.value as AlertType)}
-                >
-                  <option value="attendance_reminder">Attendance Reminder</option>
-                  <option value="lunch_reminder">Lunch Reminder</option>
-                </select>
-              </div>
-              <div>
-                <label htmlFor="alert-date">Target Date</label>
-                <input
-                  id="alert-date"
-                  type="date"
-                  value={alertDate}
-                  onChange={(event) => setAlertDate(event.target.value)}
-                />
-              </div>
-              <div>
-                <label htmlFor="alert-employee-search">Search Employees</label>
-                <input
-                  id="alert-employee-search"
-                  type="text"
-                  value={alertEmployeeSearch}
-                  onChange={(event) => setAlertEmployeeSearch(event.target.value)}
-                  placeholder="Search by name, code, email, or department"
-                />
-              </div>
-            </div>
-
-            <p className="form-note">
-              {alertType === 'attendance_reminder' ? attendanceHelp : lunchHelp}
-            </p>
-            <p className="form-note">
-              Leave the selection empty to send the alert to all eligible employees for the chosen date.
-            </p>
-            <div className="alert-filter-row">
-              <label className="alert-toggle">
-                <input
-                  type="checkbox"
-                  checked={showOnlyEligibleAlertEmployees}
-                  onChange={(event) => setShowOnlyEligibleAlertEmployees(event.target.checked)}
-                />
-                <span>
-                  Show only employees who have not applied leave and are still not logged in
-                </span>
-              </label>
-              <span className="alert-filter-meta">
-                {alertCandidatesLoading ? 'Checking eligible employees...' : `Eligible employees: ${eligibleCount}`}
-              </span>
-            </div>
-
-            <div className="form-actions">
-              <button
-                className="ghost"
-                type="button"
-                onClick={() => handleSelectAllAlertEmployees(filteredAlertEmployees.map((employee) => employee.emp_code))}
-              >
-                Select Visible
-              </button>
-              <button className="ghost" type="button" onClick={handleClearAlertEmployees}>
-                Clear Selection
-              </button>
-              <button className="cta" type="button" onClick={handleTriggerAlert} disabled={alertTriggerLoading}>
-                Trigger Alert
-              </button>
-            </div>
-            <p className="form-note">
-              Selected employees: {selectedCount}
-            </p>
-            {alertTriggerStatus ? <p className="form-note">{alertTriggerStatus}</p> : null}
-          </div>
-
-          <div className="alert-employee-list">
-            {filteredAlertEmployees.length ? (
-              filteredAlertEmployees.map((employee) => {
-                const isSelected = selectedAlertEmployees.includes(employee.emp_code)
-
-                return (
-                  <label key={employee.emp_code} className={`alert-employee-card ${isSelected ? 'selected' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleAlertEmployee(employee.emp_code)}
-                    />
-                    <div>
-                      <strong>{employee.emp_full_name || employee.emp_code}</strong>
-                      <span>{employee.emp_code}</span>
-                      <span>{employee.emp_designation || employee.emp_department || employee.emp_email || '--'}</span>
-                    </div>
-                  </label>
-                )
-              })
-            ) : (
-              <div className="empty-state">No employees match this search.</div>
             )}
           </div>
         </>

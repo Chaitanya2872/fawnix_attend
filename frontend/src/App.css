@@ -488,6 +488,17 @@ a {
   color: #112c32;
 }
 
+.modern-date-input {
+  min-height: 42px;
+  padding-right: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.modern-date-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.7;
+}
+
 .employee-search {
   max-width: 320px;
   margin-bottom: 24px;
@@ -548,6 +559,161 @@ a {
   border: 1px solid rgba(17, 44, 50, 0.08);
   display: grid;
   gap: 12px;
+}
+
+.chart-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.chart-card-head span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #607076;
+}
+
+.reports-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.85fr);
+  gap: 18px;
+}
+
+.reports-main,
+.reports-aside {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.report-toolbar,
+.report-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.report-actions-card,
+.alert-side-card {
+  background: #fff;
+  border: 1px solid rgba(17, 44, 50, 0.08);
+  border-radius: 22px;
+  padding: 18px 20px;
+  display: grid;
+  gap: 16px;
+}
+
+.report-actions-card span {
+  color: #607076;
+  font-size: 12px;
+}
+
+.line-chart-shell {
+  display: grid;
+  gap: 14px;
+}
+
+.line-chart {
+  width: 100%;
+  height: 220px;
+  overflow: visible;
+}
+
+.line-chart-labels {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.chart-label-block {
+  text-align: center;
+}
+
+.chart-label-block strong {
+  display: block;
+  font-size: 16px;
+  color: #112c32;
+}
+
+.chart-label-block span {
+  font-size: 12px;
+  color: #607076;
+}
+
+.efficiency-list {
+  display: grid;
+  gap: 12px;
+}
+
+.efficiency-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(160px, 1fr) 64px;
+  gap: 12px;
+  align-items: center;
+}
+
+.efficiency-meta span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #607076;
+}
+
+.efficiency-bar-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #e7eeeb;
+  overflow: hidden;
+}
+
+.efficiency-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #112c32;
+}
+
+.efficiency-score {
+  text-align: right;
+  color: #112c32;
+}
+
+.alert-side-count {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: #f4f6f4;
+}
+
+.alert-side-count strong {
+  font-size: 32px;
+  color: #112c32;
+}
+
+.alert-side-count span {
+  font-size: 12px;
+  color: #607076;
+}
+
+.alert-side-list {
+  display: grid;
+  gap: 10px;
+}
+
+.alert-side-item {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #f8faf8;
+  border: 1px solid rgba(17, 44, 50, 0.08);
+}
+
+.alert-side-item span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #607076;
 }
 
 .chart-head {
@@ -1880,6 +2046,14 @@ a {
     grid-template-columns: 1fr;
   }
 
+  .reports-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .efficiency-row {
+    grid-template-columns: 1fr;
+  }
+
   .data-row {
     grid-template-columns: 1fr;
   }
@@ -1948,6 +2122,21 @@ a {
   .attendance-filter-search {
     max-width: none;
     flex-basis: 100%;
+  }
+}
+
+@media (max-width: 700px) {
+  .report-toolbar,
+  .report-actions {
+    flex-direction: column;
+  }
+
+  .line-chart {
+    height: 180px;
+  }
+
+  .line-chart-labels {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

@@ -716,6 +716,39 @@ a {
   color: #607076;
 }
 
+.missed-login-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.missed-login-checkbox {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: #112c32;
+  cursor: pointer;
+}
+
+.missed-login-item-copy {
+  display: grid;
+}
+
+.missed-logins-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.missed-logins-selected {
+  font-size: 12px;
+  color: #607076;
+}
+
 .chart-head {
   display: flex;
   justify-content: space-between;

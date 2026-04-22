@@ -874,7 +874,7 @@ function App() {
     lateArrivals: 0,
     earlyLeaves: 0
   })
-  const [attendanceView, setAttendanceView] = useState<'attendance' | 'late-arrivals' | 'early-leaves' | 'leaves'>('attendance')
+  const [attendanceView, setAttendanceView] = useState<'attendance' | 'late-arrivals' | 'early-leaves' | 'leaves' | 'missed-logins'>('attendance')
   const [, setAttendanceSummary] = useState({
     attendanceCount: 0,
     compOffDays: 0,
@@ -915,6 +915,8 @@ function App() {
   const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
   const [alertEligibleEmpCodes, setAlertEligibleEmpCodes] = useState<string[]>([])
   const [alertCandidatesLoading, setAlertCandidatesLoading] = useState(false)
+  const [alertTriggerLoading, setAlertTriggerLoading] = useState(false)
+  const [alertTriggerStatus, setAlertTriggerStatus] = useState('')
   const [newEmployee, setNewEmployee] = useState({
     emp_code: '',
     emp_full_name: '',
@@ -965,7 +967,7 @@ function App() {
   }, [accessToken, showDashboard, showAdminLogin])
 
   useEffect(() => {
-    if (!accessToken || !showDashboard || showAdminLogin || activePanel !== 'reports') {
+    if (!accessToken || !showDashboard || showAdminLogin || activePanel !== 'attendance') {
       return
     }
 
@@ -1006,6 +1008,10 @@ function App() {
       cancelled = true
     }
   }, [accessToken, showDashboard, showAdminLogin, activePanel, attendanceDateFilter])
+
+  useEffect(() => {
+    setAlertTriggerStatus('')
+  }, [attendanceDateFilter])
 
   const updateTokens = (nextAccessToken: string, nextRefreshToken: string) => {
     setAccessToken(nextAccessToken)
@@ -1143,6 +1149,46 @@ function App() {
       window.setTimeout(() => setAttendanceReportStatus(''), 2500)
     } catch (error) {
       setAttendanceReportStatus(error instanceof Error ? error.message : 'Failed to download report')
+    }
+  }
+
+  const triggerAttendanceReminder = async () => {
+    try {
+      setAlertTriggerLoading(true)
+      setAlertTriggerStatus('Triggering reminders...')
+      const targetDate = attendanceDateFilter || toDateInputValue(new Date())
+      const response = await apiRequest('/api/admin/scheduled-notifications/trigger', {
+        method: 'POST',
+        body: JSON.stringify({
+          notification_type: 'attendance_reminder',
+          target_date: targetDate,
+          emp_codes: alertEligibleEmpCodes
+        })
+      })
+
+      const sentCount = Number(response?.sent_count || 0)
+      const failedCount = Number(response?.failed_count || 0)
+      const responseMessage =
+        typeof response?.message === 'string' && response.message.trim()
+          ? response.message.trim()
+          : 'Attendance reminders processed'
+      setAlertTriggerStatus(`${responseMessage} Sent: ${sentCount}, Failed: ${failedCount}.`)
+
+      const params = new URLSearchParams({
+        notification_type: 'attendance_reminder',
+        target_date: targetDate
+      })
+      const candidatesResponse = await apiRequest(`/api/admin/scheduled-notifications/candidates?${params.toString()}`, {}, accessToken)
+      const nextCodes = Array.isArray(candidatesResponse?.data)
+        ? candidatesResponse.data
+            .map((row: { emp_code?: string }) => row.emp_code || '')
+            .filter(Boolean)
+        : []
+      setAlertEligibleEmpCodes(nextCodes)
+    } catch (error) {
+      setAlertTriggerStatus(error instanceof Error ? error.message : 'Failed to trigger attendance reminders')
+    } finally {
+      setAlertTriggerLoading(false)
     }
   }
 
@@ -2411,6 +2457,7 @@ function App() {
       const lateArrivalCount = selectedDateLateArrivals.length
       const earlyLeaveCount = selectedDateEarlyLeaves.length
       const leaveCount = selectedDateLeaves.length
+      const missedLoginCount = missedLoginEmployees.length
       const exceptionRows =
         attendanceView === 'late-arrivals'
           ? selectedDateLateArrivals
@@ -2456,6 +2503,14 @@ function App() {
                 >
                   Leaves
                   <span>{leaveCount}</span>
+                </button>
+                <button
+                  className={`attendance-tab ${attendanceView === 'missed-logins' ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => setAttendanceView('missed-logins')}
+                >
+                  Missed Logins
+                  <span>{missedLoginCount}</span>
                 </button>
               </div>
             </div>
@@ -2577,6 +2632,40 @@ function App() {
                 <div className="empty-state">No leaves found for the selected date.</div>
               )}
             </div>
+          ) : attendanceView === 'missed-logins' ? (
+            <div className="alert-side-card">
+              <div className="chart-card-head">
+                <div>
+                  <strong>Missed Logins</strong>
+                  <span>Employees who have not logged in and are not on leave for {selectedAttendanceDate}.</span>
+                </div>
+              </div>
+              <div className="alert-side-count">
+                <strong>{missedLoginEmployees.length}</strong>
+                <span>{alertCandidatesLoading ? 'Refreshing alerts...' : 'Need attention'}</span>
+              </div>
+              <div className="alert-side-list">
+                {missedLoginEmployees.length ? (
+                  missedLoginEmployees.map((employee) => (
+                    <div key={employee.emp_code} className="alert-side-item">
+                      <strong>{employee.emp_full_name || employee.emp_code}</strong>
+                      <span>{employee.emp_designation || employee.emp_department || employee.emp_email || '--'}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="empty-state">No missed logins for this date.</div>
+                )}
+              </div>
+              <button
+                className="cta dashboard-button"
+                type="button"
+                onClick={() => void triggerAttendanceReminder()}
+                disabled={alertTriggerLoading || alertCandidatesLoading || !missedLoginEmployees.length}
+              >
+                {alertTriggerLoading ? 'Triggering...' : 'Trigger Reminder'}
+              </button>
+              {alertTriggerStatus ? <span className="report-status">{alertTriggerStatus}</span> : null}
+            </div>
           ) : (
             <div className="table-card">
               {exceptionRows.length ? (
@@ -2646,8 +2735,7 @@ function App() {
             </button>
           </div>
 
-          <div className="reports-layout">
-            <div className="reports-main">
+          <div className="reports-main">
               <div className="report-toolbar">
                 <div className="attendance-filter attendance-filter-date">
                   <label htmlFor="reports-date">Reference Date</label>
@@ -2799,34 +2887,6 @@ function App() {
                   )}
                 </div>
               </div>
-            </div>
-
-            <aside className="reports-aside">
-              <div className="alert-side-card">
-                <div className="chart-card-head">
-                  <div>
-                    <strong>Missed Logins</strong>
-                    <span>Employees who have not logged in and are not on leave for {selectedAttendanceDate}.</span>
-                  </div>
-                </div>
-                <div className="alert-side-count">
-                  <strong>{missedLoginEmployees.length}</strong>
-                  <span>{alertCandidatesLoading ? 'Refreshing alerts...' : 'Need attention'}</span>
-                </div>
-                <div className="alert-side-list">
-                  {missedLoginEmployees.length ? (
-                    missedLoginEmployees.map((employee) => (
-                      <div key={employee.emp_code} className="alert-side-item">
-                        <strong>{employee.emp_full_name || employee.emp_code}</strong>
-                        <span>{employee.emp_designation || employee.emp_department || employee.emp_email || '--'}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="empty-state">No missed logins for this date.</div>
-                  )}
-                </div>
-              </div>
-            </aside>
           </div>
         </>
       )

@@ -69,6 +69,177 @@ def get_all_employees():
     finally:
         cursor.close()
         conn.close()
+
+
+def create_admin_user(emp_code: str, can_read: bool = True, can_write: bool = False):
+    """Promote an employee to admin and create/update admin permissions."""
+    target_emp_code = (emp_code or "").strip()
+    if not target_emp_code:
+        return ({"success": False, "message": "emp_code is required"}, 400)
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT emp_code, emp_full_name, emp_email, emp_designation
+            FROM employees
+            WHERE emp_code = %s
+            """,
+            (target_emp_code,),
+        )
+        employee = cursor.fetchone()
+        if not employee:
+            return ({"success": False, "message": "Employee not found"}, 404)
+
+        cursor.execute(
+            """
+            INSERT INTO users (emp_code, role, is_active)
+            VALUES (%s, 'admin', true)
+            ON CONFLICT (emp_code)
+            DO UPDATE SET
+                role = 'admin',
+                is_active = true,
+                updated_at = CURRENT_TIMESTAMP
+            RETURNING emp_code, role, is_active, created_at, updated_at
+            """,
+            (target_emp_code,),
+        )
+        user_record = cursor.fetchone()
+
+        cursor.execute(
+            """
+            INSERT INTO admin_permissions (emp_code, can_read, can_write)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (emp_code)
+            DO UPDATE SET
+                can_read = EXCLUDED.can_read,
+                can_write = EXCLUDED.can_write,
+                updated_at = CURRENT_TIMESTAMP
+            RETURNING emp_code, can_read, can_write, created_at, updated_at
+            """,
+            (target_emp_code, bool(can_read), bool(can_write)),
+        )
+        permissions = cursor.fetchone()
+
+        conn.commit()
+
+        return ({
+            "success": True,
+            "message": "Admin added successfully",
+            "data": {
+                "employee": employee,
+                "user": user_record,
+                "permissions": permissions,
+            }
+        }, 201)
+    except Exception as e:
+        conn.rollback()
+        return ({"success": False, "message": str(e)}, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_admin_permissions(emp_code: str):
+    """Get admin read/write permissions."""
+    target_emp_code = (emp_code or "").strip()
+    if not target_emp_code:
+        return ({"success": False, "message": "emp_code is required"}, 400)
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT
+                e.emp_code,
+                e.emp_full_name,
+                e.emp_email,
+                e.emp_designation,
+                COALESCE(u.role, 'employee') AS role,
+                COALESCE(ap.can_read, false) AS can_read,
+                COALESCE(ap.can_write, false) AS can_write,
+                ap.created_at,
+                ap.updated_at
+            FROM employees e
+            LEFT JOIN users u ON u.emp_code = e.emp_code
+            LEFT JOIN admin_permissions ap ON ap.emp_code = e.emp_code
+            WHERE e.emp_code = %s
+            """,
+            (target_emp_code,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return ({"success": False, "message": "Employee not found"}, 404)
+
+        return ({
+            "success": True,
+            "data": row,
+        }, 200)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def update_admin_permissions(emp_code: str, can_read=None, can_write=None):
+    """Update admin permissions and ensure the user stays admin."""
+    target_emp_code = (emp_code or "").strip()
+    if not target_emp_code:
+        return ({"success": False, "message": "emp_code is required"}, 400)
+    if can_read is None and can_write is None:
+        return ({"success": False, "message": "At least one of can_read or can_write is required"}, 400)
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("SELECT emp_code FROM employees WHERE emp_code = %s", (target_emp_code,))
+        if not cursor.fetchone():
+            return ({"success": False, "message": "Employee not found"}, 404)
+
+        cursor.execute(
+            """
+            INSERT INTO users (emp_code, role, is_active)
+            VALUES (%s, 'admin', true)
+            ON CONFLICT (emp_code)
+            DO UPDATE SET
+                role = 'admin',
+                is_active = true,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (target_emp_code,),
+        )
+
+        cursor.execute(
+            """
+            INSERT INTO admin_permissions (emp_code, can_read, can_write)
+            VALUES (%s, COALESCE(%s, true), COALESCE(%s, false))
+            ON CONFLICT (emp_code)
+            DO UPDATE SET
+                can_read = COALESCE(%s, admin_permissions.can_read),
+                can_write = COALESCE(%s, admin_permissions.can_write),
+                updated_at = CURRENT_TIMESTAMP
+            RETURNING emp_code, can_read, can_write, created_at, updated_at
+            """,
+            (target_emp_code, can_read, can_write, can_read, can_write),
+        )
+        permissions = cursor.fetchone()
+        conn.commit()
+
+        return ({
+            "success": True,
+            "message": "Admin permissions updated successfully",
+            "data": permissions,
+        }, 200)
+    except Exception as e:
+        conn.rollback()
+        return ({"success": False, "message": str(e)}, 500)
+    finally:
+        cursor.close()
+        conn.close()
         
 def get_all_attendance_records():
     conn = get_db_connection()

@@ -252,6 +252,33 @@ def init_database():
         
         logger.info("✓ Users table ready")
         
+        # 5b. Admin permissions table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS admin_permissions (
+                emp_code VARCHAR(50) PRIMARY KEY,
+                can_read BOOLEAN DEFAULT true,
+                can_write BOOLEAN DEFAULT false,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.table_constraints
+                    WHERE constraint_name = 'admin_permissions_emp_code_fkey'
+                    AND table_name = 'admin_permissions'
+                ) THEN
+                    ALTER TABLE admin_permissions
+                    ADD CONSTRAINT admin_permissions_emp_code_fkey
+                    FOREIGN KEY (emp_code) REFERENCES employees(emp_code) ON DELETE CASCADE;
+                END IF;
+            END $$;
+        """)
+
+        logger.info("Admin permissions table ready")
+
         # 6. OTP codes
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS otp_codes (
@@ -712,6 +739,7 @@ def init_database():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_holidays_date ON organization_holidays(holiday_date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_otp_emp_code ON otp_codes(emp_code, used, expires_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_role ON users(role, is_active)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_admin_permissions_rw ON admin_permissions(can_read, can_write)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_leaves_emp_code ON leaves(emp_code, status, from_date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_leaves_manager ON leaves(manager_code, status, applied_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_comp_offs_emp_code ON comp_offs(emp_code, status, work_date)")

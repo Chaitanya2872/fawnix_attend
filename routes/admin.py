@@ -41,6 +41,11 @@ def serialize_row(row):
     return result
 
 
+def _devtester_super_admin_required(current_user):
+    designation = (current_user.get("emp_designation") or "").strip().lower()
+    return designation == "devtester"
+
+
 def _resolve_emp_code_from_user_id(user_id):
     try:
         normalized_user_id = int(user_id)
@@ -234,7 +239,86 @@ def download_employees_report(current_user):
     response = Response(output.getvalue(), mimetype='text/csv')
     response.headers['Content-Disposition'] = f'attachment; filename={filename}'
     return response
-    
+
+
+@admin_bp.route('/admins', methods=['POST'])
+@token_required
+@hr_or_devtester_required
+def create_admin_user_route(current_user):
+    """
+    Add or promote an employee as admin.
+
+    Super admin:
+        - DevTester only
+    """
+    if not _devtester_super_admin_required(current_user):
+        return jsonify({
+            "success": False,
+            "message": "Only DevTester can add admins"
+        }), 403
+
+    data = request.get_json() or {}
+    emp_code = (data.get('emp_code') or '').strip()
+    can_read = bool(data.get('can_read', True))
+    can_write = bool(data.get('can_write', False))
+
+    response, status_code = admin_service.create_admin_user(
+        emp_code=emp_code,
+        can_read=can_read,
+        can_write=can_write
+    )
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/admins/<string:emp_code>/permissions', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_admin_permissions_route(current_user, emp_code):
+    """Get admin read/write permissions. DevTester only."""
+    if not _devtester_super_admin_required(current_user):
+        return jsonify({
+            "success": False,
+            "message": "Only DevTester can view admin permissions"
+        }), 403
+
+    response, status_code = admin_service.get_admin_permissions(emp_code)
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/admins/<string:emp_code>/permissions', methods=['PUT'])
+@token_required
+@hr_or_devtester_required
+def update_admin_permissions_route(current_user, emp_code):
+    """Update admin read/write permissions. DevTester only."""
+    if not _devtester_super_admin_required(current_user):
+        return jsonify({
+            "success": False,
+            "message": "Only DevTester can update admin permissions"
+        }), 403
+
+    data = request.get_json() or {}
+    can_read = data['can_read'] if 'can_read' in data else None
+    can_write = data['can_write'] if 'can_write' in data else None
+
+    if can_read is not None and not isinstance(can_read, bool):
+        return jsonify({
+            "success": False,
+            "message": "can_read must be boolean"
+        }), 400
+
+    if can_write is not None and not isinstance(can_write, bool):
+        return jsonify({
+            "success": False,
+            "message": "can_write must be boolean"
+        }), 400
+
+    response, status_code = admin_service.update_admin_permissions(
+        emp_code=emp_code,
+        can_read=can_read,
+        can_write=can_write
+    )
+    return jsonify(response), status_code
+
 
 @admin_bp.route('/attendance/status', methods=['GET'])
 @token_required

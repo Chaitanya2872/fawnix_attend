@@ -344,6 +344,7 @@ type FieldVisitRow = {
   employee: string
   visitType: string
   purpose: string
+  visitDate?: string
   status: string
   isCompleted: boolean
   location: string
@@ -370,6 +371,16 @@ type FieldVisitTrackingPoint = {
 type MapTrackingPoint = {
   lat: number
   lon: number
+  trackedAt?: string
+  trackingType?: string
+}
+
+type FieldVisitTimelineItem = {
+  id: string
+  kind: 'start' | 'point' | 'end'
+  title: string
+  address: string
+  coords?: { lat: number; lon: number } | null
   trackedAt?: string
   trackingType?: string
 }
@@ -575,6 +586,85 @@ function calculateDistanceKm(points: Array<{ lat: number; lon: number }>) {
   }
 
   return total
+}
+
+function normalizeFieldVisitTrackingPoints(points: FieldVisitTrackingPoint[] = []): MapTrackingPoint[] {
+  const normalized: MapTrackingPoint[] = []
+
+  points.forEach((point) => {
+    const parsedFromLatLon = parseCoords(point.latitude, point.longitude)
+    const parsedFromLocation = point.location
+      ? (() => {
+          const [latValue = '', lonValue = ''] = point.location.split(',').map((value) => value.trim())
+          return parseCoords(latValue, lonValue)
+        })()
+      : null
+    const coords = parsedFromLatLon || parsedFromLocation
+    if (!coords) {
+      return
+    }
+
+    normalized.push({
+      lat: coords.lat,
+      lon: coords.lon,
+      trackedAt: point.tracked_at,
+      trackingType: point.tracking_type
+    })
+  })
+
+  return normalized
+}
+
+function buildFieldVisitTimelineItems(
+  row: FieldVisitRow,
+  activityTracking: FieldVisitTrackingPoint[] = [],
+  fieldTracking: FieldVisitTrackingPoint[] = []
+): FieldVisitTimelineItem[] {
+  const items: FieldVisitTimelineItem[] = []
+
+  items.push({
+    id: `${row.activityId}-start`,
+    kind: 'start',
+    title: row.startName || 'Start',
+    address: row.startAddress || row.location || 'Start address unavailable',
+    coords: row.startCoords,
+    trackedAt: row.visitDate
+  })
+
+  const trackingSource = activityTracking.length ? activityTracking : fieldTracking
+  trackingSource.forEach((point, index) => {
+    const coords =
+      parseCoords(point.latitude, point.longitude) ||
+      (point.location
+        ? (() => {
+            const [latValue = '', lonValue = ''] = point.location.split(',').map((value) => value.trim())
+            return parseCoords(latValue, lonValue)
+          })()
+        : null)
+
+    items.push({
+      id: `${row.activityId}-point-${index}`,
+      kind: 'point',
+      title: point.tracking_type ? toTitleCase(point.tracking_type.replace(/_/g, ' ')) : `Point ${index + 1}`,
+      address: point.address || point.location || 'Address unavailable',
+      coords,
+      trackedAt: point.tracked_at,
+      trackingType: point.tracking_type
+    })
+  })
+
+  if (row.isCompleted) {
+    items.push({
+      id: `${row.activityId}-end`,
+      kind: 'end',
+      title: row.endName || 'End',
+      address: row.endAddress || 'End address unavailable',
+      coords: row.endCoords,
+      trackedAt: undefined
+    })
+  }
+
+  return items
 }
 
 function areSameCoords(
@@ -908,6 +998,11 @@ function App() {
     pointsCount?: number
     isCompleted?: boolean
   } | null>(null)
+  const [fieldVisitPanelOpen, setFieldVisitPanelOpen] = useState(false)
+  const [fieldVisitPanelRow, setFieldVisitPanelRow] = useState<FieldVisitRow | null>(null)
+  const [fieldVisitPanelLoading, setFieldVisitPanelLoading] = useState(false)
+  const [fieldVisitPanelError, setFieldVisitPanelError] = useState('')
+  const [fieldVisitTimelineItems, setFieldVisitTimelineItems] = useState<FieldVisitTimelineItem[]>([])
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
   const [showAddEmployee, setShowAddEmployee] = useState(false)
@@ -1346,6 +1441,7 @@ function App() {
             employee: item.employee_name || item.employee_email || 'Unknown employee',
             visitType: item.field_visit_type || 'Field Visit',
             purpose: item.field_visit_purpose || item.activity_type || 'Visit',
+            visitDate: item.start_time,
             status,
             isCompleted,
             location: startAddress || endAddress || 'Location unavailable',
@@ -1530,39 +1626,60 @@ function App() {
     setShowAdminLogin(false)
   }
 
+  const openFieldVisitPanel = async (row: FieldVisitRow) => {
+    setFieldVisitPanelOpen(true)
+    setFieldVisitPanelRow(row)
+    setFieldVisitPanelError('')
+    setFieldVisitPanelLoading(true)
+    setFieldVisitTimelineItems(buildFieldVisitTimelineItems(
+      row,
+      Array.isArray(row.activityTracking) ? row.activityTracking : [],
+      Array.isArray(row.fieldTracking) ? row.fieldTracking : []
+    ))
+
+    if (!row.fieldVisitId) {
+      setFieldVisitPanelLoading(false)
+      return
+    }
+
+    try {
+      const trackingResponse = await apiRequest(`/api/admin/field-visits/${row.fieldVisitId}/tracking`, {})
+      const visit = trackingResponse?.data?.field_visit || {}
+      const trackingPoints: FieldVisitTrackingPoint[] = Array.isArray(trackingResponse?.data?.tracking_points)
+        ? trackingResponse.data.tracking_points
+        : []
+
+      const enrichedRow: FieldVisitRow = {
+        ...row,
+        visitDate: row.visitDate || visit.start_time,
+        startAddress: visit.start_address || row.startAddress,
+        endAddress: visit.end_address || row.endAddress,
+        startCoords: parseCoords(visit.start_latitude, visit.start_longitude) || row.startCoords,
+        endCoords: parseCoords(visit.end_latitude, visit.end_longitude) || row.endCoords,
+        distanceKm: Number.isFinite(Number(trackingResponse?.data?.total_distance_km))
+          ? Number(trackingResponse.data.total_distance_km)
+          : row.distanceKm
+      }
+
+      setFieldVisitPanelRow(enrichedRow)
+      setFieldVisitTimelineItems(buildFieldVisitTimelineItems(
+        enrichedRow,
+        Array.isArray(row.activityTracking) ? row.activityTracking : [],
+        trackingPoints.length ? trackingPoints : (Array.isArray(row.fieldTracking) ? row.fieldTracking : [])
+      ))
+    } catch (error) {
+      setFieldVisitPanelError(error instanceof Error ? error.message : 'Failed to load field visit details')
+    } finally {
+      setFieldVisitPanelLoading(false)
+    }
+  }
+
   const openMapForFieldVisit = async (row: FieldVisitRow) => {
     const startLocationText = (row.startAddress || row.location || '').trim()
     const isCompleted = isCompletedVisitStatus(row.status)
     const coordMatch = startLocationText.match(/-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?/)
-    const normalizeTrackingPoints = (points: FieldVisitTrackingPoint[] = []): MapTrackingPoint[] => {
-      const normalized: MapTrackingPoint[] = []
-
-      points.forEach((point) => {
-        const parsedFromLatLon = parseCoords(point.latitude, point.longitude)
-        const parsedFromLocation = point.location
-          ? (() => {
-              const [latValue = '', lonValue = ''] = point.location.split(',').map((value) => value.trim())
-              return parseCoords(latValue, lonValue)
-            })()
-          : null
-        const coords = parsedFromLatLon || parsedFromLocation
-        if (!coords) {
-          return
-        }
-
-        normalized.push({
-          lat: coords.lat,
-          lon: coords.lon,
-          trackedAt: point.tracked_at,
-          trackingType: point.tracking_type
-        })
-      })
-
-      return normalized
-    }
-
-    const activityTrackingFromRow = normalizeTrackingPoints(Array.isArray(row.activityTracking) ? row.activityTracking : [])
-    const fieldTrackingFromRow = normalizeTrackingPoints(Array.isArray(row.fieldTracking) ? row.fieldTracking : [])
+    const activityTrackingFromRow = normalizeFieldVisitTrackingPoints(Array.isArray(row.activityTracking) ? row.activityTracking : [])
+    const fieldTrackingFromRow = normalizeFieldVisitTrackingPoints(Array.isArray(row.fieldTracking) ? row.fieldTracking : [])
 
     setMapDialogTitle(isCompleted ? 'Activity Route' : 'Activity Location')
     setMapDialogOpen(true)
@@ -1588,10 +1705,10 @@ function App() {
       try {
         const routeResponse = await apiRequest(`/api/activities/route/${row.activityId}`, {})
         const routeData = routeResponse?.data || {}
-        const activityTrackingPoints = normalizeTrackingPoints(
+        const activityTrackingPoints = normalizeFieldVisitTrackingPoints(
           Array.isArray(routeData?.tracking_points) ? routeData.tracking_points : []
         )
-        const fieldTrackingPoints = normalizeTrackingPoints(
+        const fieldTrackingPoints = normalizeFieldVisitTrackingPoints(
           Array.isArray(routeData?.field_visit_checkpoints) ? routeData.field_visit_checkpoints : []
         )
         const nextActivityTracking = activityTrackingPoints.length ? activityTrackingPoints : activityTrackingFromRow
@@ -1665,7 +1782,7 @@ function App() {
         const points: FieldVisitTrackingPoint[] = Array.isArray(trackingResponse?.data?.tracking_points)
           ? trackingResponse.data.tracking_points
           : []
-        const normalizedFieldPoints = normalizeTrackingPoints(points)
+        const normalizedFieldPoints = normalizeFieldVisitTrackingPoints(points)
         const normalizedActivityPoints = activityTrackingFromRow
         const trackedRoutePoints = normalizedActivityPoints.length ? normalizedActivityPoints : normalizedFieldPoints
         setMapTrackingPoints(normalizedActivityPoints)
@@ -3051,14 +3168,15 @@ function App() {
         <div className="table-card">
           {fieldVisitRows.length ? (
             <div className="table-scroll">
-              <table className="dashboard-table field-visit-table">
-                <thead>
-                  <tr>
-                    <th>Employee</th>
-                    <th>Visit Type</th>
-                    <th>Start Location</th>
-                    <th>End Location</th>
-                    <th>Distance</th>
+                <table className="dashboard-table field-visit-table">
+                  <thead>
+                    <tr>
+                      <th>Employee</th>
+                      <th>Date</th>
+                      <th>Visit Type</th>
+                      <th>Start Location</th>
+                      <th>End Location</th>
+                      <th>Distance</th>
                     <th>Status</th>
                     <th>Map</th>
                   </tr>
@@ -3067,10 +3185,15 @@ function App() {
                   {fieldVisitRows.map((row) => {
                     const showRouteDetails = row.isCompleted
                     return (
-                      <tr key={row.activityId}>
+                      <tr
+                        key={row.activityId}
+                        className="table-clickable-row"
+                        onClick={() => void openFieldVisitPanel(row)}
+                      >
                         <td>
                           <strong>{row.employee}</strong>
                         </td>
+                        <td>{formatDateTime(row.visitDate)}</td>
                         <td>{row.visitType}</td>
                         <td>
                           <strong>{row.startName || 'Start location unavailable'}</strong>
@@ -3087,7 +3210,10 @@ function App() {
                         <td>
                           <button
                             className="map-button"
-                            onClick={() => openMapForFieldVisit(row)}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              void openMapForFieldVisit(row)
+                            }}
                             aria-label="Open map"
                             title="Open map"
                             type="button"
@@ -3220,6 +3346,74 @@ function App() {
         </aside>
 
         <main className="dashboard-main">
+          {fieldVisitPanelOpen && fieldVisitPanelRow ? (
+            <>
+              <button
+                className="side-panel-scrim"
+                type="button"
+                aria-label="Close field visit details"
+                onClick={() => setFieldVisitPanelOpen(false)}
+              />
+              <aside className="field-visit-panel" aria-label="Field visit details">
+                <div className="field-visit-panel-head">
+                  <div>
+                    <p className="eyebrow">Field Visit</p>
+                    <h3>{fieldVisitPanelRow.employee}</h3>
+                    <span>{fieldVisitPanelRow.visitType} • {formatDateTime(fieldVisitPanelRow.visitDate)}</span>
+                  </div>
+                  <button
+                    className="field-visit-panel-close"
+                    type="button"
+                    onClick={() => setFieldVisitPanelOpen(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="field-visit-panel-summary">
+                  <div className="field-visit-panel-card">
+                    <span>Start</span>
+                    <strong>{fieldVisitPanelRow.startName || 'Start location unavailable'}</strong>
+                    <small>{fieldVisitPanelRow.startAddress || fieldVisitPanelRow.location || '--'}</small>
+                  </div>
+                  <div className="field-visit-panel-card">
+                    <span>End</span>
+                    <strong>{fieldVisitPanelRow.isCompleted ? fieldVisitPanelRow.endName || 'End location unavailable' : 'Visit in progress'}</strong>
+                    <small>{fieldVisitPanelRow.isCompleted ? fieldVisitPanelRow.endAddress || '--' : '--'}</small>
+                  </div>
+                </div>
+
+                <div className="field-visit-panel-meta">
+                  <span className="table-pill accent">{fieldVisitPanelRow.status}</span>
+                  <span>{fieldVisitPanelRow.distanceKm ? formatDistanceKm(fieldVisitPanelRow.distanceKm) : '--'}</span>
+                </div>
+
+                {fieldVisitPanelLoading ? (
+                  <div className="empty-state">Loading field visit details...</div>
+                ) : fieldVisitPanelError ? (
+                  <div className="empty-state">{fieldVisitPanelError}</div>
+                ) : (
+                  <div className="field-visit-timeline">
+                    {fieldVisitTimelineItems.map((item) => (
+                      <div key={item.id} className={`field-visit-timeline-item ${item.kind}`}>
+                        <div className="field-visit-timeline-icon" aria-hidden="true" />
+                        <div className="field-visit-timeline-content">
+                          <strong>{item.title}</strong>
+                          <span>{item.address}</span>
+                          <span>{formatCoordsValue(item.coords) || '--'}</span>
+                          <small>
+                            {[item.trackedAt ? formatDateTime(item.trackedAt) : '', item.trackingType ? toTitleCase(item.trackingType.replace(/_/g, ' ')) : '']
+                              .filter(Boolean)
+                              .join(' • ') || '--'}
+                          </small>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </aside>
+            </>
+          ) : null}
           {mapDialogOpen ? (
             <div className="map-dialog-backdrop" role="dialog" aria-modal="true">
               <div className="map-dialog">

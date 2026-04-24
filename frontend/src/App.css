@@ -123,6 +123,13 @@ a {
   background: #f3efe6;
 }
 
+.admin-shell-login {
+  grid-template-columns: minmax(0, 1fr);
+  background:
+    radial-gradient(circle at top left, rgba(31, 167, 164, 0.08), transparent 28%),
+    linear-gradient(180deg, #f8f4ec, #efe7d9);
+}
+
 .sidebar {
   background: #10282d;
   color: #eef7f5;
@@ -256,6 +263,12 @@ a {
   gap: 24px;
 }
 
+.dashboard-main-login {
+  min-height: 100vh;
+  padding: 0;
+  align-content: stretch;
+}
+
 .dashboard-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(260px, 0.9fr);
@@ -369,161 +382,381 @@ a {
 }
 
 .login-stage {
-  min-height: calc(100vh - 64px);
+  --login-sky-top: #18283f;
+  --login-sky-mid: #0f1830;
+  --login-sky-bottom: #060914;
+  --login-glow-a: rgba(255, 183, 77, 0.36);
+  --login-glow-b: rgba(31, 167, 164, 0.28);
+  --login-glow-c: rgba(111, 178, 255, 0.18);
+  --login-map-line: rgba(255, 255, 255, 0.1);
+  --login-map-node: rgba(255, 255, 255, 0.22);
+  min-height: 100vh;
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.9fr);
-  gap: 28px;
-  align-items: stretch;
+  place-items: center;
+  padding: 32px;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.08), transparent 30%),
+    linear-gradient(180deg, var(--login-sky-top), var(--login-sky-mid) 48%, var(--login-sky-bottom));
 }
 
-.login-stage-visual,
+.login-stage-dawn {
+  --login-sky-top: #384b7a;
+  --login-sky-mid: #ef8c64;
+  --login-sky-bottom: #f5d1a1;
+  --login-glow-a: rgba(255, 214, 138, 0.48);
+  --login-glow-b: rgba(85, 193, 255, 0.26);
+  --login-glow-c: rgba(255, 143, 97, 0.2);
+  --login-map-line: rgba(82, 103, 132, 0.16);
+  --login-map-node: rgba(255, 255, 255, 0.28);
+}
+
+.login-stage-day {
+  --login-sky-top: #87c5ff;
+  --login-sky-mid: #d4efff;
+  --login-sky-bottom: #f6fbff;
+  --login-glow-a: rgba(255, 235, 166, 0.32);
+  --login-glow-b: rgba(31, 167, 164, 0.22);
+  --login-glow-c: rgba(66, 133, 244, 0.16);
+  --login-map-line: rgba(84, 126, 160, 0.16);
+  --login-map-node: rgba(255, 255, 255, 0.34);
+}
+
+.login-stage-dusk {
+  --login-sky-top: #251638;
+  --login-sky-mid: #922d5b;
+  --login-sky-bottom: #f08c57;
+  --login-glow-a: rgba(255, 171, 92, 0.4);
+  --login-glow-b: rgba(233, 84, 135, 0.22);
+  --login-glow-c: rgba(55, 195, 177, 0.16);
+  --login-map-line: rgba(255, 220, 188, 0.12);
+  --login-map-node: rgba(255, 255, 255, 0.22);
+}
+
+.login-stage-night {
+  --login-sky-top: #09111f;
+  --login-sky-mid: #101a30;
+  --login-sky-bottom: #03060f;
+  --login-glow-a: rgba(109, 180, 255, 0.22);
+  --login-glow-b: rgba(31, 167, 164, 0.16);
+  --login-glow-c: rgba(255, 213, 115, 0.12);
+  --login-map-line: rgba(180, 209, 255, 0.1);
+  --login-map-node: rgba(255, 255, 255, 0.18);
+}
+
+.login-stage-wallpaper {
+  position: absolute;
+  inset: -12%;
+  pointer-events: none;
+}
+
+.login-stage-wallpaper::before,
+.login-stage-wallpaper::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.login-stage-wallpaper::before {
+  background:
+    radial-gradient(circle at 15% 22%, var(--login-glow-a), transparent 22%),
+    radial-gradient(circle at 78% 18%, var(--login-glow-b), transparent 24%),
+    radial-gradient(circle at 62% 74%, var(--login-glow-c), transparent 22%);
+  filter: blur(12px);
+  animation: loginAuraShift 18s ease-in-out infinite alternate;
+}
+
+.login-stage-wallpaper::after {
+  background:
+    radial-gradient(circle at 72% 34%, var(--login-map-node) 0 2px, transparent 3px),
+    radial-gradient(circle at 28% 68%, var(--login-map-node) 0 2px, transparent 3px),
+    radial-gradient(circle at 56% 58%, var(--login-map-node) 0 2px, transparent 3px),
+    linear-gradient(126deg, transparent 23%, var(--login-map-line) 24%, transparent 25%),
+    linear-gradient(151deg, transparent 48%, var(--login-map-line) 49%, transparent 50%),
+    linear-gradient(92deg, transparent 64%, var(--login-map-line) 65%, transparent 66%),
+    linear-gradient(120deg, rgba(255, 255, 255, 0.08), transparent 36%);
+  opacity: 0.82;
+}
+
+.login-stage-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--login-map-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--login-map-line) 1px, transparent 1px);
+  background-size: 120px 120px;
+  mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.92), transparent 78%);
+  opacity: 0.14;
+  transform: perspective(1200px) rotateX(70deg) scale(1.45);
+  transform-origin: center bottom;
+}
+
+.login-stage-glow {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(10px);
+  opacity: 0.82;
+  mix-blend-mode: screen;
+}
+
+.login-stage-glow-one {
+  width: 480px;
+  height: 480px;
+  top: 4%;
+  left: -6%;
+  background: linear-gradient(135deg, var(--login-glow-a), transparent 68%);
+  animation: loginBlobFloat 16s ease-in-out infinite;
+}
+
+.login-stage-glow-two {
+  width: 560px;
+  height: 560px;
+  right: -12%;
+  bottom: -10%;
+  background: linear-gradient(180deg, var(--login-glow-b), transparent 72%);
+  animation: loginBlobFloat 22s ease-in-out infinite reverse;
+}
+
+.login-stage-glow-three {
+  width: 260px;
+  height: 260px;
+  right: 16%;
+  top: 16%;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.12), transparent 65%);
+  animation: loginPulse 12s ease-in-out infinite;
+}
+
+.login-stage-topbar {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  right: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  z-index: 2;
+  animation: loginCardIn 0.65s ease both;
+}
+
+.login-stage-back {
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #f4fbfa;
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 16px 34px rgba(5, 14, 26, 0.14);
+  transition:
+    transform 0.22s ease,
+    background 0.22s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+.login-stage-back svg {
+  width: 22px;
+  height: 22px;
+  transition: transform 0.22s ease;
+}
+
+.login-stage-back:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.22);
+  transform: translateX(-2px);
+  box-shadow: 0 20px 42px rgba(5, 14, 26, 0.18);
+}
+
+.login-stage-back:hover svg {
+  transform: translateX(-2px);
+}
+
+.login-stage-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.login-stage-chip {
+  min-width: 172px;
+  padding: 12px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.09));
+  color: #eef7f5;
+  backdrop-filter: blur(18px);
+  display: grid;
+  gap: 2px;
+  box-shadow: 0 18px 40px rgba(8, 17, 31, 0.12);
+}
+
+.login-stage-chip span {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(236, 247, 245, 0.72);
+}
+
+.login-stage-chip strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.login-stage-chip small {
+  color: rgba(236, 247, 245, 0.76);
+}
+
+.login-stage-chip-location {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.2), transparent 26%),
+    linear-gradient(180deg, rgba(43, 186, 167, 0.18), rgba(255, 255, 255, 0.1));
+}
+
+.login-stage-chip-location::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 24% 58%, rgba(255, 255, 255, 0.28) 0 2px, transparent 3px),
+    radial-gradient(circle at 78% 34%, rgba(255, 255, 255, 0.22) 0 2px, transparent 3px),
+    linear-gradient(140deg, transparent 32%, rgba(255, 255, 255, 0.12) 33%, transparent 34%),
+    linear-gradient(84deg, transparent 58%, rgba(255, 255, 255, 0.12) 59%, transparent 60%);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.login-stage-center {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 470px);
+}
+
 .login-stage-panel {
   position: relative;
   overflow: hidden;
   border-radius: 32px;
-  border: 1px solid rgba(17, 44, 50, 0.08);
-  box-shadow: 0 24px 60px rgba(17, 44, 50, 0.1);
-}
-
-.login-stage-visual {
+  border: 1px solid rgba(255, 255, 255, 0.24);
   background:
-    radial-gradient(circle at 18% 22%, rgba(31, 167, 164, 0.2), transparent 36%),
-    radial-gradient(circle at 82% 18%, rgba(247, 193, 122, 0.26), transparent 28%),
-    linear-gradient(145deg, #f7fbf8, #eaf2ee 55%, #f6efe0);
-  padding: 34px;
-  display: grid;
-  align-content: center;
-  gap: 24px;
-}
-
-.login-stage-orb {
-  position: absolute;
-  border-radius: 999px;
-  filter: blur(12px);
-  opacity: 0.7;
-  animation: loginFloat 8s ease-in-out infinite;
-}
-
-.login-stage-orb.orb-one {
-  width: 160px;
-  height: 160px;
-  top: -28px;
-  right: 8%;
-  background: rgba(31, 167, 164, 0.2);
-}
-
-.login-stage-orb.orb-two {
-  width: 220px;
-  height: 220px;
-  bottom: -62px;
-  left: -32px;
-  background: rgba(246, 193, 122, 0.26);
-  animation-delay: -3s;
-}
-
-.login-stage-frame {
-  position: relative;
-  width: min(320px, 72%);
-  aspect-ratio: 1;
-  border-radius: 36px;
-  padding: 14px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 26px 56px rgba(17, 44, 50, 0.14);
-  animation: loginCardIn 0.75s ease both;
-}
-
-.login-stage-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 28px;
-  display: block;
-}
-
-.login-stage-copy {
-  position: relative;
-  max-width: 560px;
-  display: grid;
-  gap: 14px;
-  animation: loginCardIn 0.85s ease both;
-  animation-delay: 0.08s;
-}
-
-.login-stage-copy h1 {
-  margin: 0;
-  font-size: clamp(36px, 4vw, 58px);
-  line-height: 1.02;
-  color: #112c32;
-}
-
-.login-stage-copy p:last-child {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.7;
-  color: #506267;
-}
-
-.login-stage-panel {
-  background:
-    linear-gradient(180deg, rgba(16, 40, 45, 0.98), rgba(17, 44, 50, 0.94)),
-    linear-gradient(120deg, rgba(31, 167, 164, 0.12), transparent);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.1)),
+    linear-gradient(140deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.04));
   padding: 28px;
   display: grid;
-  align-content: center;
   gap: 20px;
-  color: #eef7f5;
+  color: #18343c;
+  backdrop-filter: blur(24px) saturate(140%);
+  box-shadow: 0 30px 90px rgba(17, 44, 50, 0.16);
   animation: loginCardIn 0.8s ease both;
-  animation-delay: 0.14s;
+  animation-delay: 0.1s;
 }
 
 .login-stage-panel::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 30%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.44), transparent 26%),
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.2), transparent 28%);
   pointer-events: none;
 }
 
 .login-stage-panel-head {
   position: relative;
+  display: grid;
+  gap: 14px;
+}
+
+.login-stage-brand {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
+}
+
+.login-stage-brand-image {
+  width: 62px;
+  height: 62px;
+  border-radius: 20px;
+  object-fit: cover;
+  box-shadow: 0 18px 40px rgba(17, 44, 50, 0.14);
 }
 
 .login-stage-panel-head h2 {
   margin: 6px 0 0;
   font-size: 28px;
-  color: #ffffff;
+  color: #112c32;
 }
 
-.login-stage-panel-icon {
-  width: 68px;
-  height: 68px;
-  border-radius: 20px;
-  object-fit: cover;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.24);
-  flex-shrink: 0;
+.login-stage-support {
+  margin: 0;
+  color: rgba(17, 44, 50, 0.78);
+  line-height: 1.6;
 }
 
 .login-stage-card {
   position: relative;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.14));
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(14px);
+  padding: 20px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
+}
+
+.login-stage-card label {
+  color: #29474d;
 }
 
 .login-stage-card input {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.72);
 }
 
-@keyframes loginFloat {
+.login-stage-card .ghost {
+  color: #17343b;
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.login-stage-card .ghost:hover {
+  background: rgba(255, 255, 255, 0.46);
+}
+
+@keyframes loginBlobFloat {
   0%,
   100% {
-    transform: translateY(0) translateX(0);
+    transform: translate3d(0, 0, 0) scale(1);
   }
   50% {
-    transform: translateY(-14px) translateX(8px);
+    transform: translate3d(22px, -26px, 0) scale(1.08);
+  }
+}
+
+@keyframes loginAuraShift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(0, -16px, 0) scale(1.06);
+  }
+}
+
+@keyframes loginPulse {
+  0%,
+  100% {
+    transform: scale(0.96);
+    opacity: 0.46;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.9;
   }
 }
 
@@ -2750,12 +2983,26 @@ a {
   }
 
   .login-stage {
-    grid-template-columns: 1fr;
-    min-height: auto;
+    padding: 88px 22px 24px;
   }
 
-  .login-stage-frame {
-    width: min(260px, 76%);
+  .dashboard-main-login {
+    padding: 0;
+  }
+
+  .login-stage-topbar {
+    position: relative;
+    top: auto;
+    left: auto;
+    right: auto;
+    width: 100%;
+    max-width: 720px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .login-stage-meta {
+    justify-content: flex-start;
   }
 
   .dashboard-hero {
@@ -2866,24 +3113,44 @@ a {
     align-items: flex-start;
   }
 
-  .login-stage-visual,
+  .dashboard-main-login {
+    padding: 0;
+  }
+
+  .login-stage {
+    padding: 72px 14px 14px;
+  }
+
   .login-stage-panel {
     border-radius: 24px;
     padding: 22px;
   }
 
-  .login-stage-panel-head {
+  .login-stage-topbar {
+    gap: 10px;
+  }
+
+  .login-stage-meta {
+    display: grid;
+    gap: 10px;
+  }
+
+  .login-stage-chip {
+    min-width: 0;
+  }
+
+  .login-stage-brand {
     align-items: flex-start;
   }
 
-  .login-stage-panel-icon {
-    width: 56px;
-    height: 56px;
-    border-radius: 16px;
+  .login-stage-brand-image {
+    width: 54px;
+    height: 54px;
+    border-radius: 18px;
   }
 
-  .login-stage-copy h1 {
-    font-size: clamp(30px, 10vw, 42px);
+  .login-stage-panel-head h2 {
+    font-size: 24px;
   }
 }
 

@@ -978,6 +978,39 @@ function PrivacyPolicyPage() {
   )
 }
 
+type LoginSceneMode = 'dawn' | 'day' | 'dusk' | 'night'
+
+function getLoginSceneMode(value: Date): LoginSceneMode {
+  const hour = value.getHours()
+
+  if (hour >= 5 && hour < 10) {
+    return 'dawn'
+  }
+
+  if (hour >= 10 && hour < 17) {
+    return 'day'
+  }
+
+  if (hour >= 17 && hour < 20) {
+    return 'dusk'
+  }
+
+  return 'night'
+}
+
+function formatCoordinate(value: number, positive: string, negative: string) {
+  return `${Math.abs(value).toFixed(2)}°${value >= 0 ? positive : negative}`
+}
+
+function formatTimeZoneLabel(timeZone: string) {
+  if (!timeZone) {
+    return 'Device Time'
+  }
+
+  const parts = timeZone.split('/')
+  return parts[parts.length - 1].replace(/_/g, ' ')
+}
+
 function App() {
   const [empCode, setEmpCode] = useState('')
   const [otp, setOtp] = useState('')
@@ -991,6 +1024,8 @@ function App() {
   const [authStatus, setAuthStatus] = useState('')
   const [adminEmpCode, setAdminEmpCode] = useState('')
   const [adminOtp, setAdminOtp] = useState('')
+  const [loginSceneTime, setLoginSceneTime] = useState(() => new Date())
+  const [loginLocationDetails, setLoginLocationDetails] = useState('Waiting for device location')
   const [accessToken, setAccessToken] = useState('')
   const [refreshToken, setRefreshToken] = useState('')
   const [profile, setProfile] = useState<AdminProfile | null>(null)
@@ -1110,6 +1145,58 @@ function App() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (!showDashboard || !showAdminLogin) {
+      return
+    }
+
+    setLoginSceneTime(new Date())
+    const intervalId = window.setInterval(() => setLoginSceneTime(new Date()), 60000)
+
+    return () => window.clearInterval(intervalId)
+  }, [showDashboard, showAdminLogin])
+
+  useEffect(() => {
+    if (!showDashboard || !showAdminLogin) {
+      return
+    }
+
+    if (!('geolocation' in navigator)) {
+      setLoginLocationDetails('Location unavailable in this browser')
+      return
+    }
+
+    let cancelled = false
+    setLoginLocationDetails('Locating device')
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (cancelled) {
+          return
+        }
+
+        const { latitude, longitude } = position.coords
+        setLoginLocationDetails(
+          `${formatCoordinate(latitude, 'N', 'S')} / ${formatCoordinate(longitude, 'E', 'W')}`
+        )
+      },
+      () => {
+        if (!cancelled) {
+          setLoginLocationDetails('Location access is off')
+        }
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 8000,
+        maximumAge: 300000
+      }
+    )
+
+    return () => {
+      cancelled = true
+    }
+  }, [showDashboard, showAdminLogin])
 
   useEffect(() => {
     if (!accessToken || !showDashboard || showAdminLogin) {
@@ -3443,6 +3530,17 @@ function App() {
   if (showDashboard) {
     const fieldPointCount = mapFieldTrackingPoints.length
     const activityPointCount = mapTrackingPoints.length || mapSummary?.pointsCount || 0
+    const loginTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Device Time'
+    const loginTimeLabel = new Intl.DateTimeFormat([], {
+      hour: 'numeric',
+      minute: '2-digit'
+    }).format(loginSceneTime)
+    const loginDateLabel = new Intl.DateTimeFormat([], {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric'
+    }).format(loginSceneTime)
+    const loginSceneMode = getLoginSceneMode(loginSceneTime)
     const startPoint =
       mapSummary?.startCoords ||
       (mapTrackingPoints.length ? { lat: mapTrackingPoints[0].lat, lon: mapTrackingPoints[0].lon } : null) ||
@@ -3455,7 +3553,8 @@ function App() {
       (mapPoints.length ? mapPoints[mapPoints.length - 1] : null)
 
     return (
-      <div className="admin-shell">
+      <div className={`admin-shell${showAdminLogin ? ' admin-shell-login' : ''}`}>
+        {!showAdminLogin ? (
         <aside className="sidebar">
           <div className="sidebar-brand">
             <img className="brand-mark-image" src={fawnixBg} alt="" aria-hidden="true" />
@@ -3465,61 +3564,45 @@ function App() {
             </div>
           </div>
 
-          {showAdminLogin ? (
-            <>
-              <div className="sidebar-logout">
-                <button className="sidebar-link logout-link" onClick={handleLogout}>
-                  Logout
-                </button>
-              </div>
-              <div className="sidebar-foot">
-                <button className="ghost sidebar-back" onClick={() => setShowDashboard(false)}>
-                  Back to Landing
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="sidebar-user">
-                <strong>{profile?.emp_full_name || 'Admin'}</strong>
-                <span>{profile?.emp_designation || profile?.role || profile?.emp_code}</span>
-              </div>
+          <div className="sidebar-user">
+            <strong>{profile?.emp_full_name || 'Admin'}</strong>
+            <span>{profile?.emp_designation || profile?.role || profile?.emp_code}</span>
+          </div>
 
-              <div className="sidebar-group">
-                {sidebarItems.map((item) => (
-                  <button
-                    key={item.id}
-                    className={`sidebar-link ${activePanel === item.id ? 'active' : ''}`}
-                    onClick={() => setActivePanel(item.id)}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-                <button className="sidebar-link logout-link" onClick={handleLogout}>
-                  Logout
-                </button>
-              </div>
+          <div className="sidebar-group">
+            {sidebarItems.map((item) => (
+              <button
+                key={item.id}
+                className={`sidebar-link ${activePanel === item.id ? 'active' : ''}`}
+                onClick={() => setActivePanel(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+            <button className="sidebar-link logout-link" onClick={handleLogout}>
+              Logout
+            </button>
+          </div>
 
-              <div className="sidebar-foot">
-                <div className="sidebar-note">
-                  <strong>Today</strong>
-                  <span>
-                    {attendanceRows.length} attendance rows, {leaveRows.length} leave entries,
-                    {' '}{activityRows.length} activities
-                  </span>
-                </div>
-                <button className="ghost sidebar-back" onClick={() => void loadDashboard(accessToken)}>
-                  Refresh Data
-                </button>
-                <button className="ghost sidebar-back" onClick={() => setShowDashboard(false)}>
-                  Back to Landing
-                </button>
-              </div>
-            </>
-          )}
+          <div className="sidebar-foot">
+            <div className="sidebar-note">
+              <strong>Today</strong>
+              <span>
+                {attendanceRows.length} attendance rows, {leaveRows.length} leave entries,
+                {' '}{activityRows.length} activities
+              </span>
+            </div>
+            <button className="ghost sidebar-back" onClick={() => void loadDashboard(accessToken)}>
+              Refresh Data
+            </button>
+            <button className="ghost sidebar-back" onClick={() => setShowDashboard(false)}>
+              Back to Landing
+            </button>
+          </div>
         </aside>
+        ) : null}
 
-        <main className="dashboard-main">
+        <main className={`dashboard-main${showAdminLogin ? ' dashboard-main-login' : ''}`}>
           {fieldVisitPanelOpen && fieldVisitPanelRow ? (
             <>
               <button
@@ -3649,58 +3732,89 @@ function App() {
             </div>
           ) : null}
           {showAdminLogin ? (
-            <section className="login-stage">
-              <div className="login-stage-visual">
-                <div className="login-stage-orb orb-one" aria-hidden="true" />
-                <div className="login-stage-orb orb-two" aria-hidden="true" />
-                <div className="login-stage-frame">
-                  <img className="login-stage-image" src={fawnixBg} alt="Fawnix" />
-                </div>
-                <div className="login-stage-copy">
-                  <p className="eyebrow">Secure Access</p>
-                  <h1>Step into the Fawnix control room.</h1>
-                  <p>
-                    Sign in with Employee ID and OTP to manage attendance, employee records,
-                    exceptions, and live operational alerts with a smoother dashboard experience.
-                  </p>
+            <section className={`login-stage login-stage-${loginSceneMode}`}>
+              <div className="login-stage-wallpaper" aria-hidden="true">
+                <div className="login-stage-grid" />
+                <div className="login-stage-glow login-stage-glow-one" />
+                <div className="login-stage-glow login-stage-glow-two" />
+                <div className="login-stage-glow login-stage-glow-three" />
+              </div>
+
+              <div className="login-stage-topbar">
+                <button
+                  className="ghost login-stage-back"
+                  onClick={() => setShowDashboard(false)}
+                  type="button"
+                  aria-label="Back to landing"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      d="M14.75 5.75L8.5 12l6.25 6.25"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+
+                <div className="login-stage-meta">
+                  <div className="login-stage-chip">
+                    <span>Local time</span>
+                    <strong>{loginTimeLabel}</strong>
+                    <small>{loginDateLabel}</small>
+                  </div>
+                  <div className="login-stage-chip login-stage-chip-location">
+                    <span>{formatTimeZoneLabel(loginTimeZone)}</span>
+                    <strong>Device location</strong>
+                    <small>{loginLocationDetails}</small>
+                  </div>
                 </div>
               </div>
 
-              <div className="login-stage-panel">
-                <div className="login-stage-panel-head">
-                  <img className="login-stage-panel-icon" src={fawnixBg} alt="Fawnix icon" />
-                  <div>
-                    <p className="eyebrow">Admin Login</p>
-                    <h2>Authenticate to continue</h2>
+              <div className="login-stage-center">
+                <div className="login-stage-panel">
+                  <div className="login-stage-panel-head">
+                    <div className="login-stage-brand">
+                      <img className="login-stage-brand-image" src={fawnixBg} alt="Fawnix" />
+                      <div>
+                        <p className="eyebrow">Fawnix Admin Login</p>
+                        <h2>Secure Sign in</h2>
+                      </div>
+                    </div>
+                    <p className="login-stage-support">
+                      Access with Employee ID & OTP
+                    </p>
                   </div>
-                </div>
-                <div className="login-card login-stage-card">
-                  <p>Use Employee ID and OTP to access protected admin endpoints.</p>
-                  <label htmlFor="admin-emp-code">Employee ID</label>
-                  <input
-                    id="admin-emp-code"
-                    type="text"
-                    value={adminEmpCode}
-                    onChange={(event) => setAdminEmpCode(event.target.value)}
-                    placeholder="e.g. 2981"
-                  />
-                  <label htmlFor="admin-otp">OTP</label>
-                  <input
-                    id="admin-otp"
-                    type="text"
-                    value={adminOtp}
-                    onChange={(event) => setAdminOtp(event.target.value)}
-                    placeholder="Enter OTP"
-                  />
-                  <div className="login-actions">
-                    <button className="ghost" onClick={handleAdminRequestOtp} disabled={authLoading}>
-                      Request OTP
-                    </button>
-                    <button className="cta" onClick={handleAdminLogin} disabled={authLoading}>
-                      Login
-                    </button>
+
+                  <div className="login-card login-stage-card">
+                    <label htmlFor="admin-emp-code">Employee ID</label>
+                    <input
+                      id="admin-emp-code"
+                      type="text"
+                      value={adminEmpCode}
+                      onChange={(event) => setAdminEmpCode(event.target.value)}
+                      placeholder="Enter employee code"
+                    />
+                    <label htmlFor="admin-otp">OTP</label>
+                    <input
+                      id="admin-otp"
+                      type="text"
+                      value={adminOtp}
+                      onChange={(event) => setAdminOtp(event.target.value)}
+                      placeholder="Enter OTP sent to your whatsapp"
+                    />
+                    <div className="login-actions">
+                      <button className="ghost" onClick={handleAdminRequestOtp} disabled={authLoading}>
+                        Request OTP
+                      </button>
+                      <button className="cta" onClick={handleAdminLogin} disabled={authLoading}>
+                        Login
+                      </button>
+                    </div>
+                    {authStatus ? <p className="delete-note">{authStatus}</p> : null}
                   </div>
-                  {authStatus ? <p className="delete-note">{authStatus}</p> : null}
                 </div>
               </div>
             </section>
@@ -3719,23 +3833,12 @@ function App() {
             <div className="dashboard-highlight">
               <span>Shift Compliance</span>
               <strong>{lateLogins + onTimeLogins}</strong>
-              <p>
-                {showAdminLogin
-                  ? 'Authenticate to load admin endpoints.'
-                  : `Late logins: ${lateLogins} · On-time logins: ${onTimeLogins}`}
-              </p>
+              <p>{`Late logins: ${lateLogins} · On-time logins: ${onTimeLogins}`}</p>
             </div>
           </section>
 
           <section className="dashboard-panel">
-            {showAdminLogin ? (
-              <div className="empty-state">
-                <strong>Admin authentication required</strong>
-                <p>Request OTP and log in from the sidebar to load protected admin APIs.</p>
-              </div>
-            ) : (
-              renderDashboardPanel()
-            )}
+            {renderDashboardPanel()}
           </section>
             </>
           )}

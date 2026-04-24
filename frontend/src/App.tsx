@@ -420,6 +420,19 @@ function isPrivilegedUser(profile: AdminProfile | null) {
   return Boolean(profile.can_read || profile.can_write)
 }
 
+function hasWriteAccess(profile: AdminProfile | null) {
+  if (!profile) {
+    return false
+  }
+
+  const designation = (profile.emp_designation || '').trim().toLowerCase()
+  if (designation === 'devtester') {
+    return true
+  }
+
+  return (profile.role || '').trim().toLowerCase() === 'admin' && Boolean(profile.can_write)
+}
+
 function formatDateTime(value?: string) {
   if (!value) {
     return '--'
@@ -2003,7 +2016,14 @@ function App() {
     })
   }
 
+  const canWriteAdminData = hasWriteAccess(profile)
+
   const handleCreateEmployee = async () => {
+    if (!canWriteAdminData) {
+      setCreateEmployeeStatus('Write permission is required to create employees.')
+      return
+    }
+
     if (!newEmployee.emp_code.trim() || !newEmployee.emp_full_name.trim() || !newEmployee.emp_email.trim()) {
       setCreateEmployeeStatus('Employee ID, full name, and email are required.')
       return
@@ -2036,6 +2056,11 @@ function App() {
   }
 
   const handleEditEmployee = (employee: EmployeeRow) => {
+    if (!canWriteAdminData) {
+      setEditStatus('Write permission is required to edit employees.')
+      return
+    }
+
     setEditingEmployee(employee)
     setEditFormData({ ...employee })
     setEditModalOpen(true)
@@ -2043,6 +2068,11 @@ function App() {
   }
 
   const handleSaveEmployee = async () => {
+    if (!canWriteAdminData) {
+      setEditStatus('Write permission is required to edit employees.')
+      return
+    }
+
     if (!editingEmployee?.emp_code) {
       setEditStatus('Employee code is required.')
       return
@@ -2093,6 +2123,11 @@ function App() {
   }
 
   const handleDeleteEmployee = async (empCode: string, empName: string) => {
+    if (!canWriteAdminData) {
+      setEditStatus('Write permission is required to delete employees.')
+      return
+    }
+
     if (!confirm(`Are you sure you want to delete ${empName}? This cannot be undone.`)) {
       return
     }
@@ -2454,7 +2489,7 @@ function App() {
               </strong>
             </div>
           </div>
-          {showAddEmployee ? (
+          {showAddEmployee && canWriteAdminData ? (
             <div className="form-card">
               <div className="form-head">
                 <div>
@@ -2554,12 +2589,12 @@ function App() {
                 </div>
               </div>
               <div className="form-actions">
-                <button className="ghost" onClick={resetNewEmployee} disabled={createEmployeeLoading}>
-                  Reset
-                </button>
-                <button className="cta" onClick={() => void handleCreateEmployee()} disabled={createEmployeeLoading}>
-                  Create Employee
-                </button>
+                  <button className="ghost" onClick={resetNewEmployee} disabled={createEmployeeLoading}>
+                    Reset
+                  </button>
+                  <button className="cta" onClick={() => void handleCreateEmployee()} disabled={createEmployeeLoading}>
+                    Create Employee
+                  </button>
               </div>
               {createEmployeeStatus ? <p className="form-note">{createEmployeeStatus}</p> : null}
             </div>
@@ -2602,15 +2637,19 @@ function App() {
                           <span className="table-pill">{employee.is_active ? 'Active' : 'Inactive'}</span>
                         </td>
                         <td>
-                          <div className="table-actions">
-                            <button className="action-btn edit-btn" onClick={() => handleEditEmployee(employee)} title="Edit employee">
-                              Edit
-                            </button>
-                            <button className="action-btn delete-btn" onClick={() => handleDeleteEmployee(employee.emp_code, employee.emp_full_name || employee.emp_code)} title="Delete employee">
-                              Delete
-                            </button>
-                          </div>
-                        </td>
+                           {canWriteAdminData ? (
+                             <div className="table-actions">
+                               <button className="action-btn edit-btn" onClick={() => handleEditEmployee(employee)} title="Edit employee">
+                                 Edit
+                               </button>
+                               <button className="action-btn delete-btn" onClick={() => handleDeleteEmployee(employee.emp_code, employee.emp_full_name || employee.emp_code)} title="Delete employee">
+                                 Delete
+                               </button>
+                             </div>
+                           ) : (
+                             <span className="table-meta">Read only</span>
+                           )}
+                         </td>
                       </tr>
                     ))}
                   </tbody>

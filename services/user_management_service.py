@@ -12,18 +12,24 @@ from services.attendance_constants import ATTENDANCE_STATUS_LOGGED_IN
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_MANAGEMENT_ROLES = {"admin", "user_manager", "hr" }
+ALLOWED_MANAGEMENT_ROLES = {"user_manager"}
 ALLOWED_MANAGEMENT_DESIGNATIONS = {"devtester"}
 
 
 def can_manage_users(current_user: dict) -> bool:
     """Check if current user can create/delete employees."""
+    designation = (current_user.get("emp_designation") or "").strip().lower()
+    if designation in ALLOWED_MANAGEMENT_DESIGNATIONS:
+        return True
+
     role = (current_user.get("role") or "").strip().lower()
     if role in ALLOWED_MANAGEMENT_ROLES:
         return True
 
-    designation = (current_user.get("emp_designation") or "").strip().lower()
-    return designation in ALLOWED_MANAGEMENT_DESIGNATIONS
+    if role == "admin":
+        return bool(current_user.get("can_write"))
+
+    return False
 
 
 def _serialize_row(row: dict) -> dict:

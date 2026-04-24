@@ -47,6 +47,26 @@ def _normalize_attendance_type(attendance_type: str | None) -> str:
     return normalized
 
 
+def _has_approved_second_half_leave(cursor, emp_code: str, work_date) -> bool:
+    """Return True when the employee has approved second-half leave for the work date."""
+    if not emp_code or not work_date:
+        return False
+
+    cursor.execute(
+        """
+        SELECT 1
+        FROM leaves
+        WHERE emp_code = %s
+          AND status = 'approved'
+          AND duration = 'second_half'
+          AND %s BETWEEN from_date AND to_date
+        LIMIT 1
+        """,
+        (emp_code, work_date),
+    )
+    return cursor.fetchone() is not None
+
+
 def _create_site_clock_in_field_visit(
     cursor,
     attendance_id: int,
@@ -580,6 +600,12 @@ def clock_out(emp_email: str, lat: str, lon: str):
                         logger.info(f"✅ Comp-off session - early clock-out allowed for {emp_email}")
                     elif is_flexible_grade_employee(emp_code):
                         logger.info(f"Flexible grade - early clock-out allowed for {emp_email}")
+                    elif _has_approved_second_half_leave(cursor, emp_code, wd):
+                        logger.info(
+                            "Approved second-half leave found for %s on %s - early clock-out allowed",
+                            emp_email,
+                            wd,
+                        )
                     else:
                         # Check for early leave approval
                         is_approved, approval_message = check_early_leave_approval(

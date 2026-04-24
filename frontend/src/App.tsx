@@ -1067,6 +1067,7 @@ function App() {
   const [alertCandidatesLoading, setAlertCandidatesLoading] = useState(false)
   const [alertTriggerLoading, setAlertTriggerLoading] = useState(false)
   const [alertTriggerStatus, setAlertTriggerStatus] = useState('')
+  const [showAlertComposer, setShowAlertComposer] = useState(false)
   const [selectedMissedLoginEmpCodes, setSelectedMissedLoginEmpCodes] = useState<string[]>([])
   const [newEmployee, setNewEmployee] = useState({
     emp_code: '',
@@ -1162,6 +1163,7 @@ function App() {
 
   useEffect(() => {
     setAlertTriggerStatus('')
+    setShowAlertComposer(false)
   }, [attendanceDateFilter])
 
   useEffect(() => {
@@ -1335,6 +1337,7 @@ function App() {
           ? response.message.trim()
           : 'Attendance reminders processed'
       setAlertTriggerStatus(`${responseMessage} Sent: ${sentCount}, Failed: ${failedCount}.`)
+      setShowAlertComposer(false)
 
       const params = new URLSearchParams({
         notification_type: 'attendance_reminder',
@@ -2384,13 +2387,24 @@ function App() {
     const y = 100 - (item.count / maxWeeklyAttendance) * 100
     return `${x},${y}`
   }).join(' ')
-  const missedLoginEmployees = employees
-    .filter((employee) => (employee.emp_code ? alertEligibleEmpCodes.includes(employee.emp_code) : false))
-    .sort((left, right) =>
-      (left.emp_full_name || left.emp_code || '').localeCompare(right.emp_full_name || right.emp_code || '')
-    )
+    const missedLoginEmployees = employees
+      .filter((employee) => (employee.emp_code ? alertEligibleEmpCodes.includes(employee.emp_code) : false))
+      .sort((left, right) =>
+        (left.emp_full_name || left.emp_code || '').localeCompare(right.emp_full_name || right.emp_code || '')
+      )
+    const missedLoginEmployeeCodes = missedLoginEmployees
+      .map((employee) => employee.emp_code || '')
+      .filter(Boolean)
+    const selectedMissedLoginCount = selectedMissedLoginEmpCodes.filter((empCode) =>
+      missedLoginEmployeeCodes.includes(empCode)
+    ).length
+    const allMissedLoginsSelected =
+      missedLoginEmployeeCodes.length > 0 && selectedMissedLoginCount === missedLoginEmployeeCodes.length
+    const reminderTargetDate = attendanceDateFilter || toDateInputValue(new Date())
+    const reminderPreviewTitle = 'Attendance Reminder'
+    const reminderPreviewBody = 'Clock in. If you already did, please ignore.'
 
-  const renderDashboardPanel = () => {
+    const renderDashboardPanel = () => {
     const attendancePageRows = firstClockInRows
     const normalizedAttendanceSearch = attendanceSearch.trim().toLowerCase()
     const filteredAttendanceRows = normalizedAttendanceSearch
@@ -2463,15 +2477,36 @@ function App() {
               </button>
             </div>
           </div>
-          <div className="employee-search">
-            <label htmlFor="employee-search">Search Employees</label>
-            <input
-              id="employee-search"
-              type="text"
-              value={employeeSearch}
-              onChange={(event) => setEmployeeSearch(event.target.value)}
-              placeholder="Search by name, code, email, designation, department, or manager"
-            />
+          <div className="employee-search-card">
+            <div className="employee-search-copy">
+              <label htmlFor="employee-search">Search Employees</label>
+              <span>
+                {filteredEmployees.length} result{filteredEmployees.length === 1 ? '' : 's'} from {employees.length} employees
+              </span>
+            </div>
+            <div className="employee-search-shell">
+              <span className="employee-search-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.43 4.43 1.06-1.06-4.43-4.43A6.5 6.5 0 0 0 10.5 4Zm0 1.5a5 5 0 1 1 0 10a5 5 0 0 1 0-10Z" />
+                </svg>
+              </span>
+              <input
+                id="employee-search"
+                type="text"
+                value={employeeSearch}
+                onChange={(event) => setEmployeeSearch(event.target.value)}
+                placeholder="Search by name, code, email, designation, department, or manager"
+              />
+              {employeeSearch ? (
+                <button
+                  className="employee-search-clear"
+                  type="button"
+                  onClick={() => setEmployeeSearch('')}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
           </div>
           <div className="metric-row">
             <div className="metric-card">
@@ -2856,6 +2891,30 @@ function App() {
                 <strong>{missedLoginEmployees.length}</strong>
                 <span>{alertCandidatesLoading ? 'Refreshing alerts...' : 'Need attention'}</span>
               </div>
+              <div className="missed-logins-toolbar">
+                <button
+                  className="ghost dashboard-button"
+                  type="button"
+                  onClick={() => {
+                    setSelectedMissedLoginEmpCodes(missedLoginEmployeeCodes)
+                    setAlertTriggerStatus('')
+                  }}
+                  disabled={!missedLoginEmployeeCodes.length || allMissedLoginsSelected}
+                >
+                  Select All
+                </button>
+                <button
+                  className="ghost dashboard-button"
+                  type="button"
+                  onClick={() => {
+                    setSelectedMissedLoginEmpCodes([])
+                    setAlertTriggerStatus('')
+                  }}
+                  disabled={!selectedMissedLoginEmpCodes.length}
+                >
+                  Clear
+                </button>
+              </div>
               <div className="alert-side-list">
                 {missedLoginEmployees.length ? (
                   missedLoginEmployees.map((employee) => (
@@ -2888,16 +2947,64 @@ function App() {
               </div>
               <div className="missed-logins-actions">
                 <span className="missed-logins-selected">
-                  Selected: {selectedMissedLoginEmpCodes.length}
+                  Selected: {selectedMissedLoginCount}
                 </span>
-                <button
-                  className="cta dashboard-button"
-                  type="button"
-                  onClick={() => void triggerAttendanceReminder()}
-                  disabled={alertTriggerLoading || alertCandidatesLoading || !selectedMissedLoginEmpCodes.length}
-                >
-                  {alertTriggerLoading ? 'Triggering...' : 'Trigger Reminder'}
-                </button>
+                <div className={`alert-trigger-wrap${showAlertComposer ? ' open' : ''}`}>
+                  <button
+                    className="cta dashboard-button alert-trigger-button"
+                    type="button"
+                    onClick={() => {
+                      setShowAlertComposer((current) => !current)
+                      setAlertTriggerStatus('')
+                    }}
+                    disabled={alertCandidatesLoading || !selectedMissedLoginEmpCodes.length}
+                  >
+                    {alertTriggerLoading ? 'Triggering...' : 'Trigger Alert'}
+                  </button>
+                  <div className={`alert-trigger-dropdown${showAlertComposer ? ' open' : ''}`}>
+                    <div className="alert-trigger-dropdown-head">
+                      <strong>Reminder options</strong>
+                      <span>{selectedMissedLoginCount} employee{selectedMissedLoginCount === 1 ? '' : 's'} selected for {reminderTargetDate}</span>
+                    </div>
+                    <div className="alert-trigger-message">
+                      <small>Message sending</small>
+                      <strong>{reminderPreviewTitle}</strong>
+                      <p>{reminderPreviewBody}</p>
+                    </div>
+                    <div className="alert-trigger-recipient-list">
+                      {selectedMissedLoginEmpCodes
+                        .map((empCode) => missedLoginEmployees.find((employee) => employee.emp_code === empCode))
+                        .filter((employee): employee is EmployeeRow => Boolean(employee))
+                        .slice(0, 4)
+                        .map((employee) => (
+                          <span key={employee.emp_code} className="alert-trigger-recipient-pill">
+                            {employee.emp_full_name || employee.emp_code}
+                          </span>
+                        ))}
+                      {selectedMissedLoginCount > 4 ? (
+                        <span className="alert-trigger-recipient-pill">+{selectedMissedLoginCount - 4} more</span>
+                      ) : null}
+                    </div>
+                    <div className="alert-trigger-dropdown-actions">
+                      <button
+                        className="ghost dashboard-button"
+                        type="button"
+                        onClick={() => setShowAlertComposer(false)}
+                        disabled={alertTriggerLoading}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="cta dashboard-button"
+                        type="button"
+                        onClick={() => void triggerAttendanceReminder()}
+                        disabled={alertTriggerLoading || !selectedMissedLoginEmpCodes.length}
+                      >
+                        {alertTriggerLoading ? 'Sending...' : 'Send Reminder'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
               {alertTriggerStatus ? <span className="report-status">{alertTriggerStatus}</span> : null}
             </div>

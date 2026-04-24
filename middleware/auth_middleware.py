@@ -8,6 +8,7 @@ from functools import wraps
 from services.auth_service import decode_jwt_token
 from database.connection import get_db_connection
 import logging
+from werkzeug.exceptions import HTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,8 @@ def token_required(f):
             
             return f(current_user, *args, **kwargs)
         
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Token validation error: {e}")
             return jsonify({"success": False, "message": str(e)}), 401

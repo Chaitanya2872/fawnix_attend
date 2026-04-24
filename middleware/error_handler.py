@@ -9,6 +9,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _format_max_upload_size(max_bytes):
+    """Return a readable upload size string for 413 responses."""
+    if not max_bytes:
+        return "0 bytes"
+    if max_bytes < 1024 * 1024:
+        return f"{max_bytes} bytes"
+    if max_bytes % (1024 * 1024) == 0:
+        return f"{max_bytes // (1024 * 1024)} MB"
+    return f"{max_bytes / (1024 * 1024):.1f} MB"
+
+
 def register_error_handlers(app):
     """Register error handlers"""
     
@@ -55,9 +66,9 @@ def register_error_handlers(app):
 
     @app.errorhandler(413)
     def request_entity_too_large(error):
-        max_upload_mb = app.config.get('MAX_CONTENT_LENGTH', 0) // (1024 * 1024)
+        max_upload_size = _format_max_upload_size(app.config.get('MAX_CONTENT_LENGTH', 0))
         return jsonify({
             "success": False,
             "error": "Request Entity Too Large",
-            "message": f"Uploaded file is too large. Maximum request size is {max_upload_mb} MB."
+            "message": f"Uploaded file is too large. Maximum request size is {max_upload_size}."
         }), 413

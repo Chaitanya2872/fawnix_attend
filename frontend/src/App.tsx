@@ -320,6 +320,15 @@ type ActivityRow = {
   start_longitude?: number | string
   end_latitude?: number | string
   end_longitude?: number | string
+  destinations?: Array<{
+    name?: string
+    address?: string
+    lat?: number | string
+    lon?: number | string
+    visited?: boolean
+    visited_at?: string | null
+    sequence?: number
+  }>
   field_visit_tracking?: Array<{
     latitude?: number | string
     longitude?: number | string
@@ -352,6 +361,8 @@ type FieldVisitRow = {
   endName?: string
   startAddress?: string
   endAddress?: string
+  destinationLocation?: string
+  destinationVisited?: boolean | null
   distanceKm?: number | null
   startCoords?: { lat: number; lon: number } | null
   endCoords?: { lat: number; lon: number } | null
@@ -586,6 +597,26 @@ function calculateDistanceKm(points: Array<{ lat: number; lon: number }>) {
   }
 
   return total
+}
+
+function formatDestinationLocation(destinations?: ActivityRow['destinations']) {
+  if (!Array.isArray(destinations) || !destinations.length) {
+    return '--'
+  }
+
+  const labels = destinations
+    .map((destination) => destination?.name || destination?.address)
+    .filter((value): value is string => Boolean(value && value.trim()))
+
+  return labels.length ? labels.join(', ') : '--'
+}
+
+function getDestinationVisitedStatus(destinations?: ActivityRow['destinations']) {
+  if (!Array.isArray(destinations) || !destinations.length) {
+    return null
+  }
+
+  return destinations.every((destination) => Boolean(destination?.visited))
 }
 
 function normalizeFieldVisitTrackingPoints(points: FieldVisitTrackingPoint[] = []): MapTrackingPoint[] {
@@ -1449,6 +1480,8 @@ function App() {
             endName: getLocationName(endAddress, 'End Location'),
             startAddress: startAddress || undefined,
             endAddress: endAddress || undefined,
+            destinationLocation: formatDestinationLocation(item.destinations),
+            destinationVisited: getDestinationVisitedStatus(item.destinations),
             distanceKm: Number.isFinite(distanceKmValue) ? distanceKmValue : null,
             startCoords,
             endCoords,
@@ -3174,60 +3207,72 @@ function App() {
                       <th>Employee</th>
                       <th>Date</th>
                       <th>Visit Type</th>
+                      <th>Destination Location</th>
+                      <th>Destination Visited</th>
                       <th>Start Location</th>
                       <th>End Location</th>
                       <th>Distance</th>
-                    <th>Status</th>
-                    <th>Map</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {fieldVisitRows.map((row) => {
-                    const showRouteDetails = row.isCompleted
-                    return (
-                      <tr
-                        key={row.activityId}
-                        className="table-clickable-row"
-                        onClick={() => void openFieldVisitPanel(row)}
-                      >
-                        <td>
-                          <strong>{row.employee}</strong>
-                        </td>
-                        <td>{formatDateTime(row.visitDate)}</td>
-                        <td>{row.visitType}</td>
-                        <td>
-                          <strong>{row.startName || 'Start location unavailable'}</strong>
-                          <span className="table-meta">{row.startAddress || row.location || '--'}</span>
-                        </td>
-                        <td>
-                          <strong>{showRouteDetails ? row.endName || 'End location unavailable' : '--'}</strong>
-                          <span className="table-meta">{showRouteDetails ? row.endAddress || '--' : 'Visit in progress'}</span>
-                        </td>
-                        <td>{showRouteDetails ? formatDistanceKm(row.distanceKm) : '--'}</td>
-                        <td>
-                          <span className="table-pill accent">{row.status}</span>
-                        </td>
-                        <td>
-                          <button
-                            className="map-button"
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              void openMapForFieldVisit(row)
-                            }}
-                            aria-label="Open map"
-                            title="Open map"
-                            type="button"
-                          >
-                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                              <path d="M12 2c-3.6 0-6.5 2.9-6.5 6.5 0 4.7 6.5 12 6.5 12s6.5-7.3 6.5-12C18.5 4.9 15.6 2 12 2zm0 9.2c-1.5 0-2.7-1.2-2.7-2.7S10.5 5.8 12 5.8s2.7 1.2 2.7 2.7S13.5 11.2 12 11.2z" />
-                            </svg>
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                      <th>Status</th>
+                      <th>Map</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fieldVisitRows.map((row) => {
+                      const showRouteDetails = row.isCompleted
+                      return (
+                        <tr
+                          key={row.activityId}
+                          className="table-clickable-row"
+                          onClick={() => void openFieldVisitPanel(row)}
+                        >
+                          <td>
+                            <strong>{row.employee}</strong>
+                          </td>
+                          <td>{formatDateTime(row.visitDate)}</td>
+                          <td>{row.visitType}</td>
+                          <td>{row.destinationLocation || '--'}</td>
+                          <td>
+                            {row.destinationVisited === null ? (
+                              '--'
+                            ) : (
+                              <span className={`table-pill ${row.destinationVisited ? 'approved' : 'warning'}`}>
+                                {row.destinationVisited ? 'True' : 'False'}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <strong>{row.startName || 'Start location unavailable'}</strong>
+                            <span className="table-meta">{row.startAddress || row.location || '--'}</span>
+                          </td>
+                          <td>
+                            <strong>{showRouteDetails ? row.endName || 'End location unavailable' : '--'}</strong>
+                            <span className="table-meta">{showRouteDetails ? row.endAddress || '--' : 'Visit in progress'}</span>
+                          </td>
+                          <td>{showRouteDetails ? formatDistanceKm(row.distanceKm) : '--'}</td>
+                          <td>
+                            <span className="table-pill accent">{row.status}</span>
+                          </td>
+                          <td>
+                            <button
+                              className="map-button"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                void openMapForFieldVisit(row)
+                              }}
+                              aria-label="Open map"
+                              title="Open map"
+                              type="button"
+                            >
+                              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path d="M12 2c-3.6 0-6.5 2.9-6.5 6.5 0 4.7 6.5 12 6.5 12s6.5-7.3 6.5-12C18.5 4.9 15.6 2 12 2zm0 9.2c-1.5 0-2.7-1.2-2.7-2.7S10.5 5.8 12 5.8s2.7 1.2 2.7 2.7S13.5 11.2 12 11.2z" />
+                              </svg>
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
             </div>
           ) : (
             <div className="empty-state">No field visits found in the latest activity feed.</div>

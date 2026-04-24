@@ -20,7 +20,6 @@ class Config:
     TESTING = os.getenv('TESTING', 'False').lower() == 'true'
     PORT = int(os.getenv('PORT', 5000))
     MAX_CONTENT_LENGTH_MB = int(os.getenv('MAX_CONTENT_LENGTH_MB', 100))
-    MAX_CONTENT_LENGTH = MAX_CONTENT_LENGTH_MB * 1024 * 1024
     
     # Database Configuration
     DATABASE_HOST = os.getenv('DATABASE_HOST', 'employee_db')
@@ -133,6 +132,7 @@ class Config:
     MINIO_SECURE = os.getenv('MINIO_SECURE', 'False').lower() == 'true'
     MINIO_BUCKET = os.getenv('MINIO_BUCKET', 'fawnix-meeting-notes').strip()
     MINIO_MEETING_AUDIO_PREFIX = os.getenv('MINIO_MEETING_AUDIO_PREFIX', 'meeting-audio').strip().strip('/')
+    MAX_CONTENT_LENGTH = max(MAX_CONTENT_LENGTH_MB, MEETING_NOTES_MAX_UPLOAD_MB) * 1024 * 1024
     
     @classmethod
     def get_database_uri(cls) -> str:

@@ -4,6 +4,7 @@ from flask import Flask
 
 import middleware.auth_middleware as auth_middleware
 import routes.meeting_notes as meeting_notes_routes
+from middleware.error_handler import register_error_handlers
 from routes.meeting_notes import meeting_notes_bp
 
 
@@ -35,6 +36,7 @@ class AuthConnection:
 
 def create_test_app():
     app = Flask(__name__)
+    register_error_handlers(app)
     app.register_blueprint(meeting_notes_bp, url_prefix="/api/meeting-notes")
     return app
 
@@ -111,3 +113,36 @@ def test_generate_meeting_notes_route_accepts_audio_upload(monkeypatch):
     assert captured["meeting_title"] == "Weekly Review"
     assert captured["language"] == "en"
     assert captured["emp_code"] == "E001"
+
+
+def test_generate_meeting_notes_route_returns_json_for_oversized_upload(monkeypatch):
+    app = create_test_app()
+    app.config["MAX_CONTENT_LENGTH"] = 4
+    client = app.test_client()
+
+    authenticate_request(
+        monkeypatch,
+        {
+            "id": 7,
+            "emp_code": "E001",
+            "role": "employee",
+            "is_active": True,
+        },
+    )
+
+    response = client.post(
+        "/api/meeting-notes/generate",
+        headers={"Authorization": "Bearer test-token"},
+        data={
+            "audio": (BytesIO(b"audio-bytes"), "meeting.mp3"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 413
+    assert response.is_json is True
+    assert response.get_json() == {
+        "success": False,
+        "error": "Request Entity Too Large",
+        "message": "Uploaded file is too large. Maximum request size is 4 bytes.",
+    }

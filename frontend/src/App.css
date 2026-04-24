@@ -143,6 +143,15 @@ a {
   gap: 12px;
 }
 
+.brand-mark-image {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  object-fit: cover;
+  box-shadow: 0 10px 24px rgba(4, 14, 16, 0.28);
+  background: rgba(255, 255, 255, 0.12);
+}
+
 .sidebar-group {
   display: grid;
   gap: 10px;
@@ -357,6 +366,176 @@ a {
 
 .login-card .ghost {
   color: #fff;
+}
+
+.login-stage {
+  min-height: calc(100vh - 64px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.9fr);
+  gap: 28px;
+  align-items: stretch;
+}
+
+.login-stage-visual,
+.login-stage-panel {
+  position: relative;
+  overflow: hidden;
+  border-radius: 32px;
+  border: 1px solid rgba(17, 44, 50, 0.08);
+  box-shadow: 0 24px 60px rgba(17, 44, 50, 0.1);
+}
+
+.login-stage-visual {
+  background:
+    radial-gradient(circle at 18% 22%, rgba(31, 167, 164, 0.2), transparent 36%),
+    radial-gradient(circle at 82% 18%, rgba(247, 193, 122, 0.26), transparent 28%),
+    linear-gradient(145deg, #f7fbf8, #eaf2ee 55%, #f6efe0);
+  padding: 34px;
+  display: grid;
+  align-content: center;
+  gap: 24px;
+}
+
+.login-stage-orb {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(12px);
+  opacity: 0.7;
+  animation: loginFloat 8s ease-in-out infinite;
+}
+
+.login-stage-orb.orb-one {
+  width: 160px;
+  height: 160px;
+  top: -28px;
+  right: 8%;
+  background: rgba(31, 167, 164, 0.2);
+}
+
+.login-stage-orb.orb-two {
+  width: 220px;
+  height: 220px;
+  bottom: -62px;
+  left: -32px;
+  background: rgba(246, 193, 122, 0.26);
+  animation-delay: -3s;
+}
+
+.login-stage-frame {
+  position: relative;
+  width: min(320px, 72%);
+  aspect-ratio: 1;
+  border-radius: 36px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 26px 56px rgba(17, 44, 50, 0.14);
+  animation: loginCardIn 0.75s ease both;
+}
+
+.login-stage-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 28px;
+  display: block;
+}
+
+.login-stage-copy {
+  position: relative;
+  max-width: 560px;
+  display: grid;
+  gap: 14px;
+  animation: loginCardIn 0.85s ease both;
+  animation-delay: 0.08s;
+}
+
+.login-stage-copy h1 {
+  margin: 0;
+  font-size: clamp(36px, 4vw, 58px);
+  line-height: 1.02;
+  color: #112c32;
+}
+
+.login-stage-copy p:last-child {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.7;
+  color: #506267;
+}
+
+.login-stage-panel {
+  background:
+    linear-gradient(180deg, rgba(16, 40, 45, 0.98), rgba(17, 44, 50, 0.94)),
+    linear-gradient(120deg, rgba(31, 167, 164, 0.12), transparent);
+  padding: 28px;
+  display: grid;
+  align-content: center;
+  gap: 20px;
+  color: #eef7f5;
+  animation: loginCardIn 0.8s ease both;
+  animation-delay: 0.14s;
+}
+
+.login-stage-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 30%);
+  pointer-events: none;
+}
+
+.login-stage-panel-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.login-stage-panel-head h2 {
+  margin: 6px 0 0;
+  font-size: 28px;
+  color: #ffffff;
+}
+
+.login-stage-panel-icon {
+  width: 68px;
+  height: 68px;
+  border-radius: 20px;
+  object-fit: cover;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.24);
+  flex-shrink: 0;
+}
+
+.login-stage-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.login-stage-card input {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+@keyframes loginFloat {
+  0%,
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+  50% {
+    transform: translateY(-14px) translateX(8px);
+  }
+}
+
+@keyframes loginCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .empty-state {
@@ -2570,6 +2749,15 @@ a {
     padding: 20px;
   }
 
+  .login-stage {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .login-stage-frame {
+    width: min(260px, 76%);
+  }
+
   .dashboard-hero {
     grid-template-columns: 1fr;
   }
@@ -2670,6 +2858,32 @@ a {
 
   .line-chart-labels {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .sidebar-brand {
+    align-items: flex-start;
+  }
+
+  .login-stage-visual,
+  .login-stage-panel {
+    border-radius: 24px;
+    padding: 22px;
+  }
+
+  .login-stage-panel-head {
+    align-items: flex-start;
+  }
+
+  .login-stage-panel-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+  }
+
+  .login-stage-copy h1 {
+    font-size: clamp(30px, 10vw, 42px);
   }
 }
 

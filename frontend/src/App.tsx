@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import './App.css'
+import fawnixBg from './assets/fawnix_bg.png'
 
 type PrivacySection = {
   title: string
@@ -3457,7 +3458,7 @@ function App() {
       <div className="admin-shell">
         <aside className="sidebar">
           <div className="sidebar-brand">
-            <span className="brand-mark" aria-hidden="true" />
+            <img className="brand-mark-image" src={fawnixBg} alt="" aria-hidden="true" />
             <div>
               <div className="brand-name">Fawnix Admin</div>
               <div className="brand-tag">Operations control room</div>
@@ -3466,35 +3467,6 @@ function App() {
 
           {showAdminLogin ? (
             <>
-              <div className="login-card sidebar-login">
-                <h3>Admin Login</h3>
-                <p>Use Employee ID and OTP to access admin endpoints.</p>
-                <label htmlFor="admin-emp-code">Employee ID</label>
-                <input
-                  id="admin-emp-code"
-                  type="text"
-                  value={adminEmpCode}
-                  onChange={(event) => setAdminEmpCode(event.target.value)}
-                  placeholder="e.g. 2981"
-                />
-                <label htmlFor="admin-otp">OTP</label>
-                <input
-                  id="admin-otp"
-                  type="text"
-                  value={adminOtp}
-                  onChange={(event) => setAdminOtp(event.target.value)}
-                  placeholder="Enter OTP"
-                />
-                <div className="login-actions">
-                  <button className="ghost" onClick={handleAdminRequestOtp} disabled={authLoading}>
-                    Request OTP
-                  </button>
-                  <button className="cta" onClick={handleAdminLogin} disabled={authLoading}>
-                    Login
-                  </button>
-                </div>
-                {authStatus ? <p className="delete-note">{authStatus}</p> : null}
-              </div>
               <div className="sidebar-logout">
                 <button className="sidebar-link logout-link" onClick={handleLogout}>
                   Logout
@@ -3676,6 +3648,64 @@ function App() {
               </div>
             </div>
           ) : null}
+          {showAdminLogin ? (
+            <section className="login-stage">
+              <div className="login-stage-visual">
+                <div className="login-stage-orb orb-one" aria-hidden="true" />
+                <div className="login-stage-orb orb-two" aria-hidden="true" />
+                <div className="login-stage-frame">
+                  <img className="login-stage-image" src={fawnixBg} alt="Fawnix" />
+                </div>
+                <div className="login-stage-copy">
+                  <p className="eyebrow">Secure Access</p>
+                  <h1>Step into the Fawnix control room.</h1>
+                  <p>
+                    Sign in with Employee ID and OTP to manage attendance, employee records,
+                    exceptions, and live operational alerts with a smoother dashboard experience.
+                  </p>
+                </div>
+              </div>
+
+              <div className="login-stage-panel">
+                <div className="login-stage-panel-head">
+                  <img className="login-stage-panel-icon" src={fawnixBg} alt="Fawnix icon" />
+                  <div>
+                    <p className="eyebrow">Admin Login</p>
+                    <h2>Authenticate to continue</h2>
+                  </div>
+                </div>
+                <div className="login-card login-stage-card">
+                  <p>Use Employee ID and OTP to access protected admin endpoints.</p>
+                  <label htmlFor="admin-emp-code">Employee ID</label>
+                  <input
+                    id="admin-emp-code"
+                    type="text"
+                    value={adminEmpCode}
+                    onChange={(event) => setAdminEmpCode(event.target.value)}
+                    placeholder="e.g. 2981"
+                  />
+                  <label htmlFor="admin-otp">OTP</label>
+                  <input
+                    id="admin-otp"
+                    type="text"
+                    value={adminOtp}
+                    onChange={(event) => setAdminOtp(event.target.value)}
+                    placeholder="Enter OTP"
+                  />
+                  <div className="login-actions">
+                    <button className="ghost" onClick={handleAdminRequestOtp} disabled={authLoading}>
+                      Request OTP
+                    </button>
+                    <button className="cta" onClick={handleAdminLogin} disabled={authLoading}>
+                      Login
+                    </button>
+                  </div>
+                  {authStatus ? <p className="delete-note">{authStatus}</p> : null}
+                </div>
+              </div>
+            </section>
+          ) : (
+            <>
           <section className="dashboard-hero">
             <div>
               <p className="eyebrow">Admin dashboard</p>
@@ -3707,6 +3737,8 @@ function App() {
               renderDashboardPanel()
             )}
           </section>
+            </>
+          )}
 
           {editModalOpen && editingEmployee ? (
             <div className="modal-backdrop" role="dialog" aria-modal="true">

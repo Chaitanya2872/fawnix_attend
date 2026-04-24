@@ -44,9 +44,12 @@ def token_required(f):
                         e.emp_email,
                         e.emp_designation,
                         e.emp_department,
-                        e.emp_manager
+                        e.emp_manager,
+                        COALESCE(ap.can_read, FALSE) AS can_read,
+                        COALESCE(ap.can_write, FALSE) AS can_write
                     FROM users u
                     JOIN employees e ON u.emp_code = e.emp_code
+                    LEFT JOIN admin_permissions ap ON ap.emp_code = u.emp_code
                     WHERE u.emp_code = %s
                 """, (emp_code,))
                 

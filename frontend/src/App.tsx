@@ -211,6 +211,8 @@ type AdminProfile = {
   emp_designation?: string
   emp_department?: string
   role?: string
+  can_read?: boolean
+  can_write?: boolean
 }
 
 type EmployeeRow = {
@@ -406,7 +408,16 @@ function isPrivilegedUser(profile: AdminProfile | null) {
   }
 
   const designation = (profile.emp_designation || '').trim().toLowerCase()
-  return ['hr', 'devtester'].includes(designation)
+  if (designation === 'devtester') {
+    return true
+  }
+
+  const role = (profile.role || '').trim().toLowerCase()
+  if (role !== 'admin') {
+    return false
+  }
+
+  return Boolean(profile.can_read || profile.can_write)
 }
 
 function formatDateTime(value?: string) {
@@ -1613,7 +1624,7 @@ function App() {
       const nextProfile = (profileResponse?.data || null) as AdminProfile | null
 
       if (!isPrivilegedUser(nextProfile)) {
-        throw new Error('This dashboard currently requires HR or DevTester access')
+        throw new Error('This dashboard currently requires DevTester or admin permissions access')
       }
 
       persistSession(nextAccessToken, nextRefreshToken, nextProfile as AdminProfile)

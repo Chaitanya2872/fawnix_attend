@@ -418,11 +418,14 @@ def get_profile(current_user):
     try:
         cursor.execute("""
             SELECT e.*, u.role, u.is_active, u.last_login,
+                   COALESCE(ap.can_read, FALSE) AS can_read,
+                   COALESCE(ap.can_write, FALSE) AS can_write,
                    b.branch_name,
                    m1.emp_full_name as manager_name,
                    m2.emp_full_name as informing_manager_name
             FROM employees e
             LEFT JOIN users u ON e.emp_code = u.emp_code
+            LEFT JOIN admin_permissions ap ON e.emp_code = ap.emp_code
             LEFT JOIN branch b ON e.emp_branch_id = b.branch_id
             LEFT JOIN employees m1 ON e.emp_manager = m1.emp_code
             LEFT JOIN employees m2 ON e.emp_informing_manager = m2.emp_code

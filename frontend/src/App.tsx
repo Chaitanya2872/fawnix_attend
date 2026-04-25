@@ -763,6 +763,48 @@ function toDateInputValue(value: Date) {
   return new Date(value.getTime() - offsetValue).toISOString().slice(0, 10)
 }
 
+function parseDateInputValue(value: string) {
+  const [year, month, day] = value.split('-').map((item) => Number(item))
+  if (!year || !month || !day) {
+    return new Date()
+  }
+  return new Date(year, month - 1, day)
+}
+
+function formatAttendanceDateLabel(value: string) {
+  if (!value) {
+    return 'Pick a date'
+  }
+
+  const parsed = parseDateInputValue(value)
+  return parsed.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  })
+}
+
+function getCalendarMonthLabel(value: Date) {
+  return value.toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric'
+  })
+}
+
+function getCalendarDays(viewDate: Date) {
+  const year = viewDate.getFullYear()
+  const month = viewDate.getMonth()
+  const firstOfMonth = new Date(year, month, 1)
+  const startOffset = firstOfMonth.getDay()
+  const gridStart = new Date(year, month, 1 - startOffset)
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(gridStart)
+    date.setDate(gridStart.getDate() + index)
+    return date
+  })
+}
+
 function isSameDate(value: string | undefined, targetDate: string) {
   if (!value || !targetDate) {
     return false
@@ -1065,6 +1107,10 @@ function App() {
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
   const [attendanceDateFilter, setAttendanceDateFilter] = useState(() => toDateInputValue(new Date()))
+  const [attendanceDatePickerOpen, setAttendanceDatePickerOpen] = useState(false)
+  const [attendanceDatePickerMonth, setAttendanceDatePickerMonth] = useState(() =>
+    parseDateInputValue(toDateInputValue(new Date()))
+  )
   const [attendanceSearch, setAttendanceSearch] = useState('')
   const [attendanceReportMonth, setAttendanceReportMonth] = useState(() => String(new Date().getMonth() + 1))
   const [attendanceReportYear, setAttendanceReportYear] = useState(() => String(new Date().getFullYear()))
@@ -1096,6 +1142,7 @@ function App() {
   const [fieldVisitTimelineItems, setFieldVisitTimelineItems] = useState<FieldVisitTimelineItem[]>([])
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
+  const attendanceDatePickerRef = useRef<HTMLDivElement | null>(null)
   const [showAddEmployee, setShowAddEmployee] = useState(false)
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
   const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
@@ -1145,6 +1192,36 @@ function App() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    setAttendanceDatePickerMonth(parseDateInputValue(attendanceDateFilter || toDateInputValue(new Date())))
+  }, [attendanceDateFilter])
+
+  useEffect(() => {
+    if (!attendanceDatePickerOpen) {
+      return undefined
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!attendanceDatePickerRef.current?.contains(event.target as Node)) {
+        setAttendanceDatePickerOpen(false)
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setAttendanceDatePickerOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [attendanceDatePickerOpen])
 
   useEffect(() => {
     if (!showDashboard || !showAdminLogin) {
@@ -2279,6 +2356,8 @@ function App() {
   }
 
   const selectedAttendanceDate = attendanceDateFilter || toDateInputValue(new Date())
+  const attendanceCalendarMonthLabel = getCalendarMonthLabel(attendanceDatePickerMonth)
+  const attendanceCalendarDays = getCalendarDays(attendanceDatePickerMonth)
   const todayDateValue = toDateInputValue(new Date())
   const selectedDateAttendanceRows = attendanceRows.filter((row) =>
     isSameDate(row.login_time || row.date, selectedAttendanceDate)
@@ -2854,38 +2933,140 @@ function App() {
                 <div className="attendance-controls attendance-controls-inline">
                   <div className="attendance-filter attendance-filter-date">
                     <label htmlFor="attendance-date">Date</label>
-                    <div className="attendance-input-shell attendance-date-shell">
-                      <span className="attendance-input-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24">
-                          <path
-                            d="M7 3v3M17 3v3M4 9h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </span>
-                      <input
-                        className="modern-date-input"
+                    <div
+                      className={`attendance-date-picker ${attendanceDatePickerOpen ? 'open' : ''}`}
+                      ref={attendanceDatePickerRef}
+                    >
+                      <button
+                        className="attendance-input-shell attendance-date-shell attendance-date-trigger"
                         id="attendance-date"
-                        type="date"
-                        value={attendanceDateFilter}
-                        onChange={(event) => setAttendanceDateFilter(event.target.value)}
-                      />
-                      <span className="attendance-date-chevron" aria-hidden="true">
-                        <svg viewBox="0 0 24 24">
-                          <path
-                            d="m8 10 4 4 4-4"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </span>
+                        type="button"
+                        aria-haspopup="dialog"
+                        aria-expanded={attendanceDatePickerOpen}
+                        onClick={() => setAttendanceDatePickerOpen((current) => !current)}
+                      >
+                        <span className="attendance-input-icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24">
+                            <path
+                              d="M7 3v3M17 3v3M4 9h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </span>
+                        <span className="attendance-date-value">{formatAttendanceDateLabel(attendanceDateFilter)}</span>
+                        <span className="attendance-date-chevron" aria-hidden="true">
+                          <svg viewBox="0 0 24 24">
+                            <path
+                              d="m8 10 4 4 4-4"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </span>
+                      </button>
+                      {attendanceDatePickerOpen ? (
+                        <div className="attendance-date-popover" role="dialog" aria-label="Choose date">
+                          <div className="attendance-date-popover-head">
+                            <button
+                              className="attendance-date-nav"
+                              type="button"
+                              aria-label="Previous month"
+                              onClick={() =>
+                                setAttendanceDatePickerMonth(
+                                  (current) => new Date(current.getFullYear(), current.getMonth() - 1, 1)
+                                )
+                              }
+                            >
+                              <svg viewBox="0 0 24 24">
+                                <path
+                                  d="m14 7-5 5 5 5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.8"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            </button>
+                            <strong>{attendanceCalendarMonthLabel}</strong>
+                            <button
+                              className="attendance-date-nav"
+                              type="button"
+                              aria-label="Next month"
+                              onClick={() =>
+                                setAttendanceDatePickerMonth(
+                                  (current) => new Date(current.getFullYear(), current.getMonth() + 1, 1)
+                                )
+                              }
+                            >
+                              <svg viewBox="0 0 24 24">
+                                <path
+                                  d="m10 7 5 5-5 5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.8"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                          <div className="attendance-date-weekdays">
+                            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
+                              <span key={day}>{day}</span>
+                            ))}
+                          </div>
+                          <div className="attendance-date-grid">
+                            {attendanceCalendarDays.map((day) => {
+                              const dayValue = toDateInputValue(day)
+                              const isSelected = dayValue === selectedAttendanceDate
+                              const isToday = dayValue === todayDateValue
+                              const isOutsideMonth = day.getMonth() !== attendanceDatePickerMonth.getMonth()
+
+                              return (
+                                <button
+                                  key={dayValue}
+                                  className={[
+                                    'attendance-date-day',
+                                    isSelected ? 'selected' : '',
+                                    isToday ? 'today' : '',
+                                    isOutsideMonth ? 'outside' : ''
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' ')}
+                                  type="button"
+                                  onClick={() => {
+                                    setAttendanceDateFilter(dayValue)
+                                    setAttendanceDatePickerOpen(false)
+                                  }}
+                                >
+                                  <span>{day.getDate()}</span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                          <div className="attendance-date-popover-footer">
+                            <button
+                              className="attendance-date-footer-link"
+                              type="button"
+                              onClick={() => {
+                                setAttendanceDateFilter(todayDateValue)
+                                setAttendanceDatePickerMonth(parseDateInputValue(todayDateValue))
+                                setAttendanceDatePickerOpen(false)
+                              }}
+                            >
+                              Today
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                   <div className="attendance-filter attendance-filter-search">

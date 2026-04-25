@@ -2854,23 +2854,51 @@ function App() {
                 <div className="attendance-controls attendance-controls-inline">
                   <div className="attendance-filter attendance-filter-date">
                     <label htmlFor="attendance-date">Date</label>
-                    <input
-                      className="modern-date-input"
-                      id="attendance-date"
-                      type="date"
-                      value={attendanceDateFilter}
-                      onChange={(event) => setAttendanceDateFilter(event.target.value)}
-                    />
+                    <div className="attendance-input-shell attendance-date-shell">
+                      <span className="attendance-input-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24">
+                          <path
+                            d="M7 3v3M17 3v3M4 9h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </span>
+                      <input
+                        className="modern-date-input"
+                        id="attendance-date"
+                        type="date"
+                        value={attendanceDateFilter}
+                        onChange={(event) => setAttendanceDateFilter(event.target.value)}
+                      />
+                      <span className="attendance-date-chevron" aria-hidden="true">
+                        <svg viewBox="0 0 24 24">
+                          <path
+                            d="m8 10 4 4 4-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </span>
+                    </div>
                   </div>
                   <div className="attendance-filter attendance-filter-search">
                     <label htmlFor="attendance-search">Search</label>
-                    <input
-                      id="attendance-search"
-                      type="text"
-                      value={attendanceSearch}
-                      onChange={(event) => setAttendanceSearch(event.target.value)}
-                      placeholder="Search name, email, type, or location"
-                    />
+                    <div className="attendance-input-shell attendance-search-shell">
+                      <input
+                        id="attendance-search"
+                        type="text"
+                        value={attendanceSearch}
+                        onChange={(event) => setAttendanceSearch(event.target.value)}
+                        placeholder="Search name, email, type, or location"
+                      />
+                    </div>
                   </div>
                   <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                     Refresh

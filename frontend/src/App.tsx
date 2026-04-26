@@ -1078,11 +1078,15 @@ function App() {
 
   const [employees, setEmployees] = useState<EmployeeRow[]>([])
   const [editingEmployee, setEditingEmployee] = useState<EmployeeRow | null>(null)
-  const [editModalOpen, setEditModalOpen] = useState(false)
   const [editFormData, setEditFormData] = useState<Partial<EmployeeRow>>({})
   const [editLoading, setEditLoading] = useState(false)
   const [editStatus, setEditStatus] = useState('')
   const [employeeSearch, setEmployeeSearch] = useState('')
+  const [employeeStatusFilter, setEmployeeStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [employeeStatusMenuOpen, setEmployeeStatusMenuOpen] = useState(false)
+  const [employeePanelMode, setEmployeePanelMode] = useState<'add' | 'edit' | null>(null)
+  const [deleteEmployeeTarget, setDeleteEmployeeTarget] = useState<EmployeeRow | null>(null)
+  const [deleteEmployeeLoading, setDeleteEmployeeLoading] = useState(false)
   const [showTodayActivities, setShowTodayActivities] = useState(true)
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([])
   const [, setAttendanceTotalCount] = useState(0)
@@ -1143,7 +1147,7 @@ function App() {
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
   const attendanceDatePickerRef = useRef<HTMLDivElement | null>(null)
-  const [showAddEmployee, setShowAddEmployee] = useState(false)
+  const employeeStatusMenuRef = useRef<HTMLDivElement | null>(null)
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
   const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
   const [alertEligibleEmpCodes, setAlertEligibleEmpCodes] = useState<string[]>([])
@@ -1222,6 +1226,24 @@ function App() {
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [attendanceDatePickerOpen])
+
+  useEffect(() => {
+    if (!employeeStatusMenuOpen) {
+      return undefined
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!employeeStatusMenuRef.current?.contains(event.target as Node)) {
+        setEmployeeStatusMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+    }
+  }, [employeeStatusMenuOpen])
 
   useEffect(() => {
     if (!showDashboard || !showAdminLogin) {
@@ -2184,6 +2206,20 @@ function App() {
     })
   }
 
+  const closeEmployeePanel = () => {
+    setEmployeePanelMode(null)
+    setEditingEmployee(null)
+    setEditFormData({})
+    setEditStatus('')
+    setCreateEmployeeStatus('')
+  }
+
+  const openAddEmployeePanel = () => {
+    resetNewEmployee()
+    setCreateEmployeeStatus('')
+    setEmployeePanelMode('add')
+  }
+
   const canWriteAdminData = hasWriteAccess(profile)
 
   const handleCreateEmployee = async () => {
@@ -2210,14 +2246,14 @@ function App() {
       const response = await apiRequest('/api/users', {
         method: 'POST',
         body: JSON.stringify(payload)
-      })
+        })
 
-      setCreateEmployeeStatus(response?.message || 'Employee created successfully.')
-      resetNewEmployee()
-      setShowAddEmployee(false)
-      await loadDashboard(accessToken)
-    } catch (error) {
-      setCreateEmployeeStatus(error instanceof Error ? error.message : 'Failed to create employee')
+        setCreateEmployeeStatus(response?.message || 'Employee created successfully.')
+        resetNewEmployee()
+        setEmployeePanelMode(null)
+        await loadDashboard(accessToken)
+      } catch (error) {
+        setCreateEmployeeStatus(error instanceof Error ? error.message : 'Failed to create employee')
     } finally {
       setCreateEmployeeLoading(false)
     }
@@ -2227,13 +2263,13 @@ function App() {
     if (!canWriteAdminData) {
       setEditStatus('Write permission is required to edit employees.')
       return
-    }
+      }
 
-    setEditingEmployee(employee)
-    setEditFormData({ ...employee })
-    setEditModalOpen(true)
-    setEditStatus('')
-  }
+      setEditingEmployee(employee)
+      setEditFormData({ ...employee })
+      setEmployeePanelMode('edit')
+      setEditStatus('')
+    }
 
   const handleSaveEmployee = async () => {
     if (!canWriteAdminData) {
@@ -2246,8 +2282,8 @@ function App() {
       return
     }
 
-    setEditLoading(true)
-    setEditStatus('Updating employee...')
+      setEditLoading(true)
+      setEditStatus('Updating employee...')
 
     try {
       const allowedFields = new Set([
@@ -2278,45 +2314,53 @@ function App() {
         body: JSON.stringify(updatePayload)
       })
 
-      setEditStatus(response?.message || 'Employee updated successfully.')
-      setEditModalOpen(false)
-      setEditingEmployee(null)
-      setEditFormData({})
-      await loadDashboard(accessToken)
-    } catch (error) {
-      setEditStatus(error instanceof Error ? error.message : 'Failed to update employee')
+        setEditStatus(response?.message || 'Employee updated successfully.')
+        closeEmployeePanel()
+        await loadDashboard(accessToken)
+      } catch (error) {
+        setEditStatus(error instanceof Error ? error.message : 'Failed to update employee')
     } finally {
       setEditLoading(false)
     }
   }
 
-  const handleDeleteEmployee = async (empCode: string, empName: string) => {
+  const requestDeleteEmployee = (employee: EmployeeRow) => {
     if (!canWriteAdminData) {
       setEditStatus('Write permission is required to delete employees.')
       return
     }
 
-    if (!confirm(`Are you sure you want to delete ${empName}? This cannot be undone.`)) {
+    setDeleteEmployeeTarget(employee)
+  }
+
+  const handleDeleteEmployee = async () => {
+    if (!canWriteAdminData) {
+      setEditStatus('Write permission is required to delete employees.')
       return
     }
 
+    if (!deleteEmployeeTarget?.emp_code) {
+      return
+    }
+
+    setDeleteEmployeeLoading(true)
     setEditStatus('Deleting employee...')
-    setEditLoading(true)
 
     try {
-      const response = await apiRequest(`/api/users/${empCode}`, {
+      const response = await apiRequest(`/api/users/${deleteEmployeeTarget.emp_code}`, {
         method: 'DELETE'
       })
 
       setEditStatus(response?.message || 'Employee deleted successfully.')
-      setEditModalOpen(false)
-      setEditingEmployee(null)
-      setEditFormData({})
+      setDeleteEmployeeTarget(null)
+      if (editingEmployee?.emp_code === deleteEmployeeTarget.emp_code) {
+        closeEmployeePanel()
+      }
       await loadDashboard(accessToken)
     } catch (error) {
       setEditStatus(error instanceof Error ? error.message : 'Failed to delete employee')
     } finally {
-      setEditLoading(false)
+      setDeleteEmployeeLoading(false)
     }
   }
 
@@ -2593,21 +2637,33 @@ function App() {
         })
       : attendancePageRows
     const normalizedEmployeeSearch = employeeSearch.trim().toLowerCase()
-    const filteredEmployees = normalizedEmployeeSearch
-      ? employees.filter((employee) => {
-          const haystack = [
-            employee.emp_full_name || '',
-            employee.emp_code || '',
+    const filteredEmployees = employees
+      .filter((employee) => {
+        if (employeeStatusFilter === 'active') {
+          return Boolean(employee.is_active)
+        }
+        if (employeeStatusFilter === 'inactive') {
+          return !employee.is_active
+        }
+        return true
+      })
+      .filter((employee) => {
+        if (!normalizedEmployeeSearch) {
+          return true
+        }
+
+            const haystack = [
+              employee.emp_full_name || '',
+              employee.emp_code || '',
             employee.emp_email || '',
             employee.emp_designation || '',
             employee.emp_department || '',
             employee.manager_name || '',
-            employee.emp_manager || ''
-          ].join(' ').toLowerCase()
-          return haystack.includes(normalizedEmployeeSearch)
-        })
-      : employees
-    const filteredActivities = showTodayActivities
+              employee.emp_manager || ''
+            ].join(' ').toLowerCase()
+        return haystack.includes(normalizedEmployeeSearch)
+          })
+      const filteredActivities = showTodayActivities
       ? activityRows.filter((row) => isSameDate(row.start_time, todayDateValue))
       : activityRows
 
@@ -2636,9 +2692,11 @@ function App() {
               <h2>Employees List</h2>
             </div>
             <div className="employee-actions">
-              <button className="ghost dashboard-button" onClick={() => setShowAddEmployee((current) => !current)}>
-                {showAddEmployee ? 'Close Form' : 'Add Employee'}
-              </button>
+              {canWriteAdminData ? (
+                <button className="ghost dashboard-button" onClick={openAddEmployeePanel}>
+                  Add Employee
+                </button>
+              ) : null}
               <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                 Refresh
               </button>
@@ -2674,6 +2732,11 @@ function App() {
                 </button>
               ) : null}
             </div>
+            <div className="employee-toolbar-meta">
+              <span className="employee-filter-chip">
+                Status: {employeeStatusFilter === 'all' ? 'All' : employeeStatusFilter === 'active' ? 'Active' : 'Inactive'}
+              </span>
+            </div>
           </div>
           <div className="metric-row">
             <div className="metric-card">
@@ -2691,116 +2754,6 @@ function App() {
               </strong>
             </div>
           </div>
-          {showAddEmployee && canWriteAdminData ? (
-            <div className="form-card">
-              <div className="form-head">
-                <div>
-                  <strong>Add Employee</strong>
-                  <span>Uses `POST /api/users` with the current admin session.</span>
-                </div>
-              </div>
-              <div className="form-grid">
-                <div>
-                  <label htmlFor="new-emp-code">Employee ID</label>
-                  <input
-                    id="new-emp-code"
-                    value={newEmployee.emp_code}
-                    onChange={(event) => updateNewEmployee('emp_code', event.target.value)}
-                    placeholder="e.g. 3051"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="new-emp-name">Full Name</label>
-                  <input
-                    id="new-emp-name"
-                    value={newEmployee.emp_full_name}
-                    onChange={(event) => updateNewEmployee('emp_full_name', event.target.value)}
-                    placeholder="Employee full name"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="new-emp-email">Email</label>
-                  <input
-                    id="new-emp-email"
-                    type="email"
-                    value={newEmployee.emp_email}
-                    onChange={(event) => updateNewEmployee('emp_email', event.target.value)}
-                    placeholder="name@example.com"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="new-emp-contact">Contact</label>
-                  <input
-                    id="new-emp-contact"
-                    value={newEmployee.emp_contact}
-                    onChange={(event) => updateNewEmployee('emp_contact', event.target.value)}
-                    placeholder="Phone number"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="new-emp-designation">Designation</label>
-                  <input
-                    id="new-emp-designation"
-                    value={newEmployee.emp_designation}
-                    onChange={(event) => updateNewEmployee('emp_designation', event.target.value)}
-                    placeholder="HR / Sales Executive / DevTester"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="new-emp-grade">Grade</label>
-                  <select
-                    id="new-emp-grade"
-                    value={newEmployee.emp_grade}
-                    onChange={(event) => updateNewEmployee('emp_grade', event.target.value)}
-                  >
-                    <option value="">Select grade</option>
-                    <option value="F">Flexible (F)</option>
-                    <option value="M">Moderate (M)</option>
-                    <option value="NF">Non-Flexible (NF)</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="new-emp-department">Department</label>
-                  <input
-                    id="new-emp-department"
-                    value={newEmployee.emp_department}
-                    onChange={(event) => updateNewEmployee('emp_department', event.target.value)}
-                    placeholder="Department"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="new-emp-manager">Manager Code</label>
-                  <input
-                    id="new-emp-manager"
-                    value={newEmployee.emp_manager}
-                    onChange={(event) => updateNewEmployee('emp_manager', event.target.value)}
-                    placeholder="e.g. 2981"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="new-emp-role">User Role</label>
-                  <select
-                    id="new-emp-role"
-                    value={newEmployee.role}
-                    onChange={(event) => updateNewEmployee('role', event.target.value)}
-                  >
-                    <option value="employee">employee</option>
-                    <option value="user_manager">user_manager</option>
-                    <option value="admin">admin</option>
-                  </select>
-                </div>
-              </div>
-              <div className="form-actions">
-                  <button className="ghost" onClick={resetNewEmployee} disabled={createEmployeeLoading}>
-                    Reset
-                  </button>
-                  <button className="cta" onClick={() => void handleCreateEmployee()} disabled={createEmployeeLoading}>
-                    Create Employee
-                  </button>
-              </div>
-              {createEmployeeStatus ? <p className="form-note">{createEmployeeStatus}</p> : null}
-            </div>
-          ) : null}
           <div className="table-card">
             {filteredEmployees.length ? (
               <div className="table-scroll">
@@ -2813,13 +2766,56 @@ function App() {
                       <th>Department</th>
                       <th>Contact</th>
                       <th>Manager</th>
-                      <th>Status</th>
+                      <th className="employee-status-head">
+                        <div className="employee-status-filter" ref={employeeStatusMenuRef}>
+                          <span>Status</span>
+                          <button
+                            className={`employee-status-filter-trigger ${employeeStatusMenuOpen ? 'open' : ''}`}
+                            type="button"
+                            aria-haspopup="menu"
+                            aria-expanded={employeeStatusMenuOpen}
+                            onClick={() => setEmployeeStatusMenuOpen((current) => !current)}
+                          >
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <path
+                                d="M4 6h16M7 12h10m-7 6h4"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+                          {employeeStatusMenuOpen ? (
+                            <div className="employee-status-menu" role="menu">
+                              {[
+                                { id: 'all', label: 'All employees' },
+                                { id: 'active', label: 'Active only' },
+                                { id: 'inactive', label: 'Inactive only' }
+                              ].map((option) => (
+                                <button
+                                  key={option.id}
+                                  className={`employee-status-menu-item ${employeeStatusFilter === option.id ? 'active' : ''}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setEmployeeStatusFilter(option.id as 'all' | 'active' | 'inactive')
+                                    setEmployeeStatusMenuOpen(false)
+                                  }}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredEmployees.map((employee) => (
-                      <tr key={employee.emp_code}>
+                      <tr key={employee.emp_code} className="employee-row">
                         <td>
                           <strong>{employee.emp_full_name || employee.emp_code}</strong>
                           <span className="table-meta">{employee.emp_code}</span>
@@ -2836,16 +2832,36 @@ function App() {
                           <span className="table-meta">{employee.manager_email || employee.manager_code || 'Manager'}</span>
                         </td>
                         <td>
-                          <span className="table-pill">{employee.is_active ? 'Active' : 'Inactive'}</span>
+                          <span className={`table-pill ${employee.is_active ? 'active' : 'inactive'}`}>
+                            {employee.is_active ? 'Active' : 'Inactive'}
+                          </span>
                         </td>
                         <td>
                            {canWriteAdminData ? (
                              <div className="table-actions">
-                               <button className="action-btn edit-btn" onClick={() => handleEditEmployee(employee)} title="Edit employee">
-                                 Edit
+                               <button className="action-btn icon-btn edit-btn" onClick={() => handleEditEmployee(employee)} title="Edit employee" type="button">
+                                 <svg viewBox="0 0 24 24" aria-hidden="true">
+                                   <path
+                                     d="M4 20h4l10.5-10.5a2.12 2.12 0 1 0-3-3L5 17v3Z"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     strokeWidth="1.8"
+                                     strokeLinecap="round"
+                                     strokeLinejoin="round"
+                                   />
+                                 </svg>
                                </button>
-                               <button className="action-btn delete-btn" onClick={() => handleDeleteEmployee(employee.emp_code, employee.emp_full_name || employee.emp_code)} title="Delete employee">
-                                 Delete
+                               <button className="action-btn icon-btn delete-btn" onClick={() => requestDeleteEmployee(employee)} title="Delete employee" type="button">
+                                 <svg viewBox="0 0 24 24" aria-hidden="true">
+                                   <path
+                                     d="M5 7h14M9 7V5h6v2m-7 0 1 12h6l1-12M10 11v5m4-5v5"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     strokeWidth="1.8"
+                                     strokeLinecap="round"
+                                     strokeLinejoin="round"
+                                   />
+                                 </svg>
                                </button>
                              </div>
                            ) : (
@@ -4052,107 +4068,273 @@ function App() {
             </>
           )}
 
-          {editModalOpen && editingEmployee ? (
+          {employeePanelMode ? (
+            <>
+              <button className="side-panel-scrim" type="button" aria-label="Close employee panel" onClick={closeEmployeePanel} />
+              <aside className="field-visit-panel employee-form-panel" aria-label={employeePanelMode === 'add' ? 'Add employee' : 'Edit employee'}>
+                <div className="field-visit-panel-head employee-panel-head">
+                  <div>
+                    <span>{employeePanelMode === 'add' ? 'Directory' : 'Profile Editor'}</span>
+                    <h3>{employeePanelMode === 'add' ? 'Add Employee' : 'Edit Employee'}</h3>
+                    <p className="employee-panel-copy">
+                      {employeePanelMode === 'add'
+                        ? 'Create a new employee from the right-side panel without leaving the list.'
+                        : 'Update employee details in place and save them back to the admin API.'}
+                    </p>
+                  </div>
+                  <button className="field-visit-panel-close" onClick={closeEmployeePanel} type="button">
+                    Close
+                  </button>
+                </div>
+
+                <div className="employee-panel-summary">
+                  <div className="field-visit-panel-card">
+                    <span>{employeePanelMode === 'add' ? 'API Endpoint' : 'Employee Code'}</span>
+                    <strong>{employeePanelMode === 'add' ? 'POST /api/users' : editingEmployee?.emp_code || '--'}</strong>
+                    <small>
+                      {employeePanelMode === 'add'
+                        ? 'The current admin session is used to create the employee record.'
+                        : editingEmployee?.emp_email || 'Email unavailable'}
+                    </small>
+                  </div>
+                </div>
+
+                <div className="form-card employee-form-card">
+                  <div className="form-grid employee-form-grid">
+                    {employeePanelMode === 'add' ? (
+                      <>
+                        <div>
+                          <label htmlFor="new-emp-code">Employee ID</label>
+                          <input
+                            id="new-emp-code"
+                            value={newEmployee.emp_code}
+                            onChange={(event) => updateNewEmployee('emp_code', event.target.value)}
+                            placeholder="e.g. 3051"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="new-emp-name">Full Name</label>
+                          <input
+                            id="new-emp-name"
+                            value={newEmployee.emp_full_name}
+                            onChange={(event) => updateNewEmployee('emp_full_name', event.target.value)}
+                            placeholder="Employee full name"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="new-emp-email">Email</label>
+                          <input
+                            id="new-emp-email"
+                            type="email"
+                            value={newEmployee.emp_email}
+                            onChange={(event) => updateNewEmployee('emp_email', event.target.value)}
+                            placeholder="name@example.com"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="new-emp-contact">Contact</label>
+                          <input
+                            id="new-emp-contact"
+                            value={newEmployee.emp_contact}
+                            onChange={(event) => updateNewEmployee('emp_contact', event.target.value)}
+                            placeholder="Phone number"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="new-emp-designation">Designation</label>
+                          <input
+                            id="new-emp-designation"
+                            value={newEmployee.emp_designation}
+                            onChange={(event) => updateNewEmployee('emp_designation', event.target.value)}
+                            placeholder="HR / Sales Executive / DevTester"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="new-emp-grade">Grade</label>
+                          <select
+                            id="new-emp-grade"
+                            value={newEmployee.emp_grade}
+                            onChange={(event) => updateNewEmployee('emp_grade', event.target.value)}
+                          >
+                            <option value="">Select grade</option>
+                            <option value="F">Flexible (F)</option>
+                            <option value="M">Moderate (M)</option>
+                            <option value="NF">Non-Flexible (NF)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label htmlFor="new-emp-department">Department</label>
+                          <input
+                            id="new-emp-department"
+                            value={newEmployee.emp_department}
+                            onChange={(event) => updateNewEmployee('emp_department', event.target.value)}
+                            placeholder="Department"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="new-emp-manager">Manager Code</label>
+                          <input
+                            id="new-emp-manager"
+                            value={newEmployee.emp_manager}
+                            onChange={(event) => updateNewEmployee('emp_manager', event.target.value)}
+                            placeholder="e.g. 2981"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="new-emp-role">User Role</label>
+                          <select
+                            id="new-emp-role"
+                            value={newEmployee.role}
+                            onChange={(event) => updateNewEmployee('role', event.target.value)}
+                          >
+                            <option value="employee">employee</option>
+                            <option value="user_manager">user_manager</option>
+                            <option value="admin">admin</option>
+                          </select>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <label htmlFor="edit-emp-code">Employee Code</label>
+                          <input
+                            id="edit-emp-code"
+                            type="text"
+                            value={editingEmployee?.emp_code || ''}
+                            disabled
+                            placeholder="Cannot change"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="edit-emp-full-name">Full Name</label>
+                          <input
+                            id="edit-emp-full-name"
+                            type="text"
+                            value={editFormData.emp_full_name || ''}
+                            onChange={(e) => setEditFormData({ ...editFormData, emp_full_name: e.target.value })}
+                            placeholder="Full name"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="edit-emp-email">Email</label>
+                          <input
+                            id="edit-emp-email"
+                            type="email"
+                            value={editFormData.emp_email || ''}
+                            onChange={(e) => setEditFormData({ ...editFormData, emp_email: e.target.value })}
+                            placeholder="email@company.com"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="edit-emp-contact">Contact</label>
+                          <input
+                            id="edit-emp-contact"
+                            type="text"
+                            value={editFormData.emp_contact || ''}
+                            onChange={(e) => setEditFormData({ ...editFormData, emp_contact: e.target.value })}
+                            placeholder="Phone number"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="edit-emp-grade">Grade</label>
+                          <select
+                            id="edit-emp-grade"
+                            value={editFormData.emp_grade || ''}
+                            onChange={(e) => setEditFormData({ ...editFormData, emp_grade: e.target.value })}
+                          >
+                            <option value="">Select grade</option>
+                            <option value="F">Flexible (F)</option>
+                            <option value="M">Moderate (M)</option>
+                            <option value="NF">Non-Flexible (NF)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label htmlFor="edit-emp-designation">Designation</label>
+                          <input
+                            id="edit-emp-designation"
+                            type="text"
+                            value={editFormData.emp_designation || ''}
+                            onChange={(e) => setEditFormData({ ...editFormData, emp_designation: e.target.value })}
+                            placeholder="Job title"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="edit-emp-department">Department</label>
+                          <input
+                            id="edit-emp-department"
+                            type="text"
+                            value={editFormData.emp_department || ''}
+                            onChange={(e) => setEditFormData({ ...editFormData, emp_department: e.target.value })}
+                            placeholder="Department name"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="edit-emp-manager">Manager Code</label>
+                          <input
+                            id="edit-emp-manager"
+                            type="text"
+                            value={editFormData.emp_manager || ''}
+                            onChange={(e) => setEditFormData({ ...editFormData, emp_manager: e.target.value })}
+                            placeholder="e.g., EMP001"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {employeePanelMode === 'add' ? (
+                    <>
+                      <div className="form-actions employee-panel-actions">
+                        <button className="ghost" onClick={resetNewEmployee} disabled={createEmployeeLoading} type="button">
+                          Reset
+                        </button>
+                        <button className="cta" onClick={() => void handleCreateEmployee()} disabled={createEmployeeLoading} type="button">
+                          Create Employee
+                        </button>
+                      </div>
+                      {createEmployeeStatus ? <p className="form-note">{createEmployeeStatus}</p> : null}
+                    </>
+                  ) : (
+                    <>
+                      <div className="form-actions employee-panel-actions">
+                        <button className="ghost" onClick={closeEmployeePanel} disabled={editLoading} type="button">
+                          Cancel
+                        </button>
+                        <button className="cta" onClick={handleSaveEmployee} disabled={editLoading} type="button">
+                          Save Changes
+                        </button>
+                      </div>
+                      {editStatus ? <p className="form-note">{editStatus}</p> : null}
+                    </>
+                  )}
+                </div>
+              </aside>
+            </>
+          ) : null}
+          {deleteEmployeeTarget ? (
             <div className="modal-backdrop" role="dialog" aria-modal="true">
-              <div className="modal-card">
+              <div className="modal-card delete-modal-card">
                 <div className="modal-header">
-                  <strong>Edit Employee</strong>
-                  <button className="ghost" onClick={() => setEditModalOpen(false)} type="button">
+                  <strong>Delete Employee</strong>
+                  <button className="ghost" onClick={() => setDeleteEmployeeTarget(null)} type="button">
                     Close
                   </button>
                 </div>
                 <div className="modal-body">
-                  <div className="form-group">
-                    <label htmlFor="edit-emp-code">Employee Code</label>
-                    <input
-                      id="edit-emp-code"
-                      type="text"
-                      value={editingEmployee.emp_code}
-                      disabled
-                      placeholder="Cannot change"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="edit-emp-full-name">Full Name</label>
-                    <input
-                      id="edit-emp-full-name"
-                      type="text"
-                      value={editFormData.emp_full_name || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, emp_full_name: e.target.value })}
-                      placeholder="Full name"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="edit-emp-email">Email</label>
-                    <input
-                      id="edit-emp-email"
-                      type="email"
-                      value={editFormData.emp_email || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, emp_email: e.target.value })}
-                      placeholder="email@company.com"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="edit-emp-contact">Contact</label>
-                    <input
-                      id="edit-emp-contact"
-                      type="text"
-                      value={editFormData.emp_contact || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, emp_contact: e.target.value })}
-                      placeholder="Phone number"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="edit-emp-grade">Grade</label>
-                    <select
-                      id="edit-emp-grade"
-                      value={editFormData.emp_grade || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, emp_grade: e.target.value })}
-                    >
-                      <option value="">Select grade</option>
-                      <option value="F">Flexible (F)</option>
-                      <option value="M">Moderate (M)</option>
-                      <option value="NF">Non-Flexible (NF)</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="edit-emp-designation">Designation</label>
-                    <input
-                      id="edit-emp-designation"
-                      type="text"
-                      value={editFormData.emp_designation || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, emp_designation: e.target.value })}
-                      placeholder="Job title"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="edit-emp-department">Department</label>
-                    <input
-                      id="edit-emp-department"
-                      type="text"
-                      value={editFormData.emp_department || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, emp_department: e.target.value })}
-                      placeholder="Department name"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="edit-emp-manager">Manager Code</label>
-                    <input
-                      id="edit-emp-manager"
-                      type="text"
-                      value={editFormData.emp_manager || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, emp_manager: e.target.value })}
-                      placeholder="e.g., EMP001"
-                    />
+                  <p className="delete-modal-copy">
+                    {`Are you sure you want to delete ${deleteEmployeeTarget.emp_full_name || deleteEmployeeTarget.emp_code}? This action cannot be undone.`}
+                  </p>
+                  <div className="delete-modal-summary">
+                    <strong>{deleteEmployeeTarget.emp_code}</strong>
+                    <span>{deleteEmployeeTarget.emp_email || 'Email unavailable'}</span>
                   </div>
                   {editStatus ? <p className="form-note">{editStatus}</p> : null}
                 </div>
                 <div className="modal-actions">
-                  <button className="ghost" onClick={() => setEditModalOpen(false)} disabled={editLoading}>
+                  <button className="ghost" onClick={() => setDeleteEmployeeTarget(null)} disabled={deleteEmployeeLoading} type="button">
                     Cancel
                   </button>
-                  <button className="cta" onClick={handleSaveEmployee} disabled={editLoading}>
-                    Save Changes
+                  <button className="danger" onClick={() => void handleDeleteEmployee()} disabled={deleteEmployeeLoading} type="button">
+                    Delete Employee
                   </button>
                 </div>
               </div>

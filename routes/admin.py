@@ -704,14 +704,9 @@ def download_attendance_report(current_user):
     - month (1-12)
     - year (YYYY)
     - format=csv|xlsx|pdf
-    - report_type=daily|monthly
+    - report_type=daily|monthly (optional, defaults to daily)
     """
-    report_type = (request.args.get('report_type') or '').strip().lower()
-    if not report_type:
-        return jsonify({
-            "success": False,
-            "message": "report_type is required. Use daily or monthly."
-        }), 400
+    report_type = (request.args.get('report_type') or 'daily').strip().lower()
     return _download_attendance_report_by_type(report_type)
 
 

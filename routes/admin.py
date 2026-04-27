@@ -12,8 +12,13 @@ import csv
 from io import StringIO, BytesIO
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.pdfgen import canvas
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 import openpyxl
+from openpyxl.styles import Font
+from zipfile import ZIP_DEFLATED, ZipFile
 from services.notification_service import (
     create_scheduled_notification,
     get_notification_candidates,
@@ -373,8 +378,17 @@ def get_all_attendance_history(current_user):
 @hr_or_devtester_required
 def download_attendance_report(current_user):
     """
-    Download attendance report (CSV or PDF) filtered by month and year.
-    Query params: month (1-12), year (YYYY), format=csv|pdf
+    Download attendance reports filtered by month and year.
+
+    Query params:
+    - month (1-12)
+    - year (YYYY)
+    - format=csv|xlsx|pdf
+
+    Format behavior:
+    - csv  -> zip file containing separate Daily and Monthly CSV files
+    - xlsx -> workbook with "Daily Report" and "Monthly Report" sheets
+    - pdf  -> single PDF document containing Daily + Monthly tables
     """
     month = request.args.get('month', type=int)
     year = request.args.get('year', type=int)
@@ -392,111 +406,302 @@ def download_attendance_report(current_user):
             "message": "Invalid year."
         }), 400
 
-    records = admin_service.get_attendance_report_data(month, year)
+    if report_format not in {'csv', 'xlsx', 'pdf'}:
+        return jsonify({
+            "success": False,
+            "message": "Invalid format. Use csv, xlsx, or pdf."
+        }), 400
 
-    headers = [
-        "Date",
+    base_records = admin_service.get_attendance_report_base_data(month, year)
+    daily_rows = admin_service.build_daily_attendance_report_rows(base_records)
+    monthly_rows = admin_service.build_monthly_attendance_report_rows(daily_rows)
+
+    daily_headers = [
+        "Employee ID",
         "Employee Name",
-        "Employee Email",
-        "Designation",
-        "Department",
-        "Attendance Type",
-        "Login Time",
-        "Logout Time",
-        "Status",
-        "Working Hours",
-        "Login Address",
-        "Logout Address"
+        "Clock In Time",
+        "Clock Out Time",
+        "Duration",
+        "Overtime",
+    ]
+    monthly_headers = [
+        "Employee ID",
+        "Employee Name",
+        "Total Working Days",
+        "Total Hours Worked",
+        "Average Hours per Day",
+        "Total Overtime Hours",
     ]
 
-    if report_format == 'pdf':
-        summary_rows = admin_service.get_attendance_report_summary(month, year)
+    if report_format == 'csv':
+        daily_output = StringIO()
+        daily_writer = csv.writer(daily_output)
+        daily_writer.writerow(daily_headers)
+        for row in daily_rows:
+            daily_writer.writerow([
+                row.get('employee_id', ''),
+                row.get('employee_name', ''),
+                row.get('clock_in_display', ''),
+                row.get('clock_out_display', ''),
+                row.get('duration_display', ''),
+                row.get('overtime_display', ''),
+            ])
+
+        monthly_output = StringIO()
+        monthly_writer = csv.writer(monthly_output)
+        monthly_writer.writerow(monthly_headers)
+        for row in monthly_rows:
+            monthly_writer.writerow([
+                row.get('employee_id', ''),
+                row.get('employee_name', ''),
+                row.get('total_working_days', 0),
+                row.get('total_hours_display', ''),
+                row.get('average_hours_display', ''),
+                row.get('total_overtime_display', ''),
+            ])
+
+        zip_buffer = BytesIO()
+        with ZipFile(zip_buffer, mode='w', compression=ZIP_DEFLATED) as zip_file:
+            zip_file.writestr(
+                f"daily_attendance_report_{year}_{month:02d}.csv",
+                daily_output.getvalue(),
+            )
+            zip_file.writestr(
+                f"monthly_attendance_report_{year}_{month:02d}.csv",
+                monthly_output.getvalue(),
+            )
+
+        zip_buffer.seek(0)
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name=f"attendance_reports_{year}_{month:02d}.zip",
+            mimetype='application/zip',
+        )
+
+    if report_format == 'xlsx':
+        workbook = openpyxl.Workbook()
+        daily_sheet = workbook.active
+        daily_sheet.title = "Daily Report"
+        daily_sheet.append(daily_headers)
+
+        for column_index in range(1, len(daily_headers) + 1):
+            daily_sheet.cell(row=1, column=column_index).font = Font(bold=True)
+
+        for row_index, row in enumerate(daily_rows, start=2):
+            daily_sheet.cell(row=row_index, column=1, value=row.get('employee_id', ''))
+            daily_sheet.cell(row=row_index, column=2, value=row.get('employee_name', ''))
+
+            clock_in_cell = daily_sheet.cell(row=row_index, column=3)
+            if isinstance(row.get('clock_in'), datetime):
+                clock_in_cell.value = row['clock_in']
+                clock_in_cell.number_format = "hh:mm AM/PM"
+            else:
+                clock_in_cell.value = "Incomplete"
+
+            clock_out_cell = daily_sheet.cell(row=row_index, column=4)
+            if isinstance(row.get('clock_out'), datetime):
+                clock_out_cell.value = row['clock_out']
+                clock_out_cell.number_format = "hh:mm AM/PM"
+            else:
+                clock_out_cell.value = "Incomplete"
+
+            duration_cell = daily_sheet.cell(
+                row=row_index,
+                column=5,
+                value=f'=IF(OR(NOT(ISNUMBER(C{row_index})),NOT(ISNUMBER(D{row_index})),D{row_index}<C{row_index}),"Incomplete",D{row_index}-C{row_index})',
+            )
+            duration_cell.number_format = "[h]:mm"
+
+            overtime_cell = daily_sheet.cell(
+                row=row_index,
+                column=6,
+                value=f'=IF(NOT(ISNUMBER(E{row_index})),"Incomplete",IF(E{row_index}>TIME(8,0,0),E{row_index}-TIME(8,0,0),TIME(0,0,0)))',
+            )
+            overtime_cell.number_format = "[h]:mm"
+
+        daily_sheet.freeze_panes = "A2"
+        daily_column_widths = [16, 24, 16, 16, 14, 14]
+        for idx, width in enumerate(daily_column_widths, start=1):
+            daily_sheet.column_dimensions[openpyxl.utils.get_column_letter(idx)].width = width
+
+        monthly_sheet = workbook.create_sheet("Monthly Report")
+        monthly_sheet.append(monthly_headers)
+        for column_index in range(1, len(monthly_headers) + 1):
+            monthly_sheet.cell(row=1, column=column_index).font = Font(bold=True)
+
+        daily_last_row = max(len(daily_rows) + 1, 2)
+        for row_index, row in enumerate(monthly_rows, start=2):
+            monthly_sheet.cell(row=row_index, column=1, value=row.get('employee_id', ''))
+            monthly_sheet.cell(row=row_index, column=2, value=row.get('employee_name', ''))
+
+            if daily_rows:
+                monthly_sheet.cell(
+                    row=row_index,
+                    column=3,
+                    value=f'=COUNTIFS(\'Daily Report\'!$A$2:$A${daily_last_row},$A{row_index},\'Daily Report\'!$E$2:$E${daily_last_row},">=0")',
+                )
+                monthly_sheet.cell(
+                    row=row_index,
+                    column=4,
+                    value=f'=SUMIFS(\'Daily Report\'!$E$2:$E${daily_last_row},\'Daily Report\'!$A$2:$A${daily_last_row},$A{row_index})',
+                )
+                monthly_sheet.cell(
+                    row=row_index,
+                    column=6,
+                    value=f'=SUMIFS(\'Daily Report\'!$F$2:$F${daily_last_row},\'Daily Report\'!$A$2:$A${daily_last_row},$A{row_index})',
+                )
+            else:
+                monthly_sheet.cell(row=row_index, column=3, value=0)
+                monthly_sheet.cell(row=row_index, column=4, value=0)
+                monthly_sheet.cell(row=row_index, column=6, value=0)
+
+            monthly_sheet.cell(
+                row=row_index,
+                column=5,
+                value=f"=IF(C{row_index}=0,0,D{row_index}/C{row_index})",
+            )
+
+            monthly_sheet.cell(row=row_index, column=4).number_format = "[h]:mm"
+            monthly_sheet.cell(row=row_index, column=5).number_format = "[h]:mm"
+            monthly_sheet.cell(row=row_index, column=6).number_format = "[h]:mm"
+
+        if monthly_rows:
+            last_data_row = len(monthly_rows) + 1
+            totals_row = last_data_row + 1
+            monthly_sheet.cell(row=totals_row, column=1, value="Totals").font = Font(bold=True)
+            monthly_sheet.cell(row=totals_row, column=3, value=f"=SUM(C2:C{last_data_row})").font = Font(bold=True)
+            monthly_sheet.cell(row=totals_row, column=4, value=f"=SUM(D2:D{last_data_row})").font = Font(bold=True)
+            monthly_sheet.cell(row=totals_row, column=5, value=f"=IF(C{totals_row}=0,0,D{totals_row}/C{totals_row})").font = Font(bold=True)
+            monthly_sheet.cell(row=totals_row, column=6, value=f"=SUM(F2:F{last_data_row})").font = Font(bold=True)
+            monthly_sheet.cell(row=totals_row, column=4).number_format = "[h]:mm"
+            monthly_sheet.cell(row=totals_row, column=5).number_format = "[h]:mm"
+            monthly_sheet.cell(row=totals_row, column=6).number_format = "[h]:mm"
+
+        monthly_sheet.freeze_panes = "A2"
+        monthly_column_widths = [16, 24, 20, 20, 20, 20]
+        for idx, width in enumerate(monthly_column_widths, start=1):
+            monthly_sheet.column_dimensions[openpyxl.utils.get_column_letter(idx)].width = width
+
         buffer = BytesIO()
-        pdf = canvas.Canvas(buffer, pagesize=landscape(letter))
-        width, height = landscape(letter)
-        x_start = 0.5 * inch
-        y = height - 0.6 * inch
-
-        pdf.setFont("Helvetica-Bold", 14)
-        pdf.drawString(x_start, y, f"Attendance Report - {year}-{month:02d}")
-        y -= 0.3 * inch
-
-        pdf.setFont("Helvetica", 9)
-        pdf_fields = [
-            "Employee Code",
-            "Employee Full Name",
-            "Number of Attended Days",
-            "Number of Late Arrivals",
-            "Number of Comp-Offs",
-            "Number of Leaves"
-        ]
-        col_widths = [1.2, 2.6, 1.6, 1.6, 1.2, 1.2]
-        col_widths = [w * inch for w in col_widths]
-
-        def draw_row(values, y_pos, bold=False):
-            pdf.setFont("Helvetica-Bold" if bold else "Helvetica", 8)
-            x = x_start
-            for value, width_col in zip(values, col_widths):
-                text = str(value or '')
-                if len(text) > 40:
-                    text = text[:37] + "..."
-                pdf.drawString(x, y_pos, text)
-                x += width_col
-
-        draw_row(pdf_fields, y, bold=True)
-        y -= 0.22 * inch
-
-        for record in summary_rows:
-            if y < 0.6 * inch:
-                pdf.showPage()
-                y = height - 0.6 * inch
-                draw_row(pdf_fields, y, bold=True)
-                y -= 0.22 * inch
-
-            draw_row([
-                record.get('emp_code', ''),
-                record.get('emp_full_name', ''),
-                record.get('attended_days', 0),
-                record.get('late_arrivals', 0),
-                record.get('comp_offs', 0),
-                record.get('leaves', 0)
-            ], y)
-            y -= 0.2 * inch
-
-        pdf.save()
+        workbook.save(buffer)
         buffer.seek(0)
-        filename = f"attendance_report_{year}_{month:02d}.pdf"
         return send_file(
             buffer,
             as_attachment=True,
-            download_name=filename,
-            mimetype='application/pdf'
+            download_name=f"attendance_report_{year}_{month:02d}.xlsx",
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         )
 
-    output = StringIO()
-    writer = csv.writer(output)
-    writer.writerow(headers)
+    # report_format == 'pdf'
+    buffer = BytesIO()
+    document = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(letter),
+        leftMargin=0.45 * inch,
+        rightMargin=0.45 * inch,
+        topMargin=0.45 * inch,
+        bottomMargin=0.45 * inch,
+    )
 
-    for record in records:
-        writer.writerow([
-            record.get('date', ''),
-            record.get('emp_full_name', '') or record.get('employee_name', ''),
-            record.get('emp_email', '') or record.get('employee_email', ''),
-            record.get('emp_designation', ''),
-            record.get('emp_department', ''),
-            record.get('attendance_type', ''),
-            record.get('login_time', ''),
-            record.get('logout_time', ''),
-            record.get('status', ''),
-            record.get('working_hours', ''),
-            record.get('login_address', ''),
-            record.get('logout_address', '')
-        ])
+    styles = getSampleStyleSheet()
+    story = []
+    story.append(Paragraph("Daily Attendance Report", styles["Title"]))
+    story.append(Spacer(1, 0.2 * inch))
 
-    filename = f"attendance_report_{year}_{month:02d}.csv"
-    response = Response(output.getvalue(), mimetype='text/csv')
-    response.headers['Content-Disposition'] = f'attachment; filename={filename}'
-    return response
+    daily_table_data = [daily_headers]
+    if daily_rows:
+        for row in daily_rows:
+            daily_table_data.append([
+                row.get('employee_id', ''),
+                row.get('employee_name', ''),
+                row.get('clock_in_display', ''),
+                row.get('clock_out_display', ''),
+                row.get('duration_display', ''),
+                row.get('overtime_display', ''),
+            ])
+    else:
+        daily_table_data.append(["No records found", "", "", "", "", ""])
+
+    daily_table = Table(
+        daily_table_data,
+        colWidths=[1.2 * inch, 2.2 * inch, 1.4 * inch, 1.4 * inch, 1.2 * inch, 1.2 * inch],
+        repeatRows=1,
+        hAlign='LEFT',
+    )
+    daily_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F2937")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 9),
+                ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 1), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("ALIGN", (1, 1), (1, -1), "LEFT"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    story.append(daily_table)
+    story.append(Spacer(1, 0.35 * inch))
+
+    story.append(Paragraph("Monthly Attendance Report", styles["Title"]))
+    story.append(Spacer(1, 0.2 * inch))
+
+    monthly_table_data = [monthly_headers]
+    if monthly_rows:
+        for row in monthly_rows:
+            monthly_table_data.append([
+                row.get('employee_id', ''),
+                row.get('employee_name', ''),
+                str(row.get('total_working_days', 0)),
+                row.get('total_hours_display', ''),
+                row.get('average_hours_display', ''),
+                row.get('total_overtime_display', ''),
+            ])
+    else:
+        monthly_table_data.append(["No records found", "", "", "", "", ""])
+
+    monthly_table = Table(
+        monthly_table_data,
+        colWidths=[1.2 * inch, 2.2 * inch, 1.4 * inch, 1.4 * inch, 1.4 * inch, 1.6 * inch],
+        repeatRows=1,
+        hAlign='LEFT',
+    )
+    monthly_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F766E")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 9),
+                ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 1), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("ALIGN", (1, 1), (1, -1), "LEFT"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    story.append(monthly_table)
+
+    document.build(story)
+    buffer.seek(0)
+
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=f"attendance_report_{year}_{month:02d}.pdf",
+        mimetype='application/pdf',
+    )
 
 @admin_bp.route('/field-visits/<int:field_visit_id>/tracking', methods=['GET'])
 @token_required

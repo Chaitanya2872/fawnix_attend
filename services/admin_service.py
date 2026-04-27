@@ -286,32 +286,61 @@ def _format_minutes_as_hours_and_minutes(total_minutes):
     return f"{hours}h {minutes:02d}m"
 
 
-def get_attendance_report_base_data(month: int, year: int):
-    """Fetch attendance rows used to derive daily + monthly reporting outputs."""
+def get_attendance_report_base_data(month: int = None, year: int = None, target_date: date = None):
+    """
+    Fetch attendance rows used to derive reporting outputs.
+
+    Supported filters:
+    - target_date (daily report)
+    - month + year (monthly report)
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
-        cursor.execute(
-            """
-            SELECT
-                a.id,
-                a.date,
-                a.employee_email,
-                a.employee_name,
-                a.login_time,
-                a.logout_time,
-                e.emp_code,
-                e.emp_full_name
-            FROM attendance a
-            LEFT JOIN employees e
-                ON a.employee_email = e.emp_email
-            WHERE EXTRACT(MONTH FROM a.date) = %s
-              AND EXTRACT(YEAR FROM a.date) = %s
-            ORDER BY a.date ASC, a.login_time ASC, COALESCE(e.emp_full_name, a.employee_name) ASC
-            """,
-            (month, year),
-        )
+        if target_date is not None:
+            cursor.execute(
+                """
+                SELECT
+                    a.id,
+                    a.date,
+                    a.employee_email,
+                    a.employee_name,
+                    a.login_time,
+                    a.logout_time,
+                    e.emp_code,
+                    e.emp_full_name
+                FROM attendance a
+                LEFT JOIN employees e
+                    ON a.employee_email = e.emp_email
+                WHERE a.date = %s
+                ORDER BY a.login_time ASC, COALESCE(e.emp_full_name, a.employee_name) ASC
+                """,
+                (target_date,),
+            )
+        elif month is not None and year is not None:
+            cursor.execute(
+                """
+                SELECT
+                    a.id,
+                    a.date,
+                    a.employee_email,
+                    a.employee_name,
+                    a.login_time,
+                    a.logout_time,
+                    e.emp_code,
+                    e.emp_full_name
+                FROM attendance a
+                LEFT JOIN employees e
+                    ON a.employee_email = e.emp_email
+                WHERE EXTRACT(MONTH FROM a.date) = %s
+                  AND EXTRACT(YEAR FROM a.date) = %s
+                ORDER BY a.date ASC, a.login_time ASC, COALESCE(e.emp_full_name, a.employee_name) ASC
+                """,
+                (month, year),
+            )
+        else:
+            raise ValueError("Either target_date or month/year must be provided")
 
         return cursor.fetchall()
     finally:

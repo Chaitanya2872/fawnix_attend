@@ -390,11 +390,15 @@ MONTHLY_ATTENDANCE_HEADERS = [
 ]
 
 
-def _attendance_report_payload(month: int, year: int):
-    base_records = admin_service.get_attendance_report_base_data(month, year)
+def _daily_attendance_report_payload(target_date: date):
+    base_records = admin_service.get_attendance_report_base_data(target_date=target_date)
+    return admin_service.build_daily_attendance_report_rows(base_records)
+
+
+def _monthly_attendance_report_payload(month: int, year: int):
+    base_records = admin_service.get_attendance_report_base_data(month=month, year=year)
     daily_rows = admin_service.build_daily_attendance_report_rows(base_records)
-    monthly_rows = admin_service.build_monthly_attendance_report_rows(daily_rows)
-    return daily_rows, monthly_rows
+    return admin_service.build_monthly_attendance_report_rows(daily_rows)
 
 
 def _styled_pdf_table(table_data, col_widths, header_color):
@@ -425,8 +429,9 @@ def _styled_pdf_table(table_data, col_widths, header_color):
     return table
 
 
-def _export_daily_report(report_format: str, month: int, year: int, daily_rows):
-    base_filename = f"daily_attendance_report_{year}_{month:02d}"
+def _export_daily_report(report_format: str, target_date: date, daily_rows):
+    date_str = target_date.strftime("%Y-%m-%d")
+    base_filename = f"daily_attendance_report_{date_str}"
 
     if report_format == 'csv':
         output = StringIO()
@@ -511,7 +516,7 @@ def _export_daily_report(report_format: str, month: int, year: int, daily_rows):
         bottomMargin=0.45 * inch,
     )
     styles = getSampleStyleSheet()
-    story = [Paragraph("Daily Attendance Report", styles["Title"]), Spacer(1, 0.2 * inch)]
+    story = [Paragraph(f"Daily Attendance Report - {date_str}", styles["Title"]), Spacer(1, 0.2 * inch)]
 
     table_data = [DAILY_ATTENDANCE_HEADERS]
     if daily_rows:
@@ -658,21 +663,7 @@ def _export_monthly_report(report_format: str, month: int, year: int, monthly_ro
 
 
 def _download_attendance_report_by_type(report_type: str):
-    month = request.args.get('month', type=int)
-    year = request.args.get('year', type=int)
     report_format = (request.args.get('format') or 'csv').lower()
-
-    if not month or month < 1 or month > 12:
-        return jsonify({
-            "success": False,
-            "message": "Invalid month. Use 1-12."
-        }), 400
-
-    if not year or year < 2000:
-        return jsonify({
-            "success": False,
-            "message": "Invalid year."
-        }), 400
 
     if report_format not in {'csv', 'xlsx', 'pdf'}:
         return jsonify({
@@ -680,11 +671,42 @@ def _download_attendance_report_by_type(report_type: str):
             "message": "Invalid format. Use csv, xlsx, or pdf."
         }), 400
 
-    daily_rows, monthly_rows = _attendance_report_payload(month, year)
-
     if report_type == 'daily':
-        return _export_daily_report(report_format, month, year, daily_rows)
+        date_str = (request.args.get('date') or '').strip()
+        if not date_str:
+            return jsonify({
+                "success": False,
+                "message": "date is required for daily report. Use YYYY-MM-DD."
+            }), 400
+
+        try:
+            target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid date format. Use YYYY-MM-DD."
+            }), 400
+
+        daily_rows = _daily_attendance_report_payload(target_date)
+        return _export_daily_report(report_format, target_date, daily_rows)
+
     if report_type == 'monthly':
+        month = request.args.get('month', type=int)
+        year = request.args.get('year', type=int)
+
+        if not month or month < 1 or month > 12:
+            return jsonify({
+                "success": False,
+                "message": "Invalid month. Use 1-12."
+            }), 400
+
+        if not year or year < 2000:
+            return jsonify({
+                "success": False,
+                "message": "Invalid year."
+            }), 400
+
+        monthly_rows = _monthly_attendance_report_payload(month, year)
         return _export_monthly_report(report_format, month, year, monthly_rows)
 
     return jsonify({
@@ -701,12 +723,14 @@ def download_attendance_report(current_user):
     Download attendance report by report_type.
 
     Query params:
-    - month (1-12)
-    - year (YYYY)
+    - date (YYYY-MM-DD) for daily report
+    - month (1-12) and year (YYYY) for monthly report
     - format=csv|xlsx|pdf
-    - report_type=daily|monthly (optional, defaults to daily)
+    - report_type=daily|monthly (optional)
     """
-    report_type = (request.args.get('report_type') or 'daily').strip().lower()
+    report_type = (request.args.get('report_type') or '').strip().lower()
+    if not report_type:
+        report_type = 'daily' if request.args.get('date') else 'monthly'
     return _download_attendance_report_by_type(report_type)
 
 
@@ -714,7 +738,7 @@ def download_attendance_report(current_user):
 @token_required
 @hr_or_devtester_required
 def download_daily_attendance_report(current_user):
-    """Download only daily attendance report in CSV/XLSX/PDF."""
+    """Download only daily attendance report in CSV/XLSX/PDF (requires ?date=YYYY-MM-DD)."""
     return _download_attendance_report_by_type('daily')
 
 
@@ -722,7 +746,7 @@ def download_daily_attendance_report(current_user):
 @token_required
 @hr_or_devtester_required
 def download_monthly_attendance_report(current_user):
-    """Download only monthly attendance summary in CSV/XLSX/PDF."""
+    """Download only monthly attendance summary in CSV/XLSX/PDF (requires ?month & ?year)."""
     return _download_attendance_report_by_type('monthly')
 
 @admin_bp.route('/field-visits/<int:field_visit_id>/tracking', methods=['GET'])

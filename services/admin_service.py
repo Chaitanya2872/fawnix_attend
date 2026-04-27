@@ -7,6 +7,7 @@ from database.connection import get_db_connection
 from datetime import date, datetime, time
 from config import Config
 import calendar
+from collections import OrderedDict
 from services.attendance_constants import ATTENDANCE_STATUS_LOGGED_IN
 from services.CompLeaveService import (
     attach_attendance_context_to_overtime_records,
@@ -265,6 +266,152 @@ def get_all_attendance_records():
     finally:
         cursor.close()
         conn.close()
+
+
+def _format_time_as_12h(timestamp_value):
+    """Format datetime value as HH:MM AM/PM."""
+    if not isinstance(timestamp_value, datetime):
+        return "Incomplete"
+    return timestamp_value.strftime("%I:%M %p")
+
+
+def _format_minutes_as_hours_and_minutes(total_minutes):
+    """Format integer minutes as <hours>h <minutes>m."""
+    if total_minutes is None:
+        return "Incomplete"
+
+    rounded_minutes = max(int(round(total_minutes)), 0)
+    hours = rounded_minutes // 60
+    minutes = rounded_minutes % 60
+    return f"{hours}h {minutes:02d}m"
+
+
+def get_attendance_report_base_data(month: int, year: int):
+    """Fetch attendance rows used to derive daily + monthly reporting outputs."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT
+                a.id,
+                a.date,
+                a.employee_email,
+                a.employee_name,
+                a.login_time,
+                a.logout_time,
+                e.emp_code,
+                e.emp_full_name
+            FROM attendance a
+            LEFT JOIN employees e
+                ON a.employee_email = e.emp_email
+            WHERE EXTRACT(MONTH FROM a.date) = %s
+              AND EXTRACT(YEAR FROM a.date) = %s
+            ORDER BY a.date ASC, a.login_time ASC, COALESCE(e.emp_full_name, a.employee_name) ASC
+            """,
+            (month, year),
+        )
+
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def build_daily_attendance_report_rows(records):
+    """
+    Build normalized daily attendance rows with duration/overtime metrics.
+    These rows are the canonical source for CSV/XLSX/PDF exports.
+    """
+    daily_rows = []
+
+    for record in records:
+        emp_id = (record.get("emp_code") or record.get("employee_email") or "").strip()
+        emp_name = (record.get("emp_full_name") or record.get("employee_name") or "").strip()
+        clock_in = record.get("login_time")
+        clock_out = record.get("logout_time")
+
+        duration_minutes = None
+        if isinstance(clock_in, datetime) and isinstance(clock_out, datetime):
+            raw_minutes = int((clock_out - clock_in).total_seconds() / 60)
+            if raw_minutes >= 0:
+                duration_minutes = raw_minutes
+
+        overtime_minutes = None
+        if duration_minutes is not None:
+            overtime_minutes = max(duration_minutes - (8 * 60), 0)
+
+        daily_rows.append(
+            {
+                "date": record.get("date"),
+                "employee_id": emp_id,
+                "employee_name": emp_name,
+                "clock_in": clock_in,
+                "clock_out": clock_out,
+                "clock_in_display": _format_time_as_12h(clock_in),
+                "clock_out_display": _format_time_as_12h(clock_out),
+                "duration_minutes": duration_minutes,
+                "duration_display": _format_minutes_as_hours_and_minutes(duration_minutes),
+                "overtime_minutes": overtime_minutes,
+                "overtime_display": _format_minutes_as_hours_and_minutes(overtime_minutes),
+            }
+        )
+
+    return daily_rows
+
+
+def build_monthly_attendance_report_rows(daily_rows):
+    """
+    Summarize monthly attendance metrics from canonical daily rows.
+    """
+    summary_map = OrderedDict()
+
+    for row in daily_rows:
+        summary_key = (row.get("employee_id") or "", row.get("employee_name") or "")
+        if summary_key not in summary_map:
+            summary_map[summary_key] = {
+                "employee_id": row.get("employee_id") or "",
+                "employee_name": row.get("employee_name") or "",
+                "total_working_days": 0,
+                "total_hours_minutes": 0,
+                "total_overtime_minutes": 0,
+            }
+
+        summary = summary_map[summary_key]
+        duration_minutes = row.get("duration_minutes")
+        overtime_minutes = row.get("overtime_minutes")
+
+        if duration_minutes is None:
+            continue
+
+        summary["total_working_days"] += 1
+        summary["total_hours_minutes"] += int(duration_minutes)
+        summary["total_overtime_minutes"] += int(overtime_minutes or 0)
+
+    monthly_rows = []
+    for _key, summary in summary_map.items():
+        working_days = summary["total_working_days"]
+        total_minutes = summary["total_hours_minutes"]
+        overtime_minutes = summary["total_overtime_minutes"]
+        average_minutes = round(total_minutes / working_days) if working_days else 0
+
+        monthly_rows.append(
+            {
+                "employee_id": summary["employee_id"],
+                "employee_name": summary["employee_name"],
+                "total_working_days": working_days,
+                "total_hours_minutes": total_minutes,
+                "total_hours_display": _format_minutes_as_hours_and_minutes(total_minutes),
+                "average_minutes_per_day": average_minutes,
+                "average_hours_display": _format_minutes_as_hours_and_minutes(average_minutes),
+                "total_overtime_minutes": overtime_minutes,
+                "total_overtime_display": _format_minutes_as_hours_and_minutes(overtime_minutes),
+            }
+        )
+
+    monthly_rows.sort(key=lambda row: ((row.get("employee_name") or "").lower(), row.get("employee_id") or ""))
+    return monthly_rows
 
 def get_attendance_report_data(month: int, year: int):
     """Fetch Todays Activity filtered by month and year for report export."""

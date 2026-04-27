@@ -4089,8 +4089,6 @@ function App() {
 
                 <div className="employee-panel-summary">
                   <div className="field-visit-panel-card">
-                    <span>{employeePanelMode === 'add' ? 'API Endpoint' : 'Employee Code'}</span>
-                    <strong>{employeePanelMode === 'add' ? 'POST /api/users' : editingEmployee?.emp_code || '--'}</strong>
                     <small>
                       {employeePanelMode === 'add'
                         ? 'The current admin session is used to create the employee record.'
@@ -4179,18 +4177,6 @@ function App() {
                             onChange={(event) => updateNewEmployee('emp_manager', event.target.value)}
                             placeholder="e.g. 2981"
                           />
-                        </div>
-                        <div>
-                          <label htmlFor="new-emp-role">User Role</label>
-                          <select
-                            id="new-emp-role"
-                            value={newEmployee.role}
-                            onChange={(event) => updateNewEmployee('role', event.target.value)}
-                          >
-                            <option value="employee">employee</option>
-                            <option value="user_manager">user_manager</option>
-                            <option value="admin">admin</option>
-                          </select>
                         </div>
                       </>
                     ) : (

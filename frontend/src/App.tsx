@@ -1454,17 +1454,30 @@ function App() {
     return data
   }
 
-  const downloadAttendanceReport = async () => {
+  const resolveDownloadFilename = (response: Response, fallbackFilename: string) => {
+    const disposition = response.headers.get('Content-Disposition') || ''
+    const filenameMatch = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i)
+    if (!filenameMatch?.[1]) {
+      return fallbackFilename
+    }
     try {
-      setAttendanceReportStatus('Preparing report...')
+      return decodeURIComponent(filenameMatch[1])
+    } catch {
+      return filenameMatch[1]
+    }
+  }
+
+  const downloadDailyAttendanceReport = async () => {
+    try {
+      setAttendanceReportStatus('Preparing daily report...')
+      const targetDate = attendanceDateFilter || toDateInputValue(new Date())
       const params = new URLSearchParams({
-        month: attendanceReportMonth,
-        year: attendanceReportYear,
+        date: targetDate,
         format: attendanceReportFormat
       })
 
       const makeRequest = async (token: string) =>
-        fetch(`/api/admin/attendance/report?${params.toString()}`, {
+        fetch(`/api/admin/attendance/report/daily?${params.toString()}`, {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${token}`
@@ -1486,15 +1499,65 @@ function App() {
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `attendance_report_${attendanceReportYear}_${attendanceReportMonth.padStart(2, '0')}.${attendanceReportFormat}`
+      link.download = resolveDownloadFilename(
+        response,
+        `daily_attendance_report_${targetDate}.${attendanceReportFormat}`
+      )
       document.body.appendChild(link)
       link.click()
       link.remove()
       window.URL.revokeObjectURL(url)
-      setAttendanceReportStatus('Report downloaded.')
+      setAttendanceReportStatus('Daily report downloaded.')
       window.setTimeout(() => setAttendanceReportStatus(''), 2500)
     } catch (error) {
-      setAttendanceReportStatus(error instanceof Error ? error.message : 'Failed to download report')
+      setAttendanceReportStatus(error instanceof Error ? error.message : 'Failed to download daily report')
+    }
+  }
+
+  const downloadMonthlyAttendanceReport = async () => {
+    try {
+      setAttendanceReportStatus('Preparing monthly report...')
+      const params = new URLSearchParams({
+        month: attendanceReportMonth,
+        year: attendanceReportYear,
+        format: attendanceReportFormat
+      })
+
+      const makeRequest = async (token: string) =>
+        fetch(`/api/admin/attendance/report/monthly?${params.toString()}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        })
+
+      let response = await makeRequest(accessToken)
+      if (response.status === 401) {
+        const nextAccessToken = await refreshAccessToken()
+        response = await makeRequest(nextAccessToken)
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || 'Failed to download report')
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = resolveDownloadFilename(
+        response,
+        `monthly_attendance_report_${attendanceReportYear}_${attendanceReportMonth.padStart(2, '0')}.${attendanceReportFormat}`
+      )
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      setAttendanceReportStatus('Monthly report downloaded.')
+      window.setTimeout(() => setAttendanceReportStatus(''), 2500)
+    } catch (error) {
+      setAttendanceReportStatus(error instanceof Error ? error.message : 'Failed to download monthly report')
     }
   }
 
@@ -3463,7 +3526,7 @@ function App() {
               <div className="report-actions-card">
                 <div>
                   <strong>Download Reports</strong>
-                  <span>Export employee lists and attendance reports from one place.</span>
+                  <span>Export employee lists, daily attendance by date, and monthly attendance summaries.</span>
                 </div>
                 <div className="report-actions">
                   <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('csv')}>
@@ -3475,8 +3538,11 @@ function App() {
                   <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('xlsx')}>
                     Employees XLSX
                   </button>
-                  <button className="cta dashboard-button" onClick={downloadAttendanceReport}>
-                    Attendance Report
+                  <button className="cta dashboard-button" onClick={downloadDailyAttendanceReport}>
+                    Daily Attendance
+                  </button>
+                  <button className="ghost dashboard-button" onClick={downloadMonthlyAttendanceReport}>
+                    Monthly Summary
                   </button>
                 </div>
                 {attendanceReportStatus ? <span className="report-status attendance-report-status">{attendanceReportStatus}</span> : null}

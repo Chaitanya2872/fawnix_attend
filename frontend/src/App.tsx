@@ -316,6 +316,9 @@ type ActivityRow = {
   field_visit_type?: string
   field_visit_purpose?: string
   field_visit_status?: string
+  field_visit_start_time?: string
+  field_visit_end_time?: string
+  field_visit_duration_minutes?: number | string
   field_visit_start_address?: string
   field_visit_end_address?: string
   total_distance_km?: number | string
@@ -357,6 +360,9 @@ type FieldVisitRow = {
   visitType: string
   purpose: string
   visitDate?: string
+  visitStartTime?: string
+  visitEndTime?: string
+  durationMinutes?: number | null
   status: string
   isCompleted: boolean
   location: string
@@ -582,6 +588,92 @@ function formatCoordsValue(coords?: { lat: number; lon: number } | null) {
 function isCompletedVisitStatus(status?: string) {
   const normalized = (status || '').trim().toLowerCase()
   return ['completed', 'complete', 'closed', 'ended'].includes(normalized)
+}
+
+function parseDateTimeValue(value?: string) {
+  if (!value) {
+    return null
+  }
+
+  const parsed = new Date(value)
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed
+  }
+
+  // Support backend timestamps shaped like "YYYY-MM-DD HH:MM:SS".
+  const normalized = value.includes(' ') && !value.includes('T')
+    ? value.replace(' ', 'T')
+    : value
+  const fallback = new Date(normalized)
+  if (!Number.isNaN(fallback.getTime())) {
+    return fallback
+  }
+
+  return null
+}
+
+function normalizeDurationMinutes(value?: number | string | null) {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  const minutes = Number(value)
+  if (!Number.isFinite(minutes)) {
+    return null
+  }
+
+  return Math.max(0, Math.floor(minutes))
+}
+
+function resolveVisitDurationMinutes(
+  durationMinutes?: number | string | null,
+  startTime?: string,
+  endTime?: string,
+  isCompleted = false,
+  referenceTimestamp?: number
+) {
+  const persistedDuration = normalizeDurationMinutes(durationMinutes)
+  if (persistedDuration !== null) {
+    return persistedDuration
+  }
+
+  const startDate = parseDateTimeValue(startTime)
+  if (!startDate) {
+    return null
+  }
+
+  const endDate = parseDateTimeValue(endTime) || (!isCompleted
+    ? new Date(referenceTimestamp || Date.now())
+    : null)
+  if (!endDate) {
+    return null
+  }
+
+  const minutes = Math.floor((endDate.getTime() - startDate.getTime()) / 60000)
+  if (!Number.isFinite(minutes)) {
+    return null
+  }
+
+  return Math.max(0, minutes)
+}
+
+function formatVisitDuration(minutes?: number | null) {
+  if (minutes === null || minutes === undefined) {
+    return '--'
+  }
+
+  const totalMinutes = Math.max(0, Math.floor(minutes))
+  const hours = Math.floor(totalMinutes / 60)
+  const remainingMinutes = totalMinutes % 60
+
+  if (!hours) {
+    return `${remainingMinutes}m`
+  }
+  if (!remainingMinutes) {
+    return `${hours}h`
+  }
+
+  return `${hours}h ${remainingMinutes}m`
 }
 
 function getLocationName(address?: string, fallback = 'Location') {
@@ -1110,6 +1202,7 @@ function App() {
   const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([])
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
+  const [fieldVisitDurationTick, setFieldVisitDurationTick] = useState(() => Date.now())
   const [attendanceDateFilter, setAttendanceDateFilter] = useState(() => toDateInputValue(new Date()))
   const [attendanceDatePickerOpen, setAttendanceDatePickerOpen] = useState(false)
   const [attendanceDatePickerMonth, setAttendanceDatePickerMonth] = useState(() =>
@@ -1255,6 +1348,23 @@ function App() {
 
     return () => window.clearInterval(intervalId)
   }, [showDashboard, showAdminLogin])
+
+  useEffect(() => {
+    if (!showDashboard || showAdminLogin) {
+      return undefined
+    }
+
+    const hasActiveFieldVisit = fieldVisitRows.some((row) => !row.isCompleted)
+    if (!hasActiveFieldVisit) {
+      return undefined
+    }
+
+    const intervalId = window.setInterval(() => {
+      setFieldVisitDurationTick(Date.now())
+    }, 60000)
+
+    return () => window.clearInterval(intervalId)
+  }, [showDashboard, showAdminLogin, fieldVisitRows])
 
   useEffect(() => {
     if (!showDashboard || !showAdminLogin) {
@@ -1724,6 +1834,8 @@ function App() {
           const trackedCoords = activityTrackedCoords.length ? activityTrackedCoords : fieldTrackedCoords
           const status = item.field_visit_status || item.status || 'Unknown'
           const isCompleted = isCompletedVisitStatus(status)
+          const visitStartTime = item.field_visit_start_time || item.start_time
+          const visitEndTime = item.field_visit_end_time
           const routePoints = buildRoutePoints(startCoords, trackedCoords, isCompleted ? endCoords : null)
           const startAddress =
             item.field_visit_start_address ||
@@ -1742,6 +1854,12 @@ function App() {
               : routePoints.length >= 2
                 ? calculateDistanceKm(routePoints)
                 : null
+          const durationMinutes = resolveVisitDurationMinutes(
+            item.field_visit_duration_minutes,
+            visitStartTime,
+            visitEndTime,
+            isCompleted
+          )
 
           return {
             activityId: item.id || item.field_visit_id || '',
@@ -1749,7 +1867,10 @@ function App() {
             employee: item.employee_name || item.employee_email || 'Unknown employee',
             visitType: item.field_visit_type || 'Field Visit',
             purpose: item.field_visit_purpose || item.activity_type || 'Visit',
-            visitDate: item.start_time,
+            visitDate: visitStartTime,
+            visitStartTime,
+            visitEndTime,
+            durationMinutes,
             status,
             isCompleted,
             location: startAddress || endAddress || 'Location unavailable',
@@ -1768,6 +1889,7 @@ function App() {
         })
 
       setFieldVisitRows(fieldVisits)
+      setFieldVisitDurationTick(Date.now())
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to load admin dashboard'
       setDashboardError(message)
@@ -1941,6 +2063,7 @@ function App() {
     setFieldVisitPanelRow(row)
     setFieldVisitPanelError('')
     setFieldVisitPanelLoading(true)
+    setFieldVisitDurationTick(Date.now())
     setFieldVisitTimelineItems(buildFieldVisitTimelineItems(
       row,
       Array.isArray(row.activityTracking) ? row.activityTracking : [],
@@ -1958,10 +2081,24 @@ function App() {
       const trackingPoints: FieldVisitTrackingPoint[] = Array.isArray(trackingResponse?.data?.tracking_points)
         ? trackingResponse.data.tracking_points
         : []
+      const status = visit.status || row.status
+      const isCompleted = isCompletedVisitStatus(status)
+      const visitStartTime = row.visitStartTime || row.visitDate || visit.start_time
+      const visitEndTime = visit.end_time || row.visitEndTime
 
       const enrichedRow: FieldVisitRow = {
         ...row,
-        visitDate: row.visitDate || visit.start_time,
+        status,
+        isCompleted,
+        visitDate: row.visitDate || visitStartTime,
+        visitStartTime,
+        visitEndTime,
+        durationMinutes: resolveVisitDurationMinutes(
+          visit.duration_minutes ?? row.durationMinutes,
+          visitStartTime,
+          visitEndTime,
+          isCompleted
+        ),
         startAddress: visit.start_address || row.startAddress,
         endAddress: visit.end_address || row.endAddress,
         startCoords: parseCoords(visit.start_latitude, visit.start_longitude) || row.startCoords,
@@ -3747,6 +3884,7 @@ function App() {
                       <th>Destination Visited</th>
                       <th>Start Location</th>
                       <th>End Location</th>
+                      <th>Hours There</th>
                       <th>Distance</th>
                       <th>Status</th>
                       <th>Map</th>
@@ -3755,6 +3893,13 @@ function App() {
                   <tbody>
                     {fieldVisitRows.map((row) => {
                       const showRouteDetails = row.isCompleted
+                      const durationMinutes = resolveVisitDurationMinutes(
+                        row.durationMinutes,
+                        row.visitStartTime || row.visitDate,
+                        row.visitEndTime,
+                        row.isCompleted,
+                        fieldVisitDurationTick
+                      )
                       return (
                         <tr
                           key={row.activityId}
@@ -3784,6 +3929,7 @@ function App() {
                             <strong>{showRouteDetails ? row.endName || 'End location unavailable' : '--'}</strong>
                             <span className="table-meta">{showRouteDetails ? row.endAddress || '--' : 'Visit in progress'}</span>
                           </td>
+                          <td>{formatVisitDuration(durationMinutes)}</td>
                           <td>{showRouteDetails ? formatDistanceKm(row.distanceKm) : '--'}</td>
                           <td>
                             <span className="table-pill accent">{row.status}</span>
@@ -3842,6 +3988,15 @@ function App() {
         ? { lat: mapTrackingPoints[mapTrackingPoints.length - 1].lat, lon: mapTrackingPoints[mapTrackingPoints.length - 1].lon }
         : null) ||
       (mapPoints.length ? mapPoints[mapPoints.length - 1] : null)
+    const fieldVisitPanelDurationMinutes = fieldVisitPanelRow
+      ? resolveVisitDurationMinutes(
+          fieldVisitPanelRow.durationMinutes,
+          fieldVisitPanelRow.visitStartTime || fieldVisitPanelRow.visitDate,
+          fieldVisitPanelRow.visitEndTime,
+          fieldVisitPanelRow.isCompleted,
+          fieldVisitDurationTick
+        )
+      : null
 
     return (
       <div className={`admin-shell${showAdminLogin ? ' admin-shell-login' : ''}`}>
@@ -3933,7 +4088,8 @@ function App() {
 
                 <div className="field-visit-panel-meta">
                   <span className="table-pill accent">{fieldVisitPanelRow.status}</span>
-                  <span>{fieldVisitPanelRow.distanceKm ? formatDistanceKm(fieldVisitPanelRow.distanceKm) : '--'}</span>
+                  <span>Hours there: {formatVisitDuration(fieldVisitPanelDurationMinutes)}</span>
+                  <span>Distance: {fieldVisitPanelRow.distanceKm ? formatDistanceKm(fieldVisitPanelRow.distanceKm) : '--'}</span>
                 </div>
 
                 {fieldVisitPanelLoading ? (

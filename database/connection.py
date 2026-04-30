@@ -175,6 +175,13 @@ def init_database():
             BEGIN
                 IF NOT EXISTS (
                     SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'organization_holidays' AND column_name = 'is_mandatory'
+                ) THEN
+                    ALTER TABLE organization_holidays ADD COLUMN is_mandatory BOOLEAN DEFAULT true;
+                END IF;
+
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
                     WHERE table_name = 'organization_holidays' AND column_name = 'holiday_type'
                 ) THEN
                     ALTER TABLE organization_holidays ADD COLUMN holiday_type VARCHAR(40);

@@ -869,6 +869,28 @@ def _normalize_holiday_status(raw_status) -> str:
     return normalized if normalized else 'Active'
 
 
+def _get_organization_holiday_columns(cursor):
+    cursor.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'organization_holidays'
+        """
+    )
+    rows = cursor.fetchall()
+    columns = set()
+    for row in rows:
+        if hasattr(row, 'get'):
+            column_name = row.get('column_name')
+        elif isinstance(row, (tuple, list)) and row:
+            column_name = row[0]
+        else:
+            column_name = None
+        if column_name:
+            columns.add(str(column_name))
+    return columns
+
+
 def _parse_holiday_row(row):
     if hasattr(row, 'get'):
         row_data = row
@@ -920,18 +942,22 @@ def get_admin_holidays(year: int, month: int = None):
         }, 400)
 
     try:
+        available_columns = _get_organization_holiday_columns(cursor)
+        holiday_select_fields = [
+            "id",
+            "holiday_date",
+            "holiday_name",
+            "is_mandatory" if 'is_mandatory' in available_columns else "TRUE AS is_mandatory",
+            "holiday_type" if 'holiday_type' in available_columns else "NULL::TEXT AS holiday_type",
+            "description" if 'description' in available_columns else "NULL::TEXT AS description",
+            "status" if 'status' in available_columns else "'Active'::TEXT AS status",
+        ]
         query = """
             SELECT
-                id,
-                holiday_date,
-                holiday_name,
-                is_mandatory,
-                holiday_type,
-                description,
-                status
+                {holiday_select_fields}
             FROM organization_holidays
             WHERE EXTRACT(YEAR FROM holiday_date) = %s
-        """
+        """.format(holiday_select_fields=",\n                ".join(holiday_select_fields))
         params = [year]
 
         if month is not None:
@@ -1106,6 +1132,8 @@ def create_admin_holiday(payload, created_by_emp_code: str = None):
     cursor = conn.cursor()
 
     try:
+        available_columns = _get_organization_holiday_columns(cursor)
+
         cursor.execute(
             """
             SELECT id, holiday_name
@@ -1122,34 +1150,67 @@ def create_admin_holiday(payload, created_by_emp_code: str = None):
                 "message": f"Holiday already exists for {holiday_date.isoformat()}."
             }, 409)
 
+        insert_columns = ['holiday_date', 'holiday_name']
+        insert_values = [holiday_date, holiday_name]
+
+        if 'is_mandatory' in available_columns:
+            insert_columns.append('is_mandatory')
+            insert_values.append(is_mandatory)
+        if 'holiday_type' in available_columns:
+            insert_columns.append('holiday_type')
+            insert_values.append(holiday_type)
+        if 'description' in available_columns:
+            insert_columns.append('description')
+            insert_values.append(description)
+        if 'status' in available_columns:
+            insert_columns.append('status')
+            insert_values.append(status)
+        if 'created_by_emp_code' in available_columns:
+            insert_columns.append('created_by_emp_code')
+            insert_values.append((created_by_emp_code or '').strip() or None)
+
+        returning_fields = ['id', 'holiday_date', 'holiday_name']
+        if 'holiday_type' in available_columns:
+            returning_fields.append('holiday_type')
+        if 'description' in available_columns:
+            returning_fields.append('description')
+        if 'status' in available_columns:
+            returning_fields.append('status')
+        if 'is_mandatory' in available_columns:
+            returning_fields.append('is_mandatory')
+
+        placeholders = ", ".join(["%s"] * len(insert_values))
         cursor.execute(
-            """
-            INSERT INTO organization_holidays (
-                holiday_date,
-                holiday_name,
-                is_mandatory,
-                holiday_type,
-                description,
-                status,
-                created_by_emp_code
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            RETURNING id, holiday_date, holiday_name, holiday_type, description, status, is_mandatory
+            f"""
+            INSERT INTO organization_holidays ({", ".join(insert_columns)})
+            VALUES ({placeholders})
+            RETURNING {", ".join(returning_fields)}
             """,
-            (
-                holiday_date,
-                holiday_name,
-                is_mandatory,
-                holiday_type,
-                description,
-                status,
-                (created_by_emp_code or '').strip() or None,
-            ),
+            tuple(insert_values),
         )
         inserted = cursor.fetchone()
         conn.commit()
 
-        parsed = _parse_holiday_row(inserted)
+        if hasattr(inserted, 'get'):
+            inserted_data = inserted
+        elif isinstance(inserted, (tuple, list)):
+            inserted_data = {
+                field_name: inserted[index]
+                for index, field_name in enumerate(returning_fields)
+                if index < len(inserted)
+            }
+        else:
+            inserted_data = {}
+
+        parsed = _parse_holiday_row({
+            "id": inserted_data.get('id'),
+            "holiday_date": inserted_data.get('holiday_date') or holiday_date,
+            "holiday_name": inserted_data.get('holiday_name') or holiday_name,
+            "holiday_type": inserted_data.get('holiday_type') or holiday_type,
+            "description": inserted_data.get('description') or description,
+            "status": inserted_data.get('status') or status,
+            "is_mandatory": inserted_data.get('is_mandatory', is_mandatory),
+        })
         if not parsed:
             raise ValueError("Unable to parse created holiday row")
 
@@ -1198,20 +1259,24 @@ def get_calendar_summary(month: int, year: int, department: str = None, emp_code
     cursor = conn.cursor()
 
     try:
+        available_columns = _get_organization_holiday_columns(cursor)
+        holiday_select_fields = [
+            "id",
+            "holiday_date",
+            "holiday_name",
+            "is_mandatory" if 'is_mandatory' in available_columns else "TRUE AS is_mandatory",
+            "holiday_type" if 'holiday_type' in available_columns else "NULL::TEXT AS holiday_type",
+            "description" if 'description' in available_columns else "NULL::TEXT AS description",
+            "status" if 'status' in available_columns else "'Active'::TEXT AS status",
+        ]
         cursor.execute(
             """
             SELECT
-                id,
-                holiday_date,
-                holiday_name,
-                is_mandatory,
-                holiday_type,
-                description,
-                status
+                {holiday_select_fields}
             FROM organization_holidays
             WHERE holiday_date BETWEEN %s AND %s
             ORDER BY holiday_date ASC
-            """,
+            """.format(holiday_select_fields=",\n                ".join(holiday_select_fields)),
             (start_date, end_date),
         )
         raw_holidays = cursor.fetchall()

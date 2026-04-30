@@ -14,7 +14,10 @@ import {
 import {
   formatDate,
   formatDateTime,
+  getCalendarDays,
+  getCalendarMonthLabel,
   isSameDate,
+  parseDateInputValue,
   toDateInputValue
 } from '../services/dateUtils'
 import type {
@@ -220,6 +223,7 @@ const sidebarItems = [
   { id: 'employees', label: 'Employees List' },
   { id: 'attendance', label: 'Todays Activity' },
   { id: 'exceptions', label: 'Exceptions' },
+  { id: 'calendar', label: 'Calendar' },
   { id: 'reports', label: 'Reports & Analytics' },
   { id: 'leaves', label: 'Leaves' },
   { id: 'activities', label: 'Activities' },
@@ -926,6 +930,7 @@ function FawnixApp() {
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
   const [fieldVisitDurationTick, setFieldVisitDurationTick] = useState(() => Date.now())
   const [attendanceDateFilter, setAttendanceDateFilter] = useState(() => toDateInputValue(new Date()))
+  const [calendarMonthView, setCalendarMonthView] = useState(() => parseDateInputValue(toDateInputValue(new Date())))
   const [attendanceSearch, setAttendanceSearch] = useState('')
   const [exceptionSearch, setExceptionSearch] = useState('')
   const [attendanceReportMonth, setAttendanceReportMonth] = useState(() => String(new Date().getMonth() + 1))
@@ -998,6 +1003,10 @@ function FawnixApp() {
       setProfile(storedSession.profile)
     }
   }, [])
+
+  useEffect(() => {
+    setCalendarMonthView(parseDateInputValue(attendanceDateFilter || toDateInputValue(new Date())))
+  }, [attendanceDateFilter])
 
   useClickOutside(employeeStatusMenuRef, employeeStatusMenuOpen, () => setEmployeeStatusMenuOpen(false), {
     closeOnEscape: false
@@ -2446,6 +2455,41 @@ function FawnixApp() {
       exceptionKind: 'early_leave' as const
     }))
   ].sort((left, right) => getSortTime(right) - getSortTime(left))
+  const calendarMonthLabel = getCalendarMonthLabel(calendarMonthView)
+  const calendarDays = getCalendarDays(calendarMonthView)
+  const attendanceCountByDate = attendanceRows.reduce<Record<string, number>>((accumulator, row) => {
+    const key = row.login_time ? toDateInputValue(new Date(row.login_time)) : row.date?.slice(0, 10)
+    if (key) {
+      accumulator[key] = (accumulator[key] || 0) + 1
+    }
+    return accumulator
+  }, {})
+  const exceptionCountByDate = attendanceExceptions.reduce<Record<string, number>>((accumulator, row) => {
+    const key = getExceptionDateValue(row)?.slice(0, 10)
+    if (key) {
+      accumulator[key] = (accumulator[key] || 0) + 1
+    }
+    return accumulator
+  }, {})
+  const leaveCountByDate = leaveRows.reduce<Record<string, number>>((accumulator, row) => {
+    const fromDate = row.from_date ? new Date(row.from_date) : null
+    const toDate = row.to_date ? new Date(row.to_date) : fromDate
+    if (!fromDate || Number.isNaN(fromDate.getTime()) || !toDate || Number.isNaN(toDate.getTime())) {
+      return accumulator
+    }
+
+    const cursor = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate())
+    const end = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate())
+
+    while (cursor <= end) {
+      const key = toDateInputValue(cursor)
+      accumulator[key] = (accumulator[key] || 0) + 1
+      cursor.setDate(cursor.getDate() + 1)
+    }
+
+    return accumulator
+  }, {})
+  const maxCalendarAttendance = Math.max(...Object.values(attendanceCountByDate), 1)
   const lateLogins = selectedDateLateArrivals.length
   const onTimeLogins = Math.max(firstClockInRows.length - lateLogins, 0)
   const selectedDateLeaves = leaveRows
@@ -3238,6 +3282,134 @@ function FawnixApp() {
               )}
             </div>
           )}
+        </>
+      )
+    }
+
+    if (activePanel === 'calendar') {
+      return (
+        <>
+          <div className="dashboard-section-head calendar-section-head">
+            <div>
+              <p className="eyebrow">Operations Calendar</p>
+              <h2>Attendance Calendar</h2>
+              <p className="calendar-head-copy">
+                Monthly operational view with daily attendance volume, leave overlap, and exception signals.
+              </p>
+            </div>
+            <div className="calendar-head-actions">
+              <button
+                className="ghost dashboard-button"
+                type="button"
+                onClick={() =>
+                  setCalendarMonthView(
+                    (current) => new Date(current.getFullYear(), current.getMonth() - 1, 1)
+                  )
+                }
+              >
+                Previous
+              </button>
+              <button
+                className="ghost dashboard-button"
+                type="button"
+                onClick={() => setCalendarMonthView(parseDateInputValue(toDateInputValue(new Date())))}
+              >
+                Today
+              </button>
+              <button
+                className="ghost dashboard-button"
+                type="button"
+                onClick={() =>
+                  setCalendarMonthView(
+                    (current) => new Date(current.getFullYear(), current.getMonth() + 1, 1)
+                  )
+                }
+              >
+                Next
+              </button>
+            </div>
+          </div>
+
+          <div className="metric-row">
+            <div className="metric-card">
+              <span>Month</span>
+              <strong>{calendarMonthLabel}</strong>
+              <small>Professional daily operations view</small>
+            </div>
+            <div className="metric-card">
+              <span>Peak Attendance</span>
+              <strong>{maxCalendarAttendance}</strong>
+              <small>Highest attendance records in a single day</small>
+            </div>
+            <div className="metric-card">
+              <span>Tracked Exceptions</span>
+              <strong>{Object.values(exceptionCountByDate).reduce((sum, count) => sum + count, 0)}</strong>
+              <small>Late arrivals and early leaves across loaded data</small>
+            </div>
+          </div>
+
+          <div className="calendar-shell">
+            <div className="calendar-card">
+              <div className="calendar-card-head">
+                <div>
+                  <span>Monthly View</span>
+                  <strong>{calendarMonthLabel}</strong>
+                </div>
+                <div className="calendar-legend">
+                  <span><i className="calendar-dot attendance" /> Attendance</span>
+                  <span><i className="calendar-dot leave" /> Leave</span>
+                  <span><i className="calendar-dot exception" /> Exceptions</span>
+                </div>
+              </div>
+
+              <div className="calendar-weekdays">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                  <span key={day}>{day}</span>
+                ))}
+              </div>
+
+              <div className="calendar-grid-page">
+                {calendarDays.map((day) => {
+                  const dayValue = toDateInputValue(day)
+                  const attendanceCount = attendanceCountByDate[dayValue] || 0
+                  const leaveCount = leaveCountByDate[dayValue] || 0
+                  const exceptionCount = exceptionCountByDate[dayValue] || 0
+                  const isCurrentMonth = day.getMonth() === calendarMonthView.getMonth()
+                  const isToday = dayValue === toDateInputValue(new Date())
+                  const heatLevel =
+                    attendanceCount > 0
+                      ? Math.min(1, attendanceCount / maxCalendarAttendance)
+                      : 0
+
+                  return (
+                    <button
+                      key={dayValue}
+                      className={`calendar-day-card ${isCurrentMonth ? '' : 'outside'} ${isToday ? 'today' : ''}`}
+                      type="button"
+                      onClick={() => setAttendanceDateFilter(dayValue)}
+                    >
+                      <div className="calendar-day-top">
+                        <span className="calendar-day-number">{day.getDate()}</span>
+                        {isToday ? <span className="calendar-day-badge">Today</span> : null}
+                      </div>
+                      <div
+                        className="calendar-day-heat"
+                        style={{
+                          opacity: Math.max(0.12, heatLevel),
+                          background: `linear-gradient(135deg, rgba(31, 167, 164, ${0.18 + heatLevel * 0.46}), rgba(17, 44, 50, ${0.08 + heatLevel * 0.22}))`
+                        }}
+                      />
+                      <div className="calendar-day-stats">
+                        <span>{attendanceCount} attendance</span>
+                        <span>{leaveCount} leave</span>
+                        <span>{exceptionCount} exceptions</span>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
         </>
       )
     }

@@ -77,7 +77,7 @@ def get_organization_holidays(year: int) -> List[Dict]:
                 id,
                 holiday_date,
                 holiday_name,
-                weekday,
+                TO_CHAR(holiday_date, 'FMDay') as weekday,
                 TO_CHAR(holiday_date, 'DD') as day,
                 TO_CHAR(holiday_date, 'Month') as month_name
             FROM organization_holidays

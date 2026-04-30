@@ -170,6 +170,53 @@ def init_database():
             )
         """)
         
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'organization_holidays' AND column_name = 'holiday_type'
+                ) THEN
+                    ALTER TABLE organization_holidays ADD COLUMN holiday_type VARCHAR(40);
+                END IF;
+
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'organization_holidays' AND column_name = 'description'
+                ) THEN
+                    ALTER TABLE organization_holidays ADD COLUMN description TEXT;
+                END IF;
+
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'organization_holidays' AND column_name = 'status'
+                ) THEN
+                    ALTER TABLE organization_holidays ADD COLUMN status VARCHAR(20) DEFAULT 'Active';
+                END IF;
+
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'organization_holidays' AND column_name = 'created_by_emp_code'
+                ) THEN
+                    ALTER TABLE organization_holidays ADD COLUMN created_by_emp_code VARCHAR(50);
+                END IF;
+            END $$;
+        """)
+
+        cursor.execute("""
+            UPDATE organization_holidays
+            SET holiday_type = CASE
+                WHEN COALESCE(is_mandatory, true) THEN 'Public Holiday'
+                ELSE 'Optional Holiday'
+            END
+            WHERE holiday_type IS NULL OR TRIM(holiday_type) = ''
+        """)
+
+        cursor.execute("""
+            UPDATE organization_holidays
+            SET status = 'Active'
+            WHERE status IS NULL OR TRIM(status) = ''
+        """)
         logger.info("✓ Organization holidays table ready")
         
         # 3. Add shift_id to employees if column doesn't exist

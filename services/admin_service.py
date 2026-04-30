@@ -4,7 +4,7 @@ Business logic for admin-only operations
 """
 
 from database.connection import get_db_connection
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from config import Config
 import calendar
 from collections import OrderedDict
@@ -844,6 +844,508 @@ def get_all_day_summary(target_date: date = None):
             }
         }, 200)
 
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def _is_second_saturday(target_date: date) -> bool:
+    return target_date.weekday() == 5 and 8 <= target_date.day <= 14
+
+
+def _is_sunday(target_date: date) -> bool:
+    return target_date.weekday() == 6
+
+
+def _normalize_holiday_type(raw_type, is_mandatory) -> str:
+    normalized = str(raw_type or '').strip()
+    if normalized:
+        return normalized
+    return 'Public Holiday' if bool(is_mandatory) else 'Optional Holiday'
+
+
+def _normalize_holiday_status(raw_status) -> str:
+    normalized = str(raw_status or '').strip()
+    return normalized if normalized else 'Active'
+
+
+def _parse_holiday_row(row):
+    if hasattr(row, 'get'):
+        row_data = row
+    elif isinstance(row, (list, tuple)):
+        row_data = {
+            "id": row[0] if len(row) > 0 else None,
+            "holiday_date": row[1] if len(row) > 1 else None,
+            "holiday_name": row[2] if len(row) > 2 else '',
+            "is_mandatory": row[3] if len(row) > 3 else True,
+            "holiday_type": row[4] if len(row) > 4 else None,
+            "description": row[5] if len(row) > 5 else '',
+            "status": row[6] if len(row) > 6 else 'Active',
+        }
+    else:
+        return None
+
+    holiday_date = row_data.get('holiday_date')
+    if isinstance(holiday_date, datetime):
+        holiday_date = holiday_date.date()
+    if not isinstance(holiday_date, date):
+        return None
+
+    return {
+        "id": row_data.get('id'),
+        "date": holiday_date.isoformat(),
+        "holiday_date": holiday_date,
+        "holiday_name": (row_data.get('holiday_name') or '').strip(),
+        "holiday_type": _normalize_holiday_type(row_data.get('holiday_type'), row_data.get('is_mandatory')),
+        "description": (row_data.get('description') or '').strip(),
+        "status": _normalize_holiday_status(row_data.get('status')),
+        "is_mandatory": bool(row_data.get('is_mandatory')),
+    }
+
+
+def get_admin_holidays(year: int, month: int = None):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    if month is not None and (month < 1 or month > 12):
+        return ({
+            "success": False,
+            "message": "Invalid month. Use 1-12."
+        }, 400)
+
+    if year < 2000 or year > 2100:
+        return ({
+            "success": False,
+            "message": "Invalid year. Must be between 2000 and 2100."
+        }, 400)
+
+    try:
+        query = """
+            SELECT
+                id,
+                holiday_date,
+                holiday_name,
+                is_mandatory,
+                holiday_type,
+                description,
+                status
+            FROM organization_holidays
+            WHERE EXTRACT(YEAR FROM holiday_date) = %s
+        """
+        params = [year]
+
+        if month is not None:
+            query += " AND EXTRACT(MONTH FROM holiday_date) = %s"
+            params.append(month)
+
+        query += " ORDER BY holiday_date ASC"
+        cursor.execute(query, params)
+        raw_rows = cursor.fetchall()
+
+        configured_by_date = {}
+        configured_rows = []
+
+        for raw_row in raw_rows:
+            parsed = _parse_holiday_row(raw_row)
+            if not parsed:
+                continue
+            configured_rows.append(parsed)
+            configured_by_date[parsed['date']] = parsed
+
+        if month is None:
+            start_date = date(year, 1, 1)
+            end_date = date(year, 12, 31)
+        else:
+            start_date = date(year, month, 1)
+            end_date = date(year, month, calendar.monthrange(year, month)[1])
+
+        holiday_rows = []
+        current_date = start_date
+        while current_date <= end_date:
+            date_key = current_date.isoformat()
+            configured = configured_by_date.get(date_key)
+            is_sunday = _is_sunday(current_date)
+            is_second_saturday = _is_second_saturday(current_date)
+            weekend_name = 'Sunday' if is_sunday else 'Second Saturday' if is_second_saturday else ''
+
+            if configured:
+                configured_status = _normalize_holiday_status(configured.get('status'))
+                configured_active = configured_status.lower() == 'active'
+                is_holiday = configured_active or bool(weekend_name)
+
+                holiday_rows.append({
+                    "id": configured.get('id'),
+                    "date": date_key,
+                    "holidayName": configured.get('holiday_name') or weekend_name,
+                    "holidayType": configured.get('holiday_type') or ('Weekend' if weekend_name else 'Holiday'),
+                    "description": configured.get('description') or '',
+                    "status": configured_status,
+                    "isConfigured": True,
+                    "isHoliday": is_holiday,
+                    "isSunday": is_sunday,
+                    "isSecondSaturday": is_second_saturday,
+                    "dayType": (
+                        'Holiday'
+                        if configured_active
+                        else 'Sunday'
+                        if is_sunday
+                        else 'Second Saturday'
+                        if is_second_saturday
+                        else 'Working Day'
+                    ),
+                })
+            elif weekend_name:
+                holiday_rows.append({
+                    "id": None,
+                    "date": date_key,
+                    "holidayName": weekend_name,
+                    "holidayType": 'Weekend',
+                    "description": '',
+                    "status": 'Active',
+                    "isConfigured": False,
+                    "isHoliday": True,
+                    "isSunday": is_sunday,
+                    "isSecondSaturday": is_second_saturday,
+                    "dayType": 'Sunday' if is_sunday else 'Second Saturday',
+                })
+
+            current_date += timedelta(days=1)
+
+        return ({
+            "success": True,
+            "data": {
+                "year": year,
+                "month": month,
+                "holidays": holiday_rows,
+                "configured_holidays": [
+                    {
+                        "id": row.get("id"),
+                        "date": row.get("date"),
+                        "holidayName": row.get("holiday_name"),
+                        "holidayType": row.get("holiday_type"),
+                        "description": row.get("description") or '',
+                        "status": row.get("status"),
+                    }
+                    for row in configured_rows
+                ],
+                "count": len(holiday_rows),
+            }
+        }, 200)
+    except Exception as e:
+        return ({
+            "success": False,
+            "message": str(e)
+        }, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def create_admin_holiday(payload, created_by_emp_code: str = None):
+    holiday_name = (payload.get('holiday_name') or payload.get('holidayName') or '').strip()
+    holiday_date_raw = (payload.get('date') or payload.get('holiday_date') or '').strip()
+    holiday_type = (payload.get('holiday_type') or payload.get('holidayType') or '').strip()
+    description = (payload.get('description') or payload.get('note') or '').strip()
+    status = (payload.get('status') or '').strip() or 'Active'
+
+    if not holiday_name:
+        return ({
+            "success": False,
+            "message": "Holiday name is required."
+        }, 400)
+
+    if not holiday_date_raw:
+        return ({
+            "success": False,
+            "message": "Date is required. Use YYYY-MM-DD."
+        }, 400)
+
+    if not holiday_type:
+        return ({
+            "success": False,
+            "message": "Holiday type is required."
+        }, 400)
+
+    if not description:
+        return ({
+            "success": False,
+            "message": "Description or note is required."
+        }, 400)
+
+    allowed_types = {'Public Holiday', 'Company Holiday', 'Optional Holiday', 'Weekend'}
+    if holiday_type not in allowed_types:
+        return ({
+            "success": False,
+            "message": "Invalid holiday type."
+        }, 400)
+
+    allowed_statuses = {'Active', 'Inactive'}
+    if status not in allowed_statuses:
+        return ({
+            "success": False,
+            "message": "Invalid status."
+        }, 400)
+
+    try:
+        holiday_date = datetime.strptime(holiday_date_raw, "%Y-%m-%d").date()
+    except ValueError:
+        return ({
+            "success": False,
+            "message": "Invalid date format. Use YYYY-MM-DD."
+        }, 400)
+
+    if holiday_date.year < 2000 or holiday_date.year > 2100:
+        return ({
+            "success": False,
+            "message": "Invalid date year. Must be between 2000 and 2100."
+        }, 400)
+
+    is_mandatory = holiday_type in {'Public Holiday', 'Company Holiday'}
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT id, holiday_name
+            FROM organization_holidays
+            WHERE holiday_date = %s
+            LIMIT 1
+            """,
+            (holiday_date,),
+        )
+        duplicate_row = cursor.fetchone()
+        if duplicate_row:
+            return ({
+                "success": False,
+                "message": f"Holiday already exists for {holiday_date.isoformat()}."
+            }, 409)
+
+        cursor.execute(
+            """
+            INSERT INTO organization_holidays (
+                holiday_date,
+                holiday_name,
+                is_mandatory,
+                holiday_type,
+                description,
+                status,
+                created_by_emp_code
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id, holiday_date, holiday_name, holiday_type, description, status, is_mandatory
+            """,
+            (
+                holiday_date,
+                holiday_name,
+                is_mandatory,
+                holiday_type,
+                description,
+                status,
+                (created_by_emp_code or '').strip() or None,
+            ),
+        )
+        inserted = cursor.fetchone()
+        conn.commit()
+
+        parsed = _parse_holiday_row(inserted)
+        if not parsed:
+            raise ValueError("Unable to parse created holiday row")
+
+        return ({
+            "success": True,
+            "message": "Holiday created successfully.",
+            "data": {
+                "id": parsed.get("id"),
+                "date": parsed.get("date"),
+                "holidayName": parsed.get("holiday_name"),
+                "holidayType": parsed.get("holiday_type"),
+                "description": parsed.get("description"),
+                "status": parsed.get("status"),
+            }
+        }, 201)
+    except Exception as e:
+        conn.rollback()
+        return ({
+            "success": False,
+            "message": str(e)
+        }, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_calendar_summary(month: int, year: int, department: str = None, emp_code: str = None):
+    if month < 1 or month > 12:
+        return ({
+            "success": False,
+            "message": "Invalid month. Use 1-12."
+        }, 400)
+
+    if year < 2000 or year > 2100:
+        return ({
+            "success": False,
+            "message": "Invalid year. Must be between 2000 and 2100."
+        }, 400)
+
+    department_filter = (department or '').strip()
+    emp_code_filter = (emp_code or '').strip()
+    start_date = date(year, month, 1)
+    end_date = date(year, month, calendar.monthrange(year, month)[1])
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT
+                id,
+                holiday_date,
+                holiday_name,
+                is_mandatory,
+                holiday_type,
+                description,
+                status
+            FROM organization_holidays
+            WHERE holiday_date BETWEEN %s AND %s
+            ORDER BY holiday_date ASC
+            """,
+            (start_date, end_date),
+        )
+        raw_holidays = cursor.fetchall()
+
+        holidays_by_date = {}
+        for row in raw_holidays:
+            parsed = _parse_holiday_row(row)
+            if not parsed:
+                continue
+            holidays_by_date[parsed['date']] = parsed
+
+        attendance_query = """
+            SELECT
+                a.date AS record_date,
+                COUNT(
+                    DISTINCT COALESCE(
+                        NULLIF(LOWER(a.employee_email), ''),
+                        NULLIF(LOWER(a.employee_name), ''),
+                        CONCAT('attendance-', a.id::text)
+                    )
+                ) AS attendance_count
+            FROM attendance a
+            LEFT JOIN employees e ON e.emp_email = a.employee_email
+            WHERE a.date BETWEEN %s AND %s
+        """
+        attendance_params = [start_date, end_date]
+
+        if department_filter:
+            attendance_query += " AND LOWER(COALESCE(e.emp_department, '')) = LOWER(%s)"
+            attendance_params.append(department_filter)
+
+        if emp_code_filter:
+            attendance_query += " AND e.emp_code = %s"
+            attendance_params.append(emp_code_filter)
+
+        attendance_query += " GROUP BY a.date"
+        cursor.execute(attendance_query, attendance_params)
+        attendance_rows = cursor.fetchall()
+        attendance_map = {}
+        for row in attendance_rows:
+            attendance_date = row.get('record_date')
+            if isinstance(attendance_date, datetime):
+                attendance_date = attendance_date.date()
+            if isinstance(attendance_date, date):
+                attendance_map[attendance_date.isoformat()] = int(row.get('attendance_count') or 0)
+
+        comp_off_query = """
+            SELECT
+                c.work_date AS record_date,
+                COUNT(*) AS comp_off_count
+            FROM comp_offs c
+            LEFT JOIN employees e ON e.emp_code = c.emp_code
+            WHERE c.work_date BETWEEN %s AND %s
+              AND COALESCE(c.comp_off_earned, 0) > 0
+              AND LOWER(COALESCE(c.status, '')) <> 'rejected'
+        """
+        comp_off_params = [start_date, end_date]
+
+        if department_filter:
+            comp_off_query += " AND LOWER(COALESCE(e.emp_department, '')) = LOWER(%s)"
+            comp_off_params.append(department_filter)
+
+        if emp_code_filter:
+            comp_off_query += " AND c.emp_code = %s"
+            comp_off_params.append(emp_code_filter)
+
+        comp_off_query += " GROUP BY c.work_date"
+        cursor.execute(comp_off_query, comp_off_params)
+        comp_off_rows = cursor.fetchall()
+        comp_off_map = {}
+        for row in comp_off_rows:
+            comp_date = row.get('record_date')
+            if isinstance(comp_date, datetime):
+                comp_date = comp_date.date()
+            if isinstance(comp_date, date):
+                comp_off_map[comp_date.isoformat()] = int(row.get('comp_off_count') or 0)
+
+        summary_rows = []
+        current_date = start_date
+        while current_date <= end_date:
+            date_key = current_date.isoformat()
+            configured = holidays_by_date.get(date_key)
+            configured_status = _normalize_holiday_status(configured.get('status')) if configured else 'Active'
+            configured_active = bool(configured) and configured_status.lower() == 'active'
+            is_sunday = _is_sunday(current_date)
+            is_second_saturday = _is_second_saturday(current_date)
+            weekend_name = 'Sunday' if is_sunday else 'Second Saturday' if is_second_saturday else None
+
+            is_holiday = bool(weekend_name) or configured_active
+            if configured_active:
+                holiday_name = configured.get('holiday_name')
+                holiday_type = configured.get('holiday_type') or 'Holiday'
+                day_type = 'Holiday'
+            elif weekend_name:
+                holiday_name = weekend_name
+                holiday_type = 'Weekend'
+                day_type = weekend_name
+            else:
+                holiday_name = None
+                holiday_type = None
+                day_type = 'Working Day'
+
+            summary_rows.append({
+                "date": date_key,
+                "attendanceCount": int(attendance_map.get(date_key, 0)),
+                "compOffCount": int(comp_off_map.get(date_key, 0)),
+                "isHoliday": is_holiday,
+                "holidayName": holiday_name,
+                "holidayType": holiday_type,
+                "isSunday": is_sunday,
+                "isSecondSaturday": is_second_saturday,
+                "dayType": day_type,
+                "holidayStatus": configured_status if configured else None,
+                "holidayDescription": (configured.get('description') or '') if configured else '',
+            })
+
+            current_date += timedelta(days=1)
+
+        return ({
+            "success": True,
+            "data": {
+                "month": month,
+                "year": year,
+                "department": department_filter or None,
+                "emp_code": emp_code_filter or None,
+                "summary": summary_rows,
+                "count": len(summary_rows),
+            }
+        }, 200)
+    except Exception as e:
+        return ({
+            "success": False,
+            "message": str(e)
+        }, 500)
     finally:
         cursor.close()
         conn.close()

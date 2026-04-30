@@ -784,6 +784,75 @@ def get_all_day_summary(current_user):
     return jsonify(response), status_code
 
 
+@admin_bp.route('/holidays', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_admin_holidays(current_user):
+    """
+    Get admin holidays list with automatic Sunday/second-Saturday entries.
+
+    Query params:
+    - year: YYYY (optional, default current year)
+    - month: 1-12 (optional)
+    """
+    year = request.args.get('year', type=int) or date.today().year
+    month = request.args.get('month', type=int)
+
+    response, status_code = admin_service.get_admin_holidays(year=year, month=month)
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/holidays', methods=['POST'])
+@token_required
+@hr_or_devtester_required
+def create_admin_holiday(current_user):
+    """
+    Create an organization holiday.
+
+    Request body:
+    {
+      "holidayName": "Diwali",
+      "date": "YYYY-MM-DD",
+      "holidayType": "Public Holiday|Company Holiday|Optional Holiday|Weekend",
+      "description": "Festival holiday",
+      "status": "Active|Inactive"
+    }
+    """
+    payload = request.get_json() or {}
+    response, status_code = admin_service.create_admin_holiday(
+        payload=payload,
+        created_by_emp_code=current_user.get('emp_code')
+    )
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/calendar-summary', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_calendar_summary(current_user):
+    """
+    Get month-wise calendar summary.
+
+    Query params:
+    - month: 1-12 (optional, default current month)
+    - year: YYYY (optional, default current year)
+    - department: optional
+    - employee / emp_code: optional employee code
+    """
+    month = request.args.get('month', type=int) or date.today().month
+    year = request.args.get('year', type=int) or date.today().year
+    department = request.args.get('department')
+    emp_code = request.args.get('employee') or request.args.get('emp_code')
+
+    response, status_code = admin_service.get_calendar_summary(
+        month=month,
+        year=year,
+        department=department,
+        emp_code=emp_code
+    )
+    return jsonify(response), status_code
+
+
 @admin_bp.route('/activities', methods=['GET'])
 @token_required
 @hr_or_devtester_required

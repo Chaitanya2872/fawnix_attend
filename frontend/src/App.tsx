@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import './App.css'
@@ -305,6 +305,46 @@ type AttendanceExceptionRow = {
   actual_logout_time?: string
 }
 
+type HolidayCategory = 'Public Holiday' | 'Company Holiday' | 'Optional Holiday' | 'Weekend'
+type HolidayStatus = 'Active' | 'Inactive'
+type CalendarViewType = 'attendance' | 'compoff' | 'holidays' | 'combined'
+
+type AdminHolidayRow = {
+  id?: number
+  date: string
+  holidayName: string
+  holidayType: HolidayCategory | string
+  description?: string
+  status?: HolidayStatus | string
+  isHoliday?: boolean
+  isSunday?: boolean
+  isSecondSaturday?: boolean
+  dayType?: string
+  isConfigured?: boolean
+}
+
+type CalendarSummaryRow = {
+  date: string
+  attendanceCount: number
+  compOffCount: number
+  isHoliday: boolean
+  holidayName?: string | null
+  holidayType?: string | null
+  isSunday: boolean
+  isSecondSaturday: boolean
+  dayType: 'Working Day' | 'Sunday' | 'Second Saturday' | 'Holiday' | string
+  holidayStatus?: string | null
+  holidayDescription?: string
+}
+
+type HolidayFormState = {
+  holidayName: string
+  date: string
+  holidayType: HolidayCategory
+  description: string
+  status: HolidayStatus
+}
+
 type ActivityRow = {
   id?: number
   employee_name?: string
@@ -408,6 +448,13 @@ type FieldVisitTimelineItem = {
 const ACCESS_TOKEN_KEY = 'fawnix_admin_access_token'
 const REFRESH_TOKEN_KEY = 'fawnix_admin_refresh_token'
 const USER_KEY = 'fawnix_admin_user'
+const HOLIDAY_TYPE_OPTIONS: HolidayCategory[] = [
+  'Public Holiday',
+  'Company Holiday',
+  'Optional Holiday',
+  'Weekend'
+]
+const HOLIDAY_STATUS_OPTIONS: HolidayStatus[] = ['Active', 'Inactive']
 
 function isPrivilegedUser(profile: AdminProfile | null) {
   if (!profile) {
@@ -939,6 +986,67 @@ function isDateWithinRange(
   return targetDate >= startDate.slice(0, 10) && targetDate <= endDate.slice(0, 10)
 }
 
+function getMonthDateKeys(year: number, month: number) {
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+    return [] as string[]
+  }
+
+  const daysInMonth = new Date(year, month, 0).getDate()
+  return Array.from({ length: daysInMonth }, (_, index) => {
+    const dateValue = new Date(year, month - 1, index + 1)
+    return toDateInputValue(dateValue)
+  })
+}
+
+function normalizeCount(value: unknown) {
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue) || numericValue < 0) {
+    return 0
+  }
+  return Math.round(numericValue)
+}
+
+function getHolidayIcon(name?: string | null, dayType?: string | null) {
+  const label = `${name || ''} ${dayType || ''}`.toLowerCase()
+
+  if (label.includes('sunday') || label.includes('second saturday') || label.includes('weekend')) {
+    return '📴'
+  }
+  if (label.includes('diwali') || label.includes('deepavali')) {
+    return '🪔'
+  }
+  if (label.includes('christmas') || label.includes('xmas')) {
+    return '🎄'
+  }
+  if (label.includes('eid') || label.includes('ramadan') || label.includes('ramzan') || label.includes('bakrid')) {
+    return '🌙'
+  }
+  if (label.includes('independence')) {
+    return '🚩'
+  }
+  if (label.includes('new year')) {
+    return '🎆'
+  }
+
+  return '📅'
+}
+
+function getCalendarCellHeatValue(
+  row: CalendarSummaryRow,
+  viewType: CalendarViewType
+) {
+  if (viewType === 'attendance') {
+    return row.attendanceCount
+  }
+  if (viewType === 'compoff') {
+    return row.compOffCount
+  }
+  if (viewType === 'holidays') {
+    return row.isHoliday ? 1 : 0
+  }
+  return row.attendanceCount + row.compOffCount + (row.isHoliday ? 1 : 0)
+}
+
 function normalizePath(pathname: string) {
   const trimmed = pathname.replace(/\/+$/, '')
   return trimmed || '/'
@@ -1193,7 +1301,7 @@ function App() {
     lateArrivals: 0,
     earlyLeaves: 0
   })
-  const [attendanceView, setAttendanceView] = useState<'attendance' | 'late-arrivals' | 'early-leaves' | 'leaves' | 'missed-logins'>('attendance')
+  const [attendanceView, setAttendanceView] = useState<'attendance' | 'calendar' | 'late-arrivals' | 'early-leaves' | 'leaves' | 'missed-logins'>('attendance')
   const [, setAttendanceSummary] = useState({
     attendanceCount: 0,
     compOffDays: 0,
@@ -1213,6 +1321,27 @@ function App() {
   const [attendanceReportYear, setAttendanceReportYear] = useState(() => String(new Date().getFullYear()))
   const [attendanceReportFormat, setAttendanceReportFormat] = useState<'csv' | 'pdf' | 'xlsx'>('csv')
   const [attendanceReportStatus, setAttendanceReportStatus] = useState('')
+  const [calendarMonthFilter, setCalendarMonthFilter] = useState(() => String(new Date().getMonth() + 1))
+  const [calendarYearFilter, setCalendarYearFilter] = useState(() => String(new Date().getFullYear()))
+  const [calendarDepartmentFilter, setCalendarDepartmentFilter] = useState('all')
+  const [calendarEmployeeFilter, setCalendarEmployeeFilter] = useState('all')
+  const [calendarViewType, setCalendarViewType] = useState<CalendarViewType>('combined')
+  const [calendarSummaryRows, setCalendarSummaryRows] = useState<CalendarSummaryRow[]>([])
+  const [holidayRows, setHolidayRows] = useState<AdminHolidayRow[]>([])
+  const [calendarLoading, setCalendarLoading] = useState(false)
+  const [calendarError, setCalendarError] = useState('')
+  const [calendarStatus, setCalendarStatus] = useState('')
+  const [holidayModalOpen, setHolidayModalOpen] = useState(false)
+  const [holidayFormLoading, setHolidayFormLoading] = useState(false)
+  const [holidayFormStatus, setHolidayFormStatus] = useState('')
+  const [calendarActiveDate, setCalendarActiveDate] = useState('')
+  const [holidayForm, setHolidayForm] = useState<HolidayFormState>({
+    holidayName: '',
+    date: toDateInputValue(new Date()),
+    holidayType: 'Public Holiday',
+    description: '',
+    status: 'Active'
+  })
   const [mapDialogOpen, setMapDialogOpen] = useState(false)
   const [mapDialogTitle, setMapDialogTitle] = useState('')
   const [mapDialogLoading, setMapDialogLoading] = useState(false)
@@ -1468,6 +1597,48 @@ function App() {
       previousCodes.filter((empCode) => alertEligibleEmpCodes.includes(empCode))
     )
   }, [alertEligibleEmpCodes])
+
+  useEffect(() => {
+    if (calendarEmployeeFilter === 'all') {
+      return
+    }
+
+    const hasMatch = employees.some((employee) => {
+      if (employee.emp_code !== calendarEmployeeFilter) {
+        return false
+      }
+      if (calendarDepartmentFilter === 'all') {
+        return true
+      }
+      return (employee.emp_department || '').trim().toLowerCase() === calendarDepartmentFilter.toLowerCase()
+    })
+
+    if (!hasMatch) {
+      setCalendarEmployeeFilter('all')
+    }
+  }, [employees, calendarDepartmentFilter, calendarEmployeeFilter])
+
+  useEffect(() => {
+    setCalendarActiveDate('')
+  }, [calendarMonthFilter, calendarYearFilter, calendarDepartmentFilter, calendarEmployeeFilter, calendarViewType, attendanceView])
+
+  useEffect(() => {
+    if (!accessToken || !showDashboard || showAdminLogin || activePanel !== 'attendance' || attendanceView !== 'calendar') {
+      return
+    }
+
+    void loadHolidayCalendar(accessToken)
+  }, [
+    accessToken,
+    showDashboard,
+    showAdminLogin,
+    activePanel,
+    attendanceView,
+    calendarMonthFilter,
+    calendarYearFilter,
+    calendarDepartmentFilter,
+    calendarEmployeeFilter
+  ])
 
   const updateTokens = (nextAccessToken: string, nextRefreshToken: string) => {
     setAccessToken(nextAccessToken)
@@ -1738,6 +1909,13 @@ function App() {
     setLeaveRows([])
     setActivityRows([])
     setFieldVisitRows([])
+    setCalendarSummaryRows([])
+    setHolidayRows([])
+    setCalendarError('')
+    setCalendarStatus('')
+    setHolidayModalOpen(false)
+    setHolidayFormStatus('')
+    setCalendarActiveDate('')
     window.localStorage.removeItem(ACCESS_TOKEN_KEY)
     window.localStorage.removeItem(REFRESH_TOKEN_KEY)
     window.localStorage.removeItem(USER_KEY)
@@ -1900,6 +2078,242 @@ function App() {
       }
     } finally {
       setDashboardLoading(false)
+    }
+  }
+
+  const closeHolidayModal = () => {
+    setHolidayModalOpen(false)
+    setHolidayFormStatus('')
+    setHolidayFormLoading(false)
+  }
+
+  const openHolidayModal = () => {
+    const now = new Date()
+    const selectedMonth = Number(calendarMonthFilter) || now.getMonth() + 1
+    const selectedYear = Number(calendarYearFilter) || now.getFullYear()
+    const initialDate = toDateInputValue(new Date(selectedYear, selectedMonth - 1, Math.min(now.getDate(), 28)))
+
+    setHolidayForm({
+      holidayName: '',
+      date: initialDate,
+      holidayType: 'Public Holiday',
+      description: '',
+      status: 'Active'
+    })
+    setHolidayFormStatus('')
+    setCalendarStatus('')
+    setHolidayModalOpen(true)
+  }
+
+  const loadHolidayCalendar = async (token: string = accessToken) => {
+    const monthValue = Number(calendarMonthFilter)
+    const yearValue = Number(calendarYearFilter)
+
+    if (!Number.isFinite(monthValue) || monthValue < 1 || monthValue > 12) {
+      setCalendarError('Select a valid month.')
+      return
+    }
+
+    if (!Number.isFinite(yearValue) || yearValue < 2000 || yearValue > 2100) {
+      setCalendarError('Select a valid year.')
+      return
+    }
+
+    setCalendarLoading(true)
+    setCalendarError('')
+
+    try {
+      const summaryParams = new URLSearchParams({
+        month: String(monthValue),
+        year: String(yearValue)
+      })
+
+      if (calendarDepartmentFilter !== 'all') {
+        summaryParams.set('department', calendarDepartmentFilter)
+      }
+      if (calendarEmployeeFilter !== 'all') {
+        summaryParams.set('employee', calendarEmployeeFilter)
+      }
+
+      const holidayParams = new URLSearchParams({
+        month: String(monthValue),
+        year: String(yearValue)
+      })
+
+      const [summaryResponse, holidaysResponse] = await Promise.all([
+        apiRequest(`/api/admin/calendar-summary?${summaryParams.toString()}`, {}, token),
+        apiRequest(`/api/admin/holidays?${holidayParams.toString()}`, {}, token)
+      ])
+
+      const normalizedSummaryRows: CalendarSummaryRow[] = Array.isArray(summaryResponse?.data?.summary)
+        ? summaryResponse.data.summary
+            .map((row: Record<string, unknown>) => {
+              const rowDate = String(row.date || '').slice(0, 10)
+              if (!rowDate) {
+                return null
+              }
+
+              const isHoliday = Boolean(row.isHoliday ?? row.is_holiday)
+              const isSunday = Boolean(row.isSunday ?? row.is_sunday)
+              const isSecondSaturday = Boolean(row.isSecondSaturday ?? row.is_second_saturday)
+              const holidayName = typeof row.holidayName === 'string'
+                ? row.holidayName
+                : typeof row.holiday_name === 'string'
+                  ? row.holiday_name
+                  : null
+              const holidayType = typeof row.holidayType === 'string'
+                ? row.holidayType
+                : typeof row.holiday_type === 'string'
+                  ? row.holiday_type
+                  : null
+              const dayTypeRaw = typeof row.dayType === 'string'
+                ? row.dayType
+                : typeof row.day_type === 'string'
+                  ? row.day_type
+                  : null
+
+              return {
+                date: rowDate,
+                attendanceCount: normalizeCount(row.attendanceCount ?? row.attendance_count),
+                compOffCount: normalizeCount(row.compOffCount ?? row.comp_off_count),
+                isHoliday,
+                holidayName,
+                holidayType,
+                isSunday,
+                isSecondSaturday,
+                dayType: dayTypeRaw || (isHoliday ? 'Holiday' : 'Working Day'),
+                holidayStatus:
+                  typeof row.holidayStatus === 'string'
+                    ? row.holidayStatus
+                    : typeof row.holiday_status === 'string'
+                      ? row.holiday_status
+                      : null,
+                holidayDescription:
+                  typeof row.holidayDescription === 'string'
+                    ? row.holidayDescription
+                    : typeof row.holiday_description === 'string'
+                      ? row.holiday_description
+                      : ''
+              } as CalendarSummaryRow
+            })
+            .filter((row: CalendarSummaryRow | null): row is CalendarSummaryRow => Boolean(row))
+        : []
+
+      const summaryByDate = new Map<string, CalendarSummaryRow>(
+        normalizedSummaryRows.map((row: CalendarSummaryRow) => [row.date, row])
+      )
+      const filledSummaryRows: CalendarSummaryRow[] = getMonthDateKeys(yearValue, monthValue).map((dateKey) => {
+        const existingRow = summaryByDate.get(dateKey)
+        if (existingRow) {
+          return existingRow
+        }
+
+        const parsedDate = parseDateInputValue(dateKey)
+        const isSunday = parsedDate.getDay() === 0
+        const isSecondSaturday = parsedDate.getDay() === 6 && parsedDate.getDate() >= 8 && parsedDate.getDate() <= 14
+        const weekendName = isSunday ? 'Sunday' : isSecondSaturday ? 'Second Saturday' : null
+
+        return {
+          date: dateKey,
+          attendanceCount: 0,
+          compOffCount: 0,
+          isHoliday: Boolean(weekendName),
+          holidayName: weekendName,
+          holidayType: weekendName ? 'Weekend' : null,
+          isSunday,
+          isSecondSaturday,
+          dayType: weekendName || 'Working Day',
+          holidayStatus: weekendName ? 'Active' : null,
+          holidayDescription: ''
+        } as CalendarSummaryRow
+      })
+
+      const normalizedHolidayRows: AdminHolidayRow[] = Array.isArray(holidaysResponse?.data?.holidays)
+        ? holidaysResponse.data.holidays
+            .map((row: Record<string, unknown>) => {
+              const rowDate = String(row.date || row.holiday_date || '').slice(0, 10)
+              if (!rowDate) {
+                return null
+              }
+
+              return {
+                id: Number.isFinite(Number(row.id)) ? Number(row.id) : undefined,
+                date: rowDate,
+                holidayName:
+                  String(
+                    row.holidayName ||
+                      row.holiday_name ||
+                      (Boolean(row.isSunday || row.is_sunday)
+                        ? 'Sunday'
+                        : Boolean(row.isSecondSaturday || row.is_second_saturday)
+                          ? 'Second Saturday'
+                          : '')
+                  ).trim() || 'Holiday',
+                holidayType: String(row.holidayType || row.holiday_type || 'Holiday'),
+                description: String(row.description || ''),
+                status: String(row.status || 'Active'),
+                isHoliday: Boolean(row.isHoliday ?? row.is_holiday),
+                isSunday: Boolean(row.isSunday ?? row.is_sunday),
+                isSecondSaturday: Boolean(row.isSecondSaturday ?? row.is_second_saturday),
+                dayType: String(row.dayType || row.day_type || 'Holiday'),
+                isConfigured: Boolean(row.isConfigured ?? row.is_configured)
+              } as AdminHolidayRow
+            })
+            .filter((row: AdminHolidayRow | null): row is AdminHolidayRow => Boolean(row))
+            .sort((left: AdminHolidayRow, right: AdminHolidayRow) => left.date.localeCompare(right.date))
+        : []
+
+      setCalendarSummaryRows(filledSummaryRows)
+      setHolidayRows(normalizedHolidayRows)
+    } catch (error) {
+      setCalendarError(error instanceof Error ? error.message : 'Failed to load holiday calendar.')
+    } finally {
+      setCalendarLoading(false)
+    }
+  }
+
+  const createHoliday = async () => {
+    if (!canWriteAdminData) {
+      setHolidayFormStatus('Write permission is required to add holidays.')
+      return
+    }
+
+    if (!holidayForm.holidayName.trim() || !holidayForm.date || !holidayForm.description.trim()) {
+      setHolidayFormStatus('Holiday name, date, and description are required.')
+      return
+    }
+
+    const duplicateHoliday = holidayRows.find(
+      (row) => row.date === holidayForm.date && row.isConfigured !== false
+    )
+    if (duplicateHoliday) {
+      setHolidayFormStatus(`A holiday is already configured on ${formatAttendanceDateLabel(holidayForm.date)}.`)
+      return
+    }
+
+    setHolidayFormLoading(true)
+    setHolidayFormStatus('Saving holiday...')
+    try {
+      const payload = {
+        holidayName: holidayForm.holidayName.trim(),
+        date: holidayForm.date,
+        holidayType: holidayForm.holidayType,
+        description: holidayForm.description.trim(),
+        status: holidayForm.status
+      }
+      const response = await apiRequest('/api/admin/holidays', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      })
+
+      setCalendarStatus(response?.message || 'Holiday saved.')
+      window.setTimeout(() => setCalendarStatus(''), 3000)
+      closeHolidayModal()
+      await loadHolidayCalendar(accessToken)
+    } catch (error) {
+      setHolidayFormStatus(error instanceof Error ? error.message : 'Failed to save holiday.')
+    } finally {
+      setHolidayFormLoading(false)
     }
   }
 
@@ -2814,6 +3228,45 @@ function App() {
     const reminderTargetDate = attendanceDateFilter || toDateInputValue(new Date())
     const reminderPreviewTitle = 'Attendance Reminder'
     const reminderPreviewBody = 'Clock in. If you already did, please ignore.'
+    const calendarMonthNumber = Number(calendarMonthFilter) || new Date().getMonth() + 1
+    const calendarYearNumber = Number(calendarYearFilter) || new Date().getFullYear()
+    const calendarMonthLabel = getCalendarMonthLabel(new Date(calendarYearNumber, calendarMonthNumber - 1, 1))
+    const calendarMonthStartDate = parseDateInputValue(
+      `${calendarYearNumber}-${String(calendarMonthNumber).padStart(2, '0')}-01`
+    )
+    const calendarStartOffset = calendarMonthStartDate.getDay()
+    const calendarRowsByDate = new Map(calendarSummaryRows.map((row) => [row.date, row]))
+    const calendarRowsForMonth = getMonthDateKeys(calendarYearNumber, calendarMonthNumber)
+      .map((dateKey) => calendarRowsByDate.get(dateKey))
+      .filter((row): row is CalendarSummaryRow => Boolean(row))
+    const calendarMaxHeat = Math.max(
+      ...calendarRowsForMonth.map((row) => getCalendarCellHeatValue(row, calendarViewType)),
+      1
+    )
+    const calendarHolidayCount = calendarRowsForMonth.filter((row) => row.isHoliday).length
+    const calendarDepartmentOptions = Array.from(
+      new Set(
+        employees
+          .map((employee) => (employee.emp_department || '').trim())
+          .filter(Boolean)
+      )
+    ).sort((left, right) => left.localeCompare(right))
+    const calendarEmployeeOptions = employees
+      .filter((employee) => {
+        if (calendarDepartmentFilter === 'all') {
+          return true
+        }
+        return (employee.emp_department || '').trim().toLowerCase() === calendarDepartmentFilter.toLowerCase()
+      })
+      .sort((left, right) =>
+        (left.emp_full_name || left.emp_code || '').localeCompare(right.emp_full_name || right.emp_code || '')
+      )
+    const calendarSelectedEmployee = calendarEmployeeFilter === 'all'
+      ? null
+      : calendarEmployeeOptions.find((employee) => employee.emp_code === calendarEmployeeFilter) || null
+    const calendarVisibleHolidays = holidayRows
+      .filter((row) => row.date.startsWith(`${calendarYearNumber}-${String(calendarMonthNumber).padStart(2, '0')}-`))
+      .sort((left, right) => left.date.localeCompare(right.date))
 
     const renderDashboardPanel = () => {
     const attendancePageRows = firstClockInRows
@@ -3111,6 +3564,14 @@ function App() {
                   <span>{attendanceTabCount}</span>
                 </button>
                 <button
+                  className={`attendance-tab ${attendanceView === 'calendar' ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => setAttendanceView('calendar')}
+                >
+                  Holiday Calendar
+                  <span>{calendarHolidayCount}</span>
+                </button>
+                <button
                   className={`attendance-tab ${attendanceView === 'late-arrivals' ? 'active' : ''}`}
                   type="button"
                   onClick={() => setAttendanceView('late-arrivals')}
@@ -3302,6 +3763,97 @@ function App() {
                   </button>
                 </div>
               </div>
+            ) : attendanceView === 'calendar' ? (
+              <div className="attendance-head-actions">
+                <div className="attendance-controls attendance-controls-inline calendar-controls">
+                  <div className="attendance-filter attendance-filter-compact">
+                    <label htmlFor="calendar-month">Month</label>
+                    <select
+                      id="calendar-month"
+                      value={calendarMonthFilter}
+                      onChange={(event) => setCalendarMonthFilter(event.target.value)}
+                    >
+                      {Array.from({ length: 12 }, (_, index) => {
+                        const monthValue = String(index + 1)
+                        const monthLabel = new Date(2026, index, 1).toLocaleDateString('en-IN', { month: 'short' })
+                        return (
+                          <option key={monthValue} value={monthValue}>
+                            {monthLabel}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
+                  <div className="attendance-filter attendance-filter-compact">
+                    <label htmlFor="calendar-year">Year</label>
+                    <select
+                      id="calendar-year"
+                      value={calendarYearFilter}
+                      onChange={(event) => setCalendarYearFilter(event.target.value)}
+                    >
+                      {Array.from({ length: 8 }, (_, index) => {
+                        const yearValue = String(new Date().getFullYear() - 3 + index)
+                        return (
+                          <option key={yearValue} value={yearValue}>
+                            {yearValue}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
+                  <div className="attendance-filter attendance-filter-compact">
+                    <label htmlFor="calendar-department">Department</label>
+                    <select
+                      id="calendar-department"
+                      value={calendarDepartmentFilter}
+                      onChange={(event) => setCalendarDepartmentFilter(event.target.value)}
+                    >
+                      <option value="all">All</option>
+                      {calendarDepartmentOptions.map((department) => (
+                        <option key={department} value={department}>
+                          {department}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="attendance-filter attendance-filter-compact">
+                    <label htmlFor="calendar-employee">Employee</label>
+                    <select
+                      id="calendar-employee"
+                      value={calendarEmployeeFilter}
+                      onChange={(event) => setCalendarEmployeeFilter(event.target.value)}
+                    >
+                      <option value="all">All</option>
+                      {calendarEmployeeOptions.map((employee) => (
+                        <option key={employee.emp_code} value={employee.emp_code}>
+                          {employee.emp_full_name || employee.emp_code}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="attendance-filter attendance-filter-compact">
+                    <label htmlFor="calendar-view-type">View</label>
+                    <select
+                      id="calendar-view-type"
+                      value={calendarViewType}
+                      onChange={(event) => setCalendarViewType(event.target.value as CalendarViewType)}
+                    >
+                      <option value="combined">Combined</option>
+                      <option value="attendance">Attendance</option>
+                      <option value="compoff">Comp-off</option>
+                      <option value="holidays">Holidays</option>
+                    </select>
+                  </div>
+                  {canWriteAdminData ? (
+                    <button className="ghost dashboard-button" type="button" onClick={openHolidayModal}>
+                      Add Holiday
+                    </button>
+                  ) : null}
+                  <button className="ghost dashboard-button" onClick={() => void loadHolidayCalendar(accessToken)}>
+                    Refresh
+                  </button>
+                </div>
+              </div>
             ) : (
               <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                 Refresh
@@ -3358,6 +3910,140 @@ function App() {
               </div>
             )}
           </div>
+          ) : attendanceView === 'calendar' ? (
+            <div className="calendar-layout">
+              <div className="table-card calendar-card">
+                <div className="calendar-card-head">
+                  <div>
+                    <strong>{calendarMonthLabel}</strong>
+                    <span>
+                      {calendarSelectedEmployee
+                        ? `Employee: ${calendarSelectedEmployee.emp_full_name || calendarSelectedEmployee.emp_code}`
+                        : calendarDepartmentFilter !== 'all'
+                          ? `Department: ${calendarDepartmentFilter}`
+                          : 'All departments and employees'}
+                    </span>
+                  </div>
+                  <div className="calendar-legend">
+                    <span className="legend-item attendance">Attendance</span>
+                    <span className="legend-item compoff">Comp-off</span>
+                    <span className="legend-item holiday">Holiday</span>
+                    <span className="legend-item weekend">Weekend</span>
+                    <span className="legend-item today">Today</span>
+                  </div>
+                </div>
+
+                {calendarLoading ? (
+                  <div className="empty-state">Loading calendar summary...</div>
+                ) : calendarError ? (
+                  <div className="empty-state">{calendarError}</div>
+                ) : calendarRowsForMonth.length ? (
+                  <div className={`admin-calendar-grid view-${calendarViewType}`}>
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                      <div key={day} className="admin-calendar-weekday">
+                        {day}
+                      </div>
+                    ))}
+                    {Array.from({ length: calendarStartOffset }, (_, index) => (
+                      <div key={`offset-${index}`} className="admin-calendar-offset" aria-hidden="true" />
+                    ))}
+                    {calendarRowsForMonth.map((row) => {
+                      const parsedDate = parseDateInputValue(row.date)
+                      const dayNumber = parsedDate.getDate()
+                      const heatValue = getCalendarCellHeatValue(row, calendarViewType)
+                      const heatRatio = Math.max(0, Math.min(1, heatValue / calendarMaxHeat))
+                      const heatClass = heatRatio >= 0.75 ? 'heat-strong' : heatRatio >= 0.45 ? 'heat-medium' : heatRatio > 0 ? 'heat-light' : 'heat-none'
+                      const isToday = row.date === todayDateValue
+                      const popoverOpen = calendarActiveDate === row.date
+
+                      return (
+                        <button
+                          key={row.date}
+                          type="button"
+                          onClick={() => setCalendarActiveDate((current) => (current === row.date ? '' : row.date))}
+                          className={[
+                            'admin-calendar-day',
+                            heatClass,
+                            row.isHoliday ? 'holiday' : '',
+                            row.isSunday ? 'sunday' : '',
+                            row.isSecondSaturday ? 'second-saturday' : '',
+                            isToday ? 'today' : '',
+                            popoverOpen ? 'popover-open' : ''
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
+                          style={{ '--heat': String(heatRatio) } as CSSProperties}
+                        >
+                          <div className="calendar-day-top">
+                            <span className="calendar-day-number">{dayNumber}</span>
+                            {row.isHoliday ? (
+                              <span className="calendar-day-icon" aria-hidden="true">
+                                {getHolidayIcon(row.holidayName, row.dayType)}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="calendar-day-metrics">
+                            {calendarViewType !== 'compoff' && calendarViewType !== 'holidays' && row.attendanceCount > 0 ? (
+                              <span className="calendar-day-metric attendance">A {row.attendanceCount}</span>
+                            ) : null}
+                            {calendarViewType !== 'attendance' && calendarViewType !== 'holidays' && row.compOffCount > 0 ? (
+                              <span className="calendar-day-metric compoff">C {row.compOffCount}</span>
+                            ) : null}
+                            {(calendarViewType === 'holidays' || calendarViewType === 'combined') && row.isHoliday ? (
+                              <span className="calendar-day-metric holiday">H</span>
+                            ) : null}
+                          </div>
+                          <div className="calendar-day-popover" role="tooltip">
+                            <strong>{formatAttendanceDateLabel(row.date)}</strong>
+                            <span>{row.holidayName ? `${row.holidayName}` : 'No holiday configured'}</span>
+                            <span>Attendance: {row.attendanceCount}</span>
+                            <span>Comp-off: {row.compOffCount}</span>
+                            <span>Day Type: {row.dayType}</span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="empty-state">No calendar data found for the selected filters.</div>
+                )}
+
+                {calendarStatus ? <span className="report-status attendance-report-status">{calendarStatus}</span> : null}
+              </div>
+
+              <div className="table-card calendar-holiday-list-card">
+                <div className="chart-card-head">
+                  <div>
+                    <strong>Configured Holidays & Weekends</strong>
+                    <span>
+                      {calendarVisibleHolidays.length} holiday entr{calendarVisibleHolidays.length === 1 ? 'y' : 'ies'} in view
+                    </span>
+                  </div>
+                </div>
+                {calendarVisibleHolidays.length ? (
+                  <div className="calendar-holiday-list">
+                    {calendarVisibleHolidays.map((holiday) => (
+                      <div key={`${holiday.date}-${holiday.holidayName}`} className="calendar-holiday-list-item">
+                        <div className="calendar-holiday-icon" aria-hidden="true">
+                          {getHolidayIcon(holiday.holidayName, holiday.dayType)}
+                        </div>
+                        <div className="calendar-holiday-copy">
+                          <strong>{holiday.holidayName}</strong>
+                          <span>{formatAttendanceDateLabel(holiday.date)}</span>
+                          <small>
+                            {holiday.holidayType} • {holiday.status || 'Active'}
+                            {holiday.dayType ? ` • ${holiday.dayType}` : ''}
+                          </small>
+                          {holiday.description ? <p>{holiday.description}</p> : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty-state">No holidays configured for this month yet.</div>
+                )}
+              </div>
+            </div>
           ) : attendanceView === 'leaves' ? (
             <div className="table-card">
               {selectedDateLeaves.length ? (
@@ -4531,6 +5217,94 @@ function App() {
                 </div>
               </aside>
             </>
+          ) : null}
+          {holidayModalOpen ? (
+            <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Add holiday">
+              <div className="modal-card holiday-modal-card">
+                <div className="modal-header">
+                  <strong>Add Holiday</strong>
+                  <button className="ghost" onClick={closeHolidayModal} disabled={holidayFormLoading} type="button">
+                    Close
+                  </button>
+                </div>
+                <div className="modal-body">
+                  <div className="form-grid holiday-form-grid">
+                    <label htmlFor="holiday-name">Holiday name</label>
+                    <input
+                      id="holiday-name"
+                      type="text"
+                      value={holidayForm.holidayName}
+                      onChange={(event) => setHolidayForm((current) => ({ ...current, holidayName: event.target.value }))}
+                      placeholder="Ex: Diwali"
+                    />
+
+                    <label htmlFor="holiday-date">Date</label>
+                    <input
+                      id="holiday-date"
+                      type="date"
+                      value={holidayForm.date}
+                      onChange={(event) => setHolidayForm((current) => ({ ...current, date: event.target.value }))}
+                    />
+
+                    <label htmlFor="holiday-type">Type</label>
+                    <select
+                      id="holiday-type"
+                      value={holidayForm.holidayType}
+                      onChange={(event) =>
+                        setHolidayForm((current) => ({
+                          ...current,
+                          holidayType: event.target.value as HolidayCategory
+                        }))
+                      }
+                    >
+                      {HOLIDAY_TYPE_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+
+                    <label htmlFor="holiday-status">Status</label>
+                    <select
+                      id="holiday-status"
+                      value={holidayForm.status}
+                      onChange={(event) =>
+                        setHolidayForm((current) => ({
+                          ...current,
+                          status: event.target.value as HolidayStatus
+                        }))
+                      }
+                    >
+                      {HOLIDAY_STATUS_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <label htmlFor="holiday-description" className="holiday-description-label">
+                    Description or note
+                  </label>
+                  <textarea
+                    id="holiday-description"
+                    className="holiday-description-input"
+                    value={holidayForm.description}
+                    onChange={(event) => setHolidayForm((current) => ({ ...current, description: event.target.value }))}
+                    rows={4}
+                    placeholder="Add holiday note or context"
+                  />
+                  {holidayFormStatus ? <p className="form-note">{holidayFormStatus}</p> : null}
+                </div>
+                <div className="modal-actions">
+                  <button className="ghost" onClick={closeHolidayModal} disabled={holidayFormLoading} type="button">
+                    Cancel
+                  </button>
+                  <button className="cta" onClick={() => void createHoliday()} disabled={holidayFormLoading} type="button">
+                    {holidayFormLoading ? 'Saving...' : 'Add Holiday'}
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : null}
           {deleteEmployeeTarget ? (
             <div className="modal-backdrop" role="dialog" aria-modal="true">

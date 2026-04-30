@@ -14,7 +14,10 @@ import {
 import {
   formatDate,
   formatDateTime,
+  getCalendarDays,
+  getCalendarMonthLabel,
   isSameDate,
+  parseDateInputValue,
   toDateInputValue
 } from '../services/dateUtils'
 import type {
@@ -219,6 +222,8 @@ const steps = [
 const sidebarItems = [
   { id: 'employees', label: 'Employees List' },
   { id: 'attendance', label: 'Todays Activity' },
+  { id: 'exceptions', label: 'Exceptions' },
+  { id: 'calendar', label: 'Calendar' },
   { id: 'reports', label: 'Reports & Analytics' },
   { id: 'leaves', label: 'Leaves' },
   { id: 'activities', label: 'Activities' },
@@ -925,7 +930,9 @@ function FawnixApp() {
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
   const [fieldVisitDurationTick, setFieldVisitDurationTick] = useState(() => Date.now())
   const [attendanceDateFilter, setAttendanceDateFilter] = useState(() => toDateInputValue(new Date()))
+  const [calendarMonthView, setCalendarMonthView] = useState(() => parseDateInputValue(toDateInputValue(new Date())))
   const [attendanceSearch, setAttendanceSearch] = useState('')
+  const [exceptionSearch, setExceptionSearch] = useState('')
   const [attendanceReportMonth, setAttendanceReportMonth] = useState(() => String(new Date().getMonth() + 1))
   const [attendanceReportYear, setAttendanceReportYear] = useState(() => String(new Date().getFullYear()))
   const [attendanceReportFormat, setAttendanceReportFormat] = useState<'csv' | 'pdf' | 'xlsx'>('csv')
@@ -996,6 +1003,10 @@ function FawnixApp() {
       setProfile(storedSession.profile)
     }
   }, [])
+
+  useEffect(() => {
+    setCalendarMonthView(parseDateInputValue(attendanceDateFilter || toDateInputValue(new Date())))
+  }, [attendanceDateFilter])
 
   useClickOutside(employeeStatusMenuRef, employeeStatusMenuOpen, () => setEmployeeStatusMenuOpen(false), {
     closeOnEscape: false
@@ -2434,6 +2445,51 @@ function FawnixApp() {
       return leftTime - rightTime
     })
   })()
+  const selectedDateExceptions = [
+    ...selectedDateLateArrivals.map((row) => ({
+      ...row,
+      exceptionKind: 'late_arrival' as const
+    })),
+    ...selectedDateEarlyLeaves.map((row) => ({
+      ...row,
+      exceptionKind: 'early_leave' as const
+    }))
+  ].sort((left, right) => getSortTime(right) - getSortTime(left))
+  const calendarMonthLabel = getCalendarMonthLabel(calendarMonthView)
+  const calendarDays = getCalendarDays(calendarMonthView)
+  const attendanceCountByDate = attendanceRows.reduce<Record<string, number>>((accumulator, row) => {
+    const key = row.login_time ? toDateInputValue(new Date(row.login_time)) : row.date?.slice(0, 10)
+    if (key) {
+      accumulator[key] = (accumulator[key] || 0) + 1
+    }
+    return accumulator
+  }, {})
+  const exceptionCountByDate = attendanceExceptions.reduce<Record<string, number>>((accumulator, row) => {
+    const key = getExceptionDateValue(row)?.slice(0, 10)
+    if (key) {
+      accumulator[key] = (accumulator[key] || 0) + 1
+    }
+    return accumulator
+  }, {})
+  const leaveCountByDate = leaveRows.reduce<Record<string, number>>((accumulator, row) => {
+    const fromDate = row.from_date ? new Date(row.from_date) : null
+    const toDate = row.to_date ? new Date(row.to_date) : fromDate
+    if (!fromDate || Number.isNaN(fromDate.getTime()) || !toDate || Number.isNaN(toDate.getTime())) {
+      return accumulator
+    }
+
+    const cursor = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate())
+    const end = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate())
+
+    while (cursor <= end) {
+      const key = toDateInputValue(cursor)
+      accumulator[key] = (accumulator[key] || 0) + 1
+      cursor.setDate(cursor.getDate() + 1)
+    }
+
+    return accumulator
+  }, {})
+  const maxCalendarAttendance = Math.max(...Object.values(attendanceCountByDate), 1)
   const lateLogins = selectedDateLateArrivals.length
   const onTimeLogins = Math.max(firstClockInRows.length - lateLogins, 0)
   const selectedDateLeaves = leaveRows
@@ -2493,6 +2549,21 @@ function FawnixApp() {
           return haystack.includes(normalizedAttendanceSearch)
         })
       : attendancePageRows
+    const normalizedExceptionSearch = exceptionSearch.trim().toLowerCase()
+    const filteredExceptionRows = normalizedExceptionSearch
+      ? selectedDateExceptions.filter((row) => {
+          const haystack = [
+            row.emp_name || '',
+            row.emp_code || '',
+            row.reason || '',
+            row.status || '',
+            row.exceptionKind === 'late_arrival' ? 'late arrival' : 'early leave'
+          ]
+            .join(' ')
+            .toLowerCase()
+          return haystack.includes(normalizedExceptionSearch)
+        })
+      : selectedDateExceptions
     const normalizedEmployeeSearch = employeeSearch.trim().toLowerCase()
     const filteredEmployees = employees
       .filter((employee) => {
@@ -2732,6 +2803,124 @@ function FawnixApp() {
               </div>
             ) : (
               <div className="empty-state">No employees match this search.</div>
+            )}
+          </div>
+        </>
+      )
+    }
+
+    if (activePanel === 'exceptions') {
+      return (
+        <>
+          <div className="dashboard-section-head attendance-section-head">
+            <div>
+              <p className="eyebrow">Escalations</p>
+              <h2>Exceptions</h2>
+              <p className="exception-head-copy">
+                Late arrivals and early leaves for the selected date, shown as full-width review cards.
+              </p>
+            </div>
+            <div className="attendance-head-actions">
+              <div className="attendance-controls attendance-controls-inline">
+                <AttendanceDatePicker value={attendanceDateFilter} onChange={setAttendanceDateFilter} />
+                <div className="attendance-filter attendance-filter-search">
+                  <label htmlFor="exception-search">Search</label>
+                  <div className="attendance-input-shell attendance-search-shell">
+                    <input
+                      id="exception-search"
+                      type="text"
+                      value={exceptionSearch}
+                      onChange={(event) => setExceptionSearch(event.target.value)}
+                      placeholder="Search employee, code, type, reason, or status"
+                    />
+                  </div>
+                </div>
+                <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+                  Refresh
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="metric-row">
+            <div className="metric-card">
+              <span>Late Arrivals</span>
+              <strong>{selectedDateLateArrivals.length}</strong>
+            </div>
+            <div className="metric-card">
+              <span>Early Leaves</span>
+              <strong>{selectedDateEarlyLeaves.length}</strong>
+            </div>
+            <div className="metric-card">
+              <span>Total Exceptions</span>
+              <strong>{selectedDateExceptions.length}</strong>
+              <small>{formatDate(attendanceDateFilter)}</small>
+            </div>
+          </div>
+
+          <div className="exception-card-list">
+            {filteredExceptionRows.length ? (
+              filteredExceptionRows.map((row, index) => {
+                const isLateArrival = row.exceptionKind === 'late_arrival'
+                const primaryTime = isLateArrival
+                  ? row.exception_time || row.actual_login_time || '--'
+                  : row.planned_leave_time || row.actual_logout_time || '--'
+                const minuteValue = isLateArrival ? row.late_by_minutes : row.early_by_minutes
+                const statusLabel = isLateArrival
+                  ? (row.status || '').toLowerCase() === 'not_informed'
+                    ? 'Not informed'
+                    : 'Informed'
+                  : row.status || 'Pending'
+
+                return (
+                  <article
+                    key={`${row.exceptionKind}-${row.id || row.emp_code || index}`}
+                    className={`exception-card ${isLateArrival ? 'late' : 'early'}`}
+                  >
+                    <div className="exception-card-top">
+                      <div>
+                        <p className="exception-card-kicker">{isLateArrival ? 'Late Arrival' : 'Early Leave'}</p>
+                        <h3>{row.emp_name || row.emp_code || 'Unknown employee'}</h3>
+                        <span className="table-meta">{row.emp_code || 'Employee code unavailable'}</span>
+                      </div>
+                      <div className="exception-card-pills">
+                        <span className={`table-pill ${isLateArrival ? 'inactive' : 'accent'}`}>
+                          {isLateArrival ? 'Late arrival' : 'Early leave'}
+                        </span>
+                        <span className={`table-pill ${isLateArrival ? ((row.status || '').toLowerCase() === 'not_informed' ? 'inactive' : 'accent') : 'active'}`}>
+                          {statusLabel}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="exception-card-grid">
+                      <div className="exception-card-stat">
+                        <span>{isLateArrival ? 'Late By' : 'Early By'}</span>
+                        <strong>{minuteValue !== undefined && minuteValue !== null ? `${minuteValue} min` : '--'}</strong>
+                      </div>
+                      <div className="exception-card-stat">
+                        <span>{isLateArrival ? 'Login Time' : 'Leave Time'}</span>
+                        <strong>{primaryTime}</strong>
+                      </div>
+                      <div className="exception-card-stat">
+                        <span>Requested</span>
+                        <strong>{formatDateTime(row.requested_at || row.exception_date)}</strong>
+                      </div>
+                    </div>
+
+                    <div className="exception-card-reason">
+                      <span>Reason</span>
+                      <p>{row.reason || 'No reason provided.'}</p>
+                    </div>
+                  </article>
+                )
+              })
+            ) : (
+              <div className="empty-state">
+                {exceptionSearch.trim()
+                  ? 'No exceptions match this search.'
+                  : 'No late arrival or early leave exceptions found for the selected date.'}
+              </div>
             )}
           </div>
         </>
@@ -3093,6 +3282,134 @@ function FawnixApp() {
               )}
             </div>
           )}
+        </>
+      )
+    }
+
+    if (activePanel === 'calendar') {
+      return (
+        <>
+          <div className="dashboard-section-head calendar-section-head">
+            <div>
+              <p className="eyebrow">Operations Calendar</p>
+              <h2>Attendance Calendar</h2>
+              <p className="calendar-head-copy">
+                Monthly operational view with daily attendance volume, leave overlap, and exception signals.
+              </p>
+            </div>
+            <div className="calendar-head-actions">
+              <button
+                className="ghost dashboard-button"
+                type="button"
+                onClick={() =>
+                  setCalendarMonthView(
+                    (current) => new Date(current.getFullYear(), current.getMonth() - 1, 1)
+                  )
+                }
+              >
+                Previous
+              </button>
+              <button
+                className="ghost dashboard-button"
+                type="button"
+                onClick={() => setCalendarMonthView(parseDateInputValue(toDateInputValue(new Date())))}
+              >
+                Today
+              </button>
+              <button
+                className="ghost dashboard-button"
+                type="button"
+                onClick={() =>
+                  setCalendarMonthView(
+                    (current) => new Date(current.getFullYear(), current.getMonth() + 1, 1)
+                  )
+                }
+              >
+                Next
+              </button>
+            </div>
+          </div>
+
+          <div className="metric-row">
+            <div className="metric-card">
+              <span>Month</span>
+              <strong>{calendarMonthLabel}</strong>
+              <small>Professional daily operations view</small>
+            </div>
+            <div className="metric-card">
+              <span>Peak Attendance</span>
+              <strong>{maxCalendarAttendance}</strong>
+              <small>Highest attendance records in a single day</small>
+            </div>
+            <div className="metric-card">
+              <span>Tracked Exceptions</span>
+              <strong>{Object.values(exceptionCountByDate).reduce((sum, count) => sum + count, 0)}</strong>
+              <small>Late arrivals and early leaves across loaded data</small>
+            </div>
+          </div>
+
+          <div className="calendar-shell">
+            <div className="calendar-card">
+              <div className="calendar-card-head">
+                <div>
+                  <span>Monthly View</span>
+                  <strong>{calendarMonthLabel}</strong>
+                </div>
+                <div className="calendar-legend">
+                  <span><i className="calendar-dot attendance" /> Attendance</span>
+                  <span><i className="calendar-dot leave" /> Leave</span>
+                  <span><i className="calendar-dot exception" /> Exceptions</span>
+                </div>
+              </div>
+
+              <div className="calendar-weekdays">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                  <span key={day}>{day}</span>
+                ))}
+              </div>
+
+              <div className="calendar-grid-page">
+                {calendarDays.map((day) => {
+                  const dayValue = toDateInputValue(day)
+                  const attendanceCount = attendanceCountByDate[dayValue] || 0
+                  const leaveCount = leaveCountByDate[dayValue] || 0
+                  const exceptionCount = exceptionCountByDate[dayValue] || 0
+                  const isCurrentMonth = day.getMonth() === calendarMonthView.getMonth()
+                  const isToday = dayValue === toDateInputValue(new Date())
+                  const heatLevel =
+                    attendanceCount > 0
+                      ? Math.min(1, attendanceCount / maxCalendarAttendance)
+                      : 0
+
+                  return (
+                    <button
+                      key={dayValue}
+                      className={`calendar-day-card ${isCurrentMonth ? '' : 'outside'} ${isToday ? 'today' : ''}`}
+                      type="button"
+                      onClick={() => setAttendanceDateFilter(dayValue)}
+                    >
+                      <div className="calendar-day-top">
+                        <span className="calendar-day-number">{day.getDate()}</span>
+                        {isToday ? <span className="calendar-day-badge">Today</span> : null}
+                      </div>
+                      <div
+                        className="calendar-day-heat"
+                        style={{
+                          opacity: Math.max(0.12, heatLevel),
+                          background: `linear-gradient(135deg, rgba(31, 167, 164, ${0.18 + heatLevel * 0.46}), rgba(17, 44, 50, ${0.08 + heatLevel * 0.22}))`
+                        }}
+                      />
+                      <div className="calendar-day-stats">
+                        <span>{attendanceCount} attendance</span>
+                        <span>{leaveCount} leave</span>
+                        <span>{exceptionCount} exceptions</span>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
         </>
       )
     }

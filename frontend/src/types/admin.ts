@@ -7,6 +7,8 @@ export type PrivacySection = {
 export type SidebarId =
   | 'employees'
   | 'attendance'
+  | 'exceptions'
+  | 'calendar'
   | 'reports'
   | 'leaves'
   | 'activities'

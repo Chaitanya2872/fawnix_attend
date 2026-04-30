@@ -1017,8 +1017,12 @@ def get_my_exceptions(emp_code: str, status: str = None,
         conn.close()
 
 
-def get_team_exceptions(manager_code: str, status: str = None,
-                       exception_type: str = None) -> Tuple[Dict, int]:
+def get_team_exceptions(
+    manager_code: str,
+    status: str = None,
+    exception_type: str = None,
+    include_all: bool = False
+) -> Tuple[Dict, int]:
     """
     Get attendance exceptions for manager's team
     """
@@ -1032,7 +1036,7 @@ def get_team_exceptions(manager_code: str, status: str = None,
             include_employee_fields=True,
             table_alias='ae'
         )
-        is_privileged = _is_privileged_emp(manager_code)
+        is_privileged = include_all or _is_privileged_emp(manager_code)
 
         query = f"""
             SELECT 

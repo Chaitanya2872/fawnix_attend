@@ -1270,7 +1270,8 @@ def admin_team_exceptions(current_user):
     result = get_team_exceptions(
         current_user['emp_code'],
         status,
-        exception_type
+        exception_type,
+        include_all=True
     )
     
     return jsonify(result[0]), result[1]
@@ -1290,7 +1291,8 @@ def admin_late_arrivals(current_user):
     result = get_team_exceptions(
         current_user['emp_code'],
         status,
-        'late_arrival'
+        'late_arrival',
+        include_all=True
     )
     return jsonify(result[0]), result[1]
 
@@ -1309,7 +1311,8 @@ def admin_early_leaves(current_user):
     result = get_team_exceptions(
         current_user['emp_code'],
         status,
-        'early_leave'
+        'early_leave',
+        include_all=True
     )
     return jsonify(result[0]), result[1]
 

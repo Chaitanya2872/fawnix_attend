@@ -3494,7 +3494,7 @@ function FawnixApp() {
                         className="calendar-day-heat"
                         style={{
                           opacity: Math.max(0.12, heatLevel),
-                          background: `linear-gradient(135deg, rgba(31, 167, 164, ${0.18 + heatLevel * 0.46}), rgba(17, 44, 50, ${0.08 + heatLevel * 0.22}))`
+                          background: `linear-gradient(135deg, rgba(17, 44, 50, ${0.08 + heatLevel * 0.22}), rgba(17, 44, 50, ${0.18 + heatLevel * 0.3}))`
                         }}
                       />
                       <div className="calendar-day-stats">

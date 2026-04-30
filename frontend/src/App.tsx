@@ -1938,9 +1938,13 @@ function App() {
       ])
       let exceptionsResponse: any = null
       try {
-        exceptionsResponse = await apiRequest('/api/attendance-exceptions/team-exceptions', {}, token)
+        exceptionsResponse = await apiRequest('/api/admin/team-exceptions', {}, token)
       } catch {
-        exceptionsResponse = null
+        try {
+          exceptionsResponse = await apiRequest('/api/attendance-exceptions/team-exceptions', {}, token)
+        } catch {
+          exceptionsResponse = null
+        }
       }
 
       const employeesData = Array.isArray(employeesResponse?.data) ? employeesResponse.data : []

@@ -274,6 +274,10 @@ def visit_destination(current_user):
     destination_sequence = data.get('destination_sequence')
     latitude = data.get('latitude', '')
     longitude = data.get('longitude', '')
+    radius = data.get('radius_m', data.get('radius'))
+    destination_reached = data.get('destinationReached')
+    destination_visit_status = data.get('destinationVisitStatus')
+    reached_destination = data.get('reachedDestination')
     
     if not activity_id or not destination_sequence:
         return jsonify({
@@ -285,7 +289,11 @@ def visit_destination(current_user):
         activity_id, 
         destination_sequence, 
         latitude, 
-        longitude
+        longitude,
+        radius=radius,
+        destination_reached=destination_reached,
+        destination_visit_status=destination_visit_status,
+        reached_destination=reached_destination,
     )
     return jsonify(result[0]), result[1]
 

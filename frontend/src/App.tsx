@@ -1,17 +1,14 @@
-<<<<<<< HEAD
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import './App.css'
 import fawnixBg from './assets/fawnix_bg.png'
-=======
-import FawnixApp from './pages/FawnixApp'
->>>>>>> 646de696ba60722339392c2f57fb536b5bef1a0f
 
-export default function App() {
-  return <FawnixApp />
+type PrivacySection = {
+  title: string
+  body: string[]
+  bullets: string[]
 }
-<<<<<<< HEAD
 
 const privacySections: PrivacySection[] = [
   {
@@ -5567,5 +5564,3 @@ function App() {
 }
 
 export default App
-=======
->>>>>>> 646de696ba60722339392c2f57fb536b5bef1a0f

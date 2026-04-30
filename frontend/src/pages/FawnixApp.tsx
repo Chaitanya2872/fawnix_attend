@@ -529,6 +529,25 @@ function getDestinationVisitedStatus(destinations?: ActivityRow['destinations'])
   return destinations.every((destination) => Boolean(destination?.visited))
 }
 
+function getDestinationVisitFlag(destinations?: ActivityRow['destinations']) {
+  if (!Array.isArray(destinations) || !destinations.length) {
+    return null
+  }
+
+  return destinations.some((destination) => Boolean(destination?.visited))
+}
+
+function getDestinationVisitCounts(destinations?: ActivityRow['destinations']) {
+  if (!Array.isArray(destinations) || !destinations.length) {
+    return { visitedCount: 0, totalCount: 0 }
+  }
+
+  return {
+    visitedCount: destinations.filter((destination) => Boolean(destination?.visited)).length,
+    totalCount: destinations.length
+  }
+}
+
 function normalizeFieldVisitTrackingPoints(points: FieldVisitTrackingPoint[] = []): MapTrackingPoint[] {
   const normalized: MapTrackingPoint[] = []
 
@@ -1600,6 +1619,7 @@ function FawnixApp() {
             .map((point) => parseCoords(point.latitude, point.longitude))
             .filter((point): point is { lat: number; lon: number } => Boolean(point))
           const trackedCoords = activityTrackedCoords.length ? activityTrackedCoords : fieldTrackedCoords
+          const { visitedCount, totalCount } = getDestinationVisitCounts(item.destinations)
           const status = item.field_visit_status || item.status || 'Unknown'
           const isCompleted = isCompletedVisitStatus(status)
           const visitStartTime = item.field_visit_start_time || item.start_time
@@ -1648,6 +1668,9 @@ function FawnixApp() {
             endAddress: endAddress || undefined,
             destinationLocation: formatDestinationLocation(item.destinations),
             destinationVisited: getDestinationVisitedStatus(item.destinations),
+            destinationVisitFlag: getDestinationVisitFlag(item.destinations),
+            destinationVisitedCount: visitedCount,
+            destinationTotalCount: totalCount,
             distanceKm: Number.isFinite(distanceKmValue) ? distanceKmValue : null,
             startCoords,
             endCoords,
@@ -3817,6 +3840,7 @@ function FawnixApp() {
                       <th>Visit Type</th>
                       <th>Destination Location</th>
                       <th>Destination Visited</th>
+                      <th>Visited Flag</th>
                       <th>Start Location</th>
                       <th>End Location</th>
                       <th>Hours There</th>
@@ -3851,8 +3875,29 @@ function FawnixApp() {
                             {row.destinationVisited === null ? (
                               '--'
                             ) : (
-                              <span className={`table-pill ${row.destinationVisited ? 'approved' : 'warning'}`}>
-                                {row.destinationVisited ? 'True' : 'False'}
+                              <span
+                                className={`table-pill ${
+                                  row.destinationVisited
+                                    ? 'active'
+                                    : (row.destinationVisitedCount || 0) > 0
+                                      ? 'accent'
+                                      : 'inactive'
+                                }`}
+                              >
+                                {row.destinationVisited
+                                  ? 'Completed'
+                                  : (row.destinationVisitedCount || 0) > 0
+                                    ? `Partial (${row.destinationVisitedCount}/${row.destinationTotalCount || 0})`
+                                    : 'Pending'}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            {row.destinationVisitFlag === null ? (
+                              '--'
+                            ) : (
+                              <span className={`table-pill ${row.destinationVisitFlag ? 'active' : 'inactive'}`}>
+                                {row.destinationVisitFlag ? 'True' : 'False'}
                               </span>
                             )}
                           </td>

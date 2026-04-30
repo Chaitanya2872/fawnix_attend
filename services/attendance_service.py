@@ -77,6 +77,7 @@ def _create_site_clock_in_field_visit(
     address: str,
     start_time: datetime,
 ):
+    visited_at = start_time.strftime('%Y-%m-%d %H:%M:%S')
     destination = {
         "sequence": 1,
         "name": "Clock-in site",
@@ -84,8 +85,12 @@ def _create_site_clock_in_field_visit(
         "longitude": lon,
         "coordinates": f"{lat}, {lon}",
         "address": address,
-        "visited": False,
-        "visited_at": None,
+        "visited": True,
+        "visited_at": visited_at,
+        "actual_latitude": lat,
+        "actual_longitude": lon,
+        "actual_coordinates": f"{lat}, {lon}",
+        "actual_address": address,
     }
     destinations_json = json.dumps([destination])
 

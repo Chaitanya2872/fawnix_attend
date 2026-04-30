@@ -176,6 +176,9 @@ export type FieldVisitRow = {
   endAddress?: string
   destinationLocation?: string
   destinationVisited?: boolean | null
+  destinationVisitFlag?: boolean | null
+  destinationVisitedCount?: number
+  destinationTotalCount?: number
   distanceKm?: number | null
   startCoords?: { lat: number; lon: number } | null
   endCoords?: { lat: number; lon: number } | null

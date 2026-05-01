@@ -396,13 +396,13 @@ def build_monthly_attendance_report_rows(daily_rows):
     """
     summary_map = OrderedDict()
 
-    for row in daily_rows:
+    for row_index, row in enumerate(daily_rows):
         summary_key = (row.get("employee_id") or "", row.get("employee_name") or "")
         if summary_key not in summary_map:
             summary_map[summary_key] = {
                 "employee_id": row.get("employee_id") or "",
                 "employee_name": row.get("employee_name") or "",
-                "total_working_days": 0,
+                "worked_dates": set(),
                 "total_hours_minutes": 0,
                 "total_overtime_minutes": 0,
             }
@@ -414,13 +414,24 @@ def build_monthly_attendance_report_rows(daily_rows):
         if duration_minutes is None:
             continue
 
-        summary["total_working_days"] += 1
+        report_date = row.get("date")
+        if isinstance(report_date, datetime):
+            date_key = report_date.date().isoformat()
+        elif isinstance(report_date, date):
+            date_key = report_date.isoformat()
+        elif isinstance(report_date, str) and report_date.strip():
+            date_key = report_date.strip()[:10]
+        else:
+            # Fallback keeps backward compatibility for rows without a date.
+            date_key = f"session-{row_index}"
+
+        summary["worked_dates"].add(date_key)
         summary["total_hours_minutes"] += int(duration_minutes)
         summary["total_overtime_minutes"] += int(overtime_minutes or 0)
 
     monthly_rows = []
     for _key, summary in summary_map.items():
-        working_days = summary["total_working_days"]
+        working_days = len(summary["worked_dates"])
         total_minutes = summary["total_hours_minutes"]
         overtime_minutes = summary["total_overtime_minutes"]
         average_minutes = round(total_minutes / working_days) if working_days else 0

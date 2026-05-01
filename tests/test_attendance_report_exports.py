@@ -48,24 +48,28 @@ def test_build_daily_attendance_report_rows_formats_duration_and_incomplete_valu
 def test_build_monthly_attendance_report_rows_summarizes_from_daily_rows():
     daily_rows = [
         {
+            "date": date(2026, 4, 1),
             "employee_id": "EMP001",
             "employee_name": "Alice Smith",
             "duration_minutes": 540,
             "overtime_minutes": 60,
         },
         {
+            "date": date(2026, 4, 2),
             "employee_id": "EMP001",
             "employee_name": "Alice Smith",
             "duration_minutes": None,
             "overtime_minutes": None,
         },
         {
+            "date": date(2026, 4, 3),
             "employee_id": "EMP001",
             "employee_name": "Alice Smith",
             "duration_minutes": 495,
             "overtime_minutes": 15,
         },
         {
+            "date": date(2026, 4, 1),
             "employee_id": "EMP002",
             "employee_name": "Bob Green",
             "duration_minutes": 420,
@@ -91,3 +95,42 @@ def test_build_monthly_attendance_report_rows_summarizes_from_daily_rows():
     assert bob_summary["total_hours_display"] == "7h 00m"
     assert bob_summary["average_hours_display"] == "7h 00m"
     assert bob_summary["total_overtime_display"] == "0h 00m"
+
+
+def test_build_monthly_attendance_report_rows_counts_unique_worked_dates_for_multiple_sessions():
+    daily_rows = [
+        {
+            "date": date(2026, 4, 5),
+            "employee_id": "EMP003",
+            "employee_name": "Cara Wells",
+            "duration_minutes": 240,
+            "overtime_minutes": 0,
+        },
+        {
+            "date": date(2026, 4, 5),
+            "employee_id": "EMP003",
+            "employee_name": "Cara Wells",
+            "duration_minutes": 300,
+            "overtime_minutes": 0,
+        },
+        {
+            "date": date(2026, 4, 6),
+            "employee_id": "EMP003",
+            "employee_name": "Cara Wells",
+            "duration_minutes": 600,
+            "overtime_minutes": 120,
+        },
+    ]
+
+    monthly_rows = admin_service.build_monthly_attendance_report_rows(daily_rows)
+
+    assert len(monthly_rows) == 1
+    cara_summary = monthly_rows[0]
+    assert cara_summary["employee_id"] == "EMP003"
+    assert cara_summary["total_working_days"] == 2
+    assert cara_summary["total_hours_minutes"] == 1140
+    assert cara_summary["total_hours_display"] == "19h 00m"
+    assert cara_summary["average_minutes_per_day"] == 570
+    assert cara_summary["average_hours_display"] == "9h 30m"
+    assert cara_summary["total_overtime_minutes"] == 120
+    assert cara_summary["total_overtime_display"] == "2h 00m"

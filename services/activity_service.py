@@ -5,8 +5,163 @@ from services.geocoding_service import get_address_from_coordinates
 from config import ActivityType
 import logging
 import json
+import math
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_DESTINATION_RADIUS_METERS = 100.0
+
+
+def _safe_float(value):
+    try:
+        if value in (None, ''):
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _resolve_destination_lat_lon(destination: dict):
+    return (
+        _safe_float(destination.get('latitude', destination.get('lat'))),
+        _safe_float(destination.get('longitude', destination.get('lon')))
+    )
+
+
+def _resolve_destination_radius_meters(destination: dict, override_radius=None):
+    radius_value = _safe_float(override_radius)
+    if radius_value is None:
+        radius_value = _safe_float(
+            destination.get('radius_m', destination.get('radiusMeters', destination.get('radius')))
+        )
+    return radius_value if radius_value is not None and radius_value > 0 else DEFAULT_DESTINATION_RADIUS_METERS
+
+
+def _calculate_distance_meters(lat1, lon1, lat2, lon2):
+    if None in (lat1, lon1, lat2, lon2):
+        return None
+
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    lat2_rad = math.radians(lat2)
+    lon2_rad = math.radians(lon2)
+
+    delta_lat = lat2_rad - lat1_rad
+    delta_lon = lon2_rad - lon1_rad
+    a = math.sin(delta_lat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return 6371000 * c
+
+
+def _truthy_flag(value):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {'1', 'true', 'yes', 'y', 'reached', 'visited'}
+
+
+def _apply_destination_visit(
+    destination: dict,
+    actual_lat: str,
+    actual_lon: str,
+    *,
+    visit_time: datetime | None = None,
+    override_radius=None,
+    explicit_reached: bool = False,
+):
+    visit_time = visit_time or datetime.now()
+    actual_lat_float = _safe_float(actual_lat)
+    actual_lon_float = _safe_float(actual_lon)
+    destination_lat, destination_lon = _resolve_destination_lat_lon(destination)
+    radius_m = _resolve_destination_radius_meters(destination, override_radius)
+    distance_m = _calculate_distance_meters(actual_lat_float, actual_lon_float, destination_lat, destination_lon)
+
+    should_mark_visited = explicit_reached or distance_m is None or distance_m <= radius_m
+    if should_mark_visited:
+        destination['visited'] = True
+        destination['visited_at'] = visit_time.strftime('%Y-%m-%d %H:%M:%S')
+        destination['actual_latitude'] = actual_lat
+        destination['actual_longitude'] = actual_lon
+        destination['actual_coordinates'] = f"{actual_lat}, {actual_lon}" if actual_lat and actual_lon else ''
+        destination['actual_address'] = get_address_from_coordinates(actual_lat, actual_lon) if actual_lat and actual_lon else ''
+
+    debug_info = {
+        'destination_name': destination.get('name'),
+        'destination_sequence': destination.get('sequence'),
+        'actual_latitude': actual_lat,
+        'actual_longitude': actual_lon,
+        'destination_latitude': destination.get('latitude', destination.get('lat')),
+        'destination_longitude': destination.get('longitude', destination.get('lon')),
+        'radius_m': radius_m,
+        'distance_m': round(distance_m, 2) if distance_m is not None else None,
+        'explicit_reached': explicit_reached,
+        'saved_visited': bool(destination.get('visited')),
+    }
+    return should_mark_visited, debug_info
+
+
+def _auto_mark_reached_destination(destinations, actual_lat: str, actual_lon: str, *, override_radius=None, visit_time=None):
+    if not isinstance(destinations, list) or not destinations:
+        return destinations, None
+
+    best_index = None
+    best_distance = None
+    best_debug = None
+
+    for index, destination in enumerate(destinations):
+        if destination.get('visited'):
+            continue
+
+        destination_lat, destination_lon = _resolve_destination_lat_lon(destination)
+        distance_m = _calculate_distance_meters(
+            _safe_float(actual_lat),
+            _safe_float(actual_lon),
+            destination_lat,
+            destination_lon
+        )
+        radius_m = _resolve_destination_radius_meters(destination, override_radius)
+
+        logger.info(
+            "Field visit destination check: seq=%s name=%s actual=(%s,%s) target=(%s,%s) radius_m=%s distance_m=%s",
+            destination.get('sequence'),
+            destination.get('name'),
+            actual_lat,
+            actual_lon,
+            destination.get('latitude', destination.get('lat')),
+            destination.get('longitude', destination.get('lon')),
+            radius_m,
+            round(distance_m, 2) if distance_m is not None else None,
+        )
+
+        if distance_m is None:
+            continue
+
+        if best_distance is None or distance_m < best_distance:
+            best_index = index
+            best_distance = distance_m
+            best_debug = {
+                'destination_sequence': destination.get('sequence'),
+                'destination_name': destination.get('name'),
+                'distance_m': round(distance_m, 2),
+                'radius_m': radius_m,
+            }
+
+    if best_index is None:
+        return destinations, None
+
+    destination = destinations[best_index]
+    _, debug_info = _apply_destination_visit(
+        destination,
+        actual_lat,
+        actual_lon,
+        visit_time=visit_time,
+        override_radius=override_radius,
+        explicit_reached=False,
+    )
+
+    logger.info("Field visit destination auto-update result: %s", debug_info)
+    return destinations, debug_info
 
 
 def start_activity(emp_email: str, emp_name: str, activity_type: str,
@@ -156,8 +311,8 @@ def start_activity(emp_email: str, emp_name: str, activity_type: str,
         if destinations and isinstance(destinations, list) and activity_type in ['branch_visit', 'field_visit']:
             enriched_destinations = []
             for idx, dest in enumerate(destinations):
-                dest_lat = dest.get('lat', '')
-                dest_lon = dest.get('lon', '')
+                dest_lat = dest.get('lat', dest.get('latitude', ''))
+                dest_lon = dest.get('lon', dest.get('longitude', ''))
                 
                 dest_data = {
                     'sequence': idx + 1,
@@ -169,6 +324,7 @@ def start_activity(emp_email: str, emp_name: str, activity_type: str,
                         get_address_from_coordinates(dest_lat, dest_lon) 
                         if dest_lat and dest_lon else ''
                     ),
+                    'radius_m': _resolve_destination_radius_meters(dest),
                     'visited': False,
                     'visited_at': None
                 }
@@ -332,6 +488,8 @@ def end_activity(activity_id: int, lat: str, lon: str):
         
         end_time = datetime.now()
         start_time = activity['start_time']
+        destinations = None
+        destinations_updated = False
         
         if isinstance(start_time, str):
             start_time = datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
@@ -381,6 +539,26 @@ def end_activity(activity_id: int, lat: str, lon: str):
             total_distance = float(fv_result['total_distance_km'] or 0) if fv_result else 0
             
             logger.info(f"🏢 Field visit ended: ID={field_visit_id}, Distance={total_distance}km")
+
+        if activity.get('destinations'):
+            raw_destinations = activity.get('destinations')
+            destinations = json.loads(raw_destinations) if isinstance(raw_destinations, str) else raw_destinations
+            if lat and lon:
+                destinations, destination_debug = _auto_mark_reached_destination(
+                    destinations,
+                    lat,
+                    lon,
+                    visit_time=end_time,
+                )
+                if destination_debug and destination_debug.get('distance_m') is not None and (
+                    destination_debug['distance_m'] <= destination_debug['radius_m']
+                ):
+                    destinations_updated = True
+                    logger.info(
+                        "Field visit destination auto-marked on end: activity_id=%s debug=%s",
+                        activity_id,
+                        destination_debug,
+                    )
         
         # Update activity
         cursor.execute("""
@@ -390,9 +568,18 @@ def end_activity(activity_id: int, lat: str, lon: str):
                 end_location = %s,
                 end_address = %s, 
                 duration_minutes = %s, 
-                status = %s
+                status = %s,
+                destinations = %s
             WHERE id = %s
-        """, (end_time, location, address, duration, 'completed', activity_id))
+        """, (
+            end_time,
+            location,
+            address,
+            duration,
+            'completed',
+            json.dumps(destinations) if destinations is not None else activity.get('destinations'),
+            activity_id,
+        ))
         
         conn.commit()
         
@@ -429,9 +616,10 @@ def end_activity(activity_id: int, lat: str, lon: str):
             }
         
         # Include destinations if available
-        if activity.get('destinations'):
+        if destinations is not None:
+            response_data['destinations'] = destinations
+        elif activity.get('destinations'):
             dests = activity['destinations']
-            # Support both JSON string (from DB) and already-parsed list
             if isinstance(dests, str):
                 try:
                     response_data['destinations'] = json.loads(dests)
@@ -746,7 +934,17 @@ def get_team_activities(manager_code: str, limit: int = 100, activity_type: str 
         conn.close()
 
 
-def mark_destination_visited(activity_id: int, destination_sequence: int, lat: str, lon: str):
+def mark_destination_visited(
+    activity_id: int,
+    destination_sequence: int,
+    lat: str,
+    lon: str,
+    *,
+    radius=None,
+    destination_reached=None,
+    destination_visit_status=None,
+    reached_destination=None,
+):
     """
     Mark a destination as visited (for branch visits)
     
@@ -776,16 +974,23 @@ def mark_destination_visited(activity_id: int, destination_sequence: int, lat: s
         destinations = json.loads(result['destinations'])
         field_visit_id = result['field_visit_id']
         
+        explicit_reached = any(
+            _truthy_flag(flag)
+            for flag in (destination_reached, destination_visit_status, reached_destination)
+        )
+
         # Find and update the destination
         destination_found = False
+        debug_info = None
         for dest in destinations:
             if dest['sequence'] == destination_sequence:
-                dest['visited'] = True
-                dest['visited_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                dest['actual_latitude'] = lat
-                dest['actual_longitude'] = lon
-                dest['actual_coordinates'] = f"{lat}, {lon}"
-                dest['actual_address'] = get_address_from_coordinates(lat, lon) if lat and lon else ''
+                _, debug_info = _apply_destination_visit(
+                    dest,
+                    lat,
+                    lon,
+                    override_radius=radius,
+                    explicit_reached=explicit_reached,
+                )
                 destination_found = True
                 break
         
@@ -813,12 +1018,20 @@ def mark_destination_visited(activity_id: int, destination_sequence: int, lat: s
         
         conn.commit()
         
-        logger.info(f"✅ Destination marked visited: Activity={activity_id}, Seq={destination_sequence}")
+        logger.info(
+            "Destination visit update: activity_id=%s sequence=%s debug=%s",
+            activity_id,
+            destination_sequence,
+            debug_info,
+        )
         
         return ({
             "success": True,
             "message": "Destination marked as visited",
-            "data": {"destinations": destinations}
+            "data": {
+                "destinations": destinations,
+                "debug": debug_info,
+            }
         }, 200)
         
     except Exception as e:

@@ -164,6 +164,7 @@ a {
   gap: 10px;
   align-content: start;
   flex: 1 1 auto;
+  overflow-y: auto;
   padding-right: 4px;
 }
 
@@ -222,6 +223,49 @@ a {
   transition: transform 0.2s ease, background 0.2s ease;
 }
 
+.sidebar-link-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sidebar-link-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sidebar-link-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.sidebar-link-label {
+  min-width: 0;
+}
+
+.sidebar-link-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(31, 167, 164, 0.18);
+  color: #a8f0e2;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
 .sidebar-link:hover {
   transform: translateX(4px);
   background: rgba(255, 255, 255, 0.08);
@@ -229,6 +273,15 @@ a {
 
 .sidebar-link.active {
   background: #dcefe9;
+  color: #112c32;
+}
+
+.sidebar-link.active .sidebar-link-icon {
+  background: rgba(17, 44, 50, 0.08);
+}
+
+.sidebar-link.active .sidebar-link-badge {
+  background: rgba(17, 44, 50, 0.1);
   color: #112c32;
 }
 
@@ -1292,7 +1345,7 @@ a {
 
 .calendar-head-copy {
   margin: 10px 0 0;
-  color: #607076;
+  color: #5f6d72;
   font-size: 14px;
   line-height: 1.55;
   max-width: 640px;
@@ -1310,12 +1363,12 @@ a {
 
 .calendar-card {
   background:
-    radial-gradient(circle at top right, rgba(31, 167, 164, 0.12), transparent 30%),
-    linear-gradient(145deg, #ffffff, #f6fbfa);
+    radial-gradient(circle at top right, rgba(17, 44, 50, 0.04), transparent 28%),
+    linear-gradient(145deg, #ffffff, #f7f7f5);
   border: 1px solid rgba(17, 44, 50, 0.08);
   border-radius: 28px;
   padding: 22px 24px 24px;
-  box-shadow: 0 18px 38px rgba(17, 44, 50, 0.08);
+  box-shadow: 0 14px 30px rgba(17, 44, 50, 0.06);
   display: grid;
   gap: 18px;
 }
@@ -1333,14 +1386,14 @@ a {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #607076;
+  color: #6d7a7e;
 }
 
 .calendar-card-head strong {
   display: block;
   margin-top: 6px;
   color: #112c32;
-  font-size: 28px;
+  font-size: 26px;
 }
 
 .calendar-legend {
@@ -1356,10 +1409,10 @@ a {
   gap: 8px;
   padding: 8px 12px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(17, 44, 50, 0.08);
   font-size: 12px;
-  color: #20363d;
+  color: #3f5055;
   text-transform: none;
   letter-spacing: 0;
 }
@@ -1372,15 +1425,15 @@ a {
 }
 
 .calendar-dot.attendance {
-  background: #1fa7a4;
+  background: #23393f;
 }
 
 .calendar-dot.leave {
-  background: #ffad46;
+  background: #7f8b8e;
 }
 
 .calendar-dot.exception {
-  background: #d84e4e;
+  background: #566569;
 }
 
 .calendar-weekdays,
@@ -1395,7 +1448,7 @@ a {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #6b7b80;
+  color: #748287;
   padding: 4px 0 6px;
 }
 
@@ -1404,7 +1457,7 @@ a {
   min-height: 156px;
   border: 1px solid rgba(17, 44, 50, 0.08);
   border-radius: 22px;
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.94);
   padding: 14px;
   text-align: left;
   display: grid;
@@ -1415,17 +1468,18 @@ a {
 }
 
 .calendar-day-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(31, 167, 164, 0.28);
-  box-shadow: 0 16px 28px rgba(17, 44, 50, 0.08);
+  transform: translateY(-1px);
+  border-color: rgba(17, 44, 50, 0.14);
+  box-shadow: 0 12px 22px rgba(17, 44, 50, 0.06);
 }
 
 .calendar-day-card.outside {
-  opacity: 0.46;
+  opacity: 0.45;
 }
 
 .calendar-day-card.today {
-  border-color: rgba(31, 167, 164, 0.38);
+  border-color: rgba(17, 44, 50, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(17, 44, 50, 0.06);
 }
 
 .calendar-day-top {
@@ -1447,8 +1501,8 @@ a {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #0f4449;
-  background: rgba(31, 167, 164, 0.12);
+  color: #22363c;
+  background: rgba(17, 44, 50, 0.08);
   border-radius: 999px;
   padding: 5px 8px;
 }
@@ -1471,7 +1525,7 @@ a {
 
 .calendar-day-stats span {
   font-size: 12px;
-  color: #415359;
+  color: #55656a;
 }
 
 .exception-card-list {

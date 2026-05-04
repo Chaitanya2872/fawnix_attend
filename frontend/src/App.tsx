@@ -1933,7 +1933,7 @@ function App() {
       const [employeesResponse, attendanceResponse, leavesResponse, activitiesResponse] = await Promise.all([
         apiRequest('/api/admin/employees', {}, token),
         apiRequest(attendancePath, {}, token),
-        apiRequest('/api/admin/leaves?limit=30', {}, token),
+        apiRequest('/api/admin/leaves', {}, token),
         apiRequest('/api/admin/activities?limit=30&include_tracking=true&include_activity_tracking=true', {}, token)
       ])
       let exceptionsResponse: any = null

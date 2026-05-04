@@ -1934,7 +1934,7 @@ function App() {
         apiRequest('/api/admin/employees', {}, token),
         apiRequest(attendancePath, {}, token),
         apiRequest('/api/admin/leaves', {}, token),
-        apiRequest('/api/admin/activities&include_tracking=true&include_activity_tracking=true', {}, token)
+        apiRequest('/api/admin/activities?include_tracking=true&include_activity_tracking=true', {}, token)
       ])
       let exceptionsResponse: any = null
       try {

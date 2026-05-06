@@ -974,6 +974,9 @@ def _send_targeted_notification_campaign(
             "sent_count": 0,
             "failed_count": 0,
             "failures": [],
+            "processed_emp_codes": [],
+            "sent_emp_codes": [],
+            "failed_emp_codes": [],
         }
 
     is_working, day_type = is_working_day(reminder_date, candidates[0]["emp_code"])
@@ -986,20 +989,29 @@ def _send_targeted_notification_campaign(
             "sent_count": 0,
             "failed_count": 0,
             "failures": [],
+            "processed_emp_codes": [],
+            "sent_emp_codes": [],
+            "failed_emp_codes": [],
         }
 
     sent_count = 0
     failed_count = 0
     failures = []
+    processed_emp_codes = []
+    sent_emp_codes = []
+    failed_emp_codes = []
 
     for candidate in candidates:
+        emp_code = str(candidate.get("emp_code") or "").strip()
+        if emp_code:
+            processed_emp_codes.append(emp_code)
         try:
             payload = {"type": notification_type}
             if extra_payload:
                 payload.update(extra_payload)
 
             result = send_push_notification_to_employee(
-                candidate["emp_code"],
+                emp_code,
                 title,
                 body,
                 payload,
@@ -1007,7 +1019,7 @@ def _send_targeted_notification_campaign(
             _log_scheduled_notification_attempt(
                 None,
                 notification_type,
-                candidate["emp_code"],
+                emp_code,
                 title,
                 body,
                 scheduled_for,
@@ -1016,30 +1028,40 @@ def _send_targeted_notification_campaign(
 
             if result.get("success"):
                 sent_count += 1
+                if emp_code:
+                    sent_emp_codes.append(emp_code)
             else:
                 failed_count += 1
+                if emp_code:
+                    failed_emp_codes.append(emp_code)
                 failures.append(
                     {
-                        "emp_code": candidate["emp_code"],
+                        "emp_code": emp_code,
                         "message": result.get("message", "Push notification failed"),
                     }
                 )
                 logger.warning(
                     "%s push failed for %s: %s",
                     notification_type,
-                    candidate["emp_code"],
+                    emp_code,
                     result.get("message"),
                 )
         except Exception as e:
             failed_count += 1
-            failures.append({"emp_code": candidate["emp_code"], "message": str(e)})
-            logger.exception("%s push error for %s", notification_type, candidate["emp_code"])
+            if emp_code:
+                failed_emp_codes.append(emp_code)
+            failures.append({"emp_code": emp_code, "message": str(e)})
+            logger.exception("%s push error for %s", notification_type, emp_code)
 
     message = success_message
     if not sent_count and failed_count:
         message = f"{success_message} failed for all candidates"
     elif sent_count and failed_count:
         message = f"{success_message} sent with partial failures"
+
+    dedup_processed_emp_codes = list(dict.fromkeys(processed_emp_codes))
+    dedup_sent_emp_codes = list(dict.fromkeys(sent_emp_codes))
+    dedup_failed_emp_codes = list(dict.fromkeys(failed_emp_codes))
 
     return {
         "success": sent_count > 0 or not candidates,
@@ -1049,6 +1071,9 @@ def _send_targeted_notification_campaign(
         "sent_count": sent_count,
         "failed_count": failed_count,
         "failures": failures,
+        "processed_emp_codes": dedup_processed_emp_codes,
+        "sent_emp_codes": dedup_sent_emp_codes,
+        "failed_emp_codes": dedup_failed_emp_codes,
     }
 
 

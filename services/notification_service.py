@@ -817,6 +817,59 @@ def get_selected_attendance_reminder_candidates(
         return_connection(conn)
 
 
+def get_selected_attendance_filter_candidates(
+    emp_codes: List[str],
+    target_date: date | None = None,
+) -> List[Dict[str, Any]]:
+    """Fetch selected missed-login employees (same criteria as missed-login panel)."""
+    reminder_date = target_date or date.today()
+    normalized_emp_codes = sorted({
+        _normalize_emp_code(emp_code)
+        for emp_code in emp_codes
+        if (emp_code or "").strip()
+    })
+
+    if not normalized_emp_codes:
+        return []
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT DISTINCT
+                e.emp_code,
+                e.emp_full_name,
+                e.emp_email
+            FROM employees e
+            LEFT JOIN users u ON u.emp_code = e.emp_code
+            WHERE e.emp_code = ANY(%s)
+              AND COALESCE(u.is_active, TRUE) = TRUE
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM attendance a
+                  WHERE a.employee_email = e.emp_email
+                    AND a.date = %s
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM leaves l
+                  WHERE l.emp_code = e.emp_code
+                    AND l.status IN ('pending', 'approved')
+                    AND %s BETWEEN l.from_date AND l.to_date
+              )
+            ORDER BY e.emp_full_name
+            """,
+            (normalized_emp_codes, reminder_date, reminder_date),
+        )
+
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+        return_connection(conn)
+
+
 def get_attendance_filter_candidates(target_date: date | None = None) -> List[Dict[str, Any]]:
     """Fetch employees who are not on leave and have not logged in yet."""
     reminder_date = target_date or date.today()
@@ -1087,7 +1140,7 @@ def send_attendance_reminder_notifications(
 
     try:
         if emp_codes:
-            candidates = get_selected_attendance_reminder_candidates(emp_codes, reminder_date)
+            candidates = get_selected_attendance_filter_candidates(emp_codes, reminder_date)
         else:
             candidates = get_attendance_reminder_candidates(reminder_date)
     except Exception as e:

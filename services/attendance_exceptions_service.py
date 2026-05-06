@@ -711,17 +711,7 @@ def request_early_leave_exception(emp_code: str, attendance_id: int,
             return ({"success": False, "message": "Already clocked out"}, 400)
 
         current_dt = now_local_naive()
-        current_time = current_dt.time()
-        early_window_start, early_window_end = _get_early_leave_submission_window()
-        if not _is_time_in_range(current_time, early_window_start, early_window_end):
-            return ({
-                "success": False,
-                "message": (
-                    "Early leave can only be submitted between "
-                    f"{early_window_start.strftime('%H:%M')} and {early_window_end.strftime('%H:%M')}"
-                )
-            }, 400)
-        
+
         # Check if exception already exists for this attendance
         cursor.execute("""
             SELECT id FROM attendance_exceptions
@@ -736,6 +726,16 @@ def request_early_leave_exception(emp_code: str, attendance_id: int,
             planned_leave_time_obj = datetime.strptime(planned_leave_time, '%H:%M').time()
         except ValueError:
             return ({"success": False, "message": "Invalid time format. Use HH:MM"}, 400)
+
+        early_window_start, early_window_end = _get_early_leave_submission_window()
+        if not _is_time_in_range(planned_leave_time_obj, early_window_start, early_window_end):
+            return ({
+                "success": False,
+                "message": (
+                    "Planned leave time must be between "
+                    f"{early_window_start.strftime('%H:%M')} and {early_window_end.strftime('%H:%M')}"
+                )
+            }, 400)
         
         # Calculate early leave duration
         _, shift_end = get_employee_shift_times(emp_code)

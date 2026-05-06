@@ -22,7 +22,7 @@ class Config:
     MAX_CONTENT_LENGTH_MB = int(os.getenv('MAX_CONTENT_LENGTH_MB', 100))
     
     # Database Configuration
-    DATABASE_HOST = os.getenv('DATABASE_HOST', 'employee_db')
+    DATABASE_HOST = os.getenv('DATABASE_HOST', 'localhost')
     DATABASE_PORT = int(os.getenv('DATABASE_PORT', 5432))
     DATABASE_NAME = os.getenv('DATABASE_NAME', 'Intimation')
     DATABASE_USER = os.getenv('DATABASE_USER', 'postgres')

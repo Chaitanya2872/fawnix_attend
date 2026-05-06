@@ -246,7 +246,7 @@ def submit_early_leave(current_user):
     Request Body:
         {
             "attendance_id": 123,               // required - current attendance session
-            "planned_leave_time": "15:00",      // required - HH:MM format
+            "planned_leave_time": "16:30",      // required - HH:MM format, between 16:00 and 18:30
             "reason": "Medical emergency",      // required
             "notes": "Doctor appointment"       // optional
         }
@@ -255,7 +255,7 @@ def submit_early_leave(current_user):
         POST /api/attendance-exceptions/early-leave
         {
             "attendance_id": 45,
-            "planned_leave_time": "15:00",
+            "planned_leave_time": "16:30",
             "reason": "Medical emergency",
             "notes": "Doctor appointment at 3:30 PM"
         }
@@ -268,7 +268,7 @@ def submit_early_leave(current_user):
                 "exception_id": 13,
                 "attendance_id": 45,
                 "exception_type": "early_leave",
-                "planned_leave_time": "15:00",
+                "planned_leave_time": "16:30",
                 "early_by_minutes": 120,
                 "manager": "Rajesh Kumar",
                 "status": "pending"

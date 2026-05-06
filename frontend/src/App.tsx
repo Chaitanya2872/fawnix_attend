@@ -1561,18 +1561,23 @@ function App() {
           target_date: attendanceDateFilter || toDateInputValue(new Date())
         })
         const response = await apiRequest(`/api/admin/scheduled-notifications/candidates?${params.toString()}`, {}, accessToken)
-        const nextCodes = Array.isArray(response?.data)
-          ? response.data
-              .map((row: { emp_code?: string }) => row.emp_code || '')
-              .filter(Boolean)
-          : []
+        const candidateRows = Array.isArray(response?.data) ? response.data : []
+        const nextCodes = candidateRows
+          .map((row: { emp_code?: string }) => row.emp_code || '')
+          .filter(Boolean)
+        const nextSentCodes = candidateRows
+          .filter((row: { alert_status?: string }) => (row.alert_status || '').toLowerCase() === 'sent')
+          .map((row: { emp_code?: string }) => row.emp_code || '')
+          .filter(Boolean)
 
         if (!cancelled) {
           setAlertEligibleEmpCodes(nextCodes)
+          setAlertSentEmpCodes(Array.from(new Set(nextSentCodes)))
         }
       } catch {
         if (!cancelled) {
           setAlertEligibleEmpCodes([])
+          setAlertSentEmpCodes([])
         }
       } finally {
         if (!cancelled) {
@@ -4166,7 +4171,9 @@ function App() {
                         <div className="missed-login-item-copy">
                           <strong>{employee.emp_full_name || employee.emp_code}</strong>
                           <span>{employee.emp_designation || employee.emp_department || employee.emp_email || '--'}</span>
-                          {isAlertSent ? <small className="missed-login-alert-sent">Alert sent</small> : null}
+                          <small className={isAlertSent ? 'missed-login-alert-sent' : 'missed-login-alert-not-sent'}>
+                            {isAlertSent ? 'Alert sent' : 'Not sent'}
+                          </small>
                         </div>
                       </label>
                     )

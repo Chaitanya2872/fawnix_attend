@@ -1548,6 +1548,67 @@ def trigger_scheduled_notification(
     return result
 
 
+def _get_notification_delivery_status_map(
+    *,
+    notification_type: str,
+    target_date: date,
+    emp_codes: List[str] | None = None,
+) -> Dict[str, bool]:
+    """Return per-employee sent status for a notification type/date."""
+    normalized_type = (notification_type or "").strip().lower()
+    normalized_emp_codes = sorted({
+        _normalize_emp_code(emp_code)
+        for emp_code in (emp_codes or [])
+        if (emp_code or "").strip()
+    })
+
+    if not normalized_type:
+        return {}
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        if normalized_emp_codes:
+            cursor.execute(
+                """
+                SELECT
+                    emp_code,
+                    BOOL_OR(delivery_status = 'sent') AS has_sent
+                FROM scheduled_notification_logs
+                WHERE notification_type = %s
+                  AND emp_code = ANY(%s)
+                  AND DATE(COALESCE(scheduled_for, sent_at, created_at)) = %s
+                GROUP BY emp_code
+                """,
+                (normalized_type, normalized_emp_codes, target_date),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT
+                    emp_code,
+                    BOOL_OR(delivery_status = 'sent') AS has_sent
+                FROM scheduled_notification_logs
+                WHERE notification_type = %s
+                  AND DATE(COALESCE(scheduled_for, sent_at, created_at)) = %s
+                GROUP BY emp_code
+                """,
+                (normalized_type, target_date),
+            )
+
+        status_map: Dict[str, bool] = {}
+        for row in cursor.fetchall():
+            emp_code = str(row.get("emp_code") or "").strip()
+            if not emp_code:
+                continue
+            status_map[emp_code] = bool(row.get("has_sent"))
+        return status_map
+    finally:
+        cursor.close()
+        return_connection(conn)
+
+
 def get_notification_candidates(
     notification_type: str,
     target_date: date | None = None,
@@ -1569,13 +1630,37 @@ def get_notification_candidates(
             "data": [],
         }
 
+    status_map = _get_notification_delivery_status_map(
+        notification_type=normalized_type,
+        target_date=reminder_date,
+        emp_codes=[
+            str(candidate.get("emp_code") or "").strip()
+            for candidate in candidates
+            if str(candidate.get("emp_code") or "").strip()
+        ],
+    )
+
+    data = []
+    sent_emp_codes = []
+    for candidate in candidates:
+        emp_code = str(candidate.get("emp_code") or "").strip()
+        has_sent = bool(status_map.get(emp_code))
+        if has_sent and emp_code:
+            sent_emp_codes.append(emp_code)
+        data.append({
+            **candidate,
+            "alert_status": "sent" if has_sent else "not_sent",
+        })
+
     return {
         "success": True,
         "message": "Notification candidates fetched",
         "notification_type": normalized_type,
         "reminder_date": reminder_date.isoformat(),
-        "count": len(candidates),
-        "data": candidates,
+        "count": len(data),
+        "sent_count": len(sent_emp_codes),
+        "sent_emp_codes": sorted(set(sent_emp_codes)),
+        "data": data,
     }
 
 

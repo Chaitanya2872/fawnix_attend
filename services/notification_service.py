@@ -1109,6 +1109,19 @@ def _send_targeted_notification_campaign(
     message = success_message
     if not sent_count and failed_count:
         message = f"{success_message} failed for all candidates"
+        if failures:
+            unique_failure_messages = list(
+                dict.fromkeys(
+                    str(item.get("message") or "").strip()
+                    for item in failures
+                    if str(item.get("message") or "").strip()
+                )
+            )
+            if unique_failure_messages:
+                if len(unique_failure_messages) == 1:
+                    message = f"{message}: {unique_failure_messages[0]}"
+                else:
+                    message = f"{message}: {', '.join(unique_failure_messages[:2])}"
     elif sent_count and failed_count:
         message = f"{success_message} sent with partial failures"
 
@@ -1140,7 +1153,7 @@ def send_attendance_reminder_notifications(
 
     try:
         if emp_codes:
-            candidates = get_selected_attendance_filter_candidates(emp_codes, reminder_date)
+            candidates = get_selected_attendance_reminder_candidates(emp_codes, reminder_date)
         else:
             candidates = get_attendance_reminder_candidates(reminder_date)
     except Exception as e:
@@ -1618,7 +1631,7 @@ def get_notification_candidates(
     reminder_date = target_date or date.today()
 
     if normalized_type == "attendance_reminder":
-        candidates = get_attendance_filter_candidates(reminder_date)
+        candidates = get_attendance_reminder_candidates(reminder_date)
     elif normalized_type == "lunch_reminder":
         candidates = get_lunch_reminder_candidates(reminder_date)
     else:

@@ -197,6 +197,7 @@ const steps = [
 const sidebarItems = [
   { id: 'employees', label: 'Employees List' },
   { id: 'attendance', label: 'Todays Activity' },
+  { id: 'calendar', label: 'Calendar View' },
   { id: 'reports', label: 'Reports & Analytics' },
   { id: 'leaves', label: 'Leaves' },
   { id: 'activities', label: 'Activities' },
@@ -1651,10 +1652,10 @@ function App() {
 
   useEffect(() => {
     setCalendarActiveDate('')
-  }, [calendarMonthFilter, calendarYearFilter, calendarDepartmentFilter, calendarEmployeeFilter, calendarViewType, attendanceView])
+  }, [calendarMonthFilter, calendarYearFilter, calendarDepartmentFilter, calendarEmployeeFilter, calendarViewType, activePanel])
 
   useEffect(() => {
-    if (!accessToken || !showDashboard || showAdminLogin || activePanel !== 'attendance' || attendanceView !== 'calendar') {
+    if (!accessToken || !showDashboard || showAdminLogin || activePanel !== 'calendar') {
       return
     }
 
@@ -1664,7 +1665,6 @@ function App() {
     showDashboard,
     showAdminLogin,
     activePanel,
-    attendanceView,
     calendarMonthFilter,
     calendarYearFilter,
     calendarDepartmentFilter,
@@ -3310,6 +3310,7 @@ function App() {
       ...calendarRowsForMonth.map((row) => getCalendarCellHeatValue(row, calendarViewType)),
       1
     )
+<<<<<<< HEAD
     const calendarHolidayCount = calendarRowsForMonth.filter((row) => row.isHoliday).length
     const calendarAttendanceCount = calendarRowsForMonth.reduce((total, row) => total + row.attendanceCount, 0)
     const calendarLeaveCount = calendarRowsForMonth.reduce((total, row) => total + row.leaveCount, 0)
@@ -3322,6 +3323,8 @@ function App() {
           : calendarViewType === 'birthdays'
             ? calendarBirthdayCount
             : calendarAttendanceCount
+=======
+>>>>>>> e62268d5e21b14f156c65e8b60a2640690e7f144
     const calendarDepartmentOptions = Array.from(
       new Set(
         employees
@@ -3645,6 +3648,242 @@ function App() {
       )
     }
 
+    if (activePanel === 'calendar') {
+      return (
+        <>
+          <div className="dashboard-section-head attendance-section-head">
+            <div>
+              <p className="eyebrow">Operations</p>
+              <h2>Calendar View</h2>
+            </div>
+            <div className="attendance-head-actions">
+              <div className="attendance-controls attendance-controls-inline calendar-controls">
+                <div className="attendance-filter attendance-filter-compact">
+                  <label htmlFor="calendar-month">Month</label>
+                  <select
+                    id="calendar-month"
+                    value={calendarMonthFilter}
+                    onChange={(event) => setCalendarMonthFilter(event.target.value)}
+                  >
+                    {Array.from({ length: 12 }, (_, index) => {
+                      const monthValue = String(index + 1)
+                      const monthLabel = new Date(2026, index, 1).toLocaleDateString('en-IN', { month: 'short' })
+                      return (
+                        <option key={monthValue} value={monthValue}>
+                          {monthLabel}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+                <div className="attendance-filter attendance-filter-compact">
+                  <label htmlFor="calendar-year">Year</label>
+                  <select
+                    id="calendar-year"
+                    value={calendarYearFilter}
+                    onChange={(event) => setCalendarYearFilter(event.target.value)}
+                  >
+                    {Array.from({ length: 8 }, (_, index) => {
+                      const yearValue = String(new Date().getFullYear() - 3 + index)
+                      return (
+                        <option key={yearValue} value={yearValue}>
+                          {yearValue}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+                <div className="attendance-filter attendance-filter-compact">
+                  <label htmlFor="calendar-department">Department</label>
+                  <select
+                    id="calendar-department"
+                    value={calendarDepartmentFilter}
+                    onChange={(event) => setCalendarDepartmentFilter(event.target.value)}
+                  >
+                    <option value="all">All</option>
+                    {calendarDepartmentOptions.map((department) => (
+                      <option key={department} value={department}>
+                        {department}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="attendance-filter attendance-filter-compact">
+                  <label htmlFor="calendar-employee">Employee</label>
+                  <select
+                    id="calendar-employee"
+                    value={calendarEmployeeFilter}
+                    onChange={(event) => setCalendarEmployeeFilter(event.target.value)}
+                  >
+                    <option value="all">All</option>
+                    {calendarEmployeeOptions.map((employee) => (
+                      <option key={employee.emp_code} value={employee.emp_code}>
+                        {employee.emp_full_name || employee.emp_code}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="attendance-filter attendance-filter-compact">
+                  <label htmlFor="calendar-view-type">View</label>
+                  <select
+                    id="calendar-view-type"
+                    value={calendarViewType}
+                    onChange={(event) => setCalendarViewType(event.target.value as CalendarViewType)}
+                  >
+                    <option value="combined">Combined</option>
+                    <option value="attendance">Attendance</option>
+                    <option value="compoff">Comp-off</option>
+                    <option value="holidays">Holidays</option>
+                  </select>
+                </div>
+                {canWriteAdminData ? (
+                  <button className="ghost dashboard-button" type="button" onClick={openHolidayModal}>
+                    Add Holiday
+                  </button>
+                ) : null}
+                <button className="ghost dashboard-button" onClick={() => void loadHolidayCalendar(accessToken)}>
+                  Refresh
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="calendar-layout">
+            <div className="table-card calendar-card">
+              <div className="calendar-card-head">
+                <div>
+                  <strong>{calendarMonthLabel}</strong>
+                  <span>
+                    {calendarSelectedEmployee
+                      ? `Employee: ${calendarSelectedEmployee.emp_full_name || calendarSelectedEmployee.emp_code}`
+                      : calendarDepartmentFilter !== 'all'
+                        ? `Department: ${calendarDepartmentFilter}`
+                        : 'All departments and employees'}
+                  </span>
+                </div>
+                <div className="calendar-legend">
+                  <span className="legend-item attendance">Attendance</span>
+                  <span className="legend-item compoff">Comp-off</span>
+                  <span className="legend-item holiday">Holiday</span>
+                  <span className="legend-item weekend">Weekend</span>
+                  <span className="legend-item today">Today</span>
+                </div>
+              </div>
+
+              {calendarLoading ? (
+                <div className="empty-state">Loading calendar summary...</div>
+              ) : calendarError ? (
+                <div className="empty-state">{calendarError}</div>
+              ) : calendarRowsForMonth.length ? (
+                <div className={`admin-calendar-grid view-${calendarViewType}`}>
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                    <div key={day} className="admin-calendar-weekday">
+                      {day}
+                    </div>
+                  ))}
+                  {Array.from({ length: calendarStartOffset }, (_, index) => (
+                    <div key={`offset-${index}`} className="admin-calendar-offset" aria-hidden="true" />
+                  ))}
+                  {calendarRowsForMonth.map((row) => {
+                    const parsedDate = parseDateInputValue(row.date)
+                    const dayNumber = parsedDate.getDate()
+                    const heatValue = getCalendarCellHeatValue(row, calendarViewType)
+                    const heatRatio = Math.max(0, Math.min(1, heatValue / calendarMaxHeat))
+                    const heatClass = heatRatio >= 0.75 ? 'heat-strong' : heatRatio >= 0.45 ? 'heat-medium' : heatRatio > 0 ? 'heat-light' : 'heat-none'
+                    const isToday = row.date === todayDateValue
+                    const popoverOpen = calendarActiveDate === row.date
+
+                    return (
+                      <button
+                        key={row.date}
+                        type="button"
+                        onClick={() => setCalendarActiveDate((current) => (current === row.date ? '' : row.date))}
+                        className={[
+                          'admin-calendar-day',
+                          heatClass,
+                          row.isHoliday ? 'holiday' : '',
+                          row.isSunday ? 'sunday' : '',
+                          row.isSecondSaturday ? 'second-saturday' : '',
+                          isToday ? 'today' : '',
+                          popoverOpen ? 'popover-open' : ''
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                        style={{ '--heat': String(heatRatio) } as CSSProperties}
+                      >
+                        <div className="calendar-day-top">
+                          <span className="calendar-day-number">{dayNumber}</span>
+                          {row.isHoliday ? (
+                            <span className="calendar-day-icon" aria-hidden="true">
+                              {getHolidayIcon(row.holidayName, row.dayType)}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="calendar-day-metrics">
+                          {calendarViewType !== 'compoff' && calendarViewType !== 'holidays' && row.attendanceCount > 0 ? (
+                            <span className="calendar-day-metric attendance">A {row.attendanceCount}</span>
+                          ) : null}
+                          {calendarViewType !== 'attendance' && calendarViewType !== 'holidays' && row.compOffCount > 0 ? (
+                            <span className="calendar-day-metric compoff">C {row.compOffCount}</span>
+                          ) : null}
+                          {(calendarViewType === 'holidays' || calendarViewType === 'combined') && row.isHoliday ? (
+                            <span className="calendar-day-metric holiday">H</span>
+                          ) : null}
+                        </div>
+                        <div className="calendar-day-popover" role="tooltip">
+                          <strong>{formatAttendanceDateLabel(row.date)}</strong>
+                          <span>{row.holidayName ? `${row.holidayName}` : 'No holiday configured'}</span>
+                          <span>Attendance: {row.attendanceCount}</span>
+                          <span>Comp-off: {row.compOffCount}</span>
+                          <span>Day Type: {row.dayType}</span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="empty-state">No calendar data found for the selected filters.</div>
+              )}
+
+              {calendarStatus ? <span className="report-status attendance-report-status">{calendarStatus}</span> : null}
+            </div>
+
+            <div className="table-card calendar-holiday-list-card">
+              <div className="chart-card-head">
+                <div>
+                  <strong>Configured Holidays & Weekends</strong>
+                  <span>
+                    {calendarVisibleHolidays.length} holiday entr{calendarVisibleHolidays.length === 1 ? 'y' : 'ies'} in view
+                  </span>
+                </div>
+              </div>
+              {calendarVisibleHolidays.length ? (
+                <div className="calendar-holiday-list">
+                  {calendarVisibleHolidays.map((holiday) => (
+                    <div key={`${holiday.date}-${holiday.holidayName}`} className="calendar-holiday-list-item">
+                      <div className="calendar-holiday-icon" aria-hidden="true">
+                        {getHolidayIcon(holiday.holidayName, holiday.dayType)}
+                      </div>
+                      <div className="calendar-holiday-copy">
+                        <strong>{holiday.holidayName}</strong>
+                        <span>{formatAttendanceDateLabel(holiday.date)}</span>
+                        <small>
+                          {holiday.holidayType} • {holiday.status || 'Active'}
+                          {holiday.dayType ? ` • ${holiday.dayType}` : ''}
+                        </small>
+                        {holiday.description ? <p>{holiday.description}</p> : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state">No holidays configured for this month yet.</div>
+              )}
+            </div>
+          </div>
+        </>
+      )
+    }
+
     if (activePanel === 'attendance') {
       const attendanceTabCount = attendancePageRows.length
 
@@ -3675,6 +3914,7 @@ function App() {
                   <span>{attendanceTabCount}</span>
                 </button>
                 <button
+<<<<<<< HEAD
                   className={`attendance-tab ${attendanceView === 'calendar' ? 'active' : ''}`}
                   type="button"
                   onClick={() => setAttendanceView('calendar')}
@@ -3683,6 +3923,8 @@ function App() {
                   <span>{calendarActiveModuleCount}</span>
                 </button>
                 <button
+=======
+>>>>>>> e62268d5e21b14f156c65e8b60a2640690e7f144
                   className={`attendance-tab ${attendanceView === 'late-arrivals' ? 'active' : ''}`}
                   type="button"
                   onClick={() => setAttendanceView('late-arrivals')}
@@ -3874,6 +4116,7 @@ function App() {
                   </button>
                 </div>
               </div>
+<<<<<<< HEAD
             ) : attendanceView === 'calendar' ? (
               <div className="attendance-head-actions">
                 <div className="attendance-controls attendance-controls-inline calendar-controls">
@@ -3986,6 +4229,8 @@ function App() {
                   </button>
                 </div>
               </div>
+=======
+>>>>>>> e62268d5e21b14f156c65e8b60a2640690e7f144
             ) : (
               <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                 Refresh

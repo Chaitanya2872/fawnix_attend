@@ -172,7 +172,7 @@ def submit_late_arrival(current_user):
     """
     Submit late arrival exception with reason
     
-    This should be called BEFORE clock-in, after shift start time.
+    This should be called BEFORE clock-in.
     The request creates a pending attendance row immediately so an attendance_id is available
     before the employee performs the actual clock-in.
     

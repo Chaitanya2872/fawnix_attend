@@ -1629,9 +1629,15 @@ def get_notification_candidates(
     """Return eligible employees for a notification type and date."""
     normalized_type = (notification_type or "").strip().lower()
     reminder_date = target_date or date.today()
+    alert_eligible_emp_codes: set[str] = set()
 
     if normalized_type == "attendance_reminder":
-        candidates = get_attendance_reminder_candidates(reminder_date)
+        candidates = get_attendance_filter_candidates(reminder_date)
+        alert_eligible_emp_codes = {
+            str(candidate.get("emp_code") or "").strip()
+            for candidate in get_attendance_reminder_candidates(reminder_date)
+            if str(candidate.get("emp_code") or "").strip()
+        }
     elif normalized_type == "lunch_reminder":
         candidates = get_lunch_reminder_candidates(reminder_date)
     else:
@@ -1663,7 +1669,16 @@ def get_notification_candidates(
         data.append({
             **candidate,
             "alert_status": "sent" if has_sent else "not_sent",
+            "alert_eligible": emp_code in alert_eligible_emp_codes if normalized_type == "attendance_reminder" else True,
         })
+
+    alert_eligible_sorted = sorted(code for code in alert_eligible_emp_codes if code)
+    ineligible_emp_codes = sorted({
+        str(candidate.get("emp_code") or "").strip()
+        for candidate in data
+        if str(candidate.get("emp_code") or "").strip()
+        and str(candidate.get("emp_code") or "").strip() not in alert_eligible_emp_codes
+    }) if normalized_type == "attendance_reminder" else []
 
     return {
         "success": True,
@@ -1673,6 +1688,14 @@ def get_notification_candidates(
         "count": len(data),
         "sent_count": len(sent_emp_codes),
         "sent_emp_codes": sorted(set(sent_emp_codes)),
+        "alert_eligible_count": len(alert_eligible_sorted) if normalized_type == "attendance_reminder" else len(data),
+        "alert_eligible_emp_codes": alert_eligible_sorted if normalized_type == "attendance_reminder" else sorted({
+            str(candidate.get("emp_code") or "").strip()
+            for candidate in data
+            if str(candidate.get("emp_code") or "").strip()
+        }),
+        "alert_ineligible_count": len(ineligible_emp_codes),
+        "alert_ineligible_emp_codes": ineligible_emp_codes,
         "data": data,
     }
 

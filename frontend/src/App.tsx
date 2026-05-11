@@ -1395,6 +1395,7 @@ function App() {
   const employeeStatusMenuRef = useRef<HTMLDivElement | null>(null)
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
   const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
+  const [missedLoginEmpCodes, setMissedLoginEmpCodes] = useState<string[]>([])
   const [alertEligibleEmpCodes, setAlertEligibleEmpCodes] = useState<string[]>([])
   const [alertCandidatesLoading, setAlertCandidatesLoading] = useState(false)
   const [alertTriggerLoading, setAlertTriggerLoading] = useState(false)
@@ -1573,6 +1574,47 @@ function App() {
       return
     }
 
+    let disposed = false
+    let refreshInFlight = false
+
+    const refreshAttendancePanel = async () => {
+      if (disposed || refreshInFlight) {
+        return
+      }
+      refreshInFlight = true
+      try {
+        await loadDashboard(accessToken)
+      } finally {
+        refreshInFlight = false
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshAttendancePanel()
+    }, 60000)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshAttendancePanel()
+      }
+    }
+
+    window.addEventListener('focus', handleVisibilityChange)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      disposed = true
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleVisibilityChange)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [accessToken, showDashboard, showAdminLogin, activePanel])
+
+  useEffect(() => {
+    if (!accessToken || !showDashboard || showAdminLogin || activePanel !== 'attendance') {
+      return
+    }
+
     let cancelled = false
 
     const loadAlertCandidates = async () => {
@@ -1584,21 +1626,29 @@ function App() {
           target_date: attendanceDateFilter || toDateInputValue(new Date())
         })
         const response = await apiRequest(`/api/admin/scheduled-notifications/candidates?${params.toString()}`, {}, accessToken)
-        const candidateRows = Array.isArray(response?.data) ? response.data : []
-        const nextCodes = candidateRows
+        const candidateRows = Array.isArray(response?.data)
+          ? response.data as Array<{ emp_code?: string; alert_status?: string; alert_eligible?: boolean }>
+          : []
+        const nextMissedCodes = candidateRows
           .map((row: { emp_code?: string }) => row.emp_code || '')
           .filter(Boolean)
+        const nextEligibleCodes = candidateRows
+          .filter((row) => Boolean(row.alert_eligible))
+          .map((row) => row.emp_code || '')
+          .filter(Boolean)
         const nextSentCodes = candidateRows
-          .filter((row: { alert_status?: string }) => (row.alert_status || '').toLowerCase() === 'sent')
-          .map((row: { emp_code?: string }) => row.emp_code || '')
+          .filter((row) => (row.alert_status || '').toLowerCase() === 'sent')
+          .map((row) => row.emp_code || '')
           .filter(Boolean)
 
         if (!cancelled) {
-          setAlertEligibleEmpCodes(nextCodes)
+          setMissedLoginEmpCodes(Array.from(new Set(nextMissedCodes)))
+          setAlertEligibleEmpCodes(Array.from(new Set(nextEligibleCodes)))
           setAlertSentEmpCodes(Array.from(new Set(nextSentCodes)))
         }
       } catch {
         if (!cancelled) {
+          setMissedLoginEmpCodes([])
           setAlertEligibleEmpCodes([])
           setAlertSentEmpCodes([])
         }
@@ -1625,10 +1675,13 @@ function App() {
   useEffect(() => {
     setSelectedMissedLoginEmpCodes((previousCodes) =>
       previousCodes.filter(
-        (empCode) => alertEligibleEmpCodes.includes(empCode) && !alertSentEmpCodes.includes(empCode)
+        (empCode) =>
+          missedLoginEmpCodes.includes(empCode) &&
+          alertEligibleEmpCodes.includes(empCode) &&
+          !alertSentEmpCodes.includes(empCode)
       )
     )
-  }, [alertEligibleEmpCodes, alertSentEmpCodes])
+  }, [missedLoginEmpCodes, alertEligibleEmpCodes, alertSentEmpCodes])
 
   useEffect(() => {
     if (calendarEmployeeFilter === 'all') {
@@ -1874,7 +1927,9 @@ function App() {
   }
 
   const triggerAttendanceReminder = async () => {
-    const requestedEmpCodes = selectedMissedLoginEmpCodes.filter((empCode) => !alertSentEmpCodes.includes(empCode))
+    const requestedEmpCodes = selectedMissedLoginEmpCodes.filter(
+      (empCode) => alertEligibleEmpCodes.includes(empCode) && !alertSentEmpCodes.includes(empCode)
+    )
     if (!requestedEmpCodes.length) {
       setAlertTriggerStatus('Select at least one employee to trigger reminders.')
       return
@@ -1917,12 +1972,23 @@ function App() {
         target_date: targetDate
       })
       const candidatesResponse = await apiRequest(`/api/admin/scheduled-notifications/candidates?${params.toString()}`, {}, accessToken)
-      const nextCodes = Array.isArray(candidatesResponse?.data)
-        ? candidatesResponse.data
-            .map((row: { emp_code?: string }) => row.emp_code || '')
-            .filter(Boolean)
+      const candidateRows = Array.isArray(candidatesResponse?.data)
+        ? candidatesResponse.data as Array<{ emp_code?: string; alert_status?: string; alert_eligible?: boolean }>
         : []
-      setAlertEligibleEmpCodes(nextCodes)
+      const nextMissedCodes = candidateRows
+        .map((row) => row.emp_code || '')
+        .filter(Boolean)
+      const nextEligibleCodes = candidateRows
+        .filter((row) => Boolean(row.alert_eligible))
+        .map((row) => row.emp_code || '')
+        .filter(Boolean)
+      const nextSentCodes = candidateRows
+        .filter((row) => (row.alert_status || '').toLowerCase() === 'sent')
+        .map((row) => row.emp_code || '')
+        .filter(Boolean)
+      setMissedLoginEmpCodes(Array.from(new Set(nextMissedCodes)))
+      setAlertEligibleEmpCodes(Array.from(new Set(nextEligibleCodes)))
+      setAlertSentEmpCodes(Array.from(new Set(nextSentCodes)))
     } catch (error) {
       setAlertTriggerStatus(error instanceof Error ? error.message : 'Failed to trigger attendance reminders')
     } finally {
@@ -1954,6 +2020,10 @@ function App() {
     setFieldVisitRows([])
     setCalendarSummaryRows([])
     setHolidayRows([])
+    setMissedLoginEmpCodes([])
+    setAlertEligibleEmpCodes([])
+    setAlertSentEmpCodes([])
+    setSelectedMissedLoginEmpCodes([])
     setCalendarError('')
     setCalendarStatus('')
     setHolidayModalOpen(false)
@@ -3276,7 +3346,7 @@ function App() {
     return `${x},${y}`
   }).join(' ')
     const missedLoginEmployees = employees
-      .filter((employee) => (employee.emp_code ? alertEligibleEmpCodes.includes(employee.emp_code) : false))
+      .filter((employee) => (employee.emp_code ? missedLoginEmpCodes.includes(employee.emp_code) : false))
       .sort((left, right) =>
         (left.emp_full_name || left.emp_code || '').localeCompare(right.emp_full_name || right.emp_code || '')
       )
@@ -4577,6 +4647,7 @@ function App() {
                 {missedLoginEmployees.length ? (
                   missedLoginEmployees.map((employee) => {
                     const isAlertSent = alertSentEmpCodes.includes(employee.emp_code)
+                    const isAlertEligible = alertEligibleEmpCodes.includes(employee.emp_code)
                     return (
                       <label
                         key={employee.emp_code}
@@ -4586,7 +4657,7 @@ function App() {
                           className="missed-login-checkbox"
                           type="checkbox"
                           checked={selectedMissedLoginEmpCodes.includes(employee.emp_code)}
-                          disabled={isAlertSent}
+                          disabled={isAlertSent || !isAlertEligible}
                           onChange={(event) => {
                             const checked = event.target.checked
                             setSelectedMissedLoginEmpCodes((previousCodes) => {
@@ -4603,7 +4674,7 @@ function App() {
                           <strong>{employee.emp_full_name || employee.emp_code}</strong>
                           <span>{employee.emp_designation || employee.emp_department || employee.emp_email || '--'}</span>
                           <small className={isAlertSent ? 'missed-login-alert-sent' : 'missed-login-alert-not-sent'}>
-                            {isAlertSent ? 'Alert Sent' : 'Not Sent'}
+                            {isAlertSent ? 'Alert Sent' : isAlertEligible ? 'Not Sent' : 'Alert Not Eligible'}
                           </small>
                         </div>
                       </label>

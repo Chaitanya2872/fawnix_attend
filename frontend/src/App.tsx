@@ -3310,7 +3310,6 @@ function App() {
       ...calendarRowsForMonth.map((row) => getCalendarCellHeatValue(row, calendarViewType)),
       1
     )
-<<<<<<< HEAD
     const calendarHolidayCount = calendarRowsForMonth.filter((row) => row.isHoliday).length
     const calendarAttendanceCount = calendarRowsForMonth.reduce((total, row) => total + row.attendanceCount, 0)
     const calendarLeaveCount = calendarRowsForMonth.reduce((total, row) => total + row.leaveCount, 0)
@@ -3323,8 +3322,6 @@ function App() {
           : calendarViewType === 'birthdays'
             ? calendarBirthdayCount
             : calendarAttendanceCount
-=======
->>>>>>> e62268d5e21b14f156c65e8b60a2640690e7f144
     const calendarDepartmentOptions = Array.from(
       new Set(
         employees
@@ -3724,16 +3721,16 @@ function App() {
                   </select>
                 </div>
                 <div className="attendance-filter attendance-filter-compact">
-                  <label htmlFor="calendar-view-type">View</label>
+                  <label htmlFor="calendar-view-type">Module</label>
                   <select
                     id="calendar-view-type"
                     value={calendarViewType}
                     onChange={(event) => setCalendarViewType(event.target.value as CalendarViewType)}
                   >
-                    <option value="combined">Combined</option>
-                    <option value="attendance">Attendance</option>
-                    <option value="compoff">Comp-off</option>
+                    <option value="birthdays">Birthdays</option>
                     <option value="holidays">Holidays</option>
+                    <option value="leaves">Leaves</option>
+                    <option value="attendance">Attendance</option>
                   </select>
                 </div>
                 {canWriteAdminData ? (
@@ -3762,7 +3759,8 @@ function App() {
                 </div>
                 <div className="calendar-legend">
                   <span className="legend-item attendance">Attendance</span>
-                  <span className="legend-item compoff">Comp-off</span>
+                  <span className="legend-item leave">Leaves</span>
+                  <span className="legend-item birthday">Birthdays</span>
                   <span className="legend-item holiday">Holiday</span>
                   <span className="legend-item weekend">Weekend</span>
                   <span className="legend-item today">Today</span>
@@ -3819,13 +3817,16 @@ function App() {
                           ) : null}
                         </div>
                         <div className="calendar-day-metrics">
-                          {calendarViewType !== 'compoff' && calendarViewType !== 'holidays' && row.attendanceCount > 0 ? (
+                          {calendarViewType === 'attendance' && row.attendanceCount > 0 ? (
                             <span className="calendar-day-metric attendance">A {row.attendanceCount}</span>
                           ) : null}
-                          {calendarViewType !== 'attendance' && calendarViewType !== 'holidays' && row.compOffCount > 0 ? (
-                            <span className="calendar-day-metric compoff">C {row.compOffCount}</span>
+                          {calendarViewType === 'leaves' && row.leaveCount > 0 ? (
+                            <span className="calendar-day-metric leave">L {row.leaveCount}</span>
                           ) : null}
-                          {(calendarViewType === 'holidays' || calendarViewType === 'combined') && row.isHoliday ? (
+                          {calendarViewType === 'birthdays' && row.birthdayCount > 0 ? (
+                            <span className="calendar-day-metric birthday">B {row.birthdayCount}</span>
+                          ) : null}
+                          {calendarViewType === 'holidays' && row.isHoliday ? (
                             <span className="calendar-day-metric holiday">H</span>
                           ) : null}
                         </div>
@@ -3833,7 +3834,8 @@ function App() {
                           <strong>{formatAttendanceDateLabel(row.date)}</strong>
                           <span>{row.holidayName ? `${row.holidayName}` : 'No holiday configured'}</span>
                           <span>Attendance: {row.attendanceCount}</span>
-                          <span>Comp-off: {row.compOffCount}</span>
+                          <span>Leaves: {row.leaveCount}</span>
+                          <span>Birthdays: {row.birthdayCount}</span>
                           <span>Day Type: {row.dayType}</span>
                         </div>
                       </button>
@@ -3914,7 +3916,6 @@ function App() {
                   <span>{attendanceTabCount}</span>
                 </button>
                 <button
-<<<<<<< HEAD
                   className={`attendance-tab ${attendanceView === 'calendar' ? 'active' : ''}`}
                   type="button"
                   onClick={() => setAttendanceView('calendar')}
@@ -3923,8 +3924,6 @@ function App() {
                   <span>{calendarActiveModuleCount}</span>
                 </button>
                 <button
-=======
->>>>>>> e62268d5e21b14f156c65e8b60a2640690e7f144
                   className={`attendance-tab ${attendanceView === 'late-arrivals' ? 'active' : ''}`}
                   type="button"
                   onClick={() => setAttendanceView('late-arrivals')}
@@ -4116,7 +4115,6 @@ function App() {
                   </button>
                 </div>
               </div>
-<<<<<<< HEAD
             ) : attendanceView === 'calendar' ? (
               <div className="attendance-head-actions">
                 <div className="attendance-controls attendance-controls-inline calendar-controls">
@@ -4229,8 +4227,6 @@ function App() {
                   </button>
                 </div>
               </div>
-=======
->>>>>>> e62268d5e21b14f156c65e8b60a2640690e7f144
             ) : (
               <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
                 Refresh

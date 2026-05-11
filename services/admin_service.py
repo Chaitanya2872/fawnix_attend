@@ -41,6 +41,9 @@ def get_all_employees():
     cursor = conn.cursor()
 
     try:
+        employee_columns = _get_employees_columns(cursor)
+        blood_group_select = _get_employee_blood_group_select_expression(employee_columns)
+
         cursor.execute("""
             SELECT
                 e.emp_code,
@@ -48,6 +51,7 @@ def get_all_employees():
                 e.emp_email,
                 e.emp_contact,
                 e.emp_grade,
+                {blood_group_select},
                 e.emp_designation,
                 e.emp_department,
                 e.emp_branch_id,
@@ -63,7 +67,7 @@ def get_all_employees():
             LEFT JOIN employees m ON e.emp_manager = m.emp_code
             LEFT JOIN users u ON e.emp_code = u.emp_code
             ORDER BY e.emp_full_name
-        """)
+        """.format(blood_group_select=blood_group_select))
 
         return cursor.fetchall()
 
@@ -880,13 +884,15 @@ def _normalize_holiday_status(raw_status) -> str:
     return normalized if normalized else 'Active'
 
 
-def _get_organization_holiday_columns(cursor):
+def _get_table_columns(cursor, table_name: str):
     cursor.execute(
         """
         SELECT column_name
         FROM information_schema.columns
-        WHERE table_name = 'organization_holidays'
-        """
+        WHERE table_schema = 'public'
+          AND table_name = %s
+        """,
+        (table_name,),
     )
     rows = cursor.fetchall()
     columns = set()
@@ -900,6 +906,42 @@ def _get_organization_holiday_columns(cursor):
         if column_name:
             columns.add(str(column_name))
     return columns
+
+
+def _get_organization_holiday_columns(cursor):
+    return _get_table_columns(cursor, 'organization_holidays')
+
+
+def _get_employees_columns(cursor):
+    return _get_table_columns(cursor, 'employees')
+
+
+def _get_employee_blood_group_select_expression(employee_columns):
+    candidate_columns = (
+        'emp_blood_group',
+        'blood_group',
+        'emp_bloodgroup',
+        'bloodgroup',
+    )
+    for column_name in candidate_columns:
+        if column_name in employee_columns:
+            return f"e.{column_name} AS emp_blood_group"
+    return "NULL::TEXT AS emp_blood_group"
+
+
+def _get_employee_birthday_column(employee_columns):
+    candidate_columns = (
+        'emp_date_of_birth',
+        'emp_dob',
+        'date_of_birth',
+        'dob',
+        'birth_date',
+        'birthday',
+    )
+    for column_name in candidate_columns:
+        if column_name in employee_columns:
+            return column_name
+    return None
 
 
 def _parse_holiday_row(row):
@@ -1271,6 +1313,8 @@ def get_calendar_summary(month: int, year: int, department: str = None, emp_code
 
     try:
         available_columns = _get_organization_holiday_columns(cursor)
+        employee_columns = _get_employees_columns(cursor)
+        birthday_column = _get_employee_birthday_column(employee_columns)
         holiday_select_fields = [
             "id",
             "holiday_date",
@@ -1365,6 +1409,120 @@ def get_calendar_summary(month: int, year: int, department: str = None, emp_code
             if isinstance(comp_date, date):
                 comp_off_map[comp_date.isoformat()] = int(row.get('comp_off_count') or 0)
 
+        leave_query = """
+            SELECT
+                generated.leave_date::date AS record_date,
+                COUNT(DISTINCT l.emp_code) AS leave_count,
+                ARRAY_REMOVE(
+                    ARRAY_AGG(
+                        DISTINCT NULLIF(TRIM(COALESCE(e.emp_full_name, l.emp_name, l.emp_code)), '')
+                    ),
+                    NULL
+                ) AS leave_employees
+            FROM leaves l
+            LEFT JOIN employees e ON e.emp_code = l.emp_code
+            JOIN LATERAL generate_series(l.from_date, l.to_date, interval '1 day') AS generated(leave_date) ON TRUE
+            WHERE l.from_date <= %s
+              AND l.to_date >= %s
+              AND LOWER(COALESCE(l.status, '')) NOT IN ('rejected', 'cancelled')
+        """
+        leave_params = [end_date, start_date]
+
+        if department_filter:
+            leave_query += " AND LOWER(COALESCE(e.emp_department, '')) = LOWER(%s)"
+            leave_params.append(department_filter)
+
+        if emp_code_filter:
+            leave_query += " AND l.emp_code = %s"
+            leave_params.append(emp_code_filter)
+
+        leave_query += " GROUP BY generated.leave_date"
+        cursor.execute(leave_query, leave_params)
+        leave_rows = cursor.fetchall()
+        leave_count_map = {}
+        leave_employee_map = {}
+        for row in leave_rows:
+            leave_date = row.get('record_date')
+            if isinstance(leave_date, datetime):
+                leave_date = leave_date.date()
+            if not isinstance(leave_date, date):
+                continue
+
+            date_key = leave_date.isoformat()
+            leave_count_map[date_key] = int(row.get('leave_count') or 0)
+            leave_employee_names = row.get('leave_employees')
+            if isinstance(leave_employee_names, (list, tuple)):
+                leave_employee_map[date_key] = [
+                    str(name).strip()
+                    for name in leave_employee_names
+                    if str(name or '').strip()
+                ]
+            else:
+                leave_employee_map[date_key] = []
+
+        birthday_count_map = {}
+        birthday_employee_map = {}
+        if birthday_column:
+            birthday_query = """
+                SELECT
+                    TO_CHAR(e.{birthday_column}, 'MM-DD') AS birthday_mmdd,
+                    COUNT(*) AS birthday_count,
+                    ARRAY_REMOVE(
+                        ARRAY_AGG(
+                            DISTINCT NULLIF(TRIM(COALESCE(e.emp_full_name, e.emp_code)), '')
+                        ),
+                        NULL
+                    ) AS birthday_employees
+                FROM employees e
+                WHERE e.{birthday_column} IS NOT NULL
+                  AND EXTRACT(MONTH FROM e.{birthday_column}) = %s
+            """.format(birthday_column=birthday_column)
+            birthday_params = [month]
+
+            if department_filter:
+                birthday_query += " AND LOWER(COALESCE(e.emp_department, '')) = LOWER(%s)"
+                birthday_params.append(department_filter)
+
+            if emp_code_filter:
+                birthday_query += " AND e.emp_code = %s"
+                birthday_params.append(emp_code_filter)
+
+            birthday_query += " GROUP BY birthday_mmdd"
+            cursor.execute(birthday_query, birthday_params)
+            birthday_rows = cursor.fetchall()
+
+            for row in birthday_rows:
+                birthday_mmdd = str(row.get('birthday_mmdd') or '').strip()
+                if not birthday_mmdd:
+                    continue
+
+                try:
+                    birthday_date = datetime.strptime(f"{year}-{birthday_mmdd}", "%Y-%m-%d").date()
+                except ValueError:
+                    if birthday_mmdd == '02-29':
+                        birthday_date = date(year, 2, 28)
+                    else:
+                        continue
+
+                date_key = birthday_date.isoformat()
+                birthday_count_map[date_key] = birthday_count_map.get(date_key, 0) + int(row.get('birthday_count') or 0)
+
+                birthday_names = row.get('birthday_employees')
+                normalized_names = []
+                if isinstance(birthday_names, (list, tuple)):
+                    normalized_names = [
+                        str(name).strip()
+                        for name in birthday_names
+                        if str(name or '').strip()
+                    ]
+
+                if normalized_names:
+                    existing_names = birthday_employee_map.get(date_key, [])
+                    merged_names = list(dict.fromkeys([*existing_names, *normalized_names]))
+                    birthday_employee_map[date_key] = merged_names
+                else:
+                    birthday_employee_map.setdefault(date_key, [])
+
         summary_rows = []
         current_date = start_date
         while current_date <= end_date:
@@ -1394,6 +1552,10 @@ def get_calendar_summary(month: int, year: int, department: str = None, emp_code
                 "date": date_key,
                 "attendanceCount": int(attendance_map.get(date_key, 0)),
                 "compOffCount": int(comp_off_map.get(date_key, 0)),
+                "leaveCount": int(leave_count_map.get(date_key, 0)),
+                "birthdayCount": int(birthday_count_map.get(date_key, 0)),
+                "leaveEmployees": leave_employee_map.get(date_key, []),
+                "birthdayEmployees": birthday_employee_map.get(date_key, []),
                 "isHoliday": is_holiday,
                 "holidayName": holiday_name,
                 "holidayType": holiday_type,

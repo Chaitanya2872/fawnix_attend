@@ -1714,6 +1714,10 @@ a {
 
 .employee-toolbar-meta {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .employee-filter-chip {
@@ -1728,6 +1732,35 @@ a {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.employee-blood-filter {
+  display: grid;
+  gap: 6px;
+}
+
+.employee-blood-filter label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4b5c61;
+}
+
+.employee-blood-filter select {
+  min-width: 128px;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 44, 50, 0.2);
+  background: rgba(255, 255, 255, 0.94);
+  color: #112c32;
+  font-size: 13px;
+  padding: 9px 34px 9px 12px;
+}
+
+.employee-blood-filter select:focus {
+  outline: none;
+  border-color: #6ca59a;
+  box-shadow: 0 0 0 3px rgba(108, 165, 154, 0.16);
 }
 
 .employee-status-head {
@@ -3734,6 +3767,13 @@ a {
   gap: 10px;
 }
 
+.calendar-module-tabs {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .calendar-layout {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
@@ -3797,8 +3837,12 @@ a {
   background: #1fa7a4;
 }
 
-.legend-item.compoff::before {
+.legend-item.leave::before {
   background: #d8872d;
+}
+
+.legend-item.birthday::before {
+  background: #9b59b6;
 }
 
 .legend-item.holiday::before {
@@ -3824,7 +3868,7 @@ a {
   --heat-rgb: 31, 167, 164;
 }
 
-.admin-calendar-grid.view-compoff .admin-calendar-day {
+.admin-calendar-grid.view-leaves .admin-calendar-day {
   --heat-rgb: 216, 135, 45;
 }
 
@@ -3832,8 +3876,8 @@ a {
   --heat-rgb: 210, 81, 81;
 }
 
-.admin-calendar-grid.view-combined .admin-calendar-day {
-  --heat-rgb: 44, 97, 184;
+.admin-calendar-grid.view-birthdays .admin-calendar-day {
+  --heat-rgb: 155, 89, 182;
 }
 
 .admin-calendar-weekday {
@@ -3955,9 +3999,14 @@ a {
   color: #0b5a58;
 }
 
-.calendar-day-metric.compoff {
+.calendar-day-metric.leave {
   background: rgba(216, 135, 45, 0.16);
   color: #7d4b10;
+}
+
+.calendar-day-metric.birthday {
+  background: rgba(155, 89, 182, 0.18);
+  color: #5f2a75;
 }
 
 .calendar-day-metric.holiday {
@@ -4031,6 +4080,24 @@ a {
   display: grid;
   place-items: center;
   font-size: 16px;
+}
+
+.calendar-holiday-icon.attendance {
+  background: rgba(31, 167, 164, 0.14);
+  color: #0b5a58;
+  font-weight: 700;
+}
+
+.calendar-holiday-icon.leave {
+  background: rgba(216, 135, 45, 0.16);
+  color: #7d4b10;
+  font-weight: 700;
+}
+
+.calendar-holiday-icon.birthday {
+  background: rgba(155, 89, 182, 0.18);
+  color: #5f2a75;
+  font-weight: 700;
 }
 
 .calendar-holiday-copy {

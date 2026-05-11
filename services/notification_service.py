@@ -164,7 +164,7 @@ def _log_scheduled_notification_attempt(
                 response_payload,
                 created_at,
                 updated_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW(), NOW())
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW(), NOW())
             """,
             (
                 schedule_id,
@@ -1126,6 +1126,19 @@ def _send_targeted_notification_campaign(
     message = success_message
     if not sent_count and failed_count:
         message = f"{success_message} failed for all candidates"
+        if failures:
+            unique_failure_messages = list(
+                dict.fromkeys(
+                    str(item.get("message") or "").strip()
+                    for item in failures
+                    if str(item.get("message") or "").strip()
+                )
+            )
+            if unique_failure_messages:
+                if len(unique_failure_messages) == 1:
+                    message = f"{message}: {unique_failure_messages[0]}"
+                else:
+                    message = f"{message}: {', '.join(unique_failure_messages[:2])}"
     elif sent_count and failed_count:
         message = f"{success_message} sent with partial failures"
 
@@ -1157,6 +1170,8 @@ def send_attendance_reminder_notifications(
 
     try:
         if emp_codes:
+            # Align manual trigger behavior with the Missed Logins panel:
+            # selected employees are those with missed login + not on leave.
             candidates = get_selected_attendance_filter_candidates(emp_codes, reminder_date)
         else:
             candidates = get_attendance_reminder_candidates(reminder_date)
@@ -1636,8 +1651,18 @@ def get_notification_candidates(
 
     if normalized_type == "attendance_reminder":
         candidates = get_attendance_reminder_candidates(reminder_date)
+        alert_eligible_emp_codes = {
+            str(candidate.get("emp_code") or "").strip()
+            for candidate in candidates
+            if str(candidate.get("emp_code") or "").strip()
+        }
     elif normalized_type == "lunch_reminder":
         candidates = get_lunch_reminder_candidates(reminder_date)
+        alert_eligible_emp_codes = {
+            str(candidate.get("emp_code") or "").strip()
+            for candidate in candidates
+            if str(candidate.get("emp_code") or "").strip()
+        }
     else:
         return {
             "success": False,
@@ -1667,7 +1692,16 @@ def get_notification_candidates(
         data.append({
             **candidate,
             "alert_status": "sent" if has_sent else "not_sent",
+            "alert_eligible": emp_code in alert_eligible_emp_codes if normalized_type == "attendance_reminder" else True,
         })
+
+    alert_eligible_sorted = sorted(code for code in alert_eligible_emp_codes if code)
+    ineligible_emp_codes = sorted({
+        str(candidate.get("emp_code") or "").strip()
+        for candidate in data
+        if str(candidate.get("emp_code") or "").strip()
+        and str(candidate.get("emp_code") or "").strip() not in alert_eligible_emp_codes
+    }) if normalized_type == "attendance_reminder" else []
 
     return {
         "success": True,
@@ -1677,6 +1711,14 @@ def get_notification_candidates(
         "count": len(data),
         "sent_count": len(sent_emp_codes),
         "sent_emp_codes": sorted(set(sent_emp_codes)),
+        "alert_eligible_count": len(alert_eligible_sorted) if normalized_type == "attendance_reminder" else len(data),
+        "alert_eligible_emp_codes": alert_eligible_sorted if normalized_type == "attendance_reminder" else sorted({
+            str(candidate.get("emp_code") or "").strip()
+            for candidate in data
+            if str(candidate.get("emp_code") or "").strip()
+        }),
+        "alert_ineligible_count": len(ineligible_emp_codes),
+        "alert_ineligible_emp_codes": ineligible_emp_codes,
         "data": data,
     }
 

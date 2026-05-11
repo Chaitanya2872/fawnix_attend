@@ -1083,7 +1083,8 @@ function FawnixApp() {
   const employeeStatusMenuRef = useRef<HTMLDivElement | null>(null)
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
   const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
-  const [alertEligibleEmpCodes, setAlertEligibleEmpCodes] = useState<string[]>([])
+  const [missedLoginEmpCodes, setMissedLoginEmpCodes] = useState<string[]>([])
+  const [, setAlertEligibleEmpCodes] = useState<string[]>([])
   const [alertCandidatesLoading, setAlertCandidatesLoading] = useState(false)
   const [alertTriggerLoading, setAlertTriggerLoading] = useState(false)
   const [alertTriggerStatus, setAlertTriggerStatus] = useState('')
@@ -1223,21 +1224,26 @@ function FawnixApp() {
           target_date: attendanceDateFilter || toDateInputValue(new Date())
         })
         const response = await apiRequest(`/api/admin/scheduled-notifications/candidates?${params.toString()}`, {}, accessToken)
-        const candidateRows = Array.isArray(response?.data) ? response.data : []
-        const nextCodes = candidateRows
+        const candidateRows = Array.isArray(response?.data)
+          ? response.data as Array<{ emp_code?: string; alert_status?: string; alert_eligible?: boolean }>
+          : []
+        const nextMissedCodes = candidateRows
           .map((row: { emp_code?: string }) => row.emp_code || '')
           .filter(Boolean)
+        const nextEligibleCodes = nextMissedCodes
         const nextSentCodes = candidateRows
-          .filter((row: { alert_status?: string }) => (row.alert_status || '').toLowerCase() === 'sent')
-          .map((row: { emp_code?: string }) => row.emp_code || '')
+          .filter((row) => (row.alert_status || '').toLowerCase() === 'sent')
+          .map((row) => row.emp_code || '')
           .filter(Boolean)
 
         if (!cancelled) {
-          setAlertEligibleEmpCodes(nextCodes)
+          setMissedLoginEmpCodes(Array.from(new Set(nextMissedCodes)))
+          setAlertEligibleEmpCodes(Array.from(new Set(nextEligibleCodes)))
           setAlertSentEmpCodes(Array.from(new Set(nextSentCodes)))
         }
       } catch {
         if (!cancelled) {
+          setMissedLoginEmpCodes([])
           setAlertEligibleEmpCodes([])
           setAlertSentEmpCodes([])
         }
@@ -1264,10 +1270,12 @@ function FawnixApp() {
   useEffect(() => {
     setSelectedMissedLoginEmpCodes((previousCodes) =>
       previousCodes.filter(
-        (empCode) => alertEligibleEmpCodes.includes(empCode) && !alertSentEmpCodes.includes(empCode)
+        (empCode) =>
+          missedLoginEmpCodes.includes(empCode) &&
+          !alertSentEmpCodes.includes(empCode)
       )
     )
-  }, [alertEligibleEmpCodes, alertSentEmpCodes])
+  }, [missedLoginEmpCodes, alertSentEmpCodes])
 
   const updateTokens = (nextAccessToken: string, nextRefreshToken: string) => {
     setAccessToken(nextAccessToken)
@@ -1471,7 +1479,9 @@ function FawnixApp() {
   }
 
   const triggerAttendanceReminder = async () => {
-    const requestedEmpCodes = selectedMissedLoginEmpCodes.filter((empCode) => !alertSentEmpCodes.includes(empCode))
+    const requestedEmpCodes = selectedMissedLoginEmpCodes.filter(
+      (empCode) => !alertSentEmpCodes.includes(empCode)
+    )
     if (!requestedEmpCodes.length) {
       setAlertTriggerStatus('Select at least one employee to trigger reminders.')
       return
@@ -1514,12 +1524,20 @@ function FawnixApp() {
         target_date: targetDate
       })
       const candidatesResponse = await apiRequest(`/api/admin/scheduled-notifications/candidates?${params.toString()}`, {}, accessToken)
-      const nextCodes = Array.isArray(candidatesResponse?.data)
-        ? candidatesResponse.data
-            .map((row: { emp_code?: string }) => row.emp_code || '')
-            .filter(Boolean)
+      const candidateRows = Array.isArray(candidatesResponse?.data)
+        ? candidatesResponse.data as Array<{ emp_code?: string; alert_status?: string; alert_eligible?: boolean }>
         : []
-      setAlertEligibleEmpCodes(nextCodes)
+      const nextMissedCodes = candidateRows
+        .map((row) => row.emp_code || '')
+        .filter(Boolean)
+      const nextEligibleCodes = nextMissedCodes
+      const nextSentCodes = candidateRows
+        .filter((row) => (row.alert_status || '').toLowerCase() === 'sent')
+        .map((row) => row.emp_code || '')
+        .filter(Boolean)
+      setMissedLoginEmpCodes(Array.from(new Set(nextMissedCodes)))
+      setAlertEligibleEmpCodes(Array.from(new Set(nextEligibleCodes)))
+      setAlertSentEmpCodes(Array.from(new Set(nextSentCodes)))
     } catch (error) {
       setAlertTriggerStatus(error instanceof Error ? error.message : 'Failed to trigger attendance reminders')
     } finally {
@@ -1547,6 +1565,10 @@ function FawnixApp() {
     setLeaveRows([])
     setActivityRows([])
     setFieldVisitRows([])
+    setMissedLoginEmpCodes([])
+    setAlertEligibleEmpCodes([])
+    setAlertSentEmpCodes([])
+    setSelectedMissedLoginEmpCodes([])
     clearStoredAdminSession()
   }
 
@@ -2653,7 +2675,7 @@ function FawnixApp() {
     return `${x},${y}`
   }).join(' ')
     const missedLoginEmployees = employees
-      .filter((employee) => (employee.emp_code ? alertEligibleEmpCodes.includes(employee.emp_code) : false))
+      .filter((employee) => (employee.emp_code ? missedLoginEmpCodes.includes(employee.emp_code) : false))
       .sort((left, right) =>
         (left.emp_full_name || left.emp_code || '').localeCompare(right.emp_full_name || right.emp_code || '')
       )
@@ -3312,7 +3334,7 @@ function FawnixApp() {
                           <strong>{employee.emp_full_name || employee.emp_code}</strong>
                           <span>{employee.emp_designation || employee.emp_department || employee.emp_email || '--'}</span>
                           <small className={isAlertSent ? 'missed-login-alert-sent' : 'missed-login-alert-not-sent'}>
-                            {isAlertSent ? 'Alert sent' : 'Not sent'}
+                            {isAlertSent ? 'Alert Sent' : 'Not Sent'}
                           </small>
                         </div>
                       </label>

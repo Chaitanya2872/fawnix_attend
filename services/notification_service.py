@@ -159,7 +159,7 @@ def _log_scheduled_notification_attempt(
                 response_payload,
                 created_at,
                 updated_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW(), NOW())
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW(), NOW())
             """,
             (
                 schedule_id,

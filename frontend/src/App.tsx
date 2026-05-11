@@ -4603,7 +4603,7 @@ function App() {
                           <strong>{employee.emp_full_name || employee.emp_code}</strong>
                           <span>{employee.emp_designation || employee.emp_department || employee.emp_email || '--'}</span>
                           <small className={isAlertSent ? 'missed-login-alert-sent' : 'missed-login-alert-not-sent'}>
-                            {isAlertSent ? 'Alert sent' : 'Not sent'}
+                            {isAlertSent ? 'Alert Sent' : 'Not Sent'}
                           </small>
                         </div>
                       </label>

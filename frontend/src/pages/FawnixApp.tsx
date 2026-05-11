@@ -1231,7 +1231,7 @@ function FawnixApp() {
           .map((row: { emp_code?: string }) => row.emp_code || '')
           .filter(Boolean)
         const nextEligibleCodes = candidateRows
-          .filter((row) => Boolean(row.alert_eligible))
+          .filter((row) => row.alert_eligible !== false)
           .map((row) => row.emp_code || '')
           .filter(Boolean)
         const nextSentCodes = candidateRows
@@ -1535,7 +1535,7 @@ function FawnixApp() {
         .map((row) => row.emp_code || '')
         .filter(Boolean)
       const nextEligibleCodes = candidateRows
-        .filter((row) => Boolean(row.alert_eligible))
+        .filter((row) => row.alert_eligible !== false)
         .map((row) => row.emp_code || '')
         .filter(Boolean)
       const nextSentCodes = candidateRows

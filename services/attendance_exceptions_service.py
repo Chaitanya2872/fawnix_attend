@@ -525,12 +525,9 @@ def request_late_arrival_exception(emp_code: str, reason: str,
             return ({"success": False, "message": "Late arrival exception already submitted"}, 400)
         
         late_cutoff = get_late_login_cutoff_time()
-        late_by_minutes = _calculate_late_by_minutes(current_time, late_cutoff)
-        if late_by_minutes <= 0:
-            return ({
-                "success": False,
-                "message": "Late arrival can only be submitted after 10:00 AM"
-            }, 400)
+        # Allow employees to pre-submit before the cutoff; actual lateness is
+        # recalculated and updated when they clock in.
+        late_by_minutes = max(_calculate_late_by_minutes(current_time, late_cutoff), 0)
 
         late_window_start, late_window_end = _get_late_arrival_submission_window()
         if not _is_time_in_range(current_time, late_window_start, late_window_end):
@@ -632,9 +629,9 @@ def request_late_arrival_exception(emp_code: str, reason: str,
                 "exception_type": "late_arrival",
                 "employee_name": emp_info['emp_name'],
                 "late_by_minutes": late_by_minutes,
-                "shift_start_time": shift_start.strftime('%H:%M'),
+                "shift_start_time": late_cutoff.strftime('%H:%M'),
                 "actual_login_time": None,
-                "planned_arrival_time": shift_start.strftime('%H:%M'),
+                "planned_arrival_time": late_cutoff.strftime('%H:%M'),
                 "manager": emp_info['approver_name'],
                 "manager_code": emp_info['approver_code'],
                 "manager_email": emp_info['approver_email'],

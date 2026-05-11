@@ -261,3 +261,47 @@ def test_invalid_tokens_are_deactivated(monkeypatch):
     assert result["failure_count"] == 1
     assert result["deactivated_tokens"] == 1
     assert deactivated_tokens == ["invalid-token"]
+
+
+def test_get_notification_candidates_uses_sendable_attendance_candidates(monkeypatch):
+    monkeypatch.setattr(
+        notification_service,
+        "get_attendance_reminder_candidates",
+        lambda target_date=None: [
+            {"emp_code": "EMP007", "emp_full_name": "Asha", "emp_email": "asha@example.com"}
+        ],
+    )
+    monkeypatch.setattr(
+        notification_service,
+        "_get_notification_delivery_status_map",
+        lambda **kwargs: {"EMP007": True},
+    )
+
+    result = notification_service.get_notification_candidates("attendance_reminder")
+
+    assert result["success"] is True
+    assert result["count"] == 1
+    assert result["sent_count"] == 1
+    assert result["sent_emp_codes"] == ["EMP007"]
+    assert result["data"][0]["emp_code"] == "EMP007"
+    assert result["data"][0]["alert_status"] == "sent"
+
+
+def test_attendance_reminder_defaults_to_app_local_date(monkeypatch):
+    captured = {}
+
+    monkeypatch.setattr(
+        notification_service,
+        "now_local_naive",
+        lambda: datetime(2026, 5, 11, 9, 55, 0),
+    )
+    monkeypatch.setattr(
+        notification_service,
+        "get_attendance_reminder_candidates",
+        lambda target_date=None: captured.update({"target_date": target_date}) or [],
+    )
+
+    result = notification_service.send_attendance_reminder_notifications()
+
+    assert result["success"] is True
+    assert captured["target_date"].isoformat() == "2026-05-11"

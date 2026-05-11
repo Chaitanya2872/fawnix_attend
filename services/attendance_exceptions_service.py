@@ -9,7 +9,6 @@ from database.connection import get_db_connection
 from services.attendance_constants import (
     ATTENDANCE_STATUS_LOGGED_IN,
     ATTENDANCE_STATUS_LOGGED_OUT,
-    ATTENDANCE_STATUS_PENDING_CLOCK_IN,
 )
 from services.leaves_service import is_employee_on_leave
 from typing import Dict, Tuple, Optional, List
@@ -540,45 +539,6 @@ def request_late_arrival_exception(emp_code: str, reason: str,
             }, 400)
 
         cursor.execute("""
-            SELECT id
-            FROM attendance
-            WHERE employee_email = %s
-              AND date = %s
-              AND status = %s
-              AND logout_time IS NULL
-            ORDER BY created_at DESC, id DESC
-            LIMIT 1
-        """, (
-            emp_info['emp_email'],
-            current_date,
-            ATTENDANCE_STATUS_PENDING_CLOCK_IN,
-        ))
-        pending_attendance = cursor.fetchone()
-
-        if pending_attendance:
-            attendance_id = pending_attendance['id']
-        else:
-            cursor.execute("""
-                INSERT INTO attendance (
-                    employee_email,
-                    employee_name,
-                    login_time,
-                    date,
-                    status,
-                    attendance_type
-                ) VALUES (%s, %s, %s, %s, %s, %s)
-                RETURNING id
-            """, (
-                emp_info['emp_email'],
-                emp_info['emp_name'],
-                current_dt,
-                current_date,
-                ATTENDANCE_STATUS_PENDING_CLOCK_IN,
-                'office',
-            ))
-            attendance_id = cursor.fetchone()['id']
-
-        cursor.execute("""
             INSERT INTO attendance_exceptions (
                 emp_code,
                 emp_name,
@@ -601,7 +561,7 @@ def request_late_arrival_exception(emp_code: str, reason: str,
             emp_code,
             emp_info['emp_name'],
             emp_info['emp_email'],
-            attendance_id,
+            None,
             'late_arrival',
             current_date,
             exception_time_value,
@@ -625,7 +585,7 @@ def request_late_arrival_exception(emp_code: str, reason: str,
             "message": "Late arrival exception submitted successfully",
             "data": {
                 "exception_id": exception_id,
-                "attendance_id": attendance_id,
+                "attendance_id": None,
                 "exception_type": "late_arrival",
                 "employee_name": emp_info['emp_name'],
                 "late_by_minutes": late_by_minutes,
@@ -637,7 +597,6 @@ def request_late_arrival_exception(emp_code: str, reason: str,
                 "manager_email": emp_info['approver_email'],
                 "status": "pending",
                 "submitted_before_clock_in": True,
-                "attendance_status": ATTENDANCE_STATUS_PENDING_CLOCK_IN,
             }
         }, 201)
         

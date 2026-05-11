@@ -1153,7 +1153,9 @@ def send_attendance_reminder_notifications(
 
     try:
         if emp_codes:
-            candidates = get_selected_attendance_reminder_candidates(emp_codes, reminder_date)
+            # Align manual trigger behavior with the Missed Logins panel:
+            # selected employees are those with missed login + not on leave.
+            candidates = get_selected_attendance_filter_candidates(emp_codes, reminder_date)
         else:
             candidates = get_attendance_reminder_candidates(reminder_date)
     except Exception as e:

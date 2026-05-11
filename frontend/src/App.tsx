@@ -1396,7 +1396,7 @@ function App() {
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
   const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
   const [missedLoginEmpCodes, setMissedLoginEmpCodes] = useState<string[]>([])
-  const [alertEligibleEmpCodes, setAlertEligibleEmpCodes] = useState<string[]>([])
+  const [, setAlertEligibleEmpCodes] = useState<string[]>([])
   const [alertCandidatesLoading, setAlertCandidatesLoading] = useState(false)
   const [alertTriggerLoading, setAlertTriggerLoading] = useState(false)
   const [alertTriggerStatus, setAlertTriggerStatus] = useState('')
@@ -1632,10 +1632,7 @@ function App() {
         const nextMissedCodes = candidateRows
           .map((row: { emp_code?: string }) => row.emp_code || '')
           .filter(Boolean)
-        const nextEligibleCodes = candidateRows
-          .filter((row) => row.alert_eligible !== false)
-          .map((row) => row.emp_code || '')
-          .filter(Boolean)
+        const nextEligibleCodes = nextMissedCodes
         const nextSentCodes = candidateRows
           .filter((row) => (row.alert_status || '').toLowerCase() === 'sent')
           .map((row) => row.emp_code || '')
@@ -1677,11 +1674,10 @@ function App() {
       previousCodes.filter(
         (empCode) =>
           missedLoginEmpCodes.includes(empCode) &&
-          alertEligibleEmpCodes.includes(empCode) &&
           !alertSentEmpCodes.includes(empCode)
       )
     )
-  }, [missedLoginEmpCodes, alertEligibleEmpCodes, alertSentEmpCodes])
+  }, [missedLoginEmpCodes, alertSentEmpCodes])
 
   useEffect(() => {
     if (calendarEmployeeFilter === 'all') {
@@ -1928,7 +1924,7 @@ function App() {
 
   const triggerAttendanceReminder = async () => {
     const requestedEmpCodes = selectedMissedLoginEmpCodes.filter(
-      (empCode) => alertEligibleEmpCodes.includes(empCode) && !alertSentEmpCodes.includes(empCode)
+      (empCode) => !alertSentEmpCodes.includes(empCode)
     )
     if (!requestedEmpCodes.length) {
       setAlertTriggerStatus('Select at least one employee to trigger reminders.')
@@ -1978,10 +1974,7 @@ function App() {
       const nextMissedCodes = candidateRows
         .map((row) => row.emp_code || '')
         .filter(Boolean)
-      const nextEligibleCodes = candidateRows
-        .filter((row) => row.alert_eligible !== false)
-        .map((row) => row.emp_code || '')
-        .filter(Boolean)
+      const nextEligibleCodes = nextMissedCodes
       const nextSentCodes = candidateRows
         .filter((row) => (row.alert_status || '').toLowerCase() === 'sent')
         .map((row) => row.emp_code || '')
@@ -4647,7 +4640,6 @@ function App() {
                 {missedLoginEmployees.length ? (
                   missedLoginEmployees.map((employee) => {
                     const isAlertSent = alertSentEmpCodes.includes(employee.emp_code)
-                    const isAlertEligible = alertEligibleEmpCodes.includes(employee.emp_code)
                     return (
                       <label
                         key={employee.emp_code}
@@ -4657,7 +4649,7 @@ function App() {
                           className="missed-login-checkbox"
                           type="checkbox"
                           checked={selectedMissedLoginEmpCodes.includes(employee.emp_code)}
-                          disabled={isAlertSent || !isAlertEligible}
+                          disabled={isAlertSent}
                           onChange={(event) => {
                             const checked = event.target.checked
                             setSelectedMissedLoginEmpCodes((previousCodes) => {
@@ -4674,7 +4666,7 @@ function App() {
                           <strong>{employee.emp_full_name || employee.emp_code}</strong>
                           <span>{employee.emp_designation || employee.emp_department || employee.emp_email || '--'}</span>
                           <small className={isAlertSent ? 'missed-login-alert-sent' : 'missed-login-alert-not-sent'}>
-                            {isAlertSent ? 'Alert Sent' : isAlertEligible ? 'Not Sent' : 'Alert Not Eligible'}
+                            {isAlertSent ? 'Alert Sent' : 'Not Sent'}
                           </small>
                         </div>
                       </label>

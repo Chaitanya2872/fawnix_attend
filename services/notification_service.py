@@ -821,7 +821,7 @@ def get_selected_attendance_filter_candidates(
     emp_codes: List[str],
     target_date: date | None = None,
 ) -> List[Dict[str, Any]]:
-    """Fetch selected missed-login employees (same criteria as missed-login panel)."""
+    """Fetch selected employees who are not logged in and not on approved leave."""
     reminder_date = target_date or date.today()
     normalized_emp_codes = sorted({
         _normalize_emp_code(emp_code)
@@ -843,9 +843,7 @@ def get_selected_attendance_filter_candidates(
                 e.emp_full_name,
                 e.emp_email
             FROM employees e
-            LEFT JOIN users u ON u.emp_code = e.emp_code
             WHERE e.emp_code = ANY(%s)
-              AND COALESCE(u.is_active, TRUE) = TRUE
               AND NOT EXISTS (
                   SELECT 1
                   FROM attendance a
@@ -856,7 +854,7 @@ def get_selected_attendance_filter_candidates(
                   SELECT 1
                   FROM leaves l
                   WHERE l.emp_code = e.emp_code
-                    AND l.status IN ('pending', 'approved')
+                    AND l.status = 'approved'
                     AND %s BETWEEN l.from_date AND l.to_date
               )
             ORDER BY e.emp_full_name
@@ -871,7 +869,7 @@ def get_selected_attendance_filter_candidates(
 
 
 def get_attendance_filter_candidates(target_date: date | None = None) -> List[Dict[str, Any]]:
-    """Fetch employees who are not on leave and have not logged in yet."""
+    """Fetch employees who are not logged in and not on approved leave."""
     reminder_date = target_date or date.today()
 
     conn = get_db_connection()
@@ -885,9 +883,7 @@ def get_attendance_filter_candidates(target_date: date | None = None) -> List[Di
                 e.emp_full_name,
                 e.emp_email
             FROM employees e
-            LEFT JOIN users u ON u.emp_code = e.emp_code
-            WHERE COALESCE(u.is_active, TRUE) = TRUE
-              AND NOT EXISTS (
+            WHERE NOT EXISTS (
                   SELECT 1
                   FROM attendance a
                   WHERE a.employee_email = e.emp_email
@@ -897,7 +893,7 @@ def get_attendance_filter_candidates(target_date: date | None = None) -> List[Di
                   SELECT 1
                   FROM leaves l
                   WHERE l.emp_code = e.emp_code
-                    AND l.status IN ('pending', 'approved')
+                    AND l.status = 'approved'
                     AND %s BETWEEN l.from_date AND l.to_date
               )
             ORDER BY e.emp_full_name

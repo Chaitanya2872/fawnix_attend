@@ -6,7 +6,6 @@ import services.attendance_exceptions_service as exceptions_service
 class LateArrivalCursor:
     def __init__(self):
         self.fetchone_value = None
-        self.inserted_attendance_id = 901
         self.inserted_exception_id = 902
         self.exception_insert_params = None
 
@@ -19,14 +18,6 @@ class LateArrivalCursor:
 
         if "SELECT id FROM attendance_exceptions" in normalized_sql and "exception_type = 'late_arrival'" in normalized_sql:
             self.fetchone_value = None
-            return
-
-        if "FROM attendance WHERE employee_email = %s AND date = %s AND status = %s AND logout_time IS NULL" in normalized_sql:
-            self.fetchone_value = None
-            return
-
-        if "INSERT INTO attendance (" in normalized_sql and "RETURNING id" in normalized_sql:
-            self.fetchone_value = {"id": self.inserted_attendance_id}
             return
 
         if "INSERT INTO attendance_exceptions (" in normalized_sql and "RETURNING id" in normalized_sql:
@@ -97,9 +88,59 @@ def test_request_late_arrival_allows_submission_before_cutoff(monkeypatch):
 
     assert status_code == 201
     assert result["success"] is True
-    assert result["data"]["attendance_id"] == 901
+    assert result["data"]["attendance_id"] is None
     assert result["data"]["late_by_minutes"] == 0
     assert result["data"]["shift_start_time"] == "10:00"
     assert result["data"]["planned_arrival_time"] == "10:00"
+    assert connection.cursor_obj.exception_insert_params[3] is None
     assert connection.cursor_obj.exception_insert_params[8] == 0
     assert connection.commit_count == 1
+
+
+def test_request_late_arrival_rejects_submission_after_login(monkeypatch):
+    connection = LateArrivalConnection()
+    connection.cursor_obj.fetchone_value = {"id": 321}
+    original_execute = connection.cursor_obj.execute
+
+    def fake_execute(sql, params=None):
+        normalized_sql = " ".join(sql.split())
+        if "FROM attendance WHERE employee_email = %s AND date = %s AND status IN (%s, %s)" in normalized_sql:
+            connection.cursor_obj.fetchone_value = {"id": 321}
+            return
+        original_execute(sql, params)
+
+    connection.cursor_obj.execute = fake_execute
+
+    monkeypatch.setattr(exceptions_service, "get_db_connection", lambda: connection)
+    monkeypatch.setattr(
+        exceptions_service,
+        "get_employee_and_manager_info",
+        lambda emp_code: {
+            "emp_code": emp_code,
+            "emp_name": "Alice",
+            "emp_email": "alice@example.com",
+            "approver_code": "M001",
+            "approver_email": "manager@example.com",
+            "approver_name": "Manager",
+        },
+    )
+    monkeypatch.setattr(
+        exceptions_service,
+        "now_local_naive",
+        lambda: datetime(2026, 4, 8, 10, 45, 0),
+    )
+    monkeypatch.setattr(
+        exceptions_service,
+        "_exception_time_value",
+        lambda cursor, timestamp_value: timestamp_value.time(),
+    )
+
+    result, status_code = exceptions_service.request_late_arrival_exception(
+        "EMP001",
+        "Traffic jam",
+        "Heavy rain",
+    )
+
+    assert status_code == 400
+    assert result["success"] is False
+    assert result["message"] == "Late arrival must be submitted before clock-in"

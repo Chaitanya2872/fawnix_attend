@@ -3417,6 +3417,27 @@ function App() {
     const calendarVisibleBirthdays = calendarRowsForMonth
       .filter((row) => row.birthdayCount > 0)
       .sort((left, right) => left.date.localeCompare(right.date))
+    const calendarPeakRow = calendarRowsForMonth.reduce<CalendarSummaryRow | null>((best, row) => {
+      if (!best) {
+        return row
+      }
+      return getCalendarCellHeatValue(row, calendarViewType) > getCalendarCellHeatValue(best, calendarViewType)
+        ? row
+        : best
+    }, null)
+    const calendarScopeLabel = calendarSelectedEmployee
+      ? calendarSelectedEmployee.emp_full_name || calendarSelectedEmployee.emp_code
+      : calendarDepartmentFilter !== 'all'
+        ? calendarDepartmentFilter
+        : 'All teams'
+    const calendarViewLabel =
+      calendarViewType === 'holidays'
+        ? 'Holidays'
+        : calendarViewType === 'leaves'
+          ? 'Leaves'
+          : calendarViewType === 'birthdays'
+            ? 'Birthdays'
+            : 'Attendance'
 
     const renderDashboardPanel = () => {
     const attendancePageRows = firstClockInRows
@@ -3810,23 +3831,38 @@ function App() {
           <div className="calendar-layout">
             <div className="table-card calendar-card">
               <div className="calendar-card-head">
-                <div>
+                <div className="calendar-card-head-copy">
+                  <span className="calendar-kicker">{calendarViewLabel} overview</span>
                   <strong>{calendarMonthLabel}</strong>
-                  <span>
-                    {calendarSelectedEmployee
-                      ? `Employee: ${calendarSelectedEmployee.emp_full_name || calendarSelectedEmployee.emp_code}`
-                      : calendarDepartmentFilter !== 'all'
-                        ? `Department: ${calendarDepartmentFilter}`
-                        : 'All departments and employees'}
-                  </span>
+                  <span>{calendarScopeLabel}</span>
                 </div>
-                <div className="calendar-legend">
-                  <span className="legend-item attendance">Attendance</span>
-                  <span className="legend-item leave">Leaves</span>
-                  <span className="legend-item birthday">Birthdays</span>
-                  <span className="legend-item holiday">Holiday</span>
-                  <span className="legend-item weekend">Weekend</span>
-                  <span className="legend-item today">Today</span>
+                <div className="calendar-card-head-actions">
+                  <div className="calendar-legend">
+                    <span className="legend-item attendance">Attendance</span>
+                    <span className="legend-item leave">Leaves</span>
+                    <span className="legend-item birthday">Birthdays</span>
+                    <span className="legend-item holiday">Holiday</span>
+                    <span className="legend-item weekend">Weekend</span>
+                    <span className="legend-item today">Today</span>
+                  </div>
+                  <div className="calendar-insights">
+                    <div className="calendar-insight-card">
+                      <span>Attendance</span>
+                      <strong>{calendarAttendanceCount}</strong>
+                    </div>
+                    <div className="calendar-insight-card">
+                      <span>Leaves</span>
+                      <strong>{calendarLeaveCount}</strong>
+                    </div>
+                    <div className="calendar-insight-card">
+                      <span>Birthdays</span>
+                      <strong>{calendarBirthdayCount}</strong>
+                    </div>
+                    <div className="calendar-insight-card">
+                      <span>{calendarViewType === 'holidays' ? 'Holidays' : 'Peak day'}</span>
+                      <strong>{calendarViewType === 'holidays' ? calendarHolidayCount : calendarPeakRow ? formatAttendanceDateLabel(calendarPeakRow.date) : '--'}</strong>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -3835,75 +3871,84 @@ function App() {
               ) : calendarError ? (
                 <div className="empty-state">{calendarError}</div>
               ) : calendarRowsForMonth.length ? (
-                <div className={`admin-calendar-grid view-${calendarViewType}`}>
-                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                    <div key={day} className="admin-calendar-weekday">
-                      {day}
-                    </div>
-                  ))}
-                  {Array.from({ length: calendarStartOffset }, (_, index) => (
-                    <div key={`offset-${index}`} className="admin-calendar-offset" aria-hidden="true" />
-                  ))}
-                  {calendarRowsForMonth.map((row) => {
-                    const parsedDate = parseDateInputValue(row.date)
-                    const dayNumber = parsedDate.getDate()
-                    const heatValue = getCalendarCellHeatValue(row, calendarViewType)
-                    const heatRatio = Math.max(0, Math.min(1, heatValue / calendarMaxHeat))
-                    const heatClass = heatRatio >= 0.75 ? 'heat-strong' : heatRatio >= 0.45 ? 'heat-medium' : heatRatio > 0 ? 'heat-light' : 'heat-none'
-                    const isToday = row.date === todayDateValue
-                    const popoverOpen = calendarActiveDate === row.date
+                <div className="calendar-grid-shell">
+                  <div className={`admin-calendar-grid view-${calendarViewType}`}>
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                      <div key={day} className="admin-calendar-weekday">
+                        {day}
+                      </div>
+                    ))}
+                    {Array.from({ length: calendarStartOffset }, (_, index) => (
+                      <div key={`offset-${index}`} className="admin-calendar-offset" aria-hidden="true" />
+                    ))}
+                    {calendarRowsForMonth.map((row) => {
+                      const parsedDate = parseDateInputValue(row.date)
+                      const dayNumber = parsedDate.getDate()
+                      const heatValue = getCalendarCellHeatValue(row, calendarViewType)
+                      const heatRatio = Math.max(0, Math.min(1, heatValue / calendarMaxHeat))
+                      const heatClass = heatRatio >= 0.75 ? 'heat-strong' : heatRatio >= 0.45 ? 'heat-medium' : heatRatio > 0 ? 'heat-light' : 'heat-none'
+                      const isToday = row.date === todayDateValue
+                      const popoverOpen = calendarActiveDate === row.date
 
-                    return (
-                      <button
-                        key={row.date}
-                        type="button"
-                        onClick={() => setCalendarActiveDate((current) => (current === row.date ? '' : row.date))}
-                        className={[
-                          'admin-calendar-day',
-                          heatClass,
-                          row.isHoliday ? 'holiday' : '',
-                          row.isSunday ? 'sunday' : '',
-                          row.isSecondSaturday ? 'second-saturday' : '',
-                          isToday ? 'today' : '',
-                          popoverOpen ? 'popover-open' : ''
-                        ]
-                          .filter(Boolean)
-                          .join(' ')}
-                        style={{ '--heat': String(heatRatio) } as CSSProperties}
-                      >
-                        <div className="calendar-day-top">
-                          <span className="calendar-day-number">{dayNumber}</span>
-                          {row.isHoliday ? (
-                            <span className="calendar-day-icon" aria-hidden="true">
-                              {getHolidayIcon(row.holidayName, row.dayType)}
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="calendar-day-metrics">
-                          {calendarViewType === 'attendance' && row.attendanceCount > 0 ? (
-                            <span className="calendar-day-metric attendance">A {row.attendanceCount}</span>
-                          ) : null}
-                          {calendarViewType === 'leaves' && row.leaveCount > 0 ? (
-                            <span className="calendar-day-metric leave">L {row.leaveCount}</span>
-                          ) : null}
-                          {calendarViewType === 'birthdays' && row.birthdayCount > 0 ? (
-                            <span className="calendar-day-metric birthday">B {row.birthdayCount}</span>
-                          ) : null}
-                          {calendarViewType === 'holidays' && row.isHoliday ? (
-                            <span className="calendar-day-metric holiday">H</span>
-                          ) : null}
-                        </div>
-                        <div className="calendar-day-popover" role="tooltip">
-                          <strong>{formatAttendanceDateLabel(row.date)}</strong>
-                          <span>{row.holidayName ? `${row.holidayName}` : 'No holiday configured'}</span>
-                          <span>Attendance: {row.attendanceCount}</span>
-                          <span>Leaves: {row.leaveCount}</span>
-                          <span>Birthdays: {row.birthdayCount}</span>
-                          <span>Day Type: {row.dayType}</span>
-                        </div>
-                      </button>
-                    )
-                  })}
+                      return (
+                        <button
+                          key={row.date}
+                          type="button"
+                          onClick={() => setCalendarActiveDate((current) => (current === row.date ? '' : row.date))}
+                          className={[
+                            'admin-calendar-day',
+                            heatClass,
+                            row.isHoliday ? 'holiday' : '',
+                            row.isSunday ? 'sunday' : '',
+                            row.isSecondSaturday ? 'second-saturday' : '',
+                            isToday ? 'today' : '',
+                            popoverOpen ? 'popover-open' : ''
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
+                          style={{ '--heat': String(heatRatio) } as CSSProperties}
+                        >
+                          <div className="calendar-day-top">
+                            <span className="calendar-day-number">{dayNumber}</span>
+                            {row.isHoliday ? (
+                              <span className="calendar-day-icon" aria-hidden="true">
+                                {getHolidayIcon(row.holidayName, row.dayType)}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="calendar-day-type">
+                            {calendarViewType === 'birthdays' && row.birthdayCount > 0
+                              ? row.birthdayEmployees.join(', ')
+                              : calendarViewType === 'leaves' && row.leaveCount > 0
+                                ? row.leaveEmployees.join(', ')
+                                : row.dayType}
+                          </div>
+                          <div className="calendar-day-metrics">
+                            {calendarViewType === 'attendance' && row.attendanceCount > 0 ? (
+                              <span className="calendar-day-metric attendance">A {row.attendanceCount}</span>
+                            ) : null}
+                            {calendarViewType === 'leaves' && row.leaveCount > 0 ? (
+                              <span className="calendar-day-metric leave">L {row.leaveCount}</span>
+                            ) : null}
+                            {calendarViewType === 'birthdays' && row.birthdayCount > 0 ? (
+                              <span className="calendar-day-metric birthday">B {row.birthdayCount}</span>
+                            ) : null}
+                            {calendarViewType === 'holidays' && row.isHoliday ? (
+                              <span className="calendar-day-metric holiday">{row.holidayName ? 'Holiday' : 'H'}</span>
+                            ) : null}
+                          </div>
+                          <div className="calendar-day-popover" role="tooltip">
+                            <strong>{formatAttendanceDateLabel(row.date)}</strong>
+                            <span>{row.holidayName ? `${row.holidayName}` : 'No holiday configured'}</span>
+                            <span>Attendance: {row.attendanceCount}</span>
+                            <span>Leaves: {row.leaveCount}</span>
+                            <span>Birthdays: {row.birthdayCount}</span>
+                            <span>Day Type: {row.dayType}</span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
               ) : (
                 <div className="empty-state">No calendar data found for the selected filters.</div>

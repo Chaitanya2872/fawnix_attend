@@ -35,6 +35,11 @@ _firebase_app = None
 _firebase_init_attempted = False
 
 
+def _current_local_date() -> date:
+    """Return today's date in the configured app timezone."""
+    return now_local_naive().date()
+
+
 def _serialize_value(value: Any) -> Any:
     """Convert datetime-like values to strings for API responses."""
     if isinstance(value, (datetime, date, time)):
@@ -697,7 +702,7 @@ def send_push_notification_to_department(
 
 def get_attendance_reminder_candidates(target_date: date | None = None) -> List[Dict[str, Any]]:
     """Fetch employees who should receive the daily attendance reminder."""
-    reminder_date = target_date or date.today()
+    reminder_date = target_date or _current_local_date()
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -822,7 +827,7 @@ def get_selected_attendance_filter_candidates(
     target_date: date | None = None,
 ) -> List[Dict[str, Any]]:
     """Fetch selected employees who are not logged in and not on approved leave."""
-    reminder_date = target_date or date.today()
+    reminder_date = target_date or _current_local_date()
     normalized_emp_codes = sorted({
         _normalize_emp_code(emp_code)
         for emp_code in emp_codes
@@ -870,7 +875,7 @@ def get_selected_attendance_filter_candidates(
 
 def get_attendance_filter_candidates(target_date: date | None = None) -> List[Dict[str, Any]]:
     """Fetch employees who are not logged in and not on approved leave."""
-    reminder_date = target_date or date.today()
+    reminder_date = target_date or _current_local_date()
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -909,7 +914,7 @@ def get_attendance_filter_candidates(target_date: date | None = None) -> List[Di
 
 def get_lunch_reminder_candidates(target_date: date | None = None) -> List[Dict[str, Any]]:
     """Fetch active employees with devices who should receive the daily lunch reminder."""
-    reminder_date = target_date or date.today()
+    reminder_date = target_date or _current_local_date()
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -953,7 +958,7 @@ def get_selected_lunch_reminder_candidates(
     target_date: date | None = None,
 ) -> List[Dict[str, Any]]:
     """Fetch selected employees eligible for the lunch reminder."""
-    reminder_date = target_date or date.today()
+    reminder_date = target_date or _current_local_date()
     normalized_emp_codes = sorted({
         _normalize_emp_code(emp_code)
         for emp_code in emp_codes
@@ -1144,7 +1149,7 @@ def send_attendance_reminder_notifications(
     emp_codes: List[str] | None = None,
 ) -> Dict[str, Any]:
     """Send attendance reminders to employees who have not updated attendance."""
-    reminder_date = target_date or date.today()
+    reminder_date = target_date or _current_local_date()
     scheduled_for = _scheduled_datetime_for(reminder_date, Config.ATTENDANCE_REMINDER_TIME)
 
     try:
@@ -1182,7 +1187,7 @@ def send_lunch_reminder_notifications(
     emp_codes: List[str] | None = None,
 ) -> Dict[str, Any]:
     """Send lunch reminder notifications to active employees."""
-    reminder_date = target_date or date.today()
+    reminder_date = target_date or _current_local_date()
     scheduled_for = _scheduled_datetime_for(reminder_date, Config.LUNCH_REMINDER_TIME)
 
     try:
@@ -1435,7 +1440,7 @@ def process_due_scheduled_notifications(limit: int = 20) -> Dict[str, Any]:
     for schedule in schedules:
         schedule_id = int(schedule["id"])
         scheduled_for_value = schedule.get("scheduled_for")
-        scheduled_date = scheduled_for_value.date() if isinstance(scheduled_for_value, datetime) else date.today()
+        scheduled_date = scheduled_for_value.date() if isinstance(scheduled_for_value, datetime) else _current_local_date()
 
         try:
             candidates = get_lunch_reminder_candidates(scheduled_date)
@@ -1626,11 +1631,10 @@ def get_notification_candidates(
 ) -> Dict[str, Any]:
     """Return eligible employees for a notification type and date."""
     normalized_type = (notification_type or "").strip().lower()
-    reminder_date = target_date or date.today()
-    alert_eligible_emp_codes: set[str] = set()
+    reminder_date = target_date or _current_local_date()
 
     if normalized_type == "attendance_reminder":
-        candidates = get_attendance_filter_candidates(reminder_date)
+        candidates = get_attendance_reminder_candidates(reminder_date)
         alert_eligible_emp_codes = {
             str(candidate.get("emp_code") or "").strip()
             for candidate in candidates
@@ -1638,6 +1642,11 @@ def get_notification_candidates(
         }
     elif normalized_type == "lunch_reminder":
         candidates = get_lunch_reminder_candidates(reminder_date)
+        alert_eligible_emp_codes = {
+            str(candidate.get("emp_code") or "").strip()
+            for candidate in candidates
+            if str(candidate.get("emp_code") or "").strip()
+        }
     else:
         return {
             "success": False,

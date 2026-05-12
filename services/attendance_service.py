@@ -22,7 +22,6 @@ from services.geocoding_service import get_address_from_coordinates
 from services.CompLeaveService import calculate_and_record_compoff, is_working_day
 from services.attendance_exceptions_service import (
     auto_detect_late_arrival,
-    attach_pending_late_arrival_to_attendance,
     check_early_leave_approval,
     get_employee_shift_times,
     get_late_login_cutoff_time,
@@ -403,25 +402,11 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str, atte
         # Skip late arrival detection for comp-off eligible sessions.
         late_arrival_info = None
         if not is_compoff_session and emp_code:
-            late_arrival_info = attach_pending_late_arrival_to_attendance(
-                emp_code,
-                attendance_id,
-                login_time
-            )
+            late_arrival_info = auto_detect_late_arrival(emp_code, attendance_id, login_time)
 
             if late_arrival_info:
                 response_data['late_arrival'] = late_arrival_info
-                logger.info(
-                    "Late arrival request already submitted before clock-in: %s - Exception ID: %s",
-                    emp_email,
-                    late_arrival_info['exception_id']
-                )
-            else:
-                late_arrival_info = auto_detect_late_arrival(emp_code, attendance_id, login_time)
-                
-                if late_arrival_info:
-                    response_data['late_arrival'] = late_arrival_info
-                    logger.warning(f"🚨 Late arrival detected: {emp_email} - {late_arrival_info['late_by_minutes']} minutes")
+                logger.warning(f"🚨 Late arrival detected: {emp_email} - {late_arrival_info['late_by_minutes']} minutes")
         elif is_compoff_session:
             logger.info(f"✅ Late arrival check skipped for comp-off session: {emp_email}")
         
@@ -432,13 +417,7 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str, atte
             message = f"✨ Non-working day ({login_date.strftime('%A')}) - Eligible for comp-off"
             response_data['is_compoff_session'] = True
         elif late_arrival_info:
-            if late_arrival_info.get('already_submitted'):
-                message += (
-                    f". You are {late_arrival_info['late_by_minutes']} minutes late. "
-                    "Your late-arrival request has already been recorded."
-                )
-            else:
-                message += f". You are {late_arrival_info['late_by_minutes']} minutes late."
+            message += f". You are {late_arrival_info['late_by_minutes']} minutes late."
         
         return ({
             "success": True,

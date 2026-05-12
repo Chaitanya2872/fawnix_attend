@@ -670,11 +670,14 @@ def request_early_leave_exception(emp_code: str, attendance_id: int,
 
         # Check if exception already exists for this attendance
         cursor.execute("""
-            SELECT id FROM attendance_exceptions
+            SELECT id, status FROM attendance_exceptions
             WHERE attendance_id = %s AND exception_type = 'early_leave'
+            ORDER BY requested_at DESC, id DESC
+            LIMIT 1
         """, (attendance_id,))
-        
-        if cursor.fetchone():
+        existing_exception = cursor.fetchone()
+
+        if existing_exception and existing_exception.get('status') != 'cancelled':
             return ({"success": False, "message": "Early leave exception already submitted"}, 400)
         
         # Parse and validate planned leave time
@@ -770,6 +773,94 @@ def request_early_leave_exception(emp_code: str, attendance_id: int,
     except Exception as e:
         conn.rollback()
         logger.error(f"❌ Request early leave exception error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return ({"success": False, "message": str(e)}, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =========================
+# CANCEL EXCEPTION
+# =========================
+
+def cancel_early_leave_exception(emp_code: str, exception_id: int) -> Tuple[Dict, int]:
+    """Cancel a pending early-leave exception submitted by the same employee."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        emp_info = get_employee_and_manager_info(emp_code)
+        if not emp_info or not emp_info.get('emp_email'):
+            return ({"success": False, "message": "Employee not found"}, 404)
+
+        cursor.execute("""
+            SELECT
+                id,
+                attendance_id,
+                exception_type,
+                status,
+                emp_code,
+                emp_email,
+                planned_leave_time,
+                early_by_minutes,
+                manager_code,
+                manager_email
+            FROM attendance_exceptions
+            WHERE id = %s
+              AND exception_type = 'early_leave'
+              AND emp_code = %s
+              AND emp_email = %s
+            LIMIT 1
+        """, (exception_id, emp_code, emp_info['emp_email']))
+        exception = cursor.fetchone()
+
+        if not exception:
+            return ({"success": False, "message": "Early leave exception not found"}, 404)
+
+        status = (exception.get('status') or '').strip().lower()
+        if status == 'cancelled':
+            return ({"success": False, "message": "Early leave exception already cancelled"}, 400)
+        if status != 'pending':
+            return ({"success": False, "message": f"Only pending early leave requests can be cancelled. Current status: {status or 'unknown'}"}, 400)
+
+        cancelled_at = now_local_naive()
+        cursor.execute("""
+            UPDATE attendance_exceptions
+            SET
+                status = %s,
+                updated_at = %s,
+                manager_remarks = %s
+            WHERE id = %s
+        """, (
+            'cancelled',
+            cancelled_at,
+            'Cancelled by employee before approval',
+            exception_id,
+        ))
+        conn.commit()
+
+        return ({
+            "success": True,
+            "message": "Early leave exception cancelled successfully",
+            "data": {
+                "exception_id": exception_id,
+                "attendance_id": exception.get('attendance_id'),
+                "exception_type": "early_leave",
+                "status": "cancelled",
+                "planned_leave_time": (
+                    exception.get('planned_leave_time').strftime('%H:%M')
+                    if isinstance(exception.get('planned_leave_time'), time)
+                    else str(exception.get('planned_leave_time') or '')
+                ),
+                "early_by_minutes": exception.get('early_by_minutes'),
+                "cancelled_at": cancelled_at.strftime('%Y-%m-%d %H:%M:%S'),
+            }
+        }, 200)
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"❌ Cancel early leave exception error: {e}")
         import traceback
         logger.error(traceback.format_exc())
         return ({"success": False, "message": str(e)}, 500)
@@ -925,7 +1016,8 @@ def get_my_exceptions(emp_code: str, status: str = None,
             SELECT 
                 COUNT(*) FILTER (WHERE status = 'pending') as pending_count,
                 COUNT(*) FILTER (WHERE status = 'approved') as approved_count,
-                COUNT(*) FILTER (WHERE status = 'rejected') as rejected_count
+                COUNT(*) FILTER (WHERE status = 'rejected') as rejected_count,
+                COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_count
             FROM attendance_exceptions
         """
         summary_params = []
@@ -963,7 +1055,8 @@ def get_my_exceptions(emp_code: str, status: str = None,
                 "summary": {
                     "pending": int(summary['pending_count'] or 0),
                     "approved": int(summary['approved_count'] or 0),
-                    "rejected": int(summary['rejected_count'] or 0)
+                    "rejected": int(summary['rejected_count'] or 0),
+                    "cancelled": int(summary['cancelled_count'] or 0)
                 }
             }
         }, 200)
@@ -1076,6 +1169,7 @@ def get_my_late_arrival_records(emp_code: str, status: str = None) -> Tuple[Dict
                         "pending": 0,
                         "approved": 0,
                         "rejected": 0,
+                        "cancelled": 0,
                         "not_requested": 0
                     }
                 }
@@ -1143,6 +1237,7 @@ def get_my_late_arrival_records(emp_code: str, status: str = None) -> Tuple[Dict
             "pending": len([r for r in records if r['status'] == 'pending']),
             "approved": len([r for r in records if r['status'] == 'approved']),
             "rejected": len([r for r in records if r['status'] == 'rejected']),
+            "cancelled": len([r for r in records if r['status'] == 'cancelled']),
             "not_requested": len([r for r in records if r['status'] == 'not_requested']),
         }
 
@@ -1179,6 +1274,7 @@ def get_my_early_leave_records(emp_code: str, status: str = None) -> Tuple[Dict,
                         "pending": 0,
                         "approved": 0,
                         "rejected": 0,
+                        "cancelled": 0,
                         "not_requested": 0
                     }
                 }
@@ -1247,6 +1343,7 @@ def get_my_early_leave_records(emp_code: str, status: str = None) -> Tuple[Dict,
             "pending": len([r for r in records if r['status'] == 'pending']),
             "approved": len([r for r in records if r['status'] == 'approved']),
             "rejected": len([r for r in records if r['status'] == 'rejected']),
+            "cancelled": len([r for r in records if r['status'] == 'cancelled']),
             "not_requested": len([r for r in records if r['status'] == 'not_requested']),
         }
 
@@ -1321,7 +1418,10 @@ def check_early_leave_approval(attendance_id: int, current_time: Optional[time] 
         
         if exception['status'] == 'rejected':
             return (False, "Early leave request was rejected. Cannot clock out early.")
-        
+
+        if exception['status'] == 'cancelled':
+            return (False, "Early leave request was cancelled. Please submit a new request.")
+
         if exception['status'] == 'approved':
             # Optional: enforce planned leave time if required
             planned_time = _coerce_time(exception.get('planned_leave_time'))

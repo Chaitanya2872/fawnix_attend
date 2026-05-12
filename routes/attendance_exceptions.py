@@ -13,6 +13,7 @@ from services.notification_service import send_push_notification_to_department
 from services.attendance_exceptions_service import (
     request_late_arrival_exception,
     request_early_leave_exception,
+    cancel_early_leave_exception,
     approve_exception,
     get_my_exceptions,
     get_team_exceptions,
@@ -307,6 +308,33 @@ def submit_early_leave(current_user):
         except Exception:
             logger.exception("Failed to send early leave department push notification")
 
+    return jsonify(response_body), status_code
+
+
+@exceptions_bp.route('/early-leave/cancel', methods=['POST'])
+@token_required
+def cancel_early_leave(current_user):
+    """
+    Cancel a pending early leave exception submitted by the current employee.
+
+    Request Body:
+        {
+            "exception_id": 13
+        }
+    """
+    data = request.get_json() or {}
+    exception_id = data.get('exception_id')
+
+    if not exception_id:
+        return jsonify({
+            "success": False,
+            "message": "exception_id is required"
+        }), 400
+
+    response_body, status_code = cancel_early_leave_exception(
+        current_user['emp_code'],
+        exception_id,
+    )
     return jsonify(response_body), status_code
 
 

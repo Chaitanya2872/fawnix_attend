@@ -1228,12 +1228,12 @@ function FawnixApp() {
           ? response.data as Array<{ emp_code?: string; alert_status?: string; alert_eligible?: boolean }>
           : []
         const nextMissedCodes = candidateRows
-          .map((row: { emp_code?: string }) => row.emp_code || '')
+          .map((row: { emp_code?: string }) => (row.emp_code || '').trim())
           .filter(Boolean)
         const nextEligibleCodes = nextMissedCodes
         const nextSentCodes = candidateRows
           .filter((row) => (row.alert_status || '').toLowerCase() === 'sent')
-          .map((row) => row.emp_code || '')
+          .map((row) => (row.emp_code || '').trim())
           .filter(Boolean)
 
         if (!cancelled) {
@@ -1528,12 +1528,12 @@ function FawnixApp() {
         ? candidatesResponse.data as Array<{ emp_code?: string; alert_status?: string; alert_eligible?: boolean }>
         : []
       const nextMissedCodes = candidateRows
-        .map((row) => row.emp_code || '')
+        .map((row) => (row.emp_code || '').trim())
         .filter(Boolean)
       const nextEligibleCodes = nextMissedCodes
       const nextSentCodes = candidateRows
         .filter((row) => (row.alert_status || '').toLowerCase() === 'sent')
-        .map((row) => row.emp_code || '')
+        .map((row) => (row.emp_code || '').trim())
         .filter(Boolean)
       setMissedLoginEmpCodes(Array.from(new Set(nextMissedCodes)))
       setAlertEligibleEmpCodes(Array.from(new Set(nextEligibleCodes)))
@@ -2468,6 +2468,11 @@ function FawnixApp() {
       .filter((employee) => employee.emp_code && employee.emp_email)
       .map((employee) => [employee.emp_code!, employee.emp_email!.toLowerCase()])
   )
+  const employeeByCode = new Map(
+    employees
+      .filter((employee) => employee.emp_code)
+      .map((employee) => [employee.emp_code.trim(), employee])
+  )
 
   const exceptionLateArrivals = attendanceExceptions.filter(
     (item) => item.exception_type === 'late_arrival' && isSameDate(getExceptionDateValue(item), selectedAttendanceDate)
@@ -2674,8 +2679,23 @@ function FawnixApp() {
     const y = 100 - (item.count / maxWeeklyAttendance) * 100
     return `${x},${y}`
   }).join(' ')
-    const missedLoginEmployees = employees
-      .filter((employee) => (employee.emp_code ? missedLoginEmpCodes.includes(employee.emp_code) : false))
+    const missedLoginEmployees = missedLoginEmpCodes
+      .map((empCode) => {
+        const normalizedEmpCode = (empCode || '').trim()
+        if (!normalizedEmpCode) {
+          return null
+        }
+        const employee = employeeByCode.get(normalizedEmpCode)
+        if (employee) {
+          return employee
+        }
+        return {
+          emp_code: normalizedEmpCode,
+          emp_full_name: normalizedEmpCode,
+          emp_email: ''
+        } as EmployeeRow
+      })
+      .filter((employee): employee is EmployeeRow => Boolean(employee))
       .sort((left, right) =>
         (left.emp_full_name || left.emp_code || '').localeCompare(right.emp_full_name || right.emp_code || '')
       )
@@ -3100,7 +3120,7 @@ function FawnixApp() {
       const lateArrivalCount = selectedDateLateArrivals.length
       const earlyLeaveCount = selectedDateEarlyLeaves.length
       const leaveCount = selectedDateLeaves.length
-      const missedLoginCount = missedLoginEmployees.length
+      const missedLoginCount = missedLoginEmpCodes.length
       const exceptionRows =
         attendanceView === 'late-arrivals'
           ? selectedDateLateArrivals

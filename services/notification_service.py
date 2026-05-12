@@ -1634,7 +1634,7 @@ def get_notification_candidates(
     reminder_date = target_date or _current_local_date()
 
     if normalized_type == "attendance_reminder":
-        candidates = get_attendance_reminder_candidates(reminder_date)
+        candidates = get_attendance_filter_candidates(reminder_date)
         alert_eligible_emp_codes = {
             str(candidate.get("emp_code") or "").strip()
             for candidate in candidates

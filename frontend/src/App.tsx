@@ -3104,41 +3104,6 @@ function App() {
     }
   }
 
-  const downloadEmployeesReport = async (format: 'csv' | 'pdf' | 'xlsx') => {
-    try {
-      const makeRequest = async (token: string) =>
-        fetch(`/api/admin/employees/report?format=${format}`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        })
-
-      let response = await makeRequest(accessToken)
-      if (response.status === 401) {
-        const nextAccessToken = await refreshAccessToken()
-        response = await makeRequest(nextAccessToken)
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(errorText || 'Failed to download employees report')
-      }
-
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `employees_${toDateInputValue(new Date())}.${format}`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-    } catch (error) {
-      setDashboardError(error instanceof Error ? error.message : 'Failed to download employees report')
-    }
-  }
-
   const selectedAttendanceDate = attendanceDateFilter || toDateInputValue(new Date())
   const attendanceCalendarMonthLabel = getCalendarMonthLabel(attendanceDatePickerMonth)
   const attendanceCalendarDays = getCalendarDays(attendanceDatePickerMonth)
@@ -4946,18 +4911,9 @@ function App() {
               <div className="report-actions-card">
                 <div>
                   <strong>Download Reports</strong>
-                  <span>Export employee lists, daily attendance by date, and monthly attendance summaries.</span>
+                  <span>Export daily attendance by date and monthly attendance summaries.</span>
                 </div>
                 <div className="report-actions">
-                  <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('csv')}>
-                    Employees CSV
-                  </button>
-                  <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('pdf')}>
-                    Employees PDF
-                  </button>
-                  <button className="ghost dashboard-button" onClick={() => void downloadEmployeesReport('xlsx')}>
-                    Employees XLSX
-                  </button>
                   <button className="cta dashboard-button" onClick={downloadDailyAttendanceReport}>
                     Daily Attendance
                   </button>

@@ -826,7 +826,7 @@ def get_selected_attendance_filter_candidates(
     emp_codes: List[str],
     target_date: date | None = None,
 ) -> List[Dict[str, Any]]:
-    """Fetch selected employees who are not logged in and not on approved leave."""
+    """Fetch selected employees who are not logged in and not on active leave."""
     reminder_date = target_date or _current_local_date()
     normalized_emp_codes = sorted({
         _normalize_emp_code(emp_code)
@@ -859,7 +859,7 @@ def get_selected_attendance_filter_candidates(
                   SELECT 1
                   FROM leaves l
                   WHERE l.emp_code = e.emp_code
-                    AND l.status = 'approved'
+                    AND COALESCE(LOWER(TRIM(l.status)), 'pending') NOT IN ('rejected', 'cancelled')
                     AND %s BETWEEN l.from_date AND l.to_date
               )
             ORDER BY e.emp_full_name
@@ -874,7 +874,7 @@ def get_selected_attendance_filter_candidates(
 
 
 def get_attendance_filter_candidates(target_date: date | None = None) -> List[Dict[str, Any]]:
-    """Fetch employees who are not logged in and not on approved leave."""
+    """Fetch employees who are not logged in and not on active leave."""
     reminder_date = target_date or _current_local_date()
 
     conn = get_db_connection()
@@ -898,7 +898,7 @@ def get_attendance_filter_candidates(target_date: date | None = None) -> List[Di
                   SELECT 1
                   FROM leaves l
                   WHERE l.emp_code = e.emp_code
-                    AND l.status = 'approved'
+                    AND COALESCE(LOWER(TRIM(l.status)), 'pending') NOT IN ('rejected', 'cancelled')
                     AND %s BETWEEN l.from_date AND l.to_date
               )
             ORDER BY e.emp_full_name

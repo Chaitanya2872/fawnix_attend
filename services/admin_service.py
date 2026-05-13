@@ -864,8 +864,22 @@ def get_all_day_summary(target_date: date = None):
         conn.close()
 
 
+def _get_saturday_occurrence(target_date: date):
+    if target_date.weekday() != 5:
+        return None
+    return ((target_date.day - 1) // 7) + 1
+
+
 def _is_second_saturday(target_date: date) -> bool:
-    return target_date.weekday() == 5 and 8 <= target_date.day <= 14
+    return _get_saturday_occurrence(target_date) == 2
+
+
+def _is_fourth_saturday(target_date: date) -> bool:
+    return _get_saturday_occurrence(target_date) == 4
+
+
+def _is_saturday_half_day(target_date: date) -> bool:
+    return _get_saturday_occurrence(target_date) in {1, 3, 5}
 
 
 def _is_sunday(target_date: date) -> bool:
@@ -1045,7 +1059,28 @@ def get_admin_holidays(year: int, month: int = None):
             configured = configured_by_date.get(date_key)
             is_sunday = _is_sunday(current_date)
             is_second_saturday = _is_second_saturday(current_date)
-            weekend_name = 'Sunday' if is_sunday else 'Second Saturday' if is_second_saturday else ''
+            is_fourth_saturday = _is_fourth_saturday(current_date)
+            is_saturday_half_day = _is_saturday_half_day(current_date)
+            weekend_name = (
+                'Sunday'
+                if is_sunday
+                else 'Second Saturday'
+                if is_second_saturday
+                else 'Fourth Saturday'
+                if is_fourth_saturday
+                else ''
+            )
+            default_day_type = (
+                'Sunday'
+                if is_sunday
+                else 'Second Saturday'
+                if is_second_saturday
+                else 'Fourth Saturday'
+                if is_fourth_saturday
+                else 'Half Day Saturday'
+                if is_saturday_half_day
+                else 'Working Day'
+            )
 
             if configured:
                 configured_status = _normalize_holiday_status(configured.get('status'))
@@ -1063,29 +1098,29 @@ def get_admin_holidays(year: int, month: int = None):
                     "isHoliday": is_holiday,
                     "isSunday": is_sunday,
                     "isSecondSaturday": is_second_saturday,
+                    "isFourthSaturday": is_fourth_saturday,
+                    "isSaturdayHalfDay": is_saturday_half_day,
                     "dayType": (
                         'Holiday'
                         if configured_active
-                        else 'Sunday'
-                        if is_sunday
-                        else 'Second Saturday'
-                        if is_second_saturday
-                        else 'Working Day'
+                        else default_day_type
                     ),
                 })
-            elif weekend_name:
+            elif weekend_name or is_saturday_half_day:
                 holiday_rows.append({
                     "id": None,
                     "date": date_key,
-                    "holidayName": weekend_name,
-                    "holidayType": 'Weekend',
+                    "holidayName": weekend_name or 'Saturday Half Day',
+                    "holidayType": 'Weekend' if weekend_name else 'Half Day',
                     "description": '',
                     "status": 'Active',
                     "isConfigured": False,
-                    "isHoliday": True,
+                    "isHoliday": bool(weekend_name),
                     "isSunday": is_sunday,
                     "isSecondSaturday": is_second_saturday,
-                    "dayType": 'Sunday' if is_sunday else 'Second Saturday',
+                    "isFourthSaturday": is_fourth_saturday,
+                    "isSaturdayHalfDay": is_saturday_half_day,
+                    "dayType": default_day_type,
                 })
 
             current_date += timedelta(days=1)
@@ -1532,7 +1567,17 @@ def get_calendar_summary(month: int, year: int, department: str = None, emp_code
             configured_active = bool(configured) and configured_status.lower() == 'active'
             is_sunday = _is_sunday(current_date)
             is_second_saturday = _is_second_saturday(current_date)
-            weekend_name = 'Sunday' if is_sunday else 'Second Saturday' if is_second_saturday else None
+            is_fourth_saturday = _is_fourth_saturday(current_date)
+            is_saturday_half_day = _is_saturday_half_day(current_date)
+            weekend_name = (
+                'Sunday'
+                if is_sunday
+                else 'Second Saturday'
+                if is_second_saturday
+                else 'Fourth Saturday'
+                if is_fourth_saturday
+                else None
+            )
 
             is_holiday = bool(weekend_name) or configured_active
             if configured_active:
@@ -1543,6 +1588,10 @@ def get_calendar_summary(month: int, year: int, department: str = None, emp_code
                 holiday_name = weekend_name
                 holiday_type = 'Weekend'
                 day_type = weekend_name
+            elif is_saturday_half_day:
+                holiday_name = 'Saturday Half Day'
+                holiday_type = 'Half Day'
+                day_type = 'Half Day Saturday'
             else:
                 holiday_name = None
                 holiday_type = None
@@ -1561,6 +1610,8 @@ def get_calendar_summary(month: int, year: int, department: str = None, emp_code
                 "holidayType": holiday_type,
                 "isSunday": is_sunday,
                 "isSecondSaturday": is_second_saturday,
+                "isFourthSaturday": is_fourth_saturday,
+                "isSaturdayHalfDay": is_saturday_half_day,
                 "dayType": day_type,
                 "holidayStatus": configured_status if configured else None,
                 "holidayDescription": (configured.get('description') or '') if configured else '',

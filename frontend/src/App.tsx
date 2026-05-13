@@ -321,6 +321,8 @@ type AdminHolidayRow = {
   isHoliday?: boolean
   isSunday?: boolean
   isSecondSaturday?: boolean
+  isFourthSaturday?: boolean
+  isSaturdayHalfDay?: boolean
   dayType?: string
   isConfigured?: boolean
 }
@@ -338,7 +340,9 @@ type CalendarSummaryRow = {
   holidayType?: string | null
   isSunday: boolean
   isSecondSaturday: boolean
-  dayType: 'Working Day' | 'Sunday' | 'Second Saturday' | 'Holiday' | string
+  isFourthSaturday: boolean
+  isSaturdayHalfDay: boolean
+  dayType: 'Working Day' | 'Sunday' | 'Second Saturday' | 'Fourth Saturday' | 'Half Day Saturday' | 'Holiday' | string
   holidayStatus?: string | null
   holidayDescription?: string
 }
@@ -1025,10 +1029,33 @@ function normalizeCount(value: unknown) {
   return Math.round(numericValue)
 }
 
+function getSaturdayOccurrence(parsedDate: Date) {
+  if (parsedDate.getDay() !== 6) {
+    return 0
+  }
+  return Math.floor((parsedDate.getDate() - 1) / 7) + 1
+}
+
+function isSecondSaturdayDate(parsedDate: Date) {
+  return getSaturdayOccurrence(parsedDate) === 2
+}
+
+function isFourthSaturdayDate(parsedDate: Date) {
+  return getSaturdayOccurrence(parsedDate) === 4
+}
+
+function isSaturdayHalfDayDate(parsedDate: Date) {
+  const occurrence = getSaturdayOccurrence(parsedDate)
+  return occurrence === 1 || occurrence === 3 || occurrence === 5
+}
+
 function getHolidayIcon(name?: string | null, dayType?: string | null) {
   const label = `${name || ''} ${dayType || ''}`.toLowerCase()
 
-  if (label.includes('sunday') || label.includes('second saturday') || label.includes('weekend')) {
+  if (label.includes('half day')) {
+    return 'HD'
+  }
+  if (label.includes('sunday') || label.includes('second saturday') || label.includes('fourth saturday') || label.includes('weekend')) {
     return '📴'
   }
   if (label.includes('diwali') || label.includes('deepavali')) {
@@ -1058,7 +1085,7 @@ function getCalendarCellHeatValue(
     return row.attendanceCount
   }
   if (viewType === 'holidays') {
-    return row.isHoliday ? 1 : 0
+    return row.isHoliday ? 1 : row.isSaturdayHalfDay ? 0.55 : 0
   }
   if (viewType === 'leaves') {
     return row.leaveCount
@@ -2266,6 +2293,8 @@ function App() {
               const isHoliday = Boolean(row.isHoliday ?? row.is_holiday)
               const isSunday = Boolean(row.isSunday ?? row.is_sunday)
               const isSecondSaturday = Boolean(row.isSecondSaturday ?? row.is_second_saturday)
+              const isFourthSaturday = Boolean(row.isFourthSaturday ?? row.is_fourth_saturday)
+              const isSaturdayHalfDay = Boolean(row.isSaturdayHalfDay ?? row.is_saturday_half_day)
               const holidayName = typeof row.holidayName === 'string'
                 ? row.holidayName
                 : typeof row.holiday_name === 'string'
@@ -2303,6 +2332,8 @@ function App() {
                 holidayType,
                 isSunday,
                 isSecondSaturday,
+                isFourthSaturday,
+                isSaturdayHalfDay,
                 dayType: dayTypeRaw || (isHoliday ? 'Holiday' : 'Working Day'),
                 holidayStatus:
                   typeof row.holidayStatus === 'string'
@@ -2332,8 +2363,10 @@ function App() {
 
         const parsedDate = parseDateInputValue(dateKey)
         const isSunday = parsedDate.getDay() === 0
-        const isSecondSaturday = parsedDate.getDay() === 6 && parsedDate.getDate() >= 8 && parsedDate.getDate() <= 14
-        const weekendName = isSunday ? 'Sunday' : isSecondSaturday ? 'Second Saturday' : null
+        const isSecondSaturday = isSecondSaturdayDate(parsedDate)
+        const isFourthSaturday = isFourthSaturdayDate(parsedDate)
+        const isSaturdayHalfDay = isSaturdayHalfDayDate(parsedDate)
+        const weekendName = isSunday ? 'Sunday' : isSecondSaturday ? 'Second Saturday' : isFourthSaturday ? 'Fourth Saturday' : null
 
         return {
           date: dateKey,
@@ -2345,11 +2378,13 @@ function App() {
           birthdayEmployees: [],
           isHoliday: Boolean(weekendName),
           holidayName: weekendName,
-          holidayType: weekendName ? 'Weekend' : null,
+          holidayType: weekendName ? 'Weekend' : isSaturdayHalfDay ? 'Half Day' : null,
           isSunday,
           isSecondSaturday,
-          dayType: weekendName || 'Working Day',
-          holidayStatus: weekendName ? 'Active' : null,
+          isFourthSaturday,
+          isSaturdayHalfDay,
+          dayType: weekendName || (isSaturdayHalfDay ? 'Half Day Saturday' : 'Working Day'),
+          holidayStatus: weekendName || isSaturdayHalfDay ? 'Active' : null,
           holidayDescription: ''
         } as CalendarSummaryRow
       })
@@ -2373,6 +2408,10 @@ function App() {
                         ? 'Sunday'
                         : Boolean(row.isSecondSaturday || row.is_second_saturday)
                           ? 'Second Saturday'
+                          : Boolean(row.isFourthSaturday || row.is_fourth_saturday)
+                            ? 'Fourth Saturday'
+                            : Boolean(row.isSaturdayHalfDay || row.is_saturday_half_day)
+                              ? 'Saturday Half Day'
                           : '')
                   ).trim() || 'Holiday',
                 holidayType: String(row.holidayType || row.holiday_type || 'Holiday'),
@@ -2381,6 +2420,8 @@ function App() {
                 isHoliday: Boolean(row.isHoliday ?? row.is_holiday),
                 isSunday: Boolean(row.isSunday ?? row.is_sunday),
                 isSecondSaturday: Boolean(row.isSecondSaturday ?? row.is_second_saturday),
+                isFourthSaturday: Boolean(row.isFourthSaturday ?? row.is_fourth_saturday),
+                isSaturdayHalfDay: Boolean(row.isSaturdayHalfDay ?? row.is_saturday_half_day),
                 dayType: String(row.dayType || row.day_type || 'Holiday'),
                 isConfigured: Boolean(row.isConfigured ?? row.is_configured)
               } as AdminHolidayRow
@@ -3359,6 +3400,7 @@ function App() {
       1
     )
     const calendarHolidayCount = calendarRowsForMonth.filter((row) => row.isHoliday).length
+    const calendarHalfDayCount = calendarRowsForMonth.filter((row) => row.isSaturdayHalfDay).length
     const calendarAttendanceCount = calendarRowsForMonth.reduce((total, row) => total + row.attendanceCount, 0)
     const calendarLeaveCount = calendarRowsForMonth.reduce((total, row) => total + row.leaveCount, 0)
     const calendarBirthdayCount = calendarRowsForMonth.reduce((total, row) => total + row.birthdayCount, 0)
@@ -3390,8 +3432,8 @@ function App() {
     const calendarSelectedEmployee = calendarEmployeeFilter === 'all'
       ? null
       : calendarEmployeeOptions.find((employee) => employee.emp_code === calendarEmployeeFilter) || null
-    const calendarVisibleHolidays = holidayRows
-      .filter((row) => row.date.startsWith(`${calendarYearNumber}-${String(calendarMonthNumber).padStart(2, '0')}-`))
+    const calendarVisibleSchedule = calendarRowsForMonth
+      .filter((row) => row.isHoliday || row.isSaturdayHalfDay)
       .sort((left, right) => left.date.localeCompare(right.date))
     const calendarVisibleAttendance = calendarRowsForMonth
       .filter((row) => row.attendanceCount > 0)
@@ -3827,6 +3869,7 @@ function App() {
                     <span className="legend-item leave">Leaves</span>
                     <span className="legend-item birthday">Birthdays</span>
                     <span className="legend-item holiday">Holiday</span>
+                    <span className="legend-item half-day">Half day</span>
                     <span className="legend-item weekend">Weekend</span>
                     <span className="legend-item today">Today</span>
                   </div>
@@ -3844,8 +3887,8 @@ function App() {
                       <strong>{calendarBirthdayCount}</strong>
                     </div>
                     <div className="calendar-insight-card">
-                      <span>{calendarViewType === 'holidays' ? 'Holidays' : 'Peak day'}</span>
-                      <strong>{calendarViewType === 'holidays' ? calendarHolidayCount : calendarPeakRow ? formatAttendanceDateLabel(calendarPeakRow.date) : '--'}</strong>
+                      <span>{calendarViewType === 'holidays' ? 'Half days' : 'Peak day'}</span>
+                      <strong>{calendarViewType === 'holidays' ? calendarHalfDayCount : calendarPeakRow ? formatAttendanceDateLabel(calendarPeakRow.date) : '--'}</strong>
                     </div>
                   </div>
                 </div>
@@ -3886,6 +3929,8 @@ function App() {
                             row.isHoliday ? 'holiday' : '',
                             row.isSunday ? 'sunday' : '',
                             row.isSecondSaturday ? 'second-saturday' : '',
+                            row.isFourthSaturday ? 'fourth-saturday' : '',
+                            row.isSaturdayHalfDay ? 'half-day' : '',
                             isToday ? 'today' : '',
                             popoverOpen ? 'popover-open' : ''
                           ]
@@ -3895,7 +3940,7 @@ function App() {
                         >
                           <div className="calendar-day-top">
                             <span className="calendar-day-number">{dayNumber}</span>
-                            {row.isHoliday ? (
+                            {row.isHoliday || row.isSaturdayHalfDay ? (
                               <span className="calendar-day-icon" aria-hidden="true">
                                 {getHolidayIcon(row.holidayName, row.dayType)}
                               </span>
@@ -3921,6 +3966,9 @@ function App() {
                             {calendarViewType === 'holidays' && row.isHoliday ? (
                               <span className="calendar-day-metric holiday">{row.holidayName ? 'Holiday' : 'H'}</span>
                             ) : null}
+                            {calendarViewType === 'holidays' && row.isSaturdayHalfDay ? (
+                              <span className="calendar-day-metric half-day">Half day</span>
+                            ) : null}
                           </div>
                           <div className="calendar-day-popover" role="tooltip">
                             <strong>{formatAttendanceDateLabel(row.date)}</strong>
@@ -3945,15 +3993,15 @@ function App() {
             <div className="table-card calendar-holiday-list-card">
               <div className="chart-card-head">
                 <div>
-                  <strong>Configured Holidays & Weekends</strong>
+                  <strong>Holiday Schedule</strong>
                   <span>
-                    {calendarVisibleHolidays.length} holiday entr{calendarVisibleHolidays.length === 1 ? 'y' : 'ies'} in view
+                    {calendarVisibleSchedule.length} schedule entr{calendarVisibleSchedule.length === 1 ? 'y' : 'ies'} in view
                   </span>
                 </div>
               </div>
-              {calendarVisibleHolidays.length ? (
+              {calendarVisibleSchedule.length ? (
                 <div className="calendar-holiday-list">
-                  {calendarVisibleHolidays.map((holiday) => (
+                  {calendarVisibleSchedule.map((holiday) => (
                     <div key={`${holiday.date}-${holiday.holidayName}`} className="calendar-holiday-list-item">
                       <div className="calendar-holiday-icon" aria-hidden="true">
                         {getHolidayIcon(holiday.holidayName, holiday.dayType)}
@@ -3962,16 +4010,16 @@ function App() {
                         <strong>{holiday.holidayName}</strong>
                         <span>{formatAttendanceDateLabel(holiday.date)}</span>
                         <small>
-                          {holiday.holidayType} • {holiday.status || 'Active'}
+                          {holiday.holidayType} • {holiday.holidayStatus || 'Active'}
                           {holiday.dayType ? ` • ${holiday.dayType}` : ''}
                         </small>
-                        {holiday.description ? <p>{holiday.description}</p> : null}
+                        {holiday.holidayDescription ? <p>{holiday.holidayDescription}</p> : null}
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="empty-state">No holidays configured for this month yet.</div>
+                <div className="empty-state">No holiday or half-day schedule found for this month yet.</div>
               )}
             </div>
           </div>
@@ -4487,7 +4535,7 @@ function App() {
                   <div>
                     <strong>
                       {calendarViewType === 'holidays'
-                        ? 'Configured Holidays & Weekends'
+                        ? 'Holiday Schedule'
                         : calendarViewType === 'leaves'
                           ? 'Leaves Calendar'
                           : calendarViewType === 'birthdays'
@@ -4496,7 +4544,7 @@ function App() {
                     </strong>
                     {calendarViewType === 'holidays' ? (
                       <span>
-                        {calendarVisibleHolidays.length} holiday entr{calendarVisibleHolidays.length === 1 ? 'y' : 'ies'} in view
+                        {calendarVisibleSchedule.length} schedule entr{calendarVisibleSchedule.length === 1 ? 'y' : 'ies'} in view
                       </span>
                     ) : calendarViewType === 'leaves' ? (
                       <span>
@@ -4514,9 +4562,9 @@ function App() {
                   </div>
                 </div>
                 {calendarViewType === 'holidays' ? (
-                  calendarVisibleHolidays.length ? (
+                  calendarVisibleSchedule.length ? (
                   <div className="calendar-holiday-list">
-                    {calendarVisibleHolidays.map((holiday) => (
+                    {calendarVisibleSchedule.map((holiday) => (
                       <div key={`${holiday.date}-${holiday.holidayName}`} className="calendar-holiday-list-item">
                         <div className="calendar-holiday-icon" aria-hidden="true">
                           {getHolidayIcon(holiday.holidayName, holiday.dayType)}
@@ -4525,16 +4573,16 @@ function App() {
                           <strong>{holiday.holidayName}</strong>
                           <span>{formatAttendanceDateLabel(holiday.date)}</span>
                           <small>
-                            {holiday.holidayType} • {holiday.status || 'Active'}
+                            {holiday.holidayType} • {holiday.holidayStatus || 'Active'}
                             {holiday.dayType ? ` • ${holiday.dayType}` : ''}
                           </small>
-                          {holiday.description ? <p>{holiday.description}</p> : null}
+                          {holiday.holidayDescription ? <p>{holiday.holidayDescription}</p> : null}
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="empty-state">No holidays configured for this month yet.</div>
+                  <div className="empty-state">No holiday or half-day schedule found for this month.</div>
                 )
                 ) : calendarViewType === 'leaves' ? (
                   calendarVisibleLeaves.length ? (

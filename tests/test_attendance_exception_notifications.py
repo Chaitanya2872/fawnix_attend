@@ -83,6 +83,47 @@ def test_build_exception_notification_payload_uses_actual_late_minutes_and_notes
     assert "Reason: Personal emergency" in payload["body"]
 
 
+def test_build_exception_notification_payload_falls_back_to_planned_arrival_time(monkeypatch):
+    connection = NotificationConnection([
+        {
+            "id": 1005,
+            "emp_code": "EMP005",
+            "emp_name": "Vaishnavi Palepu",
+            "attendance_id": None,
+            "exception_type": "late_arrival",
+            "exception_date": datetime(2026, 5, 15).date(),
+            "exception_time": None,
+            "planned_arrival_time": time(9, 20),
+            "planned_leave_time": None,
+            "late_by_minutes": None,
+            "early_by_minutes": None,
+            "reason": "Traffic jam",
+            "notes": "Personal emergency",
+            "status": "pending",
+            "manager_code": "M001",
+            "manager_email": "manager@example.com",
+            "login_time": None,
+            "logout_time": None,
+            "attendance_date": datetime(2026, 5, 15).date(),
+            "manager_name": "Raja Shekhar Perepa",
+        }
+    ])
+
+    monkeypatch.setattr(exceptions_service, "get_db_connection", lambda: connection)
+    monkeypatch.setattr(
+        exceptions_service,
+        "get_employee_shift_times",
+        lambda emp_code: (time(9, 0), time(18, 0)),
+    )
+
+    payload = exceptions_service.build_exception_notification_payload(1005)
+
+    assert payload["data"]["actual_time"] is None
+    assert payload["data"]["selected_time"] == "09:20"
+    assert payload["data"]["calculated_minutes"] == 20
+    assert payload["data"]["detail"] == "Late by: 20 minutes"
+
+
 def test_build_exception_notification_payload_falls_back_to_planned_leave_time(monkeypatch):
     connection = NotificationConnection([
         {

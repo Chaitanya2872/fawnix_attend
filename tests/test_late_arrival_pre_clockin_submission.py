@@ -89,6 +89,7 @@ def test_request_late_arrival_allows_submission_before_cutoff(monkeypatch):
         "EMP001",
         "Traffic jam",
         "Heavy rain",
+        "10:15",
     )
 
     assert status_code == 201
@@ -96,8 +97,9 @@ def test_request_late_arrival_allows_submission_before_cutoff(monkeypatch):
     assert result["data"]["attendance_id"] is None
     assert result["data"]["late_by_minutes"] is None
     assert result["data"]["shift_start_time"] == "10:00"
-    assert result["data"]["planned_arrival_time"] == "10:00"
+    assert result["data"]["planned_arrival_time"] == "10:15"
     assert connection.cursor_obj.exception_insert_params[3] is None
+    assert connection.cursor_obj.exception_insert_params[7].strftime("%H:%M") == "10:15"
     assert connection.cursor_obj.exception_insert_params[8] is None
     assert connection.commit_count == 1
 
@@ -149,6 +151,7 @@ def test_request_late_arrival_rejects_submission_after_login(monkeypatch):
         "EMP001",
         "Traffic jam",
         "Heavy rain",
+        "10:15",
     )
 
     assert status_code == 400

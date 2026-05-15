@@ -204,15 +204,17 @@ def submit_late_arrival(current_user):
     
     Request Body:
         {
-            "reason": "Traffic jam",   // required
-            "notes": "Heavy rain"      // optional
+            "reason": "Traffic jam",          // required
+            "notes": "Heavy rain",            // optional
+            "planned_arrival_time": "10:15"   // optional - HH:MM
         }
     
     Example:
         POST /api/attendance-exceptions/late-arrival
         {
             "reason": "Traffic jam on ORR",
-            "notes": "Heavy rain caused 30 min delay"
+            "notes": "Heavy rain caused 30 min delay",
+            "planned_arrival_time": "10:15"
         }
     
     Response:
@@ -233,6 +235,7 @@ def submit_late_arrival(current_user):
     
     reason = data.get('reason')
     notes = data.get('notes', '')
+    planned_arrival_time = data.get('planned_arrival_time')
     
     if not reason:
         return jsonify({
@@ -243,7 +246,8 @@ def submit_late_arrival(current_user):
     result = request_late_arrival_exception(
         current_user['emp_code'],
         reason,
-        notes
+        notes,
+        planned_arrival_time,
     )
 
     response_body, status_code = result

@@ -122,6 +122,7 @@ def test_request_late_arrival_keeps_exception_detached_from_attendance(monkeypat
         "EMP001",
         "Traffic jam",
         "Heavy rain",
+        "10:15",
     )
 
     assert status_code == 201

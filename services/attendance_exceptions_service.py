@@ -33,6 +33,18 @@ def _parse_config_time(value: str, fallback: str) -> time:
     return datetime.strptime(fallback, '%H:%M').time()
 
 
+def _parse_optional_time_string(value: Optional[str]) -> Optional[time]:
+    raw_value = (value or '').strip()
+    if not raw_value:
+        return None
+    for fmt in ('%H:%M:%S', '%H:%M'):
+        try:
+            return datetime.strptime(raw_value, fmt).time()
+        except ValueError:
+            continue
+    return None
+
+
 def _is_time_in_range(current_value: time, start_value: time, end_value: time) -> bool:
     return start_value <= current_value <= end_value
 
@@ -642,10 +654,7 @@ def sync_late_arrival_exception_after_clock_in(
         if not exception:
             return None
 
-        planned_start = _get_late_reference_time(
-            emp_code,
-            _coerce_time(exception.get('planned_arrival_time')),
-        )
+        planned_start = _get_late_reference_time(emp_code)
         late_by_minutes = _calculate_exception_minutes(
             'late_arrival',
             planned_start,
@@ -667,7 +676,7 @@ def sync_late_arrival_exception_after_clock_in(
             (
                 attendance_id,
                 exception_time_value,
-                planned_start,
+                _coerce_time(exception.get('planned_arrival_time')),
                 late_by_minutes,
                 now_local_naive(),
                 exception['id'],
@@ -682,7 +691,9 @@ def sync_late_arrival_exception_after_clock_in(
             "late_by_minutes": late_by_minutes,
             "shift_start_time": planned_start.strftime('%H:%M'),
             "actual_login_time": login_time_only.strftime('%H:%M'),
-            "planned_arrival_time": planned_start.strftime('%H:%M'),
+            "planned_arrival_time": (
+                _format_time_for_display(exception.get('planned_arrival_time'))
+            ),
             "manager_code": exception.get('manager_code'),
             "manager_email": exception.get('manager_email'),
             "status": exception['status'],
@@ -781,7 +792,8 @@ def attach_pending_late_arrival_to_attendance(
 # =========================
 
 def request_late_arrival_exception(emp_code: str, reason: str,
-                                   notes: str = '') -> Tuple[Dict, int]:
+                                   notes: str = '',
+                                   planned_arrival_time: Optional[str] = None) -> Tuple[Dict, int]:
     """
     Submit late arrival exception with reason
     
@@ -789,6 +801,7 @@ def request_late_arrival_exception(emp_code: str, reason: str,
         emp_code: Employee code
         reason: Reason for late arrival
         notes: Additional notes
+        planned_arrival_time: Employee-entered expected arrival time in HH:MM
     """
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -841,7 +854,10 @@ def request_late_arrival_exception(emp_code: str, reason: str,
         if cursor.fetchone():
             return ({"success": False, "message": "Late arrival exception already submitted"}, 400)
         
-        planned_start = _get_late_reference_time(emp_code)
+        shift_start = _get_late_reference_time(emp_code)
+        planned_arrival_time_obj = _parse_optional_time_string(planned_arrival_time)
+        if planned_arrival_time and planned_arrival_time_obj is None:
+            return ({"success": False, "message": "Invalid planned_arrival_time format. Use HH:MM"}, 400)
         # Allow employees to pre-submit before actual clock-in.
         # The real late duration is updated later when login_time is available.
         late_by_minutes = None
@@ -883,7 +899,7 @@ def request_late_arrival_exception(emp_code: str, reason: str,
             'late_arrival',
             current_date,
             exception_time_value,
-            planned_start,
+            planned_arrival_time_obj,
             late_by_minutes,
             reason,
             notes,
@@ -907,9 +923,9 @@ def request_late_arrival_exception(emp_code: str, reason: str,
                 "exception_type": "late_arrival",
                 "employee_name": emp_info['emp_name'],
                 "late_by_minutes": late_by_minutes,
-                "shift_start_time": planned_start.strftime('%H:%M'),
+                "shift_start_time": shift_start.strftime('%H:%M'),
                 "actual_login_time": None,
-                "planned_arrival_time": planned_start.strftime('%H:%M'),
+                "planned_arrival_time": planned_arrival_time_obj.strftime('%H:%M') if planned_arrival_time_obj else None,
                 "manager": emp_info['approver_name'],
                 "manager_code": emp_info['approver_code'],
                 "manager_email": emp_info['approver_email'],
@@ -1536,7 +1552,7 @@ def get_my_late_arrival_records(emp_code: str, status: str = None) -> Tuple[Dict
                 "exception_type": "late_arrival",
                 "exception_date": attendance.get('date'),
                 "actual_login_time": login_time_only,
-                "planned_arrival_time": exception.get('planned_arrival_time') or late_cutoff,
+                "planned_arrival_time": exception.get('planned_arrival_time'),
                 "late_by_minutes": late_by_minutes,
                 "status": exception.get('status') or 'not_requested',
                 "reason": exception.get('reason'),

@@ -81,10 +81,12 @@ def test_build_exception_notification_payload_uses_actual_late_minutes_and_notes
     assert payload["template_parameters"] == [
         "Raja Shekhar Perepa",
         "Vaishnavi Palepu",
-        "late-arrival",
-        "Late by: 15 minutes",
+        "late arrival",
+        "15",
+        "late arrival",
         "Personal emergency",
-        "Pending your review",
+        "login",
+        "09:15",
     ]
     assert "Vaishnavi Palepu has raised a late arrival exception." in payload["body"]
     assert "Late by: 15 minutes" in payload["body"]

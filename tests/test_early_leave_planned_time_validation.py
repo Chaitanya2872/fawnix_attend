@@ -123,5 +123,5 @@ def test_request_early_leave_allows_submission_anytime_when_planned_time_is_vali
     assert status_code == 201
     assert result["success"] is True
     assert result["data"]["planned_leave_time"] == "16:30"
-    assert result["data"]["early_by_minutes"] == 120
+    assert result["data"]["early_by_minutes"] is None
     assert connection.commit_count == 1

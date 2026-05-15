@@ -8,13 +8,14 @@ import logging
 from flask import Blueprint, request, jsonify
 from database.connection import get_db_connection, return_connection
 from middleware.auth_middleware import token_required
-from services.whatsapp_service import send_exception_notification
-from services.notification_service import send_push_notification_to_department
+from services.whatsapp_service import send_exception_notification, send_notification
+from services.notification_service import send_push_notification_to_department, send_push_notification_to_employee
 from services.attendance_exceptions_service import (
     request_late_arrival_exception,
     request_early_leave_exception,
     cancel_early_leave_exception,
     approve_exception,
+    build_exception_notification_payload,
     get_my_exceptions,
     get_team_exceptions,
     auto_detect_late_arrival,
@@ -97,7 +98,7 @@ def _get_employee_contact(emp_code):
         return_connection(conn)
 
 
-def _send_manager_request_notification(current_user, exception_data, reason):
+def _send_manager_request_notification(current_user, exception_data):
     """Notify manager/informing-manager when exception request is submitted."""
     manager_code = exception_data.get("manager_code")
     if not manager_code:
@@ -109,32 +110,56 @@ def _send_manager_request_notification(current_user, exception_data, reason):
         logger.info("Skipping manager notification: manager contact missing for %s", manager_code)
         return
 
-    employee_name = current_user.get("emp_full_name") or exception_data.get("employee_name") or "Employee"
-    exception_type = exception_data.get("exception_type")
+    payload = build_exception_notification_payload(
+        exception_data.get("exception_id"),
+        recipient_name=manager["name"],
+        status_label="Pending your review",
+    )
+    if not payload:
+        logger.warning(
+            "Skipping manager notification: payload generation failed for exception_id=%s",
+            exception_data.get("exception_id"),
+        )
+        return
 
-    if exception_type == "late_arrival":
-        detail = f"Late by: {exception_data.get('late_by_minutes')} minutes"
-        request_label = "late-arrival"
-    else:
-        detail = f"Planned leave time: {exception_data.get('planned_leave_time')}"
-        request_label = "early-leave"
+    debug = payload.get("debug", {})
+    logger.info(
+        "Attendance exception notification payload | employee_name=%s exception_type=%s planned_time=%s actual_time=%s calculated_minutes=%s reason=%s status=%s",
+        debug.get("employee_name"),
+        debug.get("exception_type"),
+        debug.get("planned_time"),
+        debug.get("actual_time"),
+        debug.get("calculated_minutes"),
+        debug.get("reason"),
+        debug.get("status"),
+    )
 
     sent = send_exception_notification(
         phone_number=manager["phone"],
-        manager_name=manager["name"],
-        employee_name=employee_name,
-        exception_type=request_label,
-        detail=detail,
-        reason=reason,
-        status_label="Pending your review",
-        title="Attendance Exception"
+        title=payload["title"],
+        message_body=payload["body"],
+        template_parameters=payload.get("template_parameters"),
     )
     logger.info(
         "Manager WhatsApp notification for %s request (exception_id=%s): %s",
-        exception_type,
+        exception_data.get("exception_type"),
         exception_data.get("exception_id"),
         sent
     )
+
+    push_result = send_push_notification_to_employee(
+        manager_code,
+        payload["title"],
+        payload["body"],
+        payload.get("data"),
+    )
+    if not push_result.get("success"):
+        logger.warning(
+            "Manager attendance-exception push notification failed manager=%s exception_id=%s message=%s",
+            manager_code,
+            exception_data.get("exception_id"),
+            push_result.get("message"),
+        )
 
 
 def _send_employee_decision_notification(exception_data, action, remarks):
@@ -224,7 +249,7 @@ def submit_late_arrival(current_user):
     response_body, status_code = result
     if status_code == 201 and response_body.get("success"):
         try:
-            _send_manager_request_notification(current_user, response_body.get("data", {}), reason)
+            _send_manager_request_notification(current_user, response_body.get("data", {}))
         except Exception:
             logger.exception("Failed to send late arrival WhatsApp notification")
         try:
@@ -300,7 +325,7 @@ def submit_early_leave(current_user):
     response_body, status_code = result
     if status_code == 201 and response_body.get("success"):
         try:
-            _send_manager_request_notification(current_user, response_body.get("data", {}), reason)
+            _send_manager_request_notification(current_user, response_body.get("data", {}))
         except Exception:
             logger.exception("Failed to send early leave WhatsApp notification")
         try:

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 
 import services.attendance_exceptions_service as exceptions_service
 
@@ -76,6 +76,11 @@ def test_request_late_arrival_allows_submission_before_cutoff(monkeypatch):
     )
     monkeypatch.setattr(
         exceptions_service,
+        "get_employee_shift_times",
+        lambda emp_code: (time(10, 0), time(18, 30)),
+    )
+    monkeypatch.setattr(
+        exceptions_service,
         "_exception_time_value",
         lambda cursor, timestamp_value: timestamp_value.time(),
     )
@@ -89,11 +94,11 @@ def test_request_late_arrival_allows_submission_before_cutoff(monkeypatch):
     assert status_code == 201
     assert result["success"] is True
     assert result["data"]["attendance_id"] is None
-    assert result["data"]["late_by_minutes"] == 0
+    assert result["data"]["late_by_minutes"] is None
     assert result["data"]["shift_start_time"] == "10:00"
     assert result["data"]["planned_arrival_time"] == "10:00"
     assert connection.cursor_obj.exception_insert_params[3] is None
-    assert connection.cursor_obj.exception_insert_params[8] == 0
+    assert connection.cursor_obj.exception_insert_params[8] is None
     assert connection.commit_count == 1
 
 
@@ -128,6 +133,11 @@ def test_request_late_arrival_rejects_submission_after_login(monkeypatch):
         exceptions_service,
         "now_local_naive",
         lambda: datetime(2026, 4, 8, 10, 45, 0),
+    )
+    monkeypatch.setattr(
+        exceptions_service,
+        "get_employee_shift_times",
+        lambda emp_code: (time(10, 0), time(18, 30)),
     )
     monkeypatch.setattr(
         exceptions_service,

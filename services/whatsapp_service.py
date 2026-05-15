@@ -311,13 +311,9 @@ def send_leave_notification(
 
 def send_exception_notification(
     phone_number: str,
-    manager_name: str,
-    employee_name: str,
-    exception_type: str,
-    detail: str,
-    reason: str,
-    status_label: str = "Pending review",
-    title: str = "Attendance Exception"
+    title: str,
+    message_body: str,
+    template_parameters=None,
 ) -> bool:
     """
     Send WhatsApp notification for attendance exceptions (late arrival / early leave).
@@ -327,19 +323,14 @@ def send_exception_notification(
         formatted_phone = _format_phone(phone_number)
         template_name = getattr(Config, "WHATSAPP_EXCEPTION_TEMPLATE", "fawnix_notification")
 
-        full_message = (
-            f"Hello {manager_name},\n\n"
-            f"{employee_name} submitted a {exception_type} request.\n"
-            f"{detail}\n"
-            f"Reason: {reason}\n"
-            f"Status: {status_label}\n\n"
-            "- Fawnix"
-        )
+        full_message = (message_body or "").strip()
+        template_parameters = list(template_parameters or [])
 
         if not Config.WHATSAPP_TOKEN or not Config.PHONE_NUMBER_ID:
             logger.info(
-                "DEV MODE WHATSAPP | exception to=%s (%s)\n%s",
-                manager_name, phone_number, full_message
+                "DEV MODE WHATSAPP | exception to=%s\n%s",
+                phone_number,
+                full_message
             )
             return True
 
@@ -349,44 +340,42 @@ def send_exception_notification(
             "Content-Type": "application/json"
         }
 
-        template_payload = {
-            "messaging_product": "whatsapp",
-            "to": formatted_phone,
-            "type": "template",
-            "template": {
-                "name": template_name,
-                "language": {"code": "en_US"},
-                "components": [
-                    {
-                        "type": "header",
-                        "parameters": [
-                            {"type": "text", "text": str(title)}
-                        ]
-                    },
-                    {
-                        "type": "body",
-                        "parameters": [
-                            {"type": "text", "text": str(manager_name)},
-                            {"type": "text", "text": str(employee_name)},
-                            {"type": "text", "text": str(exception_type)},
-                            {"type": "text", "text": str(detail)},
-                            {"type": "text", "text": str(reason)},
-                            {"type": "text", "text": str(status_label)},
-                        ]
-                    }
-                ]
+        response = None
+        if template_parameters:
+            template_payload = {
+                "messaging_product": "whatsapp",
+                "to": formatted_phone,
+                "type": "template",
+                "template": {
+                    "name": template_name,
+                    "language": {"code": "en_US"},
+                    "components": [
+                        {
+                            "type": "header",
+                            "parameters": [
+                                {"type": "text", "text": str(title)}
+                            ]
+                        },
+                        {
+                            "type": "body",
+                            "parameters": [
+                                {"type": "text", "text": str(value)}
+                                for value in template_parameters
+                            ]
+                        }
+                    ]
+                }
             }
-        }
 
-        response = requests.post(url, headers=headers, json=template_payload, timeout=15)
-        if response.status_code == 200:
-            logger.info("WhatsApp exception template sent | to=%s", formatted_phone)
-            return True
+            response = requests.post(url, headers=headers, json=template_payload, timeout=15)
+            if response.status_code == 200:
+                logger.info("WhatsApp exception template sent | to=%s", formatted_phone)
+                return True
 
-        logger.warning(
-            "WhatsApp exception template failed (status=%s): %s — falling back to text.",
-            response.status_code, response.text
-        )
+            logger.warning(
+                "WhatsApp exception template failed (status=%s): %s — falling back to text.",
+                response.status_code, response.text
+            )
 
         text_payload = {
             "messaging_product": "whatsapp",
@@ -402,8 +391,10 @@ def send_exception_notification(
         logger.error(
             "All WhatsApp exception sends failed | template_status=%s text_status=%s "
             "template_response=%s text_response=%s",
-            response.status_code, text_response.status_code,
-            response.text, text_response.text
+            response.status_code if response is not None else None,
+            text_response.status_code,
+            response.text if response is not None else None,
+            text_response.text
         )
         return False
     except Exception:

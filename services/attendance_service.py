@@ -27,6 +27,8 @@ from services.attendance_exceptions_service import (
     get_late_login_cutoff_time,
     _fetch_exception_rows_by_attendance_ids,
     is_flexible_grade_employee,
+    sync_early_leave_exception_after_clock_out,
+    sync_late_arrival_exception_after_clock_in,
 )
 from services.attendance_notification_service import notify_tracking_started, notify_tracking_stopped
 from utils.time_utils import now_local_naive
@@ -375,6 +377,21 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str, atte
         logger.info(f"✅ Clock in successful: {emp_email} - Attendance ID: {attendance_id}")
 
         if emp_code:
+            synced_exception = sync_late_arrival_exception_after_clock_in(
+                emp_code,
+                attendance_id,
+                login_time,
+            )
+            if synced_exception:
+                logger.info(
+                    "Late arrival exception synced after clock-in | emp_code=%s attendance_id=%s exception_id=%s late_by_minutes=%s",
+                    emp_code,
+                    attendance_id,
+                    synced_exception.get('exception_id'),
+                    synced_exception.get('late_by_minutes'),
+                )
+
+        if emp_code:
             try:
                 notify_tracking_started(emp_code, attendance_id)
             except Exception as notification_error:
@@ -655,6 +672,25 @@ def clock_out(emp_email: str, lat: str, lon: str):
         """, (logout_time, location, address, round(hours, 2), ATTENDANCE_STATUS_LOGGED_OUT, attendance_id))
         
         conn.commit()
+
+        try:
+            synced_early_exception = sync_early_leave_exception_after_clock_out(
+                attendance_id,
+                logout_time,
+            )
+            if synced_early_exception:
+                logger.info(
+                    "Early leave exception synced after clock-out | attendance_id=%s exception_id=%s early_by_minutes=%s",
+                    attendance_id,
+                    synced_early_exception.get('exception_id'),
+                    synced_early_exception.get('early_by_minutes'),
+                )
+        except Exception as sync_error:
+            logger.error(
+                "Non-critical early leave exception sync failure for attendance=%s: %s",
+                attendance_id,
+                sync_error,
+            )
 
         if emp_info and emp_code:
             try:

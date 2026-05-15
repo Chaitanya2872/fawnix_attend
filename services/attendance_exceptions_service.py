@@ -53,6 +53,15 @@ def _get_early_leave_submission_window() -> Tuple[time, time]:
 def get_late_login_cutoff_time() -> time:
     return _parse_config_time(Config.LATE_LOGIN_CUTOFF, '10:00')
 
+
+def _get_late_reference_time(emp_code: str, explicit_time: Optional[time] = None) -> time:
+    """Return the planned shift start used for late-arrival calculations."""
+    if explicit_time:
+        return explicit_time
+
+    shift_start, _ = get_employee_shift_times(emp_code)
+    return shift_start or get_late_login_cutoff_time()
+
 def get_employee_shift_times(emp_code: str) -> Tuple[Optional[time], Optional[time]]:
     """
     Get employee's shift start and end times
@@ -342,14 +351,14 @@ def auto_detect_late_arrival(emp_code: str, attendance_id: int,
         Detection result dict if late, None if on time
     """
     login_time_only = login_time.time()
-    late_cutoff = get_late_login_cutoff_time()
+    planned_start = _get_late_reference_time(emp_code)
 
-    if login_time_only <= late_cutoff:
+    if login_time_only <= planned_start:
         return None  # On time
     
     # Calculate late duration
     login_datetime = datetime.combine(datetime.today(), login_time_only)
-    shift_datetime = datetime.combine(datetime.today(), late_cutoff)
+    shift_datetime = datetime.combine(datetime.today(), planned_start)
     late_by_seconds = (login_datetime - shift_datetime).total_seconds()
     late_by_minutes = int(late_by_seconds / 60)
     
@@ -358,7 +367,7 @@ def auto_detect_late_arrival(emp_code: str, attendance_id: int,
     return {
         "is_late": True,
         "late_by_minutes": late_by_minutes,
-        "shift_start_time": late_cutoff.strftime('%H:%M'),
+        "shift_start_time": planned_start.strftime('%H:%M'),
         "actual_login_time": login_time_only.strftime('%H:%M'),
         "attendance_id": attendance_id,
         "message": f"You are {late_by_minutes} minutes late. Please submit a reason."
@@ -372,6 +381,13 @@ def _calculate_late_by_minutes(reference_time: time, shift_start: time) -> int:
     return int((reference_dt - shift_dt).total_seconds() / 60)
 
 
+def _calculate_early_by_minutes(actual_time: time, shift_end: time) -> int:
+    """Calculate positive early-leave minutes for a given time."""
+    actual_dt = datetime.combine(datetime.today(), actual_time)
+    shift_dt = datetime.combine(datetime.today(), shift_end)
+    return int((shift_dt - actual_dt).total_seconds() / 60)
+
+
 def _exception_time_value(cursor, timestamp_value: datetime):
     """Adapt exception_time writes for DBs using either TIME or TIMESTAMP columns."""
     column_types = _get_table_column_types(cursor, 'attendance_exceptions')
@@ -380,28 +396,215 @@ def _exception_time_value(cursor, timestamp_value: datetime):
     return timestamp_value.time()
 
 
-def attach_pending_late_arrival_to_attendance(
-    emp_code: str,
-    attendance_id: int,
-    login_time: datetime
+def _calculate_exception_minutes(
+    exception_type: str,
+    planned_time: Optional[time],
+    actual_time: Optional[time],
+) -> Optional[int]:
+    """Calculate exception minutes only when both planned and actual times are available."""
+    if planned_time is None or actual_time is None:
+        return None
+
+    normalized_type = (exception_type or '').strip().lower()
+    if normalized_type == 'late_arrival':
+        return max(_calculate_late_by_minutes(actual_time, planned_time), 0)
+    if normalized_type == 'early_leave':
+        return max(_calculate_early_by_minutes(actual_time, planned_time), 0)
+    return None
+
+
+def _format_exception_type_label(exception_type: str) -> str:
+    normalized = (exception_type or '').strip().lower()
+    if normalized == 'late_arrival':
+        return 'late arrival'
+    if normalized == 'early_leave':
+        return 'early leave'
+    return normalized.replace('_', ' ').strip()
+
+
+def _format_exception_status_label(status: Optional[str]) -> str:
+    normalized = (status or '').strip().lower()
+    if normalized == 'pending':
+        return 'Pending your review'
+    if normalized == 'approved':
+        return 'Approved'
+    if normalized == 'rejected':
+        return 'Rejected'
+    if normalized == 'cancelled':
+        return 'Cancelled'
+    return 'Pending your review'
+
+
+def _format_time_for_display(value) -> Optional[str]:
+    normalized = _coerce_time(value)
+    return normalized.strftime('%H:%M') if normalized else None
+
+
+def _build_exception_detail_line(exception_type: str, calculated_minutes: Optional[int]) -> str:
+    label = 'Late by' if exception_type == 'late_arrival' else 'Early by'
+    if calculated_minutes is None:
+        return f"{label}: Time difference could not be calculated"
+    return f"{label}: {calculated_minutes} minutes"
+
+
+def build_exception_notification_payload(
+    exception_id: int,
+    recipient_name: Optional[str] = None,
+    status_label: Optional[str] = None,
 ) -> Optional[Dict]:
     """
-    Refresh today's pre-clock-in late-arrival request once the actual clock-in happens.
+    Build a canonical attendance-exception notification payload.
 
-    Returns linked exception details when a pending request is found, else None.
+    This payload is shared by WhatsApp and in-app push notifications so both
+    channels display identical exception details.
     """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT
+                ae.id,
+                ae.emp_code,
+                ae.emp_name,
+                ae.attendance_id,
+                ae.exception_type,
+                ae.exception_date,
+                ae.exception_time,
+                ae.planned_arrival_time,
+                ae.planned_leave_time,
+                ae.late_by_minutes,
+                ae.early_by_minutes,
+                ae.reason,
+                ae.notes,
+                ae.status,
+                ae.manager_code,
+                ae.manager_email,
+                a.login_time,
+                a.logout_time,
+                a.date AS attendance_date,
+                m.emp_full_name AS manager_name
+            FROM attendance_exceptions ae
+            LEFT JOIN attendance a ON a.id = ae.attendance_id
+            LEFT JOIN employees m ON m.emp_code = ae.manager_code
+            WHERE ae.id = %s
+            LIMIT 1
+            """,
+            (exception_id,),
+        )
+        exception = cursor.fetchone()
+        if not exception:
+            return None
+
+        exception_type = (exception.get('exception_type') or '').strip().lower()
+        if exception_type not in {'late_arrival', 'early_leave'}:
+            logger.warning(
+                "Unsupported exception type for notification payload | exception_id=%s type=%s",
+                exception_id,
+                exception_type,
+            )
+            return None
+
+        shift_start, shift_end = get_employee_shift_times(exception.get('emp_code'))
+        planned_time = (
+            _get_late_reference_time(exception.get('emp_code'), _coerce_time(exception.get('planned_arrival_time')))
+            if exception_type == 'late_arrival'
+            else shift_end
+        )
+        actual_time = (
+            _coerce_time(exception.get('login_time'))
+            if exception_type == 'late_arrival'
+            else _coerce_time(exception.get('logout_time'))
+        )
+
+        calculated_minutes = _calculate_exception_minutes(
+            exception_type,
+            planned_time,
+            actual_time,
+        )
+        stored_minutes = exception.get('late_by_minutes') if exception_type == 'late_arrival' else exception.get('early_by_minutes')
+        effective_minutes = calculated_minutes if calculated_minutes is not None else stored_minutes
+
+        resolved_recipient_name = (
+            (recipient_name or '').strip()
+            or (exception.get('manager_name') or '').strip()
+            or 'Manager'
+        )
+        resolved_status_label = status_label or _format_exception_status_label(exception.get('status'))
+        reason_text = (exception.get('notes') or exception.get('reason') or '').strip() or '-'
+        exception_label = _format_exception_type_label(exception_type)
+        intro_line = f"{exception.get('emp_name') or 'Employee'} has raised a {exception_label} exception."
+        detail_line = _build_exception_detail_line(exception_type, effective_minutes)
+        reason_line = f"Reason: {reason_text}"
+        status_line = f"Status: {resolved_status_label}"
+        auto_line = "This is an automated message. Please do not reply here."
+        body = (
+            f"Hi {resolved_recipient_name},\n\n"
+            f"{intro_line}\n\n"
+            f"{detail_line}\n"
+            f"{reason_line}\n"
+            f"{status_line}\n\n"
+            f"{auto_line}"
+        )
+
+        return {
+            "title": "Attendance Exception",
+            "body": body,
+            "template_parameters": [
+                resolved_recipient_name,
+                intro_line,
+                detail_line,
+                reason_line,
+                status_line,
+                auto_line,
+            ],
+            "data": {
+                "type": "attendance_exception_submitted",
+                "exception_id": exception.get('id'),
+                "attendance_id": exception.get('attendance_id'),
+                "exception_type": exception_type,
+                "employee_name": exception.get('emp_name'),
+                "manager_code": exception.get('manager_code'),
+                "manager_email": exception.get('manager_email'),
+                "planned_time": _format_time_for_display(planned_time),
+                "actual_time": _format_time_for_display(actual_time),
+                "calculated_minutes": effective_minutes,
+                "detail": detail_line,
+                "reason": reason_text,
+                "status": exception.get('status'),
+                "status_label": resolved_status_label,
+            },
+            "debug": {
+                "employee_name": exception.get('emp_name'),
+                "exception_type": exception_type,
+                "planned_time": _format_time_for_display(planned_time),
+                "actual_time": _format_time_for_display(actual_time),
+                "calculated_minutes": effective_minutes,
+                "reason": reason_text,
+                "status": resolved_status_label,
+            },
+        }
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def sync_late_arrival_exception_after_clock_in(
+    emp_code: str,
+    attendance_id: int,
+    login_time: datetime,
+) -> Optional[Dict]:
+    """Link and update a pending late-arrival exception after real clock-in."""
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
         current_date = login_time.date()
         login_time_only = login_time.time()
-        late_cutoff = get_late_login_cutoff_time()
 
-        if login_time_only <= late_cutoff:
-            return None
-
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT
                 id,
                 status,
@@ -409,29 +612,49 @@ def attach_pending_late_arrival_to_attendance(
                 manager_email,
                 planned_arrival_time
             FROM attendance_exceptions
-            WHERE attendance_id = %s
-              AND emp_code = %s
+            WHERE emp_code = %s
               AND exception_type = 'late_arrival'
               AND exception_date = %s
-            ORDER BY requested_at DESC
+            ORDER BY requested_at DESC, id DESC
             LIMIT 1
-        """, (attendance_id, emp_code, current_date))
-
+            """,
+            (emp_code, current_date),
+        )
         exception = cursor.fetchone()
         if not exception:
             return None
 
-        late_by_minutes = _calculate_late_by_minutes(login_time_only, late_cutoff)
+        planned_start = _get_late_reference_time(
+            emp_code,
+            _coerce_time(exception.get('planned_arrival_time')),
+        )
+        late_by_minutes = _calculate_exception_minutes(
+            'late_arrival',
+            planned_start,
+            login_time_only,
+        )
         exception_time_value = _exception_time_value(cursor, login_time)
 
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE attendance_exceptions
             SET
+                attendance_id = %s,
                 exception_time = %s,
-                late_by_minutes = %s
+                planned_arrival_time = %s,
+                late_by_minutes = %s,
+                updated_at = %s
             WHERE id = %s
-        """, (exception_time_value, late_by_minutes, exception['id']))
-
+            """,
+            (
+                attendance_id,
+                exception_time_value,
+                planned_start,
+                late_by_minutes,
+                now_local_naive(),
+                exception['id'],
+            ),
+        )
         conn.commit()
 
         return {
@@ -439,11 +662,9 @@ def attach_pending_late_arrival_to_attendance(
             "attendance_id": attendance_id,
             "exception_type": "late_arrival",
             "late_by_minutes": late_by_minutes,
-            "shift_start_time": shift_start.strftime('%H:%M'),
+            "shift_start_time": planned_start.strftime('%H:%M'),
             "actual_login_time": login_time_only.strftime('%H:%M'),
-            "planned_arrival_time": (
-                exception.get('planned_arrival_time') or shift_start
-            ).strftime('%H:%M'),
+            "planned_arrival_time": planned_start.strftime('%H:%M'),
             "manager_code": exception.get('manager_code'),
             "manager_email": exception.get('manager_email'),
             "status": exception['status'],
@@ -451,11 +672,90 @@ def attach_pending_late_arrival_to_attendance(
         }
     except Exception as e:
         conn.rollback()
-        logger.error(f"Failed to attach pending late arrival to attendance: {e}")
+        logger.error(f"Failed to sync late arrival exception after clock-in: {e}")
         return None
     finally:
         cursor.close()
         conn.close()
+
+
+def sync_early_leave_exception_after_clock_out(attendance_id: int, logout_time: datetime) -> Optional[Dict]:
+    """Update a linked early-leave exception with the real clock-out time."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT
+                id,
+                emp_code,
+                status,
+                manager_code,
+                manager_email
+            FROM attendance_exceptions
+            WHERE attendance_id = %s
+              AND exception_type = 'early_leave'
+            ORDER BY requested_at DESC, id DESC
+            LIMIT 1
+            """,
+            (attendance_id,),
+        )
+        exception = cursor.fetchone()
+        if not exception:
+            return None
+
+        _, shift_end = get_employee_shift_times(exception.get('emp_code'))
+        actual_time = logout_time.time() if isinstance(logout_time, datetime) else _coerce_time(logout_time)
+        early_by_minutes = _calculate_exception_minutes(
+            'early_leave',
+            shift_end,
+            actual_time,
+        )
+
+        cursor.execute(
+            """
+            UPDATE attendance_exceptions
+            SET
+                early_by_minutes = %s,
+                updated_at = %s
+            WHERE id = %s
+            """,
+            (
+                early_by_minutes,
+                now_local_naive(),
+                exception['id'],
+            ),
+        )
+        conn.commit()
+
+        return {
+            "exception_id": exception['id'],
+            "attendance_id": attendance_id,
+            "exception_type": "early_leave",
+            "early_by_minutes": early_by_minutes,
+            "shift_end_time": shift_end.strftime('%H:%M') if shift_end else None,
+            "actual_logout_time": actual_time.strftime('%H:%M') if actual_time else None,
+            "manager_code": exception.get('manager_code'),
+            "manager_email": exception.get('manager_email'),
+            "status": exception['status'],
+        }
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to sync early leave exception after clock-out: {e}")
+        return None
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def attach_pending_late_arrival_to_attendance(
+    emp_code: str,
+    attendance_id: int,
+    login_time: datetime
+) -> Optional[Dict]:
+    """Backward-compatible wrapper for late-arrival sync after clock-in."""
+    return sync_late_arrival_exception_after_clock_in(emp_code, attendance_id, login_time)
 
 
 # =========================
@@ -523,10 +823,10 @@ def request_late_arrival_exception(emp_code: str, reason: str,
         if cursor.fetchone():
             return ({"success": False, "message": "Late arrival exception already submitted"}, 400)
         
-        late_cutoff = get_late_login_cutoff_time()
-        # Allow employees to pre-submit before the cutoff; actual lateness is
-        # recalculated and updated when they clock in.
-        late_by_minutes = max(_calculate_late_by_minutes(current_time, late_cutoff), 0)
+        planned_start = _get_late_reference_time(emp_code)
+        # Allow employees to pre-submit before actual clock-in.
+        # The real late duration is updated later when login_time is available.
+        late_by_minutes = None
 
         late_window_start, late_window_end = _get_late_arrival_submission_window()
         if not _is_time_in_range(current_time, late_window_start, late_window_end):
@@ -565,7 +865,7 @@ def request_late_arrival_exception(emp_code: str, reason: str,
             'late_arrival',
             current_date,
             exception_time_value,
-            late_cutoff,
+            planned_start,
             late_by_minutes,
             reason,
             notes,
@@ -589,13 +889,15 @@ def request_late_arrival_exception(emp_code: str, reason: str,
                 "exception_type": "late_arrival",
                 "employee_name": emp_info['emp_name'],
                 "late_by_minutes": late_by_minutes,
-                "shift_start_time": late_cutoff.strftime('%H:%M'),
+                "shift_start_time": planned_start.strftime('%H:%M'),
                 "actual_login_time": None,
-                "planned_arrival_time": late_cutoff.strftime('%H:%M'),
+                "planned_arrival_time": planned_start.strftime('%H:%M'),
                 "manager": emp_info['approver_name'],
                 "manager_code": emp_info['approver_code'],
                 "manager_email": emp_info['approver_email'],
                 "status": "pending",
+                "reason": reason,
+                "notes": notes,
                 "submitted_before_clock_in": True,
             }
         }, 201)
@@ -708,7 +1010,7 @@ def request_early_leave_exception(emp_code: str, attendance_id: int,
         if leave_datetime >= shift_end_datetime:
             return ({"success": False, "message": "Planned leave time is after shift end time"}, 400)
         
-        early_by_minutes = int((shift_end_datetime - leave_datetime).total_seconds() / 60)
+        early_by_minutes = None
         
         # Create exception record
         cursor.execute("""
@@ -766,6 +1068,8 @@ def request_early_leave_exception(emp_code: str, attendance_id: int,
                 "manager_code": emp_info['approver_code'],
                 "manager_email": emp_info['approver_email'],
                 "status": "pending",
+                "reason": reason,
+                "notes": notes,
                 "note": "Please wait for manager approval before clocking out"
             }
         }, 201)
@@ -921,7 +1225,7 @@ def approve_exception(exception_id: int, manager_code: str,
                 reviewed_at = %s,
                 manager_remarks = %s
             WHERE id = %s
-        """, (action, manager_code, datetime.now(), remarks, exception_id))
+        """, (action, manager_code, now_local_naive(), remarks, exception_id))
         
         conn.commit()
         
@@ -942,7 +1246,7 @@ def approve_exception(exception_id: int, manager_code: str,
                 "emp_email": exception['emp_email'],
                 "reviewed_by": manager_code,
                 "manager_remarks": remarks,
-                "reviewed_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                "reviewed_at": now_local_naive().strftime('%Y-%m-%d %H:%M:%S')
             }
         }, 200)
         
@@ -1157,7 +1461,7 @@ def get_my_late_arrival_records(emp_code: str, status: str = None) -> Tuple[Dict
 
     try:
         emp_info = get_employee_and_manager_info(emp_code)
-        late_cutoff = get_late_login_cutoff_time()
+        late_cutoff = _get_late_reference_time(emp_code)
 
         if not emp_info or not emp_info.get('emp_email'):
             return ({

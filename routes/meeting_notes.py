@@ -24,6 +24,13 @@ def generate(current_user):
     - meeting_title: optional title
     - language: optional language hint for transcription
     """
+    logger.info(
+        "Meeting notes upload request received content_type=%s files=%s form=%s",
+        request.content_type,
+        list(request.files.keys()),
+        list(request.form.keys()),
+    )
+
     audio_file = request.files.get("audio")
     meeting_title = (request.form.get("meeting_title") or "").strip() or None
     language = (request.form.get("language") or "").strip() or None

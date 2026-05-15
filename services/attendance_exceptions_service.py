@@ -14,6 +14,7 @@ from services.leaves_service import is_employee_on_leave
 from typing import Dict, Tuple, Optional, List
 from utils.time_utils import now_local_naive
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,39 @@ def _parse_optional_time_string(value: Optional[str]) -> Optional[time]:
         except ValueError:
             continue
     return None
+
+
+def _extract_planned_arrival_from_notes(notes: Optional[str]) -> Tuple[Optional[time], str]:
+    """
+    Extract a leading planned-arrival time from mobile notes.
+
+    Supported examples:
+    - "09:30 AM"
+    - "09:30 AM\\nStuck near flyover"
+    """
+    raw_notes = (notes or '').strip()
+    if not raw_notes:
+        return None, ''
+
+    lines = [line.strip() for line in raw_notes.splitlines()]
+    first_line = lines[0] if lines else ''
+    match = re.fullmatch(r'(\d{1,2}:\d{2}\s*(?:AM|PM))', first_line, flags=re.IGNORECASE)
+    if not match:
+        return None, raw_notes
+
+    parsed_time = None
+    for fmt in ('%I:%M %p', '%I:%M%p'):
+        try:
+            parsed_time = datetime.strptime(match.group(1).upper().replace('  ', ' '), fmt).time()
+            break
+        except ValueError:
+            continue
+
+    if parsed_time is None:
+        return None, raw_notes
+
+    remaining_notes = '\n'.join(line for line in lines[1:] if line).strip()
+    return parsed_time, remaining_notes
 
 
 def _is_time_in_range(current_value: time, start_value: time, end_value: time) -> bool:
@@ -854,8 +888,9 @@ def request_late_arrival_exception(emp_code: str, reason: str,
         if cursor.fetchone():
             return ({"success": False, "message": "Late arrival exception already submitted"}, 400)
         
+        extracted_planned_time, normalized_notes = _extract_planned_arrival_from_notes(notes)
         shift_start = _get_late_reference_time(emp_code)
-        planned_arrival_time_obj = _parse_optional_time_string(planned_arrival_time)
+        planned_arrival_time_obj = _parse_optional_time_string(planned_arrival_time) or extracted_planned_time
         if planned_arrival_time and planned_arrival_time_obj is None:
             return ({"success": False, "message": "Invalid planned_arrival_time format. Use HH:MM"}, 400)
         # Allow employees to pre-submit before actual clock-in.
@@ -902,7 +937,7 @@ def request_late_arrival_exception(emp_code: str, reason: str,
             planned_arrival_time_obj,
             late_by_minutes,
             reason,
-            notes,
+            normalized_notes,
             emp_info['approver_code'],
             emp_info['approver_email'],
             'pending',
@@ -931,7 +966,8 @@ def request_late_arrival_exception(emp_code: str, reason: str,
                 "manager_email": emp_info['approver_email'],
                 "status": "pending",
                 "reason": reason,
-                "notes": notes,
+                "notes": normalized_notes,
+                "note": normalized_notes,
                 "submitted_before_clock_in": True,
             }
         }, 201)

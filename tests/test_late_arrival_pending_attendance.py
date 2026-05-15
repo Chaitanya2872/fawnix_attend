@@ -121,8 +121,7 @@ def test_request_late_arrival_keeps_exception_detached_from_attendance(monkeypat
     result, status_code = exceptions_service.request_late_arrival_exception(
         "EMP001",
         "Traffic jam",
-        "Heavy rain",
-        "10:15",
+        "10:15 AM\nHeavy rain",
     )
 
     assert status_code == 201

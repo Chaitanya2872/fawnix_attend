@@ -124,6 +124,15 @@ def test_build_exception_notification_payload_falls_back_to_planned_arrival_time
     assert payload["data"]["detail"] == "Late by: 20 minutes"
 
 
+def test_extract_planned_arrival_from_notes_parses_mobile_payload():
+    planned_time, normalized_notes = exceptions_service._extract_planned_arrival_from_notes(
+        "09:30 AM\nStuck near flyover"
+    )
+
+    assert planned_time.strftime("%H:%M") == "09:30"
+    assert normalized_notes == "Stuck near flyover"
+
+
 def test_build_exception_notification_payload_falls_back_to_planned_leave_time(monkeypatch):
     connection = NotificationConnection([
         {

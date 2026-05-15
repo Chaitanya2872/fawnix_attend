@@ -83,7 +83,7 @@ def test_build_exception_notification_payload_uses_actual_late_minutes_and_notes
     assert "Reason: Personal emergency" in payload["body"]
 
 
-def test_build_exception_notification_payload_reports_missing_time_difference(monkeypatch):
+def test_build_exception_notification_payload_falls_back_to_planned_leave_time(monkeypatch):
     connection = NotificationConnection([
         {
             "id": 1002,
@@ -118,9 +118,56 @@ def test_build_exception_notification_payload_reports_missing_time_difference(mo
 
     payload = exceptions_service.build_exception_notification_payload(1002)
 
-    assert payload["data"]["calculated_minutes"] is None
-    assert payload["data"]["detail"] == "Early by: Time difference could not be calculated"
+    assert payload["data"]["actual_time"] is None
+    assert payload["data"]["selected_time"] == "16:30"
+    assert payload["data"]["calculated_minutes"] == 90
+    assert payload["data"]["detail"] == "Early by: 90 minutes"
     assert "Reason: Traffic" in payload["body"]
+
+
+def test_build_exception_notification_payload_reports_missing_time_difference_when_shift_missing(monkeypatch):
+    connection = NotificationConnection([
+        {
+            "id": 1004,
+            "emp_code": "EMP004",
+            "emp_name": "Vaishnavi Palepu",
+            "attendance_id": 503,
+            "exception_type": "late_arrival",
+            "exception_date": datetime(2026, 5, 15).date(),
+            "exception_time": None,
+            "planned_arrival_time": time(9, 15),
+            "planned_leave_time": None,
+            "late_by_minutes": None,
+            "early_by_minutes": None,
+            "reason": "Traffic jam",
+            "notes": "Heavy rain",
+            "status": "pending",
+            "manager_code": "M001",
+            "manager_email": "manager@example.com",
+            "login_time": None,
+            "logout_time": None,
+            "attendance_date": datetime(2026, 5, 15).date(),
+            "manager_name": "Raja Shekhar Perepa",
+        }
+    ])
+
+    monkeypatch.setattr(exceptions_service, "get_db_connection", lambda: connection)
+    monkeypatch.setattr(
+        exceptions_service,
+        "get_employee_shift_times",
+        lambda emp_code: (None, time(18, 0)),
+    )
+    monkeypatch.setattr(
+        exceptions_service,
+        "get_late_login_cutoff_time",
+        lambda: None,
+    )
+
+    payload = exceptions_service.build_exception_notification_payload(1004)
+
+    assert payload["data"]["selected_time"] == "09:15"
+    assert payload["data"]["calculated_minutes"] is None
+    assert payload["data"]["detail"] == "Late by: Time difference could not be calculated"
 
 
 def test_sync_early_leave_exception_after_clock_out_updates_actual_minutes(monkeypatch):

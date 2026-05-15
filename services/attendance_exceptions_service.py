@@ -447,6 +447,32 @@ def _build_exception_detail_line(exception_type: str, calculated_minutes: Option
     return f"{label}: {calculated_minutes} minutes"
 
 
+def _resolve_exception_time_values(exception: Dict) -> Tuple[Optional[time], Optional[time], Optional[time]]:
+    """
+    Resolve reference and selected times for notification calculations.
+
+    Returns:
+        (reference_shift_time, actual_attendance_time, selected_time_for_calculation)
+    """
+    exception_type = (exception.get('exception_type') or '').strip().lower()
+    emp_code = exception.get('emp_code')
+    shift_start, shift_end = get_employee_shift_times(emp_code)
+
+    if exception_type == 'late_arrival':
+        reference_time = shift_start or get_late_login_cutoff_time()
+        actual_time = _coerce_time(exception.get('login_time'))
+        fallback_time = _coerce_time(exception.get('planned_arrival_time'))
+        return reference_time, actual_time, actual_time or fallback_time
+
+    if exception_type == 'early_leave':
+        reference_time = shift_end
+        actual_time = _coerce_time(exception.get('logout_time'))
+        fallback_time = _coerce_time(exception.get('planned_leave_time'))
+        return reference_time, actual_time, actual_time or fallback_time
+
+    return None, None, None
+
+
 def build_exception_notification_payload(
     exception_id: int,
     recipient_name: Optional[str] = None,
@@ -506,22 +532,12 @@ def build_exception_notification_payload(
             )
             return None
 
-        shift_start, shift_end = get_employee_shift_times(exception.get('emp_code'))
-        planned_time = (
-            _get_late_reference_time(exception.get('emp_code'), _coerce_time(exception.get('planned_arrival_time')))
-            if exception_type == 'late_arrival'
-            else shift_end
-        )
-        actual_time = (
-            _coerce_time(exception.get('login_time'))
-            if exception_type == 'late_arrival'
-            else _coerce_time(exception.get('logout_time'))
-        )
+        reference_time, actual_time, selected_time = _resolve_exception_time_values(exception)
 
         calculated_minutes = _calculate_exception_minutes(
             exception_type,
-            planned_time,
-            actual_time,
+            reference_time,
+            selected_time,
         )
         stored_minutes = exception.get('late_by_minutes') if exception_type == 'late_arrival' else exception.get('early_by_minutes')
         effective_minutes = calculated_minutes if calculated_minutes is not None else stored_minutes
@@ -567,8 +583,9 @@ def build_exception_notification_payload(
                 "employee_name": exception.get('emp_name'),
                 "manager_code": exception.get('manager_code'),
                 "manager_email": exception.get('manager_email'),
-                "planned_time": _format_time_for_display(planned_time),
+                "planned_time": _format_time_for_display(reference_time),
                 "actual_time": _format_time_for_display(actual_time),
+                "selected_time": _format_time_for_display(selected_time),
                 "calculated_minutes": effective_minutes,
                 "detail": detail_line,
                 "reason": reason_text,
@@ -578,8 +595,9 @@ def build_exception_notification_payload(
             "debug": {
                 "employee_name": exception.get('emp_name'),
                 "exception_type": exception_type,
-                "planned_time": _format_time_for_display(planned_time),
+                "planned_time": _format_time_for_display(reference_time),
                 "actual_time": _format_time_for_display(actual_time),
+                "selected_time": _format_time_for_display(selected_time),
                 "calculated_minutes": effective_minutes,
                 "reason": reason_text,
                 "status": resolved_status_label,

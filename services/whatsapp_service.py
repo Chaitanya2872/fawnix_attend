@@ -342,6 +342,15 @@ def send_exception_notification(
 
         response = None
         if template_parameters:
+            components = [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": str(value)}
+                        for value in template_parameters
+                    ]
+                }
+            ]
             template_payload = {
                 "messaging_product": "whatsapp",
                 "to": formatted_phone,
@@ -349,21 +358,7 @@ def send_exception_notification(
                 "template": {
                     "name": template_name,
                     "language": {"code": "en_US"},
-                    "components": [
-                        {
-                            "type": "header",
-                            "parameters": [
-                                {"type": "text", "text": str(title)}
-                            ]
-                        },
-                        {
-                            "type": "body",
-                            "parameters": [
-                                {"type": "text", "text": str(value)}
-                                for value in template_parameters
-                            ]
-                        }
-                    ]
+                    "components": components
                 }
             }
 

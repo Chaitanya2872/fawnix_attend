@@ -125,3 +125,27 @@ def test_request_early_leave_allows_submission_anytime_when_planned_time_is_vali
     assert result["data"]["planned_leave_time"] == "16:30"
     assert result["data"]["early_by_minutes"] is None
     assert connection.commit_count == 1
+
+
+def test_request_early_leave_allows_flexible_grade_employee_submission(monkeypatch):
+    connection = EarlyLeaveConnection()
+    _patch_common_dependencies(monkeypatch, connection)
+    monkeypatch.setattr(exceptions_service, "is_flexible_grade_employee", lambda emp_code: True)
+    monkeypatch.setattr(
+        exceptions_service,
+        "now_local_naive",
+        lambda: datetime(2026, 4, 8, 11, 0, 0),
+    )
+
+    result, status_code = exceptions_service.request_early_leave_exception(
+        "EMP001",
+        45,
+        "16:30",
+        "Medical emergency",
+        "Doctor appointment",
+    )
+
+    assert status_code == 201
+    assert result["success"] is True
+    assert result["data"]["planned_leave_time"] == "16:30"
+    assert connection.commit_count == 1

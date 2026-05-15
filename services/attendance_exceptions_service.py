@@ -1050,12 +1050,6 @@ def request_early_leave_exception(emp_code: str, attendance_id: int,
     cursor = conn.cursor()
     
     try:
-        if is_flexible_grade_employee(emp_code):
-            return ({
-                "success": False,
-                "message": "Flexible grade employees do not need early leave approval."
-            }, 400)
-
         # Get employee and manager info
         emp_info = get_employee_and_manager_info(emp_code)
         

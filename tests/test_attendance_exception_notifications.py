@@ -133,6 +133,15 @@ def test_extract_planned_arrival_from_notes_parses_mobile_payload():
     assert normalized_notes == "Stuck near flyover"
 
 
+def test_extract_planned_arrival_from_notes_accepts_inline_label_and_24h_time():
+    planned_time, normalized_notes = exceptions_service._extract_planned_arrival_from_notes(
+        "Planned arrival: 09:30\nStuck near flyover"
+    )
+
+    assert planned_time.strftime("%H:%M") == "09:30"
+    assert normalized_notes == "Planned arrival\nStuck near flyover"
+
+
 def test_build_exception_notification_payload_falls_back_to_planned_leave_time(monkeypatch):
     connection = NotificationConnection([
         {

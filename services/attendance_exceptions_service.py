@@ -60,14 +60,19 @@ def _extract_planned_arrival_from_notes(notes: Optional[str]) -> Tuple[Optional[
 
     lines = [line.strip() for line in raw_notes.splitlines()]
     first_line = lines[0] if lines else ''
-    match = re.fullmatch(r'(\d{1,2}:\d{2}\s*(?:AM|PM))', first_line, flags=re.IGNORECASE)
+    match = re.search(
+        r'(?P<time>\d{1,2}:\d{2}(?:\s*(?:AM|PM))?)',
+        first_line,
+        flags=re.IGNORECASE,
+    )
     if not match:
         return None, raw_notes
 
+    time_text = match.group('time').strip().upper()
     parsed_time = None
-    for fmt in ('%I:%M %p', '%I:%M%p'):
+    for fmt in ('%I:%M %p', '%I:%M%p', '%H:%M'):
         try:
-            parsed_time = datetime.strptime(match.group(1).upper().replace('  ', ' '), fmt).time()
+            parsed_time = datetime.strptime(time_text, fmt).time()
             break
         except ValueError:
             continue
@@ -75,7 +80,14 @@ def _extract_planned_arrival_from_notes(notes: Optional[str]) -> Tuple[Optional[
     if parsed_time is None:
         return None, raw_notes
 
-    remaining_notes = '\n'.join(line for line in lines[1:] if line).strip()
+    remaining_first_line = (
+        (first_line[:match.start()] + " " + first_line[match.end():]).strip(" -:\t")
+    ).strip()
+    remaining_lines = []
+    if remaining_first_line:
+        remaining_lines.append(remaining_first_line)
+    remaining_lines.extend(line for line in lines[1:] if line)
+    remaining_notes = '\n'.join(remaining_lines).strip()
     return parsed_time, remaining_notes
 
 
@@ -891,6 +903,15 @@ def request_late_arrival_exception(emp_code: str, reason: str,
         extracted_planned_time, normalized_notes = _extract_planned_arrival_from_notes(notes)
         shift_start = _get_late_reference_time(emp_code)
         planned_arrival_time_obj = _parse_optional_time_string(planned_arrival_time) or extracted_planned_time
+        logger.info(
+            "Late arrival request normalization | emp_code=%s provided_planned_arrival=%s extracted_from_notes=%s final_planned_arrival=%s raw_notes=%s normalized_notes=%s",
+            emp_code,
+            planned_arrival_time,
+            extracted_planned_time.strftime('%H:%M') if extracted_planned_time else None,
+            planned_arrival_time_obj.strftime('%H:%M') if planned_arrival_time_obj else None,
+            notes,
+            normalized_notes,
+        )
         if planned_arrival_time and planned_arrival_time_obj is None:
             return ({"success": False, "message": "Invalid planned_arrival_time format. Use HH:MM"}, 400)
         # Allow employees to pre-submit before actual clock-in.

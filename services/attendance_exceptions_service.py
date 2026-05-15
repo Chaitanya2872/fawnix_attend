@@ -480,6 +480,15 @@ def _format_exception_type_label(exception_type: str) -> str:
     return normalized.replace('_', ' ').strip()
 
 
+def _format_exception_type_template_value(exception_type: str) -> str:
+    normalized = (exception_type or '').strip().lower()
+    if normalized == 'late_arrival':
+        return 'late-arrival'
+    if normalized == 'early_leave':
+        return 'early-leave'
+    return normalized.replace('_', '-').strip()
+
+
 def _format_exception_status_label(status: Optional[str]) -> str:
     normalized = (status or '').strip().lower()
     if normalized == 'pending':
@@ -608,6 +617,7 @@ def build_exception_notification_payload(
         resolved_status_label = status_label or _format_exception_status_label(exception.get('status'))
         reason_text = (exception.get('notes') or exception.get('reason') or '').strip() or '-'
         exception_label = _format_exception_type_label(exception_type)
+        exception_template_value = _format_exception_type_template_value(exception_type)
         intro_line = f"{exception.get('emp_name') or 'Employee'} has raised a {exception_label} exception."
         detail_line = _build_exception_detail_line(exception_type, effective_minutes)
         reason_line = f"Reason: {reason_text}"
@@ -627,11 +637,11 @@ def build_exception_notification_payload(
             "body": body,
             "template_parameters": [
                 resolved_recipient_name,
-                intro_line,
+                exception.get('emp_name') or 'Employee',
+                exception_template_value,
                 detail_line,
-                reason_line,
-                status_line,
-                auto_line,
+                reason_text,
+                resolved_status_label,
             ],
             "data": {
                 "type": "attendance_exception_submitted",

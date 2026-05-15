@@ -78,6 +78,14 @@ def test_build_exception_notification_payload_uses_actual_late_minutes_and_notes
     assert payload["data"]["calculated_minutes"] == 15
     assert payload["data"]["reason"] == "Personal emergency"
     assert payload["data"]["status_label"] == "Pending your review"
+    assert payload["template_parameters"] == [
+        "Raja Shekhar Perepa",
+        "Vaishnavi Palepu",
+        "late-arrival",
+        "Late by: 15 minutes",
+        "Personal emergency",
+        "Pending your review",
+    ]
     assert "Vaishnavi Palepu has raised a late arrival exception." in payload["body"]
     assert "Late by: 15 minutes" in payload["body"]
     assert "Reason: Personal emergency" in payload["body"]

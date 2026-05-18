@@ -908,19 +908,11 @@ def get_attendance_filter_candidates_all(target_date: date | None = None) -> Lis
                 e.emp_full_name,
                 e.emp_email
             FROM employees e
-            LEFT JOIN users u ON u.emp_code = e.emp_code
             WHERE NOT EXISTS (
                   SELECT 1
                   FROM attendance a
                   WHERE a.employee_email = e.emp_email
                     AND a.date = %s
-              )
-              AND COALESCE(u.is_active, TRUE) = TRUE
-              AND EXISTS (
-                  SELECT 1
-                  FROM user_devices ud
-                  WHERE ud.emp_code = e.emp_code
-                    AND ud.is_active = TRUE
               )
               AND NOT EXISTS (
                   SELECT 1

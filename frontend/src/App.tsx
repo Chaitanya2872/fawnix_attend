@@ -1701,13 +1701,9 @@ function App() {
 
   useEffect(() => {
     setSelectedMissedLoginEmpCodes((previousCodes) =>
-      previousCodes.filter(
-        (empCode) =>
-          missedLoginEmpCodes.includes(empCode) &&
-          !alertSentEmpCodes.includes(empCode)
-      )
+      previousCodes.filter((empCode) => missedLoginEmpCodes.includes(empCode))
     )
-  }, [missedLoginEmpCodes, alertSentEmpCodes])
+  }, [missedLoginEmpCodes])
 
   useEffect(() => {
     if (calendarEmployeeFilter === 'all') {
@@ -1953,9 +1949,7 @@ function App() {
   }
 
   const triggerAttendanceReminder = async () => {
-    const requestedEmpCodes = selectedMissedLoginEmpCodes.filter(
-      (empCode) => !alertSentEmpCodes.includes(empCode)
-    )
+    const requestedEmpCodes = Array.from(new Set(selectedMissedLoginEmpCodes))
     if (!requestedEmpCodes.length) {
       setAlertTriggerStatus('Select at least one employee to trigger reminders.')
       return
@@ -3375,9 +3369,7 @@ function App() {
     const missedLoginEmployeeCodes = missedLoginEmployees
       .map((employee) => employee.emp_code || '')
       .filter(Boolean)
-    const actionableMissedLoginEmployeeCodes = missedLoginEmployeeCodes.filter(
-      (empCode) => !alertSentEmpCodes.includes(empCode)
-    )
+    const actionableMissedLoginEmployeeCodes = missedLoginEmployeeCodes
     const selectedMissedLoginCount = selectedMissedLoginEmpCodes.filter((empCode) =>
       actionableMissedLoginEmployeeCodes.includes(empCode)
     ).length
@@ -4791,7 +4783,6 @@ function App() {
                           className="missed-login-checkbox"
                           type="checkbox"
                           checked={selectedMissedLoginEmpCodes.includes(employee.emp_code)}
-                          disabled={isAlertSent}
                           onChange={(event) => {
                             const checked = event.target.checked
                             setSelectedMissedLoginEmpCodes((previousCodes) => {

@@ -1272,13 +1272,9 @@ function FawnixApp() {
 
   useEffect(() => {
     setSelectedMissedLoginEmpCodes((previousCodes) =>
-      previousCodes.filter(
-        (empCode) =>
-          missedLoginEmpCodes.includes(empCode) &&
-          !alertSentEmpCodes.includes(empCode)
-      )
+      previousCodes.filter((empCode) => missedLoginEmpCodes.includes(empCode))
     )
-  }, [missedLoginEmpCodes, alertSentEmpCodes])
+  }, [missedLoginEmpCodes])
 
   const updateTokens = (nextAccessToken: string, nextRefreshToken: string) => {
     setAccessToken(nextAccessToken)
@@ -1482,9 +1478,7 @@ function FawnixApp() {
   }
 
   const triggerAttendanceReminder = async () => {
-    const requestedEmpCodes = selectedMissedLoginEmpCodes.filter(
-      (empCode) => !alertSentEmpCodes.includes(empCode)
-    )
+    const requestedEmpCodes = Array.from(new Set(selectedMissedLoginEmpCodes))
     if (!requestedEmpCodes.length) {
       setAlertTriggerStatus('Select at least one employee to trigger reminders.')
       return
@@ -2670,9 +2664,7 @@ function FawnixApp() {
     const missedLoginEmployeeCodes = missedLoginEmployees
       .map((employee) => employee.emp_code || '')
       .filter(Boolean)
-    const actionableMissedLoginEmployeeCodes = missedLoginEmployeeCodes.filter(
-      (empCode) => !alertSentEmpCodes.includes(empCode)
-    )
+    const actionableMissedLoginEmployeeCodes = missedLoginEmployeeCodes
     const selectedMissedLoginCount = selectedMissedLoginEmpCodes.filter((empCode) =>
       actionableMissedLoginEmployeeCodes.includes(empCode)
     ).length
@@ -3366,7 +3358,6 @@ function FawnixApp() {
                           className="missed-login-checkbox"
                           type="checkbox"
                           checked={selectedMissedLoginEmpCodes.includes(employee.emp_code)}
-                          disabled={isAlertSent}
                           onChange={(event) => {
                             const checked = event.target.checked
                             setSelectedMissedLoginEmpCodes((previousCodes) => {

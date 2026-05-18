@@ -263,10 +263,48 @@ def test_invalid_tokens_are_deactivated(monkeypatch):
     assert deactivated_tokens == ["invalid-token"]
 
 
+class AttendanceFilterCursor:
+    def __init__(self):
+        self.fetchall_value = [{"emp_code": "EMP001", "emp_full_name": "Alice", "emp_email": "alice@example.com"}]
+
+    def execute(self, sql, params=None):
+        normalized_sql = " ".join(sql.split())
+        assert "LEFT JOIN users u ON u.emp_code = e.emp_code" in normalized_sql
+        assert "COALESCE(u.is_active, TRUE) = TRUE" in normalized_sql
+        assert "FROM user_devices ud" in normalized_sql
+        assert "ud.emp_code = e.emp_code" in normalized_sql
+        assert "ud.is_active = TRUE" in normalized_sql
+
+    def fetchall(self):
+        return self.fetchall_value
+
+    def close(self):
+        pass
+
+
+class AttendanceFilterConnection:
+    def __init__(self):
+        self.cursor_obj = AttendanceFilterCursor()
+
+    def cursor(self):
+        return self.cursor_obj
+
+
+def test_attendance_filter_candidates_require_active_device_tokens(monkeypatch):
+    connection = AttendanceFilterConnection()
+
+    monkeypatch.setattr(notification_service, "get_db_connection", lambda: connection)
+    monkeypatch.setattr(notification_service, "return_connection", lambda conn: None)
+
+    rows = notification_service.get_attendance_filter_candidates()
+
+    assert rows == [{"emp_code": "EMP001", "emp_full_name": "Alice", "emp_email": "alice@example.com"}]
+
+
 def test_get_notification_candidates_uses_sendable_attendance_candidates(monkeypatch):
     monkeypatch.setattr(
         notification_service,
-        "get_attendance_reminder_candidates",
+        "get_attendance_filter_candidates",
         lambda target_date=None: [
             {"emp_code": "EMP007", "emp_full_name": "Asha", "emp_email": "asha@example.com"}
         ],

@@ -4714,46 +4714,6 @@ function App() {
                   Clear
                 </button>
               </div>
-              <div className="alert-side-list">
-                {missedLoginEmployees.length ? (
-                  missedLoginEmployees.map((employee) => {
-                    const isAlertSent = alertSentEmpCodes.includes(employee.emp_code)
-                    return (
-                      <label
-                        key={employee.emp_code}
-                        className={`alert-side-item missed-login-item${isAlertSent ? ' sent' : ''}`}
-                      >
-                        <input
-                          className="missed-login-checkbox"
-                          type="checkbox"
-                          checked={selectedMissedLoginEmpCodes.includes(employee.emp_code)}
-                          disabled={isAlertSent}
-                          onChange={(event) => {
-                            const checked = event.target.checked
-                            setSelectedMissedLoginEmpCodes((previousCodes) => {
-                              if (checked) {
-                                return previousCodes.includes(employee.emp_code)
-                                  ? previousCodes
-                                  : [...previousCodes, employee.emp_code]
-                              }
-                              return previousCodes.filter((empCode) => empCode !== employee.emp_code)
-                            })
-                          }}
-                        />
-                        <div className="missed-login-item-copy">
-                          <strong>{employee.emp_full_name || employee.emp_code}</strong>
-                          <span>{employee.emp_designation || employee.emp_department || employee.emp_email || '--'}</span>
-                          <small className={isAlertSent ? 'missed-login-alert-sent' : 'missed-login-alert-not-sent'}>
-                            {isAlertSent ? 'Alert Sent' : 'Not Sent'}
-                          </small>
-                        </div>
-                      </label>
-                    )
-                  })
-                ) : (
-                  <div className="empty-state">No missed logins for this date.</div>
-                )}
-              </div>
               <div className="missed-logins-actions">
                 <span className="missed-logins-selected">
                   Selected: {selectedMissedLoginCount}
@@ -4814,6 +4774,46 @@ function App() {
                     </div>
                   </div>
                 </div>
+              </div>
+              <div className="alert-side-list">
+                {missedLoginEmployees.length ? (
+                  missedLoginEmployees.map((employee) => {
+                    const isAlertSent = alertSentEmpCodes.includes(employee.emp_code)
+                    return (
+                      <label
+                        key={employee.emp_code}
+                        className={`alert-side-item missed-login-item${isAlertSent ? ' sent' : ''}`}
+                      >
+                        <input
+                          className="missed-login-checkbox"
+                          type="checkbox"
+                          checked={selectedMissedLoginEmpCodes.includes(employee.emp_code)}
+                          disabled={isAlertSent}
+                          onChange={(event) => {
+                            const checked = event.target.checked
+                            setSelectedMissedLoginEmpCodes((previousCodes) => {
+                              if (checked) {
+                                return previousCodes.includes(employee.emp_code)
+                                  ? previousCodes
+                                  : [...previousCodes, employee.emp_code]
+                              }
+                              return previousCodes.filter((empCode) => empCode !== employee.emp_code)
+                            })
+                          }}
+                        />
+                        <div className="missed-login-item-copy">
+                          <strong>{employee.emp_full_name || employee.emp_code}</strong>
+                          <span>{employee.emp_designation || employee.emp_department || employee.emp_email || '--'}</span>
+                          <small className={isAlertSent ? 'missed-login-alert-sent' : 'missed-login-alert-not-sent'}>
+                            {isAlertSent ? 'Alert Sent' : 'Not Sent'}
+                          </small>
+                        </div>
+                      </label>
+                    )
+                  })
+                ) : (
+                  <div className="empty-state">No missed logins for this date.</div>
+                )}
               </div>
               {alertTriggerStatus ? <span className="report-status">{alertTriggerStatus}</span> : null}
             </div>

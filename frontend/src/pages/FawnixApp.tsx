@@ -1230,7 +1230,10 @@ function FawnixApp() {
         const nextMissedCodes = candidateRows
           .map((row: { emp_code?: string }) => (row.emp_code || '').trim())
           .filter(Boolean)
-        const nextEligibleCodes = nextMissedCodes
+        const nextEligibleCodes = candidateRows
+          .filter((row) => Boolean(row.alert_eligible))
+          .map((row) => (row.emp_code || '').trim())
+          .filter(Boolean)
         const nextSentCodes = candidateRows
           .filter((row) => (row.alert_status || '').toLowerCase() === 'sent')
           .map((row) => (row.emp_code || '').trim())

@@ -304,6 +304,14 @@ def test_attendance_filter_candidates_require_active_device_tokens(monkeypatch):
 def test_get_notification_candidates_uses_sendable_attendance_candidates(monkeypatch):
     monkeypatch.setattr(
         notification_service,
+        "get_attendance_filter_candidates_all",
+        lambda target_date=None: [
+            {"emp_code": "EMP007", "emp_full_name": "Asha", "emp_email": "asha@example.com"},
+            {"emp_code": "EMP008", "emp_full_name": "Bala", "emp_email": "bala@example.com"},
+        ],
+    )
+    monkeypatch.setattr(
+        notification_service,
         "get_attendance_filter_candidates",
         lambda target_date=None: [
             {"emp_code": "EMP007", "emp_full_name": "Asha", "emp_email": "asha@example.com"}
@@ -318,11 +326,16 @@ def test_get_notification_candidates_uses_sendable_attendance_candidates(monkeyp
     result = notification_service.get_notification_candidates("attendance_reminder")
 
     assert result["success"] is True
-    assert result["count"] == 1
+    assert result["count"] == 2
     assert result["sent_count"] == 1
     assert result["sent_emp_codes"] == ["EMP007"]
     assert result["data"][0]["emp_code"] == "EMP007"
     assert result["data"][0]["alert_status"] == "sent"
+    assert result["data"][0]["alert_eligible"] is True
+    assert result["data"][1]["emp_code"] == "EMP008"
+    assert result["data"][1]["alert_eligible"] is False
+    assert result["alert_eligible_emp_codes"] == ["EMP007"]
+    assert result["alert_ineligible_emp_codes"] == ["EMP008"]
 
 
 def test_send_push_notification_to_employee_can_use_latest_active_token_only(monkeypatch):

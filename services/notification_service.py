@@ -893,8 +893,55 @@ def get_selected_attendance_filter_candidates(
         return_connection(conn)
 
 
+def get_attendance_filter_candidates_all(target_date: date | None = None) -> List[Dict[str, Any]]:
+    """Fetch all employees who are not logged in and not on active leave."""
+    reminder_date = target_date or _current_local_date()
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT DISTINCT
+                e.emp_code,
+                e.emp_full_name,
+                e.emp_email
+            FROM employees e
+            LEFT JOIN users u ON u.emp_code = e.emp_code
+            WHERE NOT EXISTS (
+                  SELECT 1
+                  FROM attendance a
+                  WHERE a.employee_email = e.emp_email
+                    AND a.date = %s
+              )
+              AND COALESCE(u.is_active, TRUE) = TRUE
+              AND EXISTS (
+                  SELECT 1
+                  FROM user_devices ud
+                  WHERE ud.emp_code = e.emp_code
+                    AND ud.is_active = TRUE
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM leaves l
+                  WHERE l.emp_code = e.emp_code
+                    AND COALESCE(LOWER(TRIM(l.status)), 'pending') NOT IN ('rejected', 'cancelled')
+                    AND %s BETWEEN l.from_date AND l.to_date
+              )
+            ORDER BY e.emp_full_name
+            """,
+            (reminder_date, reminder_date),
+        )
+
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+        return_connection(conn)
+
+
 def get_attendance_filter_candidates(target_date: date | None = None) -> List[Dict[str, Any]]:
-    """Fetch employees who are not logged in and not on active leave."""
+    """Fetch missed-login employees who are also sendable via active device tokens."""
     reminder_date = target_date or _current_local_date()
 
     conn = get_db_connection()
@@ -1663,10 +1710,11 @@ def get_notification_candidates(
     reminder_date = target_date or _current_local_date()
 
     if normalized_type == "attendance_reminder":
-        candidates = get_attendance_filter_candidates(reminder_date)
+        candidates = get_attendance_filter_candidates_all(reminder_date)
+        sendable_candidates = get_attendance_filter_candidates(reminder_date)
         alert_eligible_emp_codes = {
             str(candidate.get("emp_code") or "").strip()
-            for candidate in candidates
+            for candidate in sendable_candidates
             if str(candidate.get("emp_code") or "").strip()
         }
     elif normalized_type == "lunch_reminder":

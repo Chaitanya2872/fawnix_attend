@@ -325,6 +325,40 @@ def test_get_notification_candidates_uses_sendable_attendance_candidates(monkeyp
     assert result["data"][0]["alert_status"] == "sent"
 
 
+def test_send_push_notification_to_employee_can_use_latest_active_token_only(monkeypatch):
+    captured = {}
+
+    monkeypatch.setattr(
+        notification_service,
+        "get_latest_employee_device_token",
+        lambda emp_code: "latest-token",
+    )
+
+    def fake_send_push_to_tokens(tokens, title, body, data=None, context=None):
+        captured["tokens"] = tokens
+        captured["context"] = context
+        return {
+            "success": True,
+            "message": "Push notification sent successfully",
+            "sent_count": len(tokens),
+            "failure_count": 0,
+        }
+
+    monkeypatch.setattr(notification_service, "_send_push_to_tokens", fake_send_push_to_tokens)
+
+    result = notification_service.send_push_notification_to_employee(
+        "EMP001",
+        "Attendance Reminder",
+        "Clock in. If you already did, please ignore.",
+        {"type": "attendance_reminder"},
+        latest_only=True,
+    )
+
+    assert result["success"] is True
+    assert captured["tokens"] == ["latest-token"]
+    assert captured["context"] == {"emp_code": "EMP001", "latest_only": True}
+
+
 def test_attendance_reminder_defaults_to_app_local_date(monkeypatch):
     captured = {}
 

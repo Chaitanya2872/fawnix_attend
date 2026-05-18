@@ -548,6 +548,12 @@ def get_employee_device_tokens(emp_code: Any) -> List[str]:
         return_connection(conn)
 
 
+def get_latest_employee_device_token(emp_code: Any) -> str | None:
+    """Fetch the most recently updated active FCM token for an employee code."""
+    tokens = get_employee_device_tokens(emp_code)
+    return tokens[0] if tokens else None
+
+
 def get_department_device_tokens(
     emp_department: Any,
     exclude_emp_code: Any = None,
@@ -618,11 +624,17 @@ def send_push_notification_to_employee(
     title: str,
     body: str,
     data: Dict[str, Any] | None = None,
+    *,
+    latest_only: bool = False,
 ) -> Dict[str, Any]:
     """Send a push notification using the employee-code identity already used by this repo."""
     try:
         normalized_emp_code = _normalize_emp_code(emp_code)
-        tokens = get_employee_device_tokens(normalized_emp_code)
+        if latest_only:
+            latest_token = get_latest_employee_device_token(normalized_emp_code)
+            tokens = [latest_token] if latest_token else []
+        else:
+            tokens = get_employee_device_tokens(normalized_emp_code)
     except ValueError as e:
         return {
             "success": False,
@@ -644,7 +656,7 @@ def send_push_notification_to_employee(
         title,
         body,
         data=data,
-        context={"emp_code": normalized_emp_code},
+        context={"emp_code": normalized_emp_code, "latest_only": latest_only},
     )
 
 
@@ -1085,6 +1097,7 @@ def _send_targeted_notification_campaign(
                 title,
                 body,
                 payload,
+                latest_only=notification_type == "attendance_reminder",
             )
             _log_scheduled_notification_attempt(
                 None,

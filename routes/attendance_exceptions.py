@@ -14,6 +14,7 @@ from services.attendance_exceptions_service import (
     request_late_arrival_exception,
     request_early_leave_exception,
     cancel_early_leave_exception,
+    cancel_late_arrival_exception,
     approve_exception,
     build_exception_notification_payload,
     get_my_exceptions,
@@ -361,6 +362,33 @@ def cancel_early_leave(current_user):
         }), 400
 
     response_body, status_code = cancel_early_leave_exception(
+        current_user['emp_code'],
+        exception_id,
+    )
+    return jsonify(response_body), status_code
+
+
+@exceptions_bp.route('/late-arrival/cancel', methods=['POST'])
+@token_required
+def cancel_late_arrival(current_user):
+    """
+    Cancel a pending late arrival exception submitted by the current employee.
+
+    Request Body:
+        {
+            "exception_id": 12
+        }
+    """
+    data = request.get_json() or {}
+    exception_id = data.get('exception_id')
+
+    if not exception_id:
+        return jsonify({
+            "success": False,
+            "message": "exception_id is required"
+        }), 400
+
+    response_body, status_code = cancel_late_arrival_exception(
         current_user['emp_code'],
         exception_id,
     )

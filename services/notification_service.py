@@ -1637,8 +1637,8 @@ def _get_notification_delivery_status_map(
     notification_type: str,
     target_date: date,
     emp_codes: List[str] | None = None,
-) -> Dict[str, bool]:
-    """Return per-employee sent status for a notification type/date."""
+) -> Dict[str, Dict[str, Any]]:
+    """Return per-employee delivery aggregates for a notification type/date."""
     normalized_type = (notification_type or "").strip().lower()
     normalized_emp_codes = sorted({
         _normalize_emp_code(emp_code)
@@ -1658,7 +1658,8 @@ def _get_notification_delivery_status_map(
                 """
                 SELECT
                     emp_code,
-                    BOOL_OR(delivery_status = 'sent') AS has_sent
+                    BOOL_OR(delivery_status = 'sent') AS has_sent,
+                    COUNT(*) FILTER (WHERE delivery_status = 'sent') AS sent_count
                 FROM scheduled_notification_logs
                 WHERE notification_type = %s
                   AND emp_code = ANY(%s)
@@ -1672,7 +1673,8 @@ def _get_notification_delivery_status_map(
                 """
                 SELECT
                     emp_code,
-                    BOOL_OR(delivery_status = 'sent') AS has_sent
+                    BOOL_OR(delivery_status = 'sent') AS has_sent,
+                    COUNT(*) FILTER (WHERE delivery_status = 'sent') AS sent_count
                 FROM scheduled_notification_logs
                 WHERE notification_type = %s
                   AND DATE(COALESCE(scheduled_for, sent_at, created_at)) = %s
@@ -1681,12 +1683,15 @@ def _get_notification_delivery_status_map(
                 (normalized_type, target_date),
             )
 
-        status_map: Dict[str, bool] = {}
+        status_map: Dict[str, Dict[str, Any]] = {}
         for row in cursor.fetchall():
             emp_code = str(row.get("emp_code") or "").strip()
             if not emp_code:
                 continue
-            status_map[emp_code] = bool(row.get("has_sent"))
+            status_map[emp_code] = {
+                "has_sent": bool(row.get("has_sent")),
+                "sent_count": int(row.get("sent_count") or 0),
+            }
         return status_map
     finally:
         cursor.close()
@@ -1739,12 +1744,15 @@ def get_notification_candidates(
     sent_emp_codes = []
     for candidate in candidates:
         emp_code = str(candidate.get("emp_code") or "").strip()
-        has_sent = bool(status_map.get(emp_code))
+        delivery_status = status_map.get(emp_code) or {}
+        has_sent = bool(delivery_status.get("has_sent"))
+        alert_send_count = int(delivery_status.get("sent_count") or 0)
         if has_sent and emp_code:
             sent_emp_codes.append(emp_code)
         data.append({
             **candidate,
             "alert_status": "sent" if has_sent else "not_sent",
+            "alert_send_count": alert_send_count,
             "alert_eligible": emp_code in alert_eligible_emp_codes if normalized_type == "attendance_reminder" else True,
         })
 

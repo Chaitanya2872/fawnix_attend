@@ -1091,6 +1091,7 @@ function FawnixApp() {
   const [showAlertComposer, setShowAlertComposer] = useState(false)
   const [selectedMissedLoginEmpCodes, setSelectedMissedLoginEmpCodes] = useState<string[]>([])
   const [alertSentEmpCodes, setAlertSentEmpCodes] = useState<string[]>([])
+  const [alertSendCounts, setAlertSendCounts] = useState<Record<string, number>>({})
   const [newEmployee, setNewEmployee] = useState({
     emp_code: '',
     emp_full_name: '',
@@ -1225,7 +1226,7 @@ function FawnixApp() {
         })
         const response = await apiRequest(`/api/admin/scheduled-notifications/candidates?${params.toString()}`, {}, accessToken)
         const candidateRows = Array.isArray(response?.data)
-          ? response.data as Array<{ emp_code?: string; alert_status?: string; alert_eligible?: boolean }>
+          ? response.data as Array<{ emp_code?: string; alert_status?: string; alert_eligible?: boolean; alert_send_count?: number }>
           : []
         const nextMissedCodes = candidateRows
           .map((row: { emp_code?: string }) => (row.emp_code || '').trim())
@@ -1238,17 +1239,27 @@ function FawnixApp() {
           .filter((row) => (row.alert_status || '').toLowerCase() === 'sent')
           .map((row) => (row.emp_code || '').trim())
           .filter(Boolean)
+        const nextSendCounts = candidateRows.reduce<Record<string, number>>((counts, row) => {
+          const empCode = (row.emp_code || '').trim()
+          if (!empCode) {
+            return counts
+          }
+          counts[empCode] = Number(row.alert_send_count || 0)
+          return counts
+        }, {})
 
         if (!cancelled) {
           setMissedLoginEmpCodes(Array.from(new Set(nextMissedCodes)))
           setAlertEligibleEmpCodes(Array.from(new Set(nextEligibleCodes)))
           setAlertSentEmpCodes(Array.from(new Set(nextSentCodes)))
+          setAlertSendCounts(nextSendCounts)
         }
       } catch {
         if (!cancelled) {
           setMissedLoginEmpCodes([])
           setAlertEligibleEmpCodes([])
           setAlertSentEmpCodes([])
+          setAlertSendCounts({})
         }
       } finally {
         if (!cancelled) {
@@ -1268,6 +1279,7 @@ function FawnixApp() {
     setAlertTriggerStatus('')
     setShowAlertComposer(false)
     setAlertSentEmpCodes([])
+    setAlertSendCounts({})
   }, [attendanceDateFilter])
 
   useEffect(() => {
@@ -1522,7 +1534,7 @@ function FawnixApp() {
       })
       const candidatesResponse = await apiRequest(`/api/admin/scheduled-notifications/candidates?${params.toString()}`, {}, accessToken)
       const candidateRows = Array.isArray(candidatesResponse?.data)
-        ? candidatesResponse.data as Array<{ emp_code?: string; alert_status?: string; alert_eligible?: boolean }>
+        ? candidatesResponse.data as Array<{ emp_code?: string; alert_status?: string; alert_eligible?: boolean; alert_send_count?: number }>
         : []
       const nextMissedCodes = candidateRows
         .map((row) => (row.emp_code || '').trim())
@@ -1532,9 +1544,18 @@ function FawnixApp() {
         .filter((row) => (row.alert_status || '').toLowerCase() === 'sent')
         .map((row) => (row.emp_code || '').trim())
         .filter(Boolean)
+      const nextSendCounts = candidateRows.reduce<Record<string, number>>((counts, row) => {
+        const empCode = (row.emp_code || '').trim()
+        if (!empCode) {
+          return counts
+        }
+        counts[empCode] = Number(row.alert_send_count || 0)
+        return counts
+      }, {})
       setMissedLoginEmpCodes(Array.from(new Set(nextMissedCodes)))
       setAlertEligibleEmpCodes(Array.from(new Set(nextEligibleCodes)))
       setAlertSentEmpCodes(Array.from(new Set(nextSentCodes)))
+      setAlertSendCounts(nextSendCounts)
     } catch (error) {
       setAlertTriggerStatus(error instanceof Error ? error.message : 'Failed to trigger attendance reminders')
     } finally {
@@ -1565,6 +1586,7 @@ function FawnixApp() {
     setMissedLoginEmpCodes([])
     setAlertEligibleEmpCodes([])
     setAlertSentEmpCodes([])
+    setAlertSendCounts({})
     setSelectedMissedLoginEmpCodes([])
     clearStoredAdminSession()
   }
@@ -3349,6 +3371,7 @@ function FawnixApp() {
                 {missedLoginEmployees.length ? (
                   missedLoginEmployees.map((employee) => {
                     const isAlertSent = alertSentEmpCodes.includes(employee.emp_code)
+                    const alertSendCount = Number(alertSendCounts[employee.emp_code] || 0)
                     return (
                       <label
                         key={employee.emp_code}
@@ -3374,7 +3397,7 @@ function FawnixApp() {
                           <strong>{employee.emp_full_name || employee.emp_code}</strong>
                           <span>{employee.emp_designation || employee.emp_department || employee.emp_email || '--'}</span>
                           <small className={isAlertSent ? 'missed-login-alert-sent' : 'missed-login-alert-not-sent'}>
-                            {isAlertSent ? 'Alert Sent' : 'Not Sent'}
+                            {isAlertSent ? `Sent ${alertSendCount} time${alertSendCount === 1 ? '' : 's'}` : 'Not Sent'}
                           </small>
                         </div>
                       </label>

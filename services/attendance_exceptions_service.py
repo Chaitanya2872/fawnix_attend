@@ -1283,6 +1283,90 @@ def cancel_early_leave_exception(emp_code: str, exception_id: int) -> Tuple[Dict
         conn.close()
 
 
+def cancel_late_arrival_exception(emp_code: str, exception_id: int) -> Tuple[Dict, int]:
+    """Cancel a pending late-arrival exception submitted by the same employee."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        emp_info = get_employee_and_manager_info(emp_code)
+        if not emp_info or not emp_info.get('emp_email'):
+            return ({"success": False, "message": "Employee not found"}, 404)
+
+        cursor.execute("""
+            SELECT
+                id,
+                attendance_id,
+                exception_type,
+                status,
+                emp_code,
+                emp_email,
+                planned_arrival_time,
+                late_by_minutes,
+                manager_code,
+                manager_email
+            FROM attendance_exceptions
+            WHERE id = %s
+              AND exception_type = 'late_arrival'
+              AND emp_code = %s
+              AND emp_email = %s
+            LIMIT 1
+        """, (exception_id, emp_code, emp_info['emp_email']))
+        exception = cursor.fetchone()
+
+        if not exception:
+            return ({"success": False, "message": "Late arrival exception not found"}, 404)
+
+        status = (exception.get('status') or '').strip().lower()
+        if status == 'cancelled':
+            return ({"success": False, "message": "Late arrival exception already cancelled"}, 400)
+        if status != 'pending':
+            return ({"success": False, "message": f"Only pending late arrival requests can be cancelled. Current status: {status or 'unknown'}"}, 400)
+
+        cancelled_at = now_local_naive()
+        cursor.execute("""
+            UPDATE attendance_exceptions
+            SET
+                status = %s,
+                updated_at = %s,
+                manager_remarks = %s
+            WHERE id = %s
+        """, (
+            'cancelled',
+            cancelled_at,
+            'Cancelled by employee before approval',
+            exception_id,
+        ))
+        conn.commit()
+
+        return ({
+            "success": True,
+            "message": "Late arrival exception cancelled successfully",
+            "data": {
+                "exception_id": exception_id,
+                "attendance_id": exception.get('attendance_id'),
+                "exception_type": "late_arrival",
+                "status": "cancelled",
+                "planned_arrival_time": (
+                    exception.get('planned_arrival_time').strftime('%H:%M')
+                    if isinstance(exception.get('planned_arrival_time'), time)
+                    else str(exception.get('planned_arrival_time') or '')
+                ),
+                "late_by_minutes": exception.get('late_by_minutes'),
+                "cancelled_at": cancelled_at.strftime('%Y-%m-%d %H:%M:%S'),
+            }
+        }, 200)
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"❌ Cancel late arrival exception error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return ({"success": False, "message": str(e)}, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
 # =========================
 # APPROVE/REJECT EXCEPTION
 # =========================

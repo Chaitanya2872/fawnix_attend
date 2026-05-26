@@ -447,6 +447,7 @@ def index():
             'leads': '/api/leads',
             'reports': '/api/reports',
             'distance': '/api/distance',
+            'attendance_exceptions': '/api/attendance-exceptions',
             'approvals': '/api/approvals',
             'meeting_notes': '/api/meeting-notes'
         },
@@ -552,6 +553,17 @@ def api_docs():
                 'POST /api/distance/check': '✨ NEW: Check if employee moved >1km (smart detection)',
                 'GET /api/distance/alerts': '✨ NEW: Get distance alerts for employee',
                 'POST /api/distance/clear/{id}': '✨ NEW: Clear/acknowledge distance alert'
+            },
+            'attendance_exceptions': {
+                'POST /api/attendance-exceptions/late-arrival': 'Submit late arrival exception before clock-in',
+                'POST /api/attendance-exceptions/late-arrival/cancel': 'Cancel pending late arrival exception',
+                'POST /api/attendance-exceptions/early-leave': 'Submit early leave exception before clock-out',
+                'POST /api/attendance-exceptions/early-leave/cancel': 'Cancel pending early leave exception',
+                'POST /api/attendance-exceptions/approve': 'Approve/reject attendance exception',
+                'GET /api/attendance-exceptions/my-exceptions': 'Get my exception history',
+                'GET /api/attendance-exceptions/my-late-arrivals': 'Get my late arrival history',
+                'GET /api/attendance-exceptions/my-early-leaves': 'Get my early leave history',
+                'GET /api/attendance-exceptions/team-exceptions': 'Get team exception history'
             },
             'activity_approvals': {
                 'POST /api/approvals/late-arrival/request': '✨ NEW: Request late arrival approval',

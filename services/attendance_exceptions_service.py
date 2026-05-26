@@ -7,6 +7,7 @@ from datetime import datetime, date, time
 from config import Config
 from database.connection import get_db_connection
 from services.attendance_constants import (
+    ATTENDANCE_STATUS_PENDING_CLOCK_IN,
     ATTENDANCE_STATUS_LOGGED_IN,
     ATTENDANCE_STATUS_LOGGED_OUT,
 )

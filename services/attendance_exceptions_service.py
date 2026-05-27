@@ -11,7 +11,11 @@ from services.attendance_constants import (
     ATTENDANCE_STATUS_LOGGED_IN,
     ATTENDANCE_STATUS_LOGGED_OUT,
 )
-from services.leaves_service import is_employee_on_leave
+from services.leaves_service import (
+    get_monthly_late_arrival_lop_summary,
+    is_employee_on_leave,
+)
+from services.notification_service import send_push_notification_to_employee
 from typing import Dict, Tuple, Optional, List
 from utils.time_utils import now_local_naive
 import logging
@@ -110,7 +114,7 @@ def _get_early_leave_submission_window() -> Tuple[time, time]:
     )
 
 def get_late_login_cutoff_time() -> time:
-    return _parse_config_time(Config.LATE_LOGIN_CUTOFF, '10:00')
+    return _parse_config_time(Config.LATE_LOGIN_CUTOFF, '10:15')
 
 
 def _get_late_reference_time(emp_code: str, explicit_time: Optional[time] = None) -> time:
@@ -118,8 +122,57 @@ def _get_late_reference_time(emp_code: str, explicit_time: Optional[time] = None
     if explicit_time:
         return explicit_time
 
-    shift_start, _ = get_employee_shift_times(emp_code)
-    return shift_start or get_late_login_cutoff_time()
+    return get_late_login_cutoff_time()
+
+
+def _format_lop_deduction_days(value: float) -> str:
+    normalized = float(value or 0)
+    return str(int(normalized)) if normalized.is_integer() else f"{normalized:.1f}"
+
+
+def _format_lop_deduction_label(value: float) -> str:
+    normalized = float(value or 0)
+    return "day" if normalized == 1.0 else "days"
+
+
+def send_lop_detected_notification(
+    emp_code: str,
+    *,
+    reference_date: Optional[date] = None,
+    extra_late_arrivals: int = 0,
+    trigger_source: str = "late_arrival",
+) -> Dict[str, object]:
+    """Push the current month-to-date late-arrival LOP summary to the employee."""
+    summary = get_monthly_late_arrival_lop_summary(
+        emp_code,
+        reference_date=reference_date,
+        extra_late_arrivals=extra_late_arrivals,
+    )
+    late_arrival_count = int(summary["late_arrival_count"])
+    lop_deduction_days = float(summary["lop_deduction_days"])
+    body = (
+        f"LOP detected — {late_arrival_count} late arrivals, "
+        f"{_format_lop_deduction_days(lop_deduction_days)} "
+        f"{_format_lop_deduction_label(lop_deduction_days)} deducted ,GooD Morning"
+    )
+
+    push_result = send_push_notification_to_employee(
+        emp_code,
+        "LOP detected",
+        body,
+        {
+            "type": "lop_detected",
+            "trigger_source": trigger_source,
+            "late_arrival_count": late_arrival_count,
+            "lop_deduction_days": lop_deduction_days,
+            "reference_date": summary["reference_date"],
+            "period_start": summary["period_start"],
+            "period_end": summary["period_end"],
+        },
+        latest_only=True,
+    )
+    push_result["message_preview"] = body
+    return push_result
 
 def get_employee_shift_times(emp_code: str) -> Tuple[Optional[time], Optional[time]]:
     """

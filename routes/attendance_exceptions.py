@@ -22,6 +22,7 @@ from services.attendance_exceptions_service import (
     auto_detect_late_arrival,
     get_my_late_arrival_records,
     get_my_early_leave_records,
+    send_lop_detected_notification,
 )
 
 exceptions_bp = Blueprint('attendance_exceptions', __name__)
@@ -253,6 +254,20 @@ def submit_late_arrival(current_user):
 
     response_body, status_code = result
     if status_code == 201 and response_body.get("success"):
+        try:
+            lop_push_result = send_lop_detected_notification(
+                current_user['emp_code'],
+                extra_late_arrivals=1,
+                trigger_source="late_arrival_exception",
+            )
+            logger.info(
+                "Late arrival LOP push processed emp_code=%s success=%s message=%s",
+                current_user['emp_code'],
+                lop_push_result.get("success"),
+                lop_push_result.get("message"),
+            )
+        except Exception:
+            logger.exception("Failed to send late arrival LOP notification")
         try:
             _send_manager_request_notification(current_user, response_body.get("data", {}))
         except Exception:

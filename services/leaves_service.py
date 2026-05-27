@@ -197,6 +197,8 @@ def get_late_arrival_count(emp_code: str, from_date: date, to_date: date) -> int
             FROM attendance
             WHERE employee_email = (SELECT emp_email FROM employees WHERE emp_code = %s)
             AND date BETWEEN %s AND %s
+            AND login_time IS NOT NULL
+            AND COALESCE(is_compoff_session, FALSE) = FALSE
             AND EXTRACT(HOUR FROM login_time) * 60 + EXTRACT(MINUTE FROM login_time) > 
                 EXTRACT(HOUR FROM %s::time) * 60 + EXTRACT(MINUTE FROM %s::time)
         """, (emp_code, from_date, to_date, late_cutoff, late_cutoff))
@@ -209,6 +211,36 @@ def get_late_arrival_count(emp_code: str, from_date: date, to_date: date) -> int
     finally:
         cursor.close()
         conn.close()
+
+
+def calculate_late_arrival_lop_deduction(late_arrivals: int) -> float:
+    """Return the monthly LOP deduction based on total late arrivals."""
+    if late_arrivals >= 6:
+        return 1.0
+    if late_arrivals >= 3:
+        return 0.5
+    return 0.0
+
+
+def get_monthly_late_arrival_lop_summary(
+    emp_code: str,
+    reference_date: date | None = None,
+    *,
+    extra_late_arrivals: int = 0,
+) -> Dict:
+    """Return dynamic month-to-date late-arrival count and resulting LOP deduction."""
+    summary_date = reference_date or date.today()
+    start_date = summary_date.replace(day=1)
+    late_arrivals = get_late_arrival_count(emp_code, start_date, summary_date) + max(0, int(extra_late_arrivals or 0))
+    deduction = calculate_late_arrival_lop_deduction(late_arrivals)
+
+    return {
+        "reference_date": summary_date.isoformat(),
+        "period_start": start_date.isoformat(),
+        "period_end": summary_date.isoformat(),
+        "late_arrival_count": late_arrivals,
+        "lop_deduction_days": deduction,
+    }
 
 
 def get_short_working_days(emp_code: str, from_date: date, to_date: date) -> int:
@@ -254,13 +286,13 @@ def calculate_auto_deductions(emp_code: str, month: int, year: int) -> Dict:
     return {
         'late_arrivals': {
             'count': late_arrivals,
-            'deduction': 0.5 if late_arrivals > 3 else 0
+            'deduction': calculate_late_arrival_lop_deduction(late_arrivals)
         },
         'short_working_days': {
             'count': short_days,
             'deduction': short_days * 0.5
         },
-        'total_deduction': (0.5 if late_arrivals > 3 else 0) + (short_days * 0.5)
+        'total_deduction': calculate_late_arrival_lop_deduction(late_arrivals) + (short_days * 0.5)
     }
 
 

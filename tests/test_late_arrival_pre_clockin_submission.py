@@ -95,7 +95,7 @@ def test_request_late_arrival_allows_submission_before_cutoff(monkeypatch):
     assert result["success"] is True
     assert result["data"]["attendance_id"] is None
     assert result["data"]["late_by_minutes"] is None
-    assert result["data"]["shift_start_time"] == "10:00"
+    assert result["data"]["shift_start_time"] == "10:15"
     assert result["data"]["planned_arrival_time"] == "10:15"
     assert result["data"]["notes"] == "Heavy rain"
     assert result["data"]["note"] == "Heavy rain"

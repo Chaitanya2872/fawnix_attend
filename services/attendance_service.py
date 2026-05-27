@@ -27,6 +27,7 @@ from services.attendance_exceptions_service import (
     get_late_login_cutoff_time,
     _fetch_exception_rows_by_attendance_ids,
     is_flexible_grade_employee,
+    send_lop_detected_notification,
     sync_early_leave_exception_after_clock_out,
     sync_late_arrival_exception_after_clock_in,
 )
@@ -424,6 +425,25 @@ def clock_in(emp_email: str, emp_name: str, phone: str, lat: str, lon: str, atte
             if late_arrival_info:
                 response_data['late_arrival'] = late_arrival_info
                 logger.warning(f"🚨 Late arrival detected: {emp_email} - {late_arrival_info['late_by_minutes']} minutes")
+                try:
+                    lop_push_result = send_lop_detected_notification(
+                        emp_code,
+                        reference_date=login_date,
+                        trigger_source="late_clock_in",
+                    )
+                    logger.info(
+                        "Late clock-in LOP push processed emp_code=%s success=%s message=%s",
+                        emp_code,
+                        lop_push_result.get("success"),
+                        lop_push_result.get("message"),
+                    )
+                except Exception as notification_error:
+                    logger.error(
+                        "Non-critical late-arrival LOP notification failure for %s attendance=%s: %s",
+                        emp_code,
+                        attendance_id,
+                        notification_error,
+                    )
         elif is_compoff_session:
             logger.info(f"✅ Late arrival check skipped for comp-off session: {emp_email}")
         

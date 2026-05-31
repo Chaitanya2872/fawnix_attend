@@ -7,7 +7,7 @@ FIXED: Proper auto clock out integration with testing and production schedules
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from config import Config
-from database.connection import init_database, get_db_connection, return_connection
+from database.connection import init_database, run_migrations, get_db_connection, return_connection
 from middleware.auth_middleware import setup_auth_middleware
 from middleware.error_handler import register_error_handlers
 from middleware.logging_middleware import setup_logging
@@ -757,10 +757,14 @@ with app.app_context():
     logger.info("\n🔧 Initializing database...")
     try:
         init_database()
+        logger.info("Database bootstrap initialized successfully")
+        logger.info("Running database migrations...")
+        run_migrations()
         logger.info("✓ Database initialized successfully")
     except Exception as e:
         logger.error(f"✗ Database initialization failed: {e}")
         logger.error("Please check your database configuration and try again")
+        raise
     
     logger.info("\n📋 Available Endpoints:")
     

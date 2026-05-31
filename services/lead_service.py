@@ -63,10 +63,29 @@ def _request(current_user, method: str, path: str, *, params=None, payload=None)
     try:
         body = response.json()
     except ValueError:
+        text_body = (response.text or "").strip()
         body = {
             "success": response.ok,
-            "message": response.text or "Unexpected response from lead service",
+            "message": text_body or "Unexpected response from lead service",
+            "upstreamStatus": response.status_code,
+            "upstreamUrl": url,
         }
+        if text_body:
+            body["upstreamBody"] = text_body
+
+    if not response.ok:
+        if isinstance(body, dict):
+            body.setdefault("success", False)
+            body.setdefault("upstreamStatus", response.status_code)
+            body.setdefault("upstreamUrl", url)
+        else:
+            body = {
+                "success": False,
+                "message": "Lead service request failed",
+                "upstreamStatus": response.status_code,
+                "upstreamUrl": url,
+                "upstreamBody": body,
+            }
 
     return body, response.status_code
 

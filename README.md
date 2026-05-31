@@ -79,6 +79,11 @@ python app.py
 python run.py
 ```
 
+Database startup note:
+- `init_database()` bootstraps a fresh database.
+- Versioned schema updates run from `database/migrations/*.sql` on app startup.
+- Add future schema changes as SQL migration files, not Python `ALTER TABLE` blocks.
+
 ### Option 2: Docker
 
 ```bash

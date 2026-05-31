@@ -62,3 +62,24 @@ def test_list_leads_forwards_query_params(monkeypatch):
     assert status_code == 200
     assert response == {"data": []}
     assert captured["params"] == {"assignedTo": "john@example.com", "page": "1", "pageSize": "20"}
+
+
+def test_list_leads_surfaces_upstream_error_details(monkeypatch):
+    def fake_request(method, url, headers=None, params=None, json=None, timeout=None):
+        return DummyResponse(
+            status_code=401,
+            payload={"message": "Unauthorized from CRM"},
+        )
+
+    monkeypatch.setattr(lead_service.requests, "request", fake_request)
+
+    response, status_code = lead_service.list_leads(
+        {"_access_token": "jwt-token", "emp_email": "john@example.com"},
+        {},
+    )
+
+    assert status_code == 401
+    assert response["success"] is False
+    assert response["message"] == "Unauthorized from CRM"
+    assert response["upstreamStatus"] == 401
+    assert response["upstreamUrl"] == f"{lead_service.CRM_BASE_URL}/api/leads"

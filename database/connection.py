@@ -136,6 +136,52 @@ def _normalize_migration_sql(sql_text: str) -> str:
     return "\n".join(normalized_lines).strip()
 
 
+def _table_exists(cursor, table_name: str) -> bool:
+    cursor.execute(
+        """
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = %s
+        LIMIT 1
+        """,
+        (table_name,),
+    )
+    return cursor.fetchone() is not None
+
+
+def _should_baseline_legacy_migrations(cursor) -> bool:
+    """
+    Detect an existing pre-migration-runner database.
+
+    Fresh bootstrap databases created by this repo do not create these tables,
+    but long-running deployed databases already have them. When that state is
+    present and schema_migrations is empty, replaying old migrations is risky.
+    """
+    legacy_tables = (
+        "attendance_exceptions",
+        "field_visits",
+        "location_tracking",
+        "field_visit_tracking",
+        "overtime_records",
+    )
+    return any(_table_exists(cursor, table_name) for table_name in legacy_tables)
+
+
+def _baseline_existing_migrations(cursor):
+    migration_files = sorted(path for path in MIGRATIONS_DIR.glob("*.sql") if path.is_file())
+    for migration_path in migration_files:
+        cursor.execute(
+            """
+            INSERT INTO schema_migrations (filename)
+            VALUES (%s)
+            ON CONFLICT (filename) DO NOTHING
+            """,
+            (migration_path.name,),
+        )
+    return len(migration_files)
+
+
 def run_migrations():
     """Execute pending SQL migration files in sorted order."""
     conn = get_db_connection()
@@ -146,6 +192,14 @@ def run_migrations():
 
         cursor.execute("SELECT filename FROM schema_migrations")
         executed = {row["filename"] for row in cursor.fetchall()}
+        if not executed and _should_baseline_legacy_migrations(cursor):
+            baseline_count = _baseline_existing_migrations(cursor)
+            conn.commit()
+            logger.info(
+                "Detected legacy database without migration tracking; baselined %s migration(s)",
+                baseline_count,
+            )
+            executed = {path.name for path in MIGRATIONS_DIR.glob("*.sql") if path.is_file()}
         migration_files = sorted(path for path in MIGRATIONS_DIR.glob("*.sql") if path.is_file())
         pending = [path for path in migration_files if path.name not in executed]
 

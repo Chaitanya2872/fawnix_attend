@@ -69,6 +69,7 @@ def token_required(f):
                         current_user['id'] = resolved_user_id
                 if resolved_user_id is not None and 'user_id' not in current_user:
                     current_user['user_id'] = resolved_user_id
+                current_user["_access_token"] = token
             finally:
                 cursor.close()
                 conn.close()

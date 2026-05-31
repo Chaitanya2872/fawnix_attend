@@ -30,20 +30,12 @@ def create(current_user):
 @token_required
 def list_all(current_user):
     """List leads with optional filters."""
-    filters = {
-        "status": request.args.get("status"),
-        "priority": request.args.get("priority"),
-        "search": request.args.get("search"),
-        "scope": request.args.get("scope", "my"),
-        "field_visit_id": request.args.get("field_visit_id"),
-        "limit": request.args.get("limit", 50),
-        "offset": request.args.get("offset", 0),
-    }
+    filters = request.args.to_dict(flat=True)
     result, status = list_leads(current_user, filters)
     return jsonify(result), status
 
 
-@leads_bp.route("/<int:lead_id>", methods=["GET"])
+@leads_bp.route("/<string:lead_id>", methods=["GET"])
 @token_required
 def get_one(current_user, lead_id):
     """Get lead details."""
@@ -51,7 +43,7 @@ def get_one(current_user, lead_id):
     return jsonify(result), status
 
 
-@leads_bp.route("/<int:lead_id>", methods=["PUT"])
+@leads_bp.route("/<string:lead_id>", methods=["PUT"])
 @token_required
 def update(current_user, lead_id):
     """Update lead."""
@@ -60,7 +52,7 @@ def update(current_user, lead_id):
     return jsonify(result), status
 
 
-@leads_bp.route("/<int:lead_id>/link-field-visit", methods=["POST"])
+@leads_bp.route("/<string:lead_id>/link-field-visit", methods=["POST"])
 @token_required
 def link_field_visit(current_user, lead_id):
     """Link lead to an existing field visit."""

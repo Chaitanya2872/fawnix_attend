@@ -12,6 +12,7 @@ from services.activity_service import (
     mark_destination_visited, get_activity_route,
     start_break, end_break
 )
+from services.lead_service import create_lead, parse_lead_identifier
 from services.locationtracking_service import track_location
 
 activities_bp = Blueprint('activities', __name__)
@@ -53,6 +54,7 @@ def start(current_user):
             "longitude": "78.486671",         // required for field visits
             "notes": "Visiting client",       // optional
             "lead_id": 123,                   // optional (link lead with created field visit)
+            "newLead": { ... },               // optional (create lead first, then link)
             "destinations": [                 // optional, for branch visits
                 {
                     "name": "Branch Office",
@@ -83,13 +85,26 @@ def start(current_user):
     notes = data.get('notes', '')
     destinations = data.get('destinations')
     lead_id = data.get('lead_id')
-    
+    new_lead = data.get('newLead') or data.get('new_lead')
+
     if not activity_type:
         return jsonify({
             "success": False,
             "message": "activity_type is required"
         }), 400
-    
+
+    if lead_id not in (None, '') and new_lead:
+        return jsonify({
+            "success": False,
+            "message": "Pass either lead_id or newLead, not both"
+        }), 400
+
+    if new_lead:
+        lead_response, status_code = create_lead(current_user, new_lead)
+        if status_code not in (200, 201):
+            return jsonify(lead_response), status_code
+        lead_id = parse_lead_identifier(lead_response.get('id'))
+
     result = start_activity(
         current_user['emp_email'],
         current_user['emp_full_name'],

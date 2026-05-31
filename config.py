@@ -118,6 +118,10 @@ class Config:
     MEETING_NOTES_COMPLETION_MODEL = os.getenv('MEETING_NOTES_COMPLETION_MODEL', 'gpt-4o-mini').strip()
     MEETING_NOTES_REQUEST_TIMEOUT = int(os.getenv('MEETING_NOTES_REQUEST_TIMEOUT', 120))
     MEETING_NOTES_MAX_UPLOAD_MB = int(os.getenv('MEETING_NOTES_MAX_UPLOAD_MB', 100))
+
+    # CRM Lead Service
+    CRM_BASE_URL = os.getenv('CRM_BASE_URL', 'https://fawnixverse.acstechnologies.co.in').rstrip('/')
+    CRM_TIMEOUT_SECONDS = int(os.getenv('CRM_TIMEOUT_SECONDS', 20))
     MEETING_NOTES_ALLOWED_EXTENSIONS = [
         extension.strip().lower()
         for extension in os.getenv(

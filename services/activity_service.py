@@ -166,7 +166,7 @@ def _auto_mark_reached_destination(destinations, actual_lat: str, actual_lon: st
 
 def start_activity(emp_email: str, emp_name: str, activity_type: str,
                   lat: str, lon: str, notes: str = '', destinations: list = None,
-                  lead_id: int = None, emp_code: str = None):
+                  lead_id: str = None, emp_code: str = None):
     """
     Start activity
     
@@ -189,8 +189,8 @@ def start_activity(emp_email: str, emp_name: str, activity_type: str,
         lon: Longitude
         notes: Additional notes
         destinations: List of destinations for branch visits
-        lead_id: Optional lead id to link with created field visit
-        emp_code: Current user employee code for lead access validation
+        lead_id: Optional external lead id for client-side flow/reference
+        emp_code: Current user employee code
     
     Returns:
         Tuple of (response_dict, status_code)
@@ -252,12 +252,11 @@ def start_activity(emp_email: str, emp_name: str, activity_type: str,
         # Optional lead integration. Lead can be linked only with field/branch visits.
         linked_lead_id = None
         if lead_id not in (None, ''):
-            try:
-                linked_lead_id = int(lead_id)
-            except Exception:
+            linked_lead_id = str(lead_id).strip()
+            if not linked_lead_id:
                 return ({
                     "success": False,
-                    "message": "lead_id must be an integer"
+                    "message": "lead_id must not be blank"
                 }, 400)
 
             if activity_type not in ['branch_visit', 'field_visit']:
@@ -265,25 +264,6 @@ def start_activity(emp_email: str, emp_name: str, activity_type: str,
                     "success": False,
                     "message": "lead_id can be used only with branch_visit or field_visit"
                 }, 400)
-
-            cursor.execute("""
-                SELECT id, created_by_emp_code, assigned_to_emp_code
-                FROM leads
-                WHERE id = %s
-            """, (linked_lead_id,))
-            lead = cursor.fetchone()
-            if not lead:
-                return ({
-                    "success": False,
-                    "message": "Lead not found"
-                }, 404)
-
-            if emp_code and lead.get('created_by_emp_code') != emp_code and \
-                    lead.get('assigned_to_emp_code') not in (None, emp_code):
-                return ({
-                    "success": False,
-                    "message": "You don't have access to this lead"
-                }, 403)
 
         # 🔒 GUARD 2: Check for active activity
         cursor.execute("""
@@ -354,17 +334,6 @@ def start_activity(emp_email: str, emp_name: str, activity_type: str,
             field_visit_id = cursor.fetchone()['id']
             logger.info(f"🏢 Field visit created: ID={field_visit_id}")
 
-            if linked_lead_id:
-                cursor.execute("""
-                    UPDATE leads
-                    SET
-                        field_visit_id = %s,
-                        status = CASE WHEN status = 'new' THEN 'contacted' ELSE status END,
-                        last_contacted_at = %s,
-                        updated_at = %s
-                    WHERE id = %s
-                """, (field_visit_id, start_time, start_time, linked_lead_id))
-        
         # Create activity record
         cursor.execute("""
             INSERT INTO activities (

@@ -20,6 +20,7 @@ from middleware.auth_middleware import token_required
 from datetime import datetime, date, time
 from typing import Dict
 import logging
+import requests
 from config import Config
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,52 @@ auth_bp = Blueprint('auth', __name__)
 
 ACCESS_TOKEN_EXPIRES_IN_SECONDS = Config.JWT_EXPIRE_MINUTES * 60
 REFRESH_TOKEN_EXPIRES_IN_SECONDS = Config.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+
+
+def exchange_verse_session(fawnix_access_token: str):
+    """Exchange a Fawnix token for a Verse access token."""
+    if not fawnix_access_token:
+        return None
+
+    base_url = (Config.CRM_BASE_URL or "").rstrip("/")
+    exchange_path = (getattr(Config, "CRM_SSO_EXCHANGE_PATH", "/api/auth/sso/fawnix") or "/api/auth/sso/fawnix").strip()
+    if not exchange_path.startswith("/"):
+        exchange_path = f"/{exchange_path}"
+    exchange_url = f"{base_url}{exchange_path}"
+
+    try:
+        response = requests.post(
+            exchange_url,
+            headers={
+                "Authorization": f"Bearer {fawnix_access_token}",
+                "Content-Type": "application/json",
+            },
+            timeout=Config.CRM_TIMEOUT_SECONDS,
+        )
+    except requests.RequestException as exc:
+        logger.warning("Verse SSO exchange request failed: %s", exc)
+        return None
+
+    if not response.ok:
+        logger.warning("Verse SSO exchange rejected with status %s", response.status_code)
+        return None
+
+    try:
+        payload = response.json() or {}
+    except ValueError:
+        logger.warning("Verse SSO exchange returned invalid JSON")
+        return None
+
+    access_token = str(payload.get("accessToken") or "").strip()
+    if not access_token:
+        logger.warning("Verse SSO exchange response missing access token")
+        return None
+
+    return {
+        "access_token": access_token,
+        "access_token_expires_at": payload.get("accessTokenExpiresAt"),
+        "user": payload.get("user"),
+    }
 
 
 def serialize_row(row):
@@ -181,6 +228,7 @@ def verify_otp():
             employee['emp_email'],
             user.get('id')
         )
+        verse_session = exchange_verse_session(access_token)
         
         # Create refresh token (7 days)
         refresh_token, token_family, refresh_expires_at = create_refresh_token(
@@ -201,6 +249,7 @@ def verify_otp():
             "expires_in": ACCESS_TOKEN_EXPIRES_IN_SECONDS,
             "refresh_expires_in": REFRESH_TOKEN_EXPIRES_IN_SECONDS,
             "refresh_expires_at": refresh_expires_at.strftime('%Y-%m-%d %H:%M:%S'),
+            "verse_session": verse_session,
             "user": {
                 "id": user.get("id"),
                 "user_id": user.get("id"),
@@ -260,6 +309,7 @@ def refresh():
             user_agent,
             ip_address
         )
+        verse_session = exchange_verse_session(new_access_token)
         
         logger.info(f"✅ Token refreshed successfully")
         
@@ -270,7 +320,8 @@ def refresh():
             "token_type": "bearer",
             "expires_in": ACCESS_TOKEN_EXPIRES_IN_SECONDS,
             "refresh_expires_in": REFRESH_TOKEN_EXPIRES_IN_SECONDS,
-            "refresh_expires_at": refresh_expires_at.strftime('%Y-%m-%d %H:%M:%S')
+            "refresh_expires_at": refresh_expires_at.strftime('%Y-%m-%d %H:%M:%S'),
+            "verse_session": verse_session
         }), 200
         
     except Exception as e:
@@ -445,6 +496,23 @@ def get_profile(current_user):
     finally:
         cursor.close()
         conn.close()
+
+
+@auth_bp.route('/verse-session', methods=['GET'])
+@token_required
+def get_verse_session(current_user):
+    """Exchange the current Fawnix access token for a Verse session."""
+    verse_session = exchange_verse_session(current_user.get("_access_token"))
+    if not verse_session:
+        return jsonify({
+            "success": False,
+            "message": "Unable to create Verse session from current login"
+        }), 502
+
+    return jsonify({
+        "success": True,
+        "data": verse_session
+    }), 200
 
 
 @auth_bp.route('/account/delete', methods=['POST'])

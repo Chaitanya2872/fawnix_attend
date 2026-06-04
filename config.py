@@ -122,6 +122,8 @@ class Config:
     # CRM Lead Service
     CRM_BASE_URL = os.getenv('CRM_BASE_URL', 'https://fawnixverse.acstechnologies.co.in').rstrip('/')
     CRM_TIMEOUT_SECONDS = int(os.getenv('CRM_TIMEOUT_SECONDS', 20))
+    CRM_SERVICE_TOKEN = os.getenv('CRM_SERVICE_TOKEN', '').strip()
+    CRM_SSO_EXCHANGE_PATH = os.getenv('CRM_SSO_EXCHANGE_PATH', '/api/auth/sso/fawnix').strip()
     MEETING_NOTES_ALLOWED_EXTENSIONS = [
         extension.strip().lower()
         for extension in os.getenv(

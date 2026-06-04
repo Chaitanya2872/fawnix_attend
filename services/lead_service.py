@@ -22,6 +22,8 @@ CRM_BASE_URL = getattr(
     "https://fawnixverse.acstechnologies.co.in",
 ).rstrip("/")
 CRM_TIMEOUT_SECONDS = getattr(Config, "CRM_TIMEOUT_SECONDS", 20)
+CRM_SERVICE_TOKEN = getattr(Config, "CRM_SERVICE_TOKEN", "").strip()
+CRM_SSO_EXCHANGE_PATH = getattr(Config, "CRM_SSO_EXCHANGE_PATH", "/api/auth/sso/fawnix").strip() or "/api/auth/sso/fawnix"
 
 
 def parse_lead_identifier(raw_identifier):
@@ -30,11 +32,57 @@ def parse_lead_identifier(raw_identifier):
     return str(raw_identifier).strip()
 
 
-def _headers(current_user: dict[str, Any]) -> dict[str, str]:
-    token = current_user.get("access_token") or current_user.get("_access_token")
+def _exchange_fawnix_token_for_verse_token(current_user: dict[str, Any]) -> str | None:
+    fawnix_access_token = (current_user.get("_access_token") or "").strip()
+    if not fawnix_access_token:
+        return None
+
+    url = f"{CRM_BASE_URL}{CRM_SSO_EXCHANGE_PATH}"
+    try:
+        response = requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {fawnix_access_token}",
+                "Content-Type": "application/json",
+            },
+            timeout=CRM_TIMEOUT_SECONDS,
+        )
+    except requests.Timeout:
+        logger.warning("CRM SSO exchange timed out: %s", url)
+        return None
+    except requests.RequestException as exc:
+        logger.error("CRM SSO exchange failed: %s (%s)", url, exc)
+        return None
+
+    if not response.ok:
+        logger.warning("CRM SSO exchange rejected with status %s for %s", response.status_code, url)
+        return None
+
+    try:
+        body = response.json() or {}
+    except ValueError:
+        logger.warning("CRM SSO exchange returned non-JSON response for %s", url)
+        return None
+
+    access_token = str(body.get("accessToken") or "").strip()
+    return access_token or None
+
+
+def _headers(current_user: dict[str, Any], verse_access_token: str | None) -> dict[str, str]:
     headers = {"Content-Type": "application/json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    if verse_access_token:
+        headers["Authorization"] = f"Bearer {verse_access_token}"
+    elif CRM_SERVICE_TOKEN:
+        headers["Authorization"] = f"Bearer {CRM_SERVICE_TOKEN}"
+
+    user_email = (current_user.get("emp_email") or "").strip()
+    if user_email:
+        headers["X-Authenticated-User-Email"] = user_email
+
+    user_id = current_user.get("id", current_user.get("user_id"))
+    if user_id not in (None, ""):
+        headers["X-Authenticated-User-Id"] = str(user_id)
+
     return headers
 
 
@@ -43,12 +91,16 @@ def _error(message: str, status_code: int):
 
 
 def _request(current_user, method: str, path: str, *, params=None, payload=None):
+    verse_access_token = _exchange_fawnix_token_for_verse_token(current_user)
+    if not verse_access_token and not CRM_SERVICE_TOKEN:
+        return _error("Verse access token exchange failed and CRM service token is not configured", 500)
+
     url = f"{CRM_BASE_URL}{path}"
     try:
         response = requests.request(
             method,
             url,
-            headers=_headers(current_user),
+            headers=_headers(current_user, verse_access_token),
             params=params,
             json=payload,
             timeout=CRM_TIMEOUT_SECONDS,

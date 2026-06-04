@@ -458,6 +458,7 @@ type FieldVisitTimelineItem = {
 const ACCESS_TOKEN_KEY = 'fawnix_admin_access_token'
 const REFRESH_TOKEN_KEY = 'fawnix_admin_refresh_token'
 const USER_KEY = 'fawnix_admin_user'
+const VERSE_SESSION_KEY = 'fawnix_verse_session'
 const HOLIDAY_TYPE_OPTIONS: HolidayCategory[] = [
   'Public Holiday',
   'Company Holiday',
@@ -1453,6 +1454,7 @@ function App() {
     const storedAccessToken = window.localStorage.getItem(ACCESS_TOKEN_KEY) || ''
     const storedRefreshToken = window.localStorage.getItem(REFRESH_TOKEN_KEY) || ''
     const storedUser = window.localStorage.getItem(USER_KEY)
+    const storedVerseSession = window.localStorage.getItem(VERSE_SESSION_KEY)
 
     if (storedAccessToken) {
       setAccessToken(storedAccessToken)
@@ -1469,11 +1471,32 @@ function App() {
         window.localStorage.removeItem(USER_KEY)
       }
     }
+
+    if (storedVerseSession) {
+      try {
+        JSON.parse(storedVerseSession)
+      } catch {
+        window.localStorage.removeItem(VERSE_SESSION_KEY)
+      }
+    }
   }, [])
 
   useEffect(() => {
     setAttendanceDatePickerMonth(parseDateInputValue(attendanceDateFilter || toDateInputValue(new Date())))
   }, [attendanceDateFilter])
+
+  useEffect(() => {
+    if (!accessToken) {
+      return
+    }
+
+    const storedVerseSession = window.localStorage.getItem(VERSE_SESSION_KEY)
+    if (storedVerseSession) {
+      return
+    }
+
+    void bootstrapVerseSession(accessToken)
+  }, [accessToken])
 
   useEffect(() => {
     if (!attendanceDatePickerOpen) {
@@ -1753,6 +1776,25 @@ function App() {
     window.localStorage.setItem(REFRESH_TOKEN_KEY, nextRefreshToken)
   }
 
+  const persistVerseSession = (verseSession: unknown) => {
+    if (!verseSession) {
+      window.localStorage.removeItem(VERSE_SESSION_KEY)
+      return
+    }
+    window.localStorage.setItem(VERSE_SESSION_KEY, JSON.stringify(verseSession))
+  }
+
+  const bootstrapVerseSession = async (token: string) => {
+    try {
+      const response = await apiRequest('/api/auth/verse-session', {}, token)
+      if (response?.success && response?.data) {
+        persistVerseSession(response.data)
+      }
+    } catch {
+      // Ignore bootstrap failures and continue the Fawnix session normally.
+    }
+  }
+
   const refreshAccessToken = async () => {
     if (!refreshToken) {
       throw new Error('Refresh token missing')
@@ -1780,6 +1822,7 @@ function App() {
         }
 
         updateTokens(nextAccessToken, nextRefreshToken)
+        persistVerseSession(data?.verse_session || null)
         setRefreshNotice('Session refreshed')
         window.setTimeout(() => setRefreshNotice(''), 2500)
         return nextAccessToken
@@ -2013,13 +2056,19 @@ function App() {
     }
   }
 
-  const persistSession = (nextAccessToken: string, nextRefreshToken: string, nextProfile: AdminProfile) => {
+  const persistSession = (
+    nextAccessToken: string,
+    nextRefreshToken: string,
+    nextProfile: AdminProfile,
+    verseSession?: unknown
+  ) => {
     setAccessToken(nextAccessToken)
     setRefreshToken(nextRefreshToken)
     setProfile(nextProfile)
     window.localStorage.setItem(ACCESS_TOKEN_KEY, nextAccessToken)
     window.localStorage.setItem(REFRESH_TOKEN_KEY, nextRefreshToken)
     window.localStorage.setItem(USER_KEY, JSON.stringify(nextProfile))
+    persistVerseSession(verseSession || null)
   }
 
   const clearSession = () => {
@@ -2049,6 +2098,7 @@ function App() {
     window.localStorage.removeItem(ACCESS_TOKEN_KEY)
     window.localStorage.removeItem(REFRESH_TOKEN_KEY)
     window.localStorage.removeItem(USER_KEY)
+    window.localStorage.removeItem(VERSE_SESSION_KEY)
   }
 
   const loadDashboard = async (token: string) => {
@@ -2593,7 +2643,7 @@ function App() {
         throw new Error('This dashboard currently requires DevTester or admin permissions access')
       }
 
-      persistSession(nextAccessToken, nextRefreshToken, nextProfile as AdminProfile)
+      persistSession(nextAccessToken, nextRefreshToken, nextProfile as AdminProfile, loginData?.verse_session || null)
       setShowAdminLogin(false)
       setShowDashboard(true)
       setAuthStatus('Admin login successful.')

@@ -12,6 +12,7 @@ from io import BytesIO
 import json
 import logging
 import os
+import threading
 import uuid
 from typing import Any, Dict, Tuple
 
@@ -658,6 +659,89 @@ def _update_meeting_note_failed(meeting_note_id: str, error_message: str):
         return_connection(conn)
 
 
+def _validate_saved_meeting_note_generation(
+    meeting_note_id: str,
+    *,
+    emp_code: str | None = None,
+) -> Tuple[str | None, Dict[str, Any] | None, Tuple[Dict[str, Any], int] | None]:
+    if not Config.FEATURE_MEETING_NOTES:
+        return None, None, _error("Meeting notes feature is disabled", 503)
+
+    provider = _configured_provider()
+    if provider is None:
+        return None, None, _error(
+            "Meeting notes AI is not configured. Set GEMINI_API_KEY or OPENAI_API_KEY first.",
+            503,
+        )
+
+    record = _fetch_meeting_note_record(meeting_note_id, emp_code=emp_code)
+    if not record:
+        return None, None, _error("Meeting note not found", 404)
+
+    if not record.get("audio_bucket") or not record.get("audio_object_name"):
+        return None, None, _error("Uploaded audio is missing for this meeting note", 400)
+
+    return provider, record, None
+
+
+def _run_saved_meeting_note_generation_in_background(
+    meeting_note_id: str,
+    *,
+    emp_code: str | None = None,
+) -> None:
+    try:
+        generate_meeting_notes_from_saved(
+            meeting_note_id,
+            emp_code=emp_code,
+            mark_processing=False,
+        )
+    except Exception:
+        logger.exception("Unexpected background meeting-notes generation failure")
+
+
+def queue_meeting_notes_generation_from_saved(
+    meeting_note_id: str,
+    *,
+    emp_code: str | None = None,
+):
+    provider, record, validation_error = _validate_saved_meeting_note_generation(
+        meeting_note_id,
+        emp_code=emp_code,
+    )
+    if validation_error:
+        return validation_error
+
+    if record.get("status") == "processing":
+        return (
+            {
+                "success": True,
+                "message": "Meeting notes generation is already in progress",
+                "data": _row_to_meeting_note_payload(record),
+            },
+            202,
+        )
+
+    _mark_meeting_note_processing(meeting_note_id)
+    refreshed = _fetch_meeting_note_record(meeting_note_id, emp_code=emp_code) or record
+    threading.Thread(
+        target=_run_saved_meeting_note_generation_in_background,
+        kwargs={"meeting_note_id": meeting_note_id, "emp_code": emp_code},
+        daemon=True,
+        name=f"meeting-notes-{meeting_note_id}",
+    ).start()
+    return (
+        {
+            "success": True,
+            "message": "Meeting notes generation started",
+            "data": {
+                **_row_to_meeting_note_payload(refreshed),
+                "provider": provider,
+            },
+        },
+        202,
+    )
+
+
 def upload_meeting_note_audio(
     audio_file,
     *,
@@ -722,25 +806,17 @@ def generate_meeting_notes_from_saved(
     meeting_note_id: str,
     *,
     emp_code: str | None = None,
+    mark_processing: bool = True,
 ):
-    if not Config.FEATURE_MEETING_NOTES:
-        return _error("Meeting notes feature is disabled", 503)
+    provider, record, validation_error = _validate_saved_meeting_note_generation(
+        meeting_note_id,
+        emp_code=emp_code,
+    )
+    if validation_error:
+        return validation_error
 
-    provider = _configured_provider()
-    if provider is None:
-        return _error(
-            "Meeting notes AI is not configured. Set GEMINI_API_KEY or OPENAI_API_KEY first.",
-            503,
-        )
-
-    record = _fetch_meeting_note_record(meeting_note_id, emp_code=emp_code)
-    if not record:
-        return _error("Meeting note not found", 404)
-
-    if not record.get("audio_bucket") or not record.get("audio_object_name"):
-        return _error("Uploaded audio is missing for this meeting note", 400)
-
-    _mark_meeting_note_processing(meeting_note_id)
+    if mark_processing:
+        _mark_meeting_note_processing(meeting_note_id)
 
     try:
         downloaded = download_s3_object(record["audio_bucket"], record["audio_object_name"])

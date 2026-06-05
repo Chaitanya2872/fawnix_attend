@@ -12,6 +12,7 @@ from services.meeting_notes_service import (
     generate_meeting_notes_from_saved,
     get_meeting_note_record,
     list_meeting_note_records,
+    queue_meeting_notes_generation_from_saved,
     upload_meeting_note_audio,
 )
 
@@ -79,11 +80,18 @@ def generate(current_user):
         meeting_note_id = str(payload.get("meeting_note_id") or "").strip()
         if not meeting_note_id:
             return jsonify({"success": False, "message": "meeting_note_id is required"}), 400
+        wait_for_completion = bool(payload.get("wait"))
 
-        response_body, status_code = generate_meeting_notes_from_saved(
-            meeting_note_id,
-            emp_code=current_user.get("emp_code"),
-        )
+        if wait_for_completion:
+            response_body, status_code = generate_meeting_notes_from_saved(
+                meeting_note_id,
+                emp_code=current_user.get("emp_code"),
+            )
+        else:
+            response_body, status_code = queue_meeting_notes_generation_from_saved(
+                meeting_note_id,
+                emp_code=current_user.get("emp_code"),
+            )
     else:
         audio_file = request.files.get("audio")
         meeting_title = (request.form.get("meeting_title") or "").strip() or None

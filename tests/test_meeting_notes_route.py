@@ -186,6 +186,55 @@ def test_generate_meeting_notes_route_from_saved_record(monkeypatch):
 
     captured = {}
 
+    def fake_queue_from_saved(meeting_note_id, emp_code=None):
+        captured["meeting_note_id"] = meeting_note_id
+        captured["emp_code"] = emp_code
+        return (
+            {
+                "success": True,
+                "message": "Meeting notes generation started",
+                "data": {
+                    "meeting_note_id": meeting_note_id,
+                    "status": "processing",
+                },
+            },
+            202,
+        )
+
+    monkeypatch.setattr(
+        meeting_notes_routes,
+        "queue_meeting_notes_generation_from_saved",
+        fake_queue_from_saved,
+    )
+
+    response = client.post(
+        "/api/meeting-notes/generate",
+        headers={"Authorization": "Bearer test-token"},
+        json={"meeting_note_id": "mn_saved_001"},
+    )
+
+    assert response.status_code == 202
+    assert response.get_json()["success"] is True
+    assert captured["meeting_note_id"] == "mn_saved_001"
+    assert captured["emp_code"] == "E001"
+
+
+def test_generate_meeting_notes_route_from_saved_record_waits_when_requested(monkeypatch):
+    app = create_test_app()
+    client = app.test_client()
+
+    authenticate_request(
+        monkeypatch,
+        {
+            "id": 7,
+            "emp_code": "E001",
+            "role": "employee",
+            "is_active": True,
+        },
+    )
+
+    captured = {}
+
     def fake_generate_from_saved(meeting_note_id, emp_code=None):
         captured["meeting_note_id"] = meeting_note_id
         captured["emp_code"] = emp_code
@@ -206,7 +255,7 @@ def test_generate_meeting_notes_route_from_saved_record(monkeypatch):
     response = client.post(
         "/api/meeting-notes/generate",
         headers={"Authorization": "Bearer test-token"},
-        json={"meeting_note_id": "mn_saved_001"},
+        json={"meeting_note_id": "mn_saved_001", "wait": True},
     )
 
     assert response.status_code == 200

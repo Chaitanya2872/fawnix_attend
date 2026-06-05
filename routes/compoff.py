@@ -4,6 +4,7 @@ API endpoints for overtime tracking and comp-off management with multi-level app
 """
 
 from flask import Blueprint, request, jsonify
+from config import Config
 from middleware.auth_middleware import token_required
 from services import admin_service
 from services.CompLeaveService import (
@@ -11,12 +12,17 @@ from services.CompLeaveService import (
     get_employee_overtime_records,
     request_compoff,
     get_my_compoff_requests,
+    get_my_avail_compoff_requests,
     approve_compoff_request,
+    approve_avail_compoff_request,
     cancel_compoff_request,
     get_compoff_balance,
     get_team_compoff_requests,
+    get_team_compoff_avail_requests,
     get_compoff_statistics,
-    scan_attendance_and_create_overtime_records
+    scan_attendance_and_create_overtime_records,
+    request_avail_compoff,
+    process_compoff_expirations,
 )
 from datetime import datetime
 
@@ -222,12 +228,12 @@ def request_comp_off(current_user):
     Business Rules:
     1. All records must be 'eligible' status
     2. Records must not be expired
-    3. Must be within 30-day recording window
-    4. If > 3 comp-offs in current month, requires HR/CMD approval
+    3. Must be within 3 days of the overtime date
+    4. 4th comp-off request onward in the same month requires CMD approval
     
     Approval Levels:
     - <= 3 requests this month: Manager approval (approval_level = 'manager')
-    - > 3 requests this month: HR/CMD approval (approval_level = 'cmd')
+    - 4th request onward this month: CMD approval (approval_level = 'cmd')
     
     Returns:
     - Request ID
@@ -239,7 +245,7 @@ def request_comp_off(current_user):
     Example Response:
     {
         "success": true,
-        "message": "Comp-off request submitted. This is your 4th request this month. Requires HR/CMD approval.",
+        "message": "Comp-off request submitted. This is your 4th request this month. Requires CMD approval.",
         "data": {
             "request_id": 123,
             "total_comp_days": 1.5,
@@ -310,6 +316,29 @@ def my_requests(current_user):
     return jsonify(result[0]), result[1]
 
 
+@compoff_bp.route('/my-avail-requests', methods=['GET'])
+@token_required
+def my_avail_requests(current_user):
+    status = request.args.get('status')
+    limit = request.args.get('limit', 50, type=int)
+    emp_code = request.args.get('emp_code')
+
+    target_emp_code = current_user['emp_code']
+    if emp_code and emp_code != current_user['emp_code']:
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. You can only view your own avail requests in this endpoint."
+        }), 403
+
+    result = get_my_avail_compoff_requests(
+        target_emp_code,
+        status,
+        limit
+    )
+
+    return jsonify(result[0]), result[1]
+
+
 @compoff_bp.route('/approve', methods=['POST'])
 @token_required
 def approve(current_user):
@@ -318,7 +347,7 @@ def approve(current_user):
     
     Authorization:
     - Manager: Can approve 'manager' level requests for their team
-    - HR/CMD: Can approve both 'manager' and 'cmd' level requests
+    - CMD: Can approve both 'manager' and 'cmd' level requests
     
     Request Body:
     {
@@ -328,8 +357,8 @@ def approve(current_user):
     }
     
     Business Rule:
-    - If employee has > 3 comp-off requests in current month,
-      approval_level will be 'cmd' and requires HR/CMD approval
+    - If employee has already submitted 3 comp-off requests in the current month,
+      approval_level will be 'cmd' and requires CMD approval
     - Otherwise, approval_level is 'manager' and requires Manager approval
     
     Returns:
@@ -345,8 +374,8 @@ def approve(current_user):
             "request_id": 123,
             "status": "approved",
             "total_comp_days": 1.5,
-            "approver": "HR001",
-            "approver_designation": "HR",
+            "approver": "CMD001",
+            "approver_designation": "CMD",
             "approved_at": "2024-02-06 15:30:00"
         }
     }
@@ -410,6 +439,68 @@ def cancel(current_user):
         current_user['emp_code']
     )
     
+    return jsonify(result[0]), result[1]
+
+
+@compoff_bp.route('/avail-request', methods=['POST'])
+@token_required
+def create_avail_request(current_user):
+    data = request.get_json() or {}
+    avail_date_raw = (data.get('avail_date') or '').strip()
+    avail_type = (data.get('avail_type') or '').strip().lower()
+    remarks = data.get('remarks', '')
+
+    if not avail_date_raw or not avail_type:
+        return jsonify({
+            "success": False,
+            "message": "avail_date and avail_type are required"
+        }), 400
+
+    try:
+        avail_date = datetime.strptime(avail_date_raw, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({
+            "success": False,
+            "message": "Invalid avail_date format. Use YYYY-MM-DD"
+        }), 400
+
+    result = request_avail_compoff(
+        current_user['emp_code'],
+        avail_date,
+        avail_type,
+        remarks
+    )
+
+    return jsonify(result[0]), result[1]
+
+
+@compoff_bp.route('/approve-avail', methods=['POST'])
+@token_required
+def approve_avail(current_user):
+    data = request.get_json() or {}
+    avail_request_id = data.get('avail_request_id')
+    action = data.get('action')
+    remarks = data.get('remarks', '')
+
+    if not avail_request_id or not action:
+        return jsonify({
+            "success": False,
+            "message": "avail_request_id and action are required"
+        }), 400
+
+    if action not in ['approved', 'rejected']:
+        return jsonify({
+            "success": False,
+            "message": "action must be 'approved' or 'rejected'"
+        }), 400
+
+    result = approve_avail_compoff_request(
+        avail_request_id,
+        current_user['emp_code'],
+        action,
+        remarks
+    )
+
     return jsonify(result[0]), result[1]
 
 
@@ -489,6 +580,21 @@ def team_requests(current_user):
     return jsonify(result[0]), result[1]
 
 
+@compoff_bp.route('/team-avail-requests', methods=['GET'])
+@token_required
+def team_avail_requests(current_user):
+    status = request.args.get('status')
+    limit = request.args.get('limit', 50, type=int)
+
+    result = get_team_compoff_avail_requests(
+        current_user['emp_code'],
+        status,
+        limit
+    )
+
+    return jsonify(result[0]), result[1]
+
+
 # ========================================
 # UTILITY ENDPOINTS
 # ========================================
@@ -503,8 +609,8 @@ def get_config(current_user):
     - Working hours (shift times)
     - Thresholds for half-day and full-day comp-offs
     - Recording window (30 days)
-    - Expiry period (90 days)
-    - HR/CMD approval threshold (> 3 requests/month)
+    - Expiry period (1 month from approval)
+    - CMD approval threshold (4th request onward each month)
     """
     return jsonify({
         "success": True,
@@ -526,13 +632,32 @@ def get_config(current_user):
             },
             "approval_levels": {
                 "manager": "For <= 3 comp-off requests in current month",
-                "hr_cmd": "For > 3 comp-off requests in current month"
+                "cmd": "4th request onward in a month requires CMD approval"
             },
-            "recording_window_days": 30,
-            "expiry_days": 90,
-            "hr_cmd_approval_threshold": 3
+            "recording_window_days": 3,
+            "expiry_months_after_approval": 1,
+            "cmd_approval_threshold_after_requests": 3,
+            "avail_types": [
+                "full_day",
+                "first_half",
+                "second_half"
+            ],
+            "avail_request_requires_manager_approval": Config.COMPOFF_AVAIL_REQUIRES_APPROVAL
         }
     }), 200
+
+
+@compoff_bp.route('/process-expiry', methods=['POST'])
+@token_required
+def process_expiry(current_user):
+    if not _is_privileged(current_user):
+        return jsonify({
+            "success": False,
+            "message": "Unauthorized. Only privileged users can process comp-off expiry."
+        }), 403
+
+    result = process_compoff_expirations()
+    return jsonify(result[0]), result[1]
 
 
 @compoff_bp.route('/statistics', methods=['GET'])

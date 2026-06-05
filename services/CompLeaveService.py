@@ -6,10 +6,12 @@ Key differences from standard version:
 - attendance_id can be NULL
 """
 
+import calendar
 from datetime import datetime, timedelta, date, time
 from database.connection import get_db_connection
 from typing import Tuple, Dict, List, Optional
 import logging
+from config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -19,15 +21,190 @@ logger = logging.getLogger(__name__)
 
 COMPOFF_THRESHOLD_HALF_DAY = 3.0  # > 3 hours = 0.5 day comp-off
 COMPOFF_THRESHOLD_FULL_DAY = 6.0  # > 6 hours = 1 day comp-off
-COMPOFF_RECORDING_WINDOW_DAYS = 30  # Must record within 30 days
-COMPOFF_EXPIRY_DAYS = 90  # Comp-offs expire after 90 days
-COMPOFF_CMD_APPROVAL_THRESHOLD = 3  # > 3 comp-offs in month needs HR/CMD approval
+COMPOFF_RECORDING_WINDOW_DAYS = 3  # Request must be raised within 3 days of overtime
+COMPOFF_EXPIRY_MONTHS = 1  # Approved comp-offs expire after 1 month
+COMPOFF_CMD_APPROVAL_THRESHOLD = 3  # 4th request onward in the same month needs CMD approval
 
 # Standard shift times
 WEEKDAY_SHIFT_START = time(10, 0)  # 10:00 AM
 WEEKDAY_SHIFT_END = time(18, 30)   # 6:30 PM
 SATURDAY_SHIFT_START = time(10, 0)  # 10:00 AM
 SATURDAY_SHIFT_END = time(13, 30)   # 1:30 PM
+
+COMPOFF_STATUS_PENDING = 'pending'
+COMPOFF_STATUS_REJECTED = 'rejected'
+COMPOFF_STATUS_CANCELLED = 'cancelled'
+COMPOFF_STATUS_AVAILABLE = 'available'
+COMPOFF_STATUS_PARTIALLY_CONSUMED = 'partially_consumed'
+COMPOFF_STATUS_CONSUMED = 'consumed'
+COMPOFF_STATUS_EXPIRED = 'expired'
+
+AVAIL_TYPE_FULL_DAY = 'full_day'
+AVAIL_TYPE_FIRST_HALF = 'first_half'
+AVAIL_TYPE_SECOND_HALF = 'second_half'
+
+
+def _normalize_designation(value: Optional[str]) -> str:
+    return (value or '').strip().upper()
+
+
+def _is_cmd_designation(value: Optional[str]) -> bool:
+    return _normalize_designation(value) == 'CMD'
+
+
+def _is_manager_or_cmd(approver_emp_code: str, manager_emp_code: Optional[str], approver_designation: Optional[str]) -> bool:
+    return approver_emp_code == manager_emp_code or _is_cmd_designation(approver_designation)
+
+
+def _coerce_date(value) -> Optional[date]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        return datetime.strptime(value, '%Y-%m-%d').date()
+    return None
+
+
+def _coerce_datetime(value) -> Optional[datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, time.min)
+    return None
+
+
+def _add_months(base_value: datetime, months: int = 1) -> datetime:
+    month_index = base_value.month - 1 + months
+    year = base_value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(base_value.day, calendar.monthrange(year, month)[1])
+    return base_value.replace(year=year, month=month, day=day)
+
+
+def _requested_days_for_avail_type(avail_type: str) -> float:
+    normalized = (avail_type or '').strip().lower()
+    if normalized == AVAIL_TYPE_FULL_DAY:
+        return 1.0
+    if normalized in {AVAIL_TYPE_FIRST_HALF, AVAIL_TYPE_SECOND_HALF}:
+        return 0.5
+    raise ValueError("avail_type must be one of full_day, first_half, second_half")
+
+
+def _reset_overtime_records_for_reuse(cursor, overtime_ids: List[int], today: Optional[date] = None) -> None:
+    if not overtime_ids:
+        return
+
+    effective_today = today or date.today()
+    placeholders = ','.join(['%s'] * len(overtime_ids))
+    cursor.execute(
+        f"""
+        UPDATE overtime_records
+        SET
+            status = CASE
+                WHEN COALESCE(recording_deadline, expires_at)::date < %s THEN 'expired'
+                ELSE 'eligible'
+            END,
+            compoff_request_id = NULL,
+            updated_at = NOW()
+        WHERE id IN ({placeholders})
+        """,
+        [effective_today] + overtime_ids,
+    )
+
+
+def process_compoff_expirations() -> Tuple[Dict, int]:
+    """Expire stale overtime eligibility and unused approved comp-off balances."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        today = date.today()
+        expired_overtime_count = 0
+        expired_request_count = 0
+
+        cursor.execute(
+            """
+            UPDATE overtime_records
+            SET
+                status = 'expired',
+                expired_at = COALESCE(expired_at, NOW()),
+                updated_at = NOW()
+            WHERE status IN ('eligible', 'rejected')
+              AND COALESCE(recording_deadline, expires_at) IS NOT NULL
+              AND COALESCE(recording_deadline, expires_at)::date < %s
+            RETURNING id
+            """,
+            (today,),
+        )
+        expired_overtime_count = len(cursor.fetchall())
+
+        cursor.execute(
+            """
+            SELECT request_id, overtime_record_ids
+            FROM compoff_requests
+            WHERE status IN ('available', 'partially_consumed')
+              AND expires_at IS NOT NULL
+              AND expires_at < NOW()
+            """
+        )
+        stale_requests = cursor.fetchall()
+
+        for row in stale_requests:
+            request_id = row['request_id']
+            overtime_ids = row.get('overtime_record_ids') or []
+
+            cursor.execute(
+                """
+                UPDATE compoff_requests
+                SET
+                    status = 'expired',
+                    available_days = 0,
+                    expired_at = COALESCE(expired_at, NOW()),
+                    updated_at = NOW()
+                WHERE request_id = %s
+                """,
+                (request_id,),
+            )
+            expired_request_count += 1
+
+            if overtime_ids:
+                placeholders = ','.join(['%s'] * len(overtime_ids))
+                cursor.execute(
+                    f"""
+                    UPDATE overtime_records
+                    SET
+                        status = CASE WHEN status = 'utilized' THEN status ELSE 'expired' END,
+                        expired_at = COALESCE(expired_at, NOW()),
+                        updated_at = NOW()
+                    WHERE id IN ({placeholders})
+                    """,
+                    overtime_ids,
+                )
+
+        conn.commit()
+
+        return ({
+            "success": True,
+            "data": {
+                "expired_overtime_records": expired_overtime_count,
+                "expired_compoff_requests": expired_request_count,
+            }
+        }, 200)
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Comp-off expiry job failed: {e}")
+        return ({
+            "success": False,
+            "message": str(e),
+        }, 500)
+    finally:
+        cursor.close()
+        conn.close()
 
 
 # =========================
@@ -407,7 +584,7 @@ def calculate_and_record_compoff(
             clock_in_sequence, actual_hours, extra_hours, standard_hours,
             comp_off_days, 'eligible',
             work_date + timedelta(days=COMPOFF_RECORDING_WINDOW_DAYS),
-            work_date + timedelta(days=COMPOFF_EXPIRY_DAYS)
+            work_date + timedelta(days=COMPOFF_RECORDING_WINDOW_DAYS)
         ))
         
         result = cursor.fetchone()
@@ -417,6 +594,7 @@ def calculate_and_record_compoff(
         
         return {
             'id': result['id'],  # YOUR table uses 'id', not 'overtime_id'
+            'overtime_id': result['id'],
             'comp_off_days': comp_off_days,
             'extra_hours': extra_hours,
             'total_hours': total_hours,
@@ -1314,6 +1492,1019 @@ def get_compoff_statistics(emp_code: str, year: Optional[int] = None, month: Opt
         "success": True,
         "message": "Statistics endpoint - implement as needed"
     }, 200)
+
+
+# =========================
+# COMP-OFF LIFECYCLE OVERRIDES
+# =========================
+
+def _get_month_request_count(cursor, emp_code: str) -> int:
+    current_month_start = date.today().replace(day=1)
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS request_count
+        FROM compoff_requests
+        WHERE emp_code = %s
+          AND created_at >= %s
+          AND status NOT IN ('rejected', 'cancelled')
+        """,
+        (emp_code, current_month_start),
+    )
+    row = cursor.fetchone()
+    return int(row['request_count'] or 0) if row else 0
+
+
+def _sum_available_compoff_days(cursor, emp_code: str) -> float:
+    cursor.execute(
+        """
+        SELECT COALESCE(SUM(available_days), 0) AS available_days
+        FROM compoff_requests
+        WHERE emp_code = %s
+          AND status IN ('available', 'partially_consumed')
+          AND (expires_at IS NULL OR expires_at >= NOW())
+        """,
+        (emp_code,),
+    )
+    row = cursor.fetchone()
+    return float(row['available_days'] or 0) if row else 0.0
+
+
+def _load_available_compoff_sources(cursor, emp_code: str) -> List[Dict]:
+    cursor.execute(
+        """
+        SELECT request_id, available_days, overtime_record_ids, expires_at, approved_at, available_at
+        FROM compoff_requests
+        WHERE emp_code = %s
+          AND status IN ('available', 'partially_consumed')
+          AND COALESCE(available_days, 0) > 0
+          AND (expires_at IS NULL OR expires_at >= NOW())
+        ORDER BY expires_at ASC NULLS LAST, approved_at ASC NULLS LAST, request_id ASC
+        """,
+        (emp_code,),
+    )
+    return cursor.fetchall()
+
+
+def _apply_avail_consumption(cursor, emp_code: str, avail_request_id: int, requested_days: float) -> None:
+    remaining = float(requested_days)
+    sources = _load_available_compoff_sources(cursor, emp_code)
+    total_available = sum(float(source.get('available_days') or 0) for source in sources)
+
+    if total_available + 1e-9 < remaining:
+        raise ValueError("Insufficient comp-off balance available")
+
+    for source in sources:
+        if remaining <= 0:
+            break
+
+        source_available = float(source.get('available_days') or 0)
+        if source_available <= 0:
+            continue
+
+        allocated = min(source_available, remaining)
+        request_id = int(source['request_id'])
+
+        cursor.execute(
+            """
+            INSERT INTO compoff_avail_request_allocations (
+                avail_request_id, compoff_request_id, allocated_days, created_at
+            ) VALUES (%s, %s, %s, NOW())
+            """,
+            (avail_request_id, request_id, allocated),
+        )
+
+        new_available = round(source_available - allocated, 2)
+        new_status = COMPOFF_STATUS_CONSUMED if new_available <= 0 else COMPOFF_STATUS_PARTIALLY_CONSUMED
+
+        cursor.execute(
+            """
+            UPDATE compoff_requests
+            SET
+                available_days = %s,
+                consumed_days = COALESCE(consumed_days, 0) + %s,
+                status = %s,
+                consumed_at = CASE WHEN %s <= 0 THEN COALESCE(consumed_at, NOW()) ELSE consumed_at END,
+                updated_at = NOW()
+            WHERE request_id = %s
+            """,
+            (new_available, allocated, new_status, new_available, request_id),
+        )
+
+        if new_available <= 0:
+            overtime_ids = source.get('overtime_record_ids') or []
+            if overtime_ids:
+                placeholders = ','.join(['%s'] * len(overtime_ids))
+                cursor.execute(
+                    f"""
+                    UPDATE overtime_records
+                    SET status = 'utilized', utilized_at = COALESCE(utilized_at, NOW()), updated_at = NOW()
+                    WHERE id IN ({placeholders})
+                    """,
+                    overtime_ids,
+                )
+
+        remaining = round(remaining - allocated, 2)
+
+
+def get_employee_overtime_records(emp_code: str, status: Optional[str] = None, limit: int = 50) -> Tuple[Dict, int]:
+    process_compoff_expirations()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        query = """
+            SELECT * FROM overtime_records
+            WHERE emp_code = %s
+        """
+        params = [emp_code]
+
+        if status:
+            query += " AND status = %s"
+            params.append(status)
+
+        query += " ORDER BY work_date DESC LIMIT %s"
+        params.append(limit)
+        cursor.execute(query, params)
+        records = cursor.fetchall()
+        attach_attendance_context_to_overtime_records(cursor, records)
+        records = [serialize_temporal_values(record) for record in records]
+
+        return ({
+            "success": True,
+            "data": {
+                "records": records,
+                "count": len(records)
+            }
+        }, 200)
+    except Exception as e:
+        logger.error(f"Error fetching overtime records: {e}")
+        return ({
+            "success": False,
+            "message": str(e)
+        }, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_my_compoff_requests(emp_code: str, status: Optional[str] = None, limit: int = 50) -> Tuple[Dict, int]:
+    process_compoff_expirations()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        query = """
+            SELECT * FROM compoff_requests
+            WHERE emp_code = %s
+        """
+        params = [emp_code]
+
+        if status:
+            query += " AND status = %s"
+            params.append(status)
+
+        query += " ORDER BY created_at DESC LIMIT %s"
+        params.append(limit)
+        cursor.execute(query, params)
+        requests = [serialize_temporal_values(row) for row in cursor.fetchall()]
+
+        return ({
+            "success": True,
+            "data": {
+                "requests": requests,
+                "count": len(requests)
+            }
+        }, 200)
+    except Exception as e:
+        logger.error(f"Error fetching comp-off requests: {e}")
+        return ({
+            "success": False,
+            "message": str(e)
+        }, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_my_avail_compoff_requests(emp_code: str, status: Optional[str] = None, limit: int = 50) -> Tuple[Dict, int]:
+    process_compoff_expirations()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        query = """
+            SELECT *
+            FROM compoff_avail_requests
+            WHERE emp_code = %s
+        """
+        params = [emp_code]
+
+        if status:
+            query += " AND status = %s"
+            params.append(status)
+
+        query += " ORDER BY created_at DESC LIMIT %s"
+        params.append(limit)
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        for row in rows:
+            cursor.execute(
+                """
+                SELECT compoff_request_id, allocated_days
+                FROM compoff_avail_request_allocations
+                WHERE avail_request_id = %s
+                ORDER BY id ASC
+                """,
+                (row['avail_request_id'],),
+            )
+            row['allocations'] = cursor.fetchall()
+
+        rows = [serialize_temporal_values(row) for row in rows]
+        return ({
+            "success": True,
+            "data": {
+                "requests": rows,
+                "count": len(rows)
+            }
+        }, 200)
+    except Exception as e:
+        logger.error(f"Error fetching comp-off avail requests: {e}")
+        return ({
+            "success": False,
+            "message": str(e)
+        }, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def request_compoff(
+    emp_code: str,
+    overtime_record_ids: List[int],
+    reason: str = '',
+    notes: str = ''
+) -> Tuple[Dict, int]:
+    process_compoff_expirations()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        emp_details = get_employee_details(emp_code)
+        if not emp_details:
+            return ({"success": False, "message": "Employee not found"}, 404)
+
+        emp_manager = emp_details.get('emp_manager_code')
+        month_count = _get_month_request_count(cursor, emp_code)
+        approval_level = 'cmd' if month_count >= COMPOFF_CMD_APPROVAL_THRESHOLD else 'manager'
+        approval_message = (
+            f"This is your {month_count + 1}th comp-off request this month. Requires CMD approval."
+            if approval_level == 'cmd'
+            else f"This is your {month_count + 1}th comp-off request this month. Requires Manager approval."
+        )
+
+        placeholders = ','.join(['%s'] * len(overtime_record_ids))
+        cursor.execute(
+            f"""
+            SELECT
+                id,
+                emp_code,
+                comp_off_days,
+                status,
+                work_date,
+                recording_deadline,
+                expires_at
+            FROM overtime_records
+            WHERE id IN ({placeholders})
+              AND emp_code = %s
+            """,
+            overtime_record_ids + [emp_code],
+        )
+        records = cursor.fetchall()
+
+        if len(records) != len(overtime_record_ids):
+            return ({
+                "success": False,
+                "message": "Some overtime records not found or don't belong to you"
+            }, 400)
+
+        ineligible = [record for record in records if record['status'] != 'eligible']
+        if ineligible:
+            return ({
+                "success": False,
+                "message": f"Some records are not eligible. Status: {ineligible[0]['status']}"
+            }, 400)
+
+        today = date.today()
+        for record in records:
+            deadline = _coerce_date(record.get('recording_deadline')) or _coerce_date(record.get('expires_at'))
+            if deadline and deadline < today:
+                return ({
+                    "success": False,
+                    "message": "Comp-off request must be raised within 3 days of the overtime date."
+                }, 400)
+
+        total_comp_days = sum(float(record['comp_off_days'] or 0) for record in records)
+        cursor.execute(
+            """
+            INSERT INTO compoff_requests (
+                emp_code, emp_email, emp_name,
+                overtime_record_ids, total_comp_days,
+                consumed_days, available_days,
+                reason, notes,
+                approval_level, approver_emp_code,
+                status, created_at, updated_at
+            ) VALUES (
+                %s, %s, %s,
+                %s, %s,
+                0, 0,
+                %s, %s,
+                %s, %s,
+                'pending', NOW(), NOW()
+            )
+            RETURNING request_id, created_at
+            """,
+            (
+                emp_code,
+                emp_details['emp_email'],
+                emp_details['emp_full_name'],
+                overtime_record_ids,
+                total_comp_days,
+                reason,
+                notes,
+                approval_level,
+                emp_manager if approval_level == 'manager' else None,
+            ),
+        )
+        created_row = cursor.fetchone()
+        request_id = created_row['request_id']
+
+        cursor.execute(
+            f"""
+            UPDATE overtime_records
+            SET status = 'requested', compoff_request_id = %s, updated_at = NOW()
+            WHERE id IN ({placeholders})
+            """,
+            [request_id] + overtime_record_ids,
+        )
+        conn.commit()
+
+        return ({
+            "success": True,
+            "message": f"Comp-off request submitted successfully. {approval_message}",
+            "data": {
+                "request_id": request_id,
+                "total_comp_days": total_comp_days,
+                "overtime_records_count": len(overtime_record_ids),
+                "approval_level": approval_level,
+                "approver": emp_manager if approval_level == 'manager' else 'CMD',
+                "month_request_count": month_count + 1,
+                "created_at": created_row['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
+                "status": COMPOFF_STATUS_PENDING
+            }
+        }, 201)
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error creating comp-off request: {e}")
+        return ({
+            "success": False,
+            "message": f"Error creating comp-off request: {str(e)}"
+        }, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def approve_compoff_request(
+    request_id: int,
+    approver_emp_code: str,
+    action: str,
+    remarks: str = ''
+) -> Tuple[Dict, int]:
+    process_compoff_expirations()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        approver = get_employee_details(approver_emp_code)
+        if not approver:
+            return ({"success": False, "message": "Approver not found"}, 404)
+
+        approver_designation = approver.get('emp_designation')
+        cursor.execute(
+            """
+            SELECT cr.*, e.emp_manager AS emp_manager_code
+            FROM compoff_requests cr
+            JOIN employees e ON cr.emp_code = e.emp_code
+            WHERE cr.request_id = %s
+            """,
+            (request_id,),
+        )
+        request = cursor.fetchone()
+
+        if not request:
+            return ({"success": False, "message": "Request not found"}, 404)
+
+        if request['status'] != COMPOFF_STATUS_PENDING:
+            return ({
+                "success": False,
+                "message": f"Request is already {request['status']}"
+            }, 400)
+
+        approval_level = (request.get('approval_level') or 'manager').strip().lower()
+        emp_manager = request.get('emp_manager_code')
+
+        if approval_level == 'cmd':
+            if not _is_cmd_designation(approver_designation):
+                return ({
+                    "success": False,
+                    "message": "Unauthorized. This request requires CMD approval."
+                }, 403)
+        elif not _is_manager_or_cmd(approver_emp_code, emp_manager, approver_designation):
+            return ({
+                "success": False,
+                "message": "Unauthorized. This request requires manager approval."
+            }, 403)
+
+        overtime_ids = request.get('overtime_record_ids') or []
+        placeholders = ','.join(['%s'] * len(overtime_ids)) if overtime_ids else ''
+
+        if action == 'approved':
+            approved_at = datetime.now()
+            expires_at = _add_months(approved_at, COMPOFF_EXPIRY_MONTHS)
+            cursor.execute(
+                """
+                UPDATE compoff_requests
+                SET
+                    status = 'available',
+                    approver_emp_code = %s,
+                    approver_remarks = %s,
+                    approved_at = %s,
+                    available_at = %s,
+                    expires_at = %s,
+                    available_days = total_comp_days,
+                    updated_at = NOW()
+                WHERE request_id = %s
+                """,
+                (approver_emp_code, remarks, approved_at, approved_at, expires_at, request_id),
+            )
+
+            if overtime_ids:
+                cursor.execute(
+                    f"""
+                    UPDATE overtime_records
+                    SET status = 'approved', approval_completed_at = NOW(), updated_at = NOW()
+                    WHERE id IN ({placeholders})
+                    """,
+                    overtime_ids,
+                )
+
+            result_status = COMPOFF_STATUS_AVAILABLE
+            message = "Comp-off request approved and balance is now available"
+        else:
+            cursor.execute(
+                """
+                UPDATE compoff_requests
+                SET
+                    status = 'rejected',
+                    approver_emp_code = %s,
+                    approver_remarks = %s,
+                    rejected_at = NOW(),
+                    updated_at = NOW()
+                WHERE request_id = %s
+                """,
+                (approver_emp_code, remarks, request_id),
+            )
+            _reset_overtime_records_for_reuse(cursor, overtime_ids)
+            result_status = COMPOFF_STATUS_REJECTED
+            message = "Comp-off request rejected successfully"
+
+        conn.commit()
+        return ({
+            "success": True,
+            "message": message,
+            "data": {
+                "request_id": request_id,
+                "status": result_status,
+                "total_comp_days": float(request['total_comp_days'] or 0),
+                "approver": approver_emp_code,
+                "approver_designation": approver_designation
+            }
+        }, 200)
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error approving comp-off request: {e}")
+        return ({
+            "success": False,
+            "message": f"Error approving comp-off request: {str(e)}"
+        }, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def cancel_compoff_request(request_id: int, emp_code: str) -> Tuple[Dict, int]:
+    process_compoff_expirations()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT * FROM compoff_requests
+            WHERE request_id = %s AND emp_code = %s
+            """,
+            (request_id, emp_code),
+        )
+        request = cursor.fetchone()
+
+        if not request:
+            return ({"success": False, "message": "Request not found"}, 404)
+
+        if request['status'] != COMPOFF_STATUS_PENDING:
+            return ({"success": False, "message": f"Cannot cancel {request['status']} request"}, 400)
+
+        cursor.execute(
+            """
+            UPDATE compoff_requests
+            SET status = 'cancelled', cancelled_at = NOW(), updated_at = NOW()
+            WHERE request_id = %s
+            """,
+            (request_id,),
+        )
+        _reset_overtime_records_for_reuse(cursor, request.get('overtime_record_ids') or [])
+        conn.commit()
+
+        return ({
+            "success": True,
+            "message": "Request cancelled successfully"
+        }, 200)
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error cancelling request: {e}")
+        return ({"success": False, "message": str(e)}, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def request_avail_compoff(
+    emp_code: str,
+    avail_date: date,
+    avail_type: str,
+    remarks: str = ''
+) -> Tuple[Dict, int]:
+    process_compoff_expirations()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        emp_details = get_employee_details(emp_code)
+        if not emp_details:
+            return ({"success": False, "message": "Employee not found"}, 404)
+
+        if avail_date < date.today():
+            return ({
+                "success": False,
+                "message": "Avail date cannot be in the past"
+            }, 400)
+
+        requested_days = _requested_days_for_avail_type(avail_type)
+        available_balance = _sum_available_compoff_days(cursor, emp_code)
+        if available_balance + 1e-9 < requested_days:
+            return ({
+                "success": False,
+                "message": "Insufficient comp-off balance available"
+            }, 400)
+
+        approval_required = bool(getattr(Config, 'COMPOFF_AVAIL_REQUIRES_APPROVAL', True))
+        initial_status = COMPOFF_STATUS_PENDING if approval_required else 'approved'
+        cursor.execute(
+            """
+            INSERT INTO compoff_avail_requests (
+                emp_code, emp_email, emp_name,
+                avail_date, avail_type, requested_days,
+                remarks, approval_required, approval_level,
+                approver_emp_code, status, created_at, updated_at
+            ) VALUES (
+                %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, NOW(), NOW()
+            )
+            RETURNING avail_request_id
+            """,
+            (
+                emp_code,
+                emp_details['emp_email'],
+                emp_details['emp_full_name'],
+                avail_date,
+                avail_type,
+                requested_days,
+                remarks,
+                approval_required,
+                'manager',
+                emp_details.get('emp_manager_code'),
+                initial_status,
+            ),
+        )
+        created = cursor.fetchone()
+        avail_request_id = created['avail_request_id']
+
+        if approval_required:
+            conn.commit()
+            return ({
+                "success": True,
+                "message": "Comp-off avail request submitted for approval",
+                "data": {
+                    "avail_request_id": avail_request_id,
+                    "avail_date": avail_date.strftime('%Y-%m-%d'),
+                    "avail_type": avail_type,
+                    "requested_days": requested_days,
+                    "status": COMPOFF_STATUS_PENDING
+                }
+            }, 201)
+
+        _apply_avail_consumption(cursor, emp_code, avail_request_id, requested_days)
+        cursor.execute(
+            """
+            UPDATE compoff_avail_requests
+            SET approved_at = NOW(), consumed_at = NOW(), updated_at = NOW()
+            WHERE avail_request_id = %s
+            """,
+            (avail_request_id,),
+        )
+        conn.commit()
+        return ({
+            "success": True,
+            "message": "Comp-off avail request approved and consumed successfully",
+            "data": {
+                "avail_request_id": avail_request_id,
+                "avail_type": avail_type,
+                "requested_days": requested_days,
+                "status": "approved"
+            }
+        }, 201)
+    except ValueError as e:
+        conn.rollback()
+        return ({
+            "success": False,
+            "message": str(e)
+        }, 400)
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error creating comp-off avail request: {e}")
+        return ({
+            "success": False,
+            "message": str(e)
+        }, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def approve_avail_compoff_request(
+    avail_request_id: int,
+    approver_emp_code: str,
+    action: str,
+    remarks: str = ''
+) -> Tuple[Dict, int]:
+    process_compoff_expirations()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        approver = get_employee_details(approver_emp_code)
+        if not approver:
+            return ({"success": False, "message": "Approver not found"}, 404)
+
+        approver_designation = approver.get('emp_designation')
+        cursor.execute(
+            """
+            SELECT ar.*, e.emp_manager AS emp_manager_code
+            FROM compoff_avail_requests ar
+            JOIN employees e ON ar.emp_code = e.emp_code
+            WHERE ar.avail_request_id = %s
+            """,
+            (avail_request_id,),
+        )
+        request = cursor.fetchone()
+
+        if not request:
+            return ({"success": False, "message": "Avail request not found"}, 404)
+
+        if request['status'] != COMPOFF_STATUS_PENDING:
+            return ({
+                "success": False,
+                "message": f"Avail request is already {request['status']}"
+            }, 400)
+
+        if not _is_manager_or_cmd(approver_emp_code, request.get('emp_manager_code'), approver_designation):
+            return ({
+                "success": False,
+                "message": "Unauthorized. This avail request requires manager approval."
+            }, 403)
+
+        if action == 'approved':
+            requested_days = float(request.get('requested_days') or 0)
+            available_balance = _sum_available_compoff_days(cursor, request['emp_code'])
+            if available_balance + 1e-9 < requested_days:
+                return ({
+                    "success": False,
+                    "message": "Insufficient available balance at approval time"
+                }, 400)
+
+            _apply_avail_consumption(cursor, request['emp_code'], avail_request_id, requested_days)
+            cursor.execute(
+                """
+                UPDATE compoff_avail_requests
+                SET
+                    status = 'approved',
+                    approver_emp_code = %s,
+                    approver_remarks = %s,
+                    approved_at = NOW(),
+                    consumed_at = NOW(),
+                    updated_at = NOW()
+                WHERE avail_request_id = %s
+                """,
+                (approver_emp_code, remarks, avail_request_id),
+            )
+            result_status = 'approved'
+            message = "Comp-off avail request approved successfully"
+        else:
+            cursor.execute(
+                """
+                UPDATE compoff_avail_requests
+                SET
+                    status = 'rejected',
+                    approver_emp_code = %s,
+                    approver_remarks = %s,
+                    rejected_at = NOW(),
+                    updated_at = NOW()
+                WHERE avail_request_id = %s
+                """,
+                (approver_emp_code, remarks, avail_request_id),
+            )
+            result_status = COMPOFF_STATUS_REJECTED
+            message = "Comp-off avail request rejected successfully"
+
+        conn.commit()
+        return ({
+            "success": True,
+            "message": message,
+            "data": {
+                "avail_request_id": avail_request_id,
+                "status": result_status,
+                "approver": approver_emp_code,
+                "approver_designation": approver_designation
+            }
+        }, 200)
+    except ValueError as e:
+        conn.rollback()
+        return ({
+            "success": False,
+            "message": str(e)
+        }, 400)
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error approving comp-off avail request: {e}")
+        return ({
+            "success": False,
+            "message": str(e)
+        }, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_compoff_balance(emp_code: str) -> Tuple[Dict, int]:
+    process_compoff_expirations()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(SUM(CASE WHEN status IN ('available', 'partially_consumed') THEN available_days ELSE 0 END), 0) AS available_balance,
+                COALESCE(SUM(CASE WHEN status = 'pending' THEN total_comp_days ELSE 0 END), 0) AS pending_request_days,
+                COALESCE(SUM(CASE WHEN status = 'expired' THEN GREATEST(total_comp_days - COALESCE(consumed_days, 0), 0) ELSE 0 END), 0) AS expired_unused_days,
+                COALESCE(SUM(CASE WHEN status IN ('consumed', 'partially_consumed') THEN consumed_days ELSE 0 END), 0) AS consumed_days
+            FROM compoff_requests
+            WHERE emp_code = %s
+            """,
+            (emp_code,),
+        )
+        request_summary = cursor.fetchone()
+
+        cursor.execute(
+            """
+            SELECT COUNT(*) AS eligible_count, COALESCE(SUM(comp_off_days), 0) AS eligible_days
+            FROM overtime_records
+            WHERE emp_code = %s AND status = 'eligible'
+            """,
+            (emp_code,),
+        )
+        eligible = cursor.fetchone()
+
+        cursor.execute(
+            """
+            SELECT COALESCE(SUM(requested_days), 0) AS pending_avail_days
+            FROM compoff_avail_requests
+            WHERE emp_code = %s AND status = 'pending'
+            """,
+            (emp_code,),
+        )
+        pending_avail = cursor.fetchone()
+
+        return ({
+            "success": True,
+            "data": {
+                "available_balance": float(request_summary['available_balance'] or 0),
+                "approved_balance": float(request_summary['available_balance'] or 0),
+                "eligible_not_requested": float(eligible['eligible_days'] or 0),
+                "eligible_records_count": int(eligible['eligible_count'] or 0),
+                "pending_approval": float(request_summary['pending_request_days'] or 0),
+                "pending_avail_approval": float(pending_avail['pending_avail_days'] or 0),
+                "consumed_balance": float(request_summary['consumed_days'] or 0),
+                "expired_balance": float(request_summary['expired_unused_days'] or 0),
+                "total_potential": float(request_summary['available_balance'] or 0) + float(eligible['eligible_days'] or 0)
+            }
+        }, 200)
+    except Exception as e:
+        logger.error(f"Error fetching balance: {e}")
+        return ({"success": False, "message": str(e)}, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_team_compoff_requests(manager_emp_code: str, status: Optional[str] = None, limit: int = 50) -> Tuple[Dict, int]:
+    process_compoff_expirations()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        manager = get_employee_details(manager_emp_code)
+        if not manager:
+            return ({"success": False, "message": "Manager not found"}, 404)
+
+        manager_designation = manager.get('emp_designation')
+        if _is_cmd_designation(manager_designation):
+            query = """
+                SELECT cr.*, e.emp_manager AS emp_manager_code
+                FROM compoff_requests cr
+                JOIN employees e ON cr.emp_code = e.emp_code
+                WHERE 1 = 1
+            """
+            params = []
+        else:
+            query = """
+                SELECT cr.*, e.emp_manager AS emp_manager_code
+                FROM compoff_requests cr
+                JOIN employees e ON cr.emp_code = e.emp_code
+                WHERE e.emp_manager = %s
+                  AND cr.approval_level = 'manager'
+            """
+            params = [manager_emp_code]
+
+        if status:
+            query += " AND cr.status = %s"
+            params.append(status)
+
+        query += " ORDER BY cr.created_at DESC LIMIT %s"
+        params.append(limit)
+        cursor.execute(query, params)
+        requests = [serialize_temporal_values(row) for row in cursor.fetchall()]
+
+        return ({
+            "success": True,
+            "data": {
+                "requests": requests,
+                "count": len(requests),
+                "manager_designation": manager_designation
+            }
+        }, 200)
+    except Exception as e:
+        logger.error(f"Error fetching team requests: {e}")
+        return ({"success": False, "message": str(e)}, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_team_compoff_avail_requests(manager_emp_code: str, status: Optional[str] = None, limit: int = 50) -> Tuple[Dict, int]:
+    process_compoff_expirations()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        manager = get_employee_details(manager_emp_code)
+        if not manager:
+            return ({"success": False, "message": "Manager not found"}, 404)
+
+        manager_designation = manager.get('emp_designation')
+        if _is_cmd_designation(manager_designation):
+            query = """
+                SELECT ar.*, e.emp_manager AS emp_manager_code
+                FROM compoff_avail_requests ar
+                JOIN employees e ON ar.emp_code = e.emp_code
+                WHERE 1 = 1
+            """
+            params = []
+        else:
+            query = """
+                SELECT ar.*, e.emp_manager AS emp_manager_code
+                FROM compoff_avail_requests ar
+                JOIN employees e ON ar.emp_code = e.emp_code
+                WHERE e.emp_manager = %s
+            """
+            params = [manager_emp_code]
+
+        if status:
+            query += " AND ar.status = %s"
+            params.append(status)
+
+        query += " ORDER BY ar.created_at DESC LIMIT %s"
+        params.append(limit)
+        cursor.execute(query, params)
+        rows = [serialize_temporal_values(row) for row in cursor.fetchall()]
+
+        return ({
+            "success": True,
+            "data": {
+                "requests": rows,
+                "count": len(rows),
+                "manager_designation": manager_designation
+            }
+        }, 200)
+    except Exception as e:
+        logger.error(f"Error fetching team avail requests: {e}")
+        return ({"success": False, "message": str(e)}, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_compoff_statistics(emp_code: str, year: Optional[int] = None, month: Optional[int] = None) -> Tuple[Dict, int]:
+    process_compoff_expirations()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        filters = ["emp_code = %s"]
+        params: List = [emp_code]
+
+        if year:
+            filters.append("EXTRACT(YEAR FROM work_date) = %s")
+            params.append(year)
+        if month:
+            filters.append("EXTRACT(MONTH FROM work_date) = %s")
+            params.append(month)
+
+        where_clause = " AND ".join(filters)
+        cursor.execute(
+            f"""
+            SELECT COUNT(*) AS overtime_count, COALESCE(SUM(comp_off_days), 0) AS earned_days
+            FROM overtime_records
+            WHERE {where_clause}
+            """,
+            params,
+        )
+        overtime = cursor.fetchone()
+
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(SUM(CASE WHEN status IN ('available', 'partially_consumed') THEN available_days ELSE 0 END), 0) AS available_days,
+                COALESCE(SUM(CASE WHEN status IN ('consumed', 'partially_consumed') THEN consumed_days ELSE 0 END), 0) AS consumed_days,
+                COALESCE(SUM(CASE WHEN status = 'expired' THEN GREATEST(total_comp_days - COALESCE(consumed_days, 0), 0) ELSE 0 END), 0) AS expired_days
+            FROM compoff_requests
+            WHERE emp_code = %s
+            """,
+            (emp_code,),
+        )
+        request_summary = cursor.fetchone()
+
+        return ({
+            "success": True,
+            "data": {
+                "overtime_records": int(overtime['overtime_count'] or 0),
+                "earned_days": float(overtime['earned_days'] or 0),
+                "available_days": float(request_summary['available_days'] or 0),
+                "consumed_days": float(request_summary['consumed_days'] or 0),
+                "expired_days": float(request_summary['expired_days'] or 0)
+            }
+        }, 200)
+    except Exception as e:
+        logger.error(f"Error fetching comp-off statistics: {e}")
+        return ({
+            "success": False,
+            "message": str(e)
+        }, 500)
+    finally:
+        cursor.close()
+        conn.close()
 
 
 # =========================

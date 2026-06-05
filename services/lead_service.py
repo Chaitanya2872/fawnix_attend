@@ -32,7 +32,11 @@ def parse_lead_identifier(raw_identifier):
     return str(raw_identifier).strip()
 
 
-def _exchange_fawnix_token_for_verse_token(current_user: dict[str, Any]) -> str | None:
+def _resolve_verse_access_token(current_user: dict[str, Any]) -> str | None:
+    if (current_user.get("_access_token_source") or "").strip().lower() == "verse":
+        token = (current_user.get("_access_token") or "").strip()
+        return token or None
+
     fawnix_access_token = (current_user.get("_access_token") or "").strip()
     if not fawnix_access_token:
         return None
@@ -91,7 +95,7 @@ def _error(message: str, status_code: int):
 
 
 def _request(current_user, method: str, path: str, *, params=None, payload=None):
-    verse_access_token = _exchange_fawnix_token_for_verse_token(current_user)
+    verse_access_token = _resolve_verse_access_token(current_user)
     if not verse_access_token and not CRM_SERVICE_TOKEN:
         return _error("Verse access token exchange failed and CRM service token is not configured", 500)
 

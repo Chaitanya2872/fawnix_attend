@@ -13,6 +13,7 @@ from services.notification_service import (
     send_attendance_reminder_notifications,
     send_lunch_reminder_notifications,
 )
+from services.CompLeaveService import process_compoff_expirations
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,18 @@ def scheduled_notification_processor_job():
         logger.warning("Scheduled notification processor completed with issues: %s", result.get("message"))
 
     return result
+
+
+def compoff_expiry_job():
+    """Scheduled wrapper that expires stale comp-off eligibility and unused balances."""
+    payload, status_code = process_compoff_expirations()
+
+    if status_code == 200 and payload.get("success"):
+        logger.info("Comp-off expiry job completed: %s", payload.get("data"))
+    else:
+        logger.warning("Comp-off expiry job completed with issues: %s", payload.get("message"))
+
+    return payload
 
 
 def register_attendance_reminder_job(scheduler, scheduler_timezone, misfire_grace_time: int):
@@ -114,5 +127,17 @@ def register_attendance_reminder_job(scheduler, scheduler_timezone, misfire_grac
     )
     logger.info(
         "Scheduled notification processor job scheduled every minute (%s)",
+        scheduler_timezone,
+    )
+
+    scheduler.add_job(
+        compoff_expiry_job,
+        CronTrigger(hour=0, minute=30, timezone=scheduler_timezone),
+        id="compoff_expiry_job",
+        replace_existing=True,
+        misfire_grace_time=misfire_grace_time,
+    )
+    logger.info(
+        "Comp-off expiry job scheduled for 00:30 daily (%s)",
         scheduler_timezone,
     )

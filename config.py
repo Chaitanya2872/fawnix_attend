@@ -33,6 +33,9 @@ class Config:
     JWT_ALGORITHM = 'HS256'
     JWT_EXPIRE_MINUTES = int(os.getenv('JWT_EXPIRE_MINUTES', 1440))  # 24 hours
     REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv('REFRESH_TOKEN_EXPIRE_DAYS', 7))
+    VERSE_JWT_SECRET = os.getenv('VERSE_JWT_SECRET', '').strip()
+    VERSE_JWT_ISSUER = os.getenv('VERSE_JWT_ISSUER', 'fawnix-verse').strip()
+    VERSE_JWT_ALGORITHM = os.getenv('VERSE_JWT_ALGORITHM', 'HS384').strip()
     
     # OTP Configuration
     OTP_LENGTH = 6
@@ -87,6 +90,7 @@ class Config:
     REST_BREAK_DURATION = int(os.getenv('REST_BREAK_DURATION', 30))  # minutes
     MAX_MEAL_BREAKS = int(os.getenv('MAX_MEAL_BREAKS', 1))
     MAX_TEA_BREAKS = int(os.getenv('MAX_TEA_BREAKS', 2))
+    COMPOFF_AVAIL_REQUIRES_APPROVAL = os.getenv('COMPOFF_AVAIL_REQUIRES_APPROVAL', 'True').lower() == 'true'
     
     # Geocoding Configuration
     GEOCODING_SERVICE = os.getenv('GEOCODING_SERVICE', 'nominatim')

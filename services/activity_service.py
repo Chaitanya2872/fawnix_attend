@@ -10,6 +10,7 @@ import math
 logger = logging.getLogger(__name__)
 
 DEFAULT_DESTINATION_RADIUS_METERS = 100.0
+CLOCK_IN_REQUIRED_ACTIVITY_MESSAGE = "Clock-in first, heroics later — please clock in before starting your work."
 
 
 def _safe_float(value):
@@ -244,7 +245,7 @@ def start_activity(emp_email: str, emp_name: str, activity_type: str,
         if not attendance:
             return ({
                 "success": False,
-                "message": "You must clock in before starting any activity"
+                "message": CLOCK_IN_REQUIRED_ACTIVITY_MESSAGE
             }, 400)
         
         attendance_id = attendance['id']

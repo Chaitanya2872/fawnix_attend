@@ -48,7 +48,7 @@ def test_start_activity_requires_clock_in(monkeypatch):
 
     assert status_code == 400
     assert result["success"] is False
-    assert result["message"] == "You must clock in before starting any activity"
+    assert result["message"] == activity_service.CLOCK_IN_REQUIRED_ACTIVITY_MESSAGE
 
 
 def test_start_break_requires_clock_in(monkeypatch):
@@ -64,4 +64,4 @@ def test_start_break_requires_clock_in(monkeypatch):
 
     assert status_code == 400
     assert result["success"] is False
-    assert result["message"] == "You must clock in before starting any activity"
+    assert result["message"] == activity_service.CLOCK_IN_REQUIRED_ACTIVITY_MESSAGE

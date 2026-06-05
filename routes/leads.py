@@ -5,7 +5,7 @@ Lead management endpoints with optional field-visit linkage.
 
 from flask import Blueprint, request, jsonify
 
-from middleware.auth_middleware import token_required
+from middleware.auth_middleware import token_required_allow_verse
 from services.lead_service import (
     create_lead,
     list_leads,
@@ -18,7 +18,7 @@ leads_bp = Blueprint("leads", __name__)
 
 
 @leads_bp.route("", methods=["POST"], strict_slashes=False)
-@token_required
+@token_required_allow_verse
 def create(current_user):
     """Create a lead."""
     payload = request.get_json() or {}
@@ -27,7 +27,7 @@ def create(current_user):
 
 
 @leads_bp.route("", methods=["GET"], strict_slashes=False)
-@token_required
+@token_required_allow_verse
 def list_all(current_user):
     """List leads with optional filters."""
     filters = request.args.to_dict(flat=True)
@@ -36,7 +36,7 @@ def list_all(current_user):
 
 
 @leads_bp.route("/<string:lead_id>", methods=["GET"])
-@token_required
+@token_required_allow_verse
 def get_one(current_user, lead_id):
     """Get lead details."""
     result, status = get_lead(lead_id, current_user)
@@ -44,7 +44,7 @@ def get_one(current_user, lead_id):
 
 
 @leads_bp.route("/<string:lead_id>", methods=["PUT"])
-@token_required
+@token_required_allow_verse
 def update(current_user, lead_id):
     """Update lead."""
     payload = request.get_json() or {}
@@ -53,7 +53,7 @@ def update(current_user, lead_id):
 
 
 @leads_bp.route("/<string:lead_id>/link-field-visit", methods=["POST"])
-@token_required
+@token_required_allow_verse
 def link_field_visit(current_user, lead_id):
     """Link lead to an existing field visit."""
     payload = request.get_json() or {}

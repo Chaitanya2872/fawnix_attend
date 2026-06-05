@@ -136,12 +136,24 @@ class Config:
         ).split(',')
         if extension.strip()
     ]
-    MINIO_ENDPOINT = os.getenv('MINIO_ENDPOINT', '').strip()
-    MINIO_ACCESS_KEY = os.getenv('MINIO_ACCESS_KEY', '').strip()
-    MINIO_SECRET_KEY = os.getenv('MINIO_SECRET_KEY', '').strip()
-    MINIO_SECURE = os.getenv('MINIO_SECURE', 'False').lower() == 'true'
-    MINIO_BUCKET = os.getenv('MINIO_BUCKET', 'fawnix-meeting-notes').strip()
-    MINIO_MEETING_AUDIO_PREFIX = os.getenv('MINIO_MEETING_AUDIO_PREFIX', 'meeting-audio').strip().strip('/')
+    MEETING_NOTES_S3_BUCKET = os.getenv('MEETING_NOTES_S3_BUCKET', os.getenv('bucket_name', '')).strip()
+    MEETING_NOTES_S3_REGION = os.getenv('MEETING_NOTES_S3_REGION', os.getenv('mom_S3_REGION', 'ap-south-1')).strip()
+    MEETING_NOTES_AWS_ACCESS_KEY_ID = os.getenv(
+        'MEETING_NOTES_AWS_ACCESS_KEY_ID',
+        os.getenv('mom_AWS_ACCESS_KEY_ID', '')
+    ).strip()
+    MEETING_NOTES_AWS_SECRET_ACCESS_KEY = os.getenv(
+        'MEETING_NOTES_AWS_SECRET_ACCESS_KEY',
+        os.getenv('momAWS_SECRET_ACCESS_KEY', '')
+    ).strip()
+    MEETING_NOTES_S3_AUDIO_PREFIX = os.getenv(
+        'MEETING_NOTES_S3_AUDIO_PREFIX',
+        'meeting-notes/audio'
+    ).strip().strip('/')
+    MEETING_NOTES_S3_REPORT_PREFIX = os.getenv(
+        'MEETING_NOTES_S3_REPORT_PREFIX',
+        'meeting-notes/generated-reports'
+    ).strip().strip('/')
     MAX_CONTENT_LENGTH = max(MAX_CONTENT_LENGTH_MB, MEETING_NOTES_MAX_UPLOAD_MB) * 1024 * 1024
     
     @classmethod

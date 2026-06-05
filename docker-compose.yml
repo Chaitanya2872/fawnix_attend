@@ -19,25 +19,6 @@ services:
       timeout: 5s
       retries: 5
 
-  minio:
-    image: minio/minio:latest
-    container_name: employee_minio
-    environment:
-      TZ: Asia/Kolkata
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-fawnixminio}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-fawnixminio123}
-    command: server /data --console-address ":9001"
-    ports:
-      - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
   app:
     build: .
     container_name: employee_app
@@ -48,16 +29,14 @@ services:
       DATABASE_NAME: Intimation
       DATABASE_USER: postgres
       DATABASE_PASSWORD: postgres
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-fawnixminio}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-fawnixminio123}
-      MINIO_SECURE: "false"
-      MINIO_BUCKET: ${MINIO_BUCKET:-fawnix-meeting-notes}
-      MINIO_MEETING_AUDIO_PREFIX: ${MINIO_MEETING_AUDIO_PREFIX:-meeting-audio}
+      MEETING_NOTES_S3_BUCKET: ${bucket_name}
+      MEETING_NOTES_S3_REGION: ${mom_S3_REGION}
+      MEETING_NOTES_AWS_ACCESS_KEY_ID: ${mom_AWS_ACCESS_KEY_ID}
+      MEETING_NOTES_AWS_SECRET_ACCESS_KEY: ${momAWS_SECRET_ACCESS_KEY}
+      MEETING_NOTES_S3_AUDIO_PREFIX: ${MEETING_NOTES_S3_AUDIO_PREFIX:-meeting-notes/audio}
+      MEETING_NOTES_S3_REPORT_PREFIX: ${MEETING_NOTES_S3_REPORT_PREFIX:-meeting-notes/generated-reports}
     depends_on:
       postgres:
-        condition: service_healthy
-      minio:
         condition: service_healthy
     expose:
       - "5000"
@@ -82,4 +61,3 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:

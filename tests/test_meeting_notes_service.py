@@ -21,10 +21,11 @@ def test_generate_meeting_notes_success(monkeypatch):
     monkeypatch.setattr(meeting_notes_service.Config, "GEMINI_API_KEY", "gemini-test-key")
     monkeypatch.setattr(meeting_notes_service.Config, "OPENAI_API_KEY", "")
     monkeypatch.setattr(meeting_notes_service.Config, "MEETING_NOTES_ALLOWED_EXTENSIONS", ["mp3"])
-    monkeypatch.setattr(meeting_notes_service, "is_minio_configured", lambda: True)
+    monkeypatch.setattr(meeting_notes_service, "is_s3_configured", lambda: True)
 
     calls = []
     uploads = []
+    report_uploads = []
 
     def fake_post(url, headers=None, data=None, files=None, json=None, timeout=None):
         calls.append(
@@ -74,11 +75,29 @@ def test_generate_meeting_notes_success(monkeypatch):
             }
         ) or {
             "bucket": "test-bucket",
-            "object_name": "meeting-audio/test.mp3",
+            "object_name": "meeting-notes/audio/test.mp3",
             "file_name": filename,
             "content_type": content_type,
             "size_bytes": len(audio_bytes),
-            "url": "http://minio/test-bucket/meeting-audio/test.mp3",
+            "url": "https://test-bucket.s3.ap-south-1.amazonaws.com/meeting-notes/audio/test.mp3",
+        },
+    )
+    monkeypatch.setattr(
+        meeting_notes_service,
+        "upload_meeting_report",
+        lambda report_payload, emp_code=None, meeting_title=None: report_uploads.append(
+            {
+                "report_payload": report_payload,
+                "emp_code": emp_code,
+                "meeting_title": meeting_title,
+            }
+        ) or {
+            "bucket": "test-bucket",
+            "object_name": "meeting-notes/generated-reports/test.json",
+            "file_name": "weekly-sync.json",
+            "content_type": "application/json",
+            "size_bytes": 512,
+            "url": "https://test-bucket.s3.ap-south-1.amazonaws.com/meeting-notes/generated-reports/test.json",
         },
     )
 
@@ -103,10 +122,12 @@ def test_generate_meeting_notes_success(monkeypatch):
     assert response["data"]["important_points"] == ["Roadmap reviewed", "Action item assigned"]
     assert response["data"]["transcript"] == "Alice reviewed the roadmap and assigned follow-ups."
     assert response["data"]["audio_storage"]["bucket"] == "test-bucket"
+    assert response["data"]["report_storage"]["bucket"] == "test-bucket"
     assert ":generateContent?key=gemini-test-key" in calls[0]["url"]
     assert calls[0]["json"]["contents"][0]["parts"][1]["inline_data"]["mime_type"] == "audio/mpeg"
     assert uploads[0]["filename"] == "meeting.mp3"
     assert uploads[0]["emp_code"] == "EMP001"
+    assert report_uploads[0]["emp_code"] == "EMP001"
 
 
 def test_generate_meeting_notes_requires_configuration(monkeypatch):

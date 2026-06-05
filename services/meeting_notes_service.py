@@ -16,7 +16,11 @@ from typing import Any, Dict, Tuple
 import requests
 
 from config import Config
-from services.minio_storage_service import is_minio_configured, upload_meeting_audio
+from services.s3_storage_service import (
+    is_s3_configured,
+    upload_meeting_audio,
+    upload_meeting_report,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +288,7 @@ def generate_meeting_notes(
 
     filename = (audio_file.filename or "").strip()
     audio_storage = None
+    report_storage = None
 
     try:
         audio_file.stream.seek(0, os.SEEK_END)
@@ -315,11 +320,25 @@ def generate_meeting_notes(
                 language=language,
             )
 
-        if is_minio_configured():
+        if is_s3_configured():
             audio_storage = upload_meeting_audio(
                 audio_bytes,
                 filename,
                 content_type=audio_file.mimetype or "application/octet-stream",
+                emp_code=emp_code,
+                meeting_title=meeting_title,
+            )
+            report_storage = upload_meeting_report(
+                {
+                    "meeting_title": (meeting_title or "").strip() or None,
+                    "file_name": filename,
+                    "provider": provider,
+                    "transcript": structured_notes["transcript"],
+                    "summary": structured_notes["summary"],
+                    "minutes_of_meeting": structured_notes["minutes_of_meeting"],
+                    "important_points": structured_notes["important_points"],
+                    "audio_storage": audio_storage,
+                },
                 emp_code=emp_code,
                 meeting_title=meeting_title,
             )
@@ -337,6 +356,7 @@ def generate_meeting_notes(
                     "minutes_of_meeting": structured_notes["minutes_of_meeting"],
                     "important_points": structured_notes["important_points"],
                     "audio_storage": audio_storage,
+                    "report_storage": report_storage,
                 },
             },
             200,

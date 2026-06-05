@@ -44,9 +44,10 @@ services:
       - ./logs:/app/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 30s
+      interval: 15s
       timeout: 5s
-      retries: 3
+      start_period: 60s
+      retries: 8
 
   nginx:
     image: nginx:alpine

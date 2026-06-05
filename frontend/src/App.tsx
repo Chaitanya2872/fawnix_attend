@@ -290,6 +290,19 @@ type LeaveRow = {
   status?: string
 }
 
+type LeaveImportIssue = {
+  row?: number
+  reason?: string
+}
+
+type LeaveImportResult = {
+  total_rows?: number
+  inserted_count?: number
+  skipped_count?: number
+  failed_count?: number
+  failed?: LeaveImportIssue[]
+}
+
 type AttendanceExceptionRow = {
   id?: number
   emp_code?: string
@@ -1359,6 +1372,12 @@ function App() {
     efficiencyScore: 0
   })
   const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([])
+  const [leaveImportOpen, setLeaveImportOpen] = useState(false)
+  const [leaveImportFile, setLeaveImportFile] = useState<File | null>(null)
+  const [leaveImportDefaultStatus, setLeaveImportDefaultStatus] = useState<'approved' | 'pending'>('approved')
+  const [leaveImportLoading, setLeaveImportLoading] = useState(false)
+  const [leaveImportStatus, setLeaveImportStatus] = useState('')
+  const [leaveImportResult, setLeaveImportResult] = useState<LeaveImportResult | null>(null)
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
   const [fieldVisitDurationTick, setFieldVisitDurationTick] = useState(() => Date.now())
@@ -3049,6 +3068,93 @@ function App() {
   }
 
   const canWriteAdminData = hasWriteAccess(profile)
+
+  const refreshLeaves = async () => {
+    const response = await apiRequest('/api/admin/leaves')
+    const leavesData = Array.isArray(response?.data?.leaves) ? response.data.leaves : []
+    setLeaveRows(leavesData)
+  }
+
+  const openLeaveImport = () => {
+    if (!canWriteAdminData) {
+      return
+    }
+    setLeaveImportFile(null)
+    setLeaveImportStatus('')
+    setLeaveImportResult(null)
+    setLeaveImportOpen(true)
+  }
+
+  const closeLeaveImport = () => {
+    if (leaveImportLoading) {
+      return
+    }
+    setLeaveImportOpen(false)
+  }
+
+  const downloadLeaveImportTemplate = () => {
+    const csvContent = [
+      'emp_code,from_date,to_date,leave_type,duration,leave_count,notes,status,applied_at,reviewed_by,reviewed_at,remarks',
+      'EMP001,2026-06-01,2026-06-01,casual,full_day,1,Personal leave,approved,2026-05-28 10:00:00,MANAGER001,2026-05-28 11:00:00,Approved'
+    ].join('\n')
+    const blobUrl = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8' }))
+    const anchor = document.createElement('a')
+    anchor.href = blobUrl
+    anchor.download = 'leave-import-template.csv'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(blobUrl)
+  }
+
+  const handleLeaveImport = async () => {
+    if (!canWriteAdminData) {
+      setLeaveImportStatus('Write permission is required to import leaves.')
+      return
+    }
+
+    if (!leaveImportFile) {
+      setLeaveImportStatus('Choose a CSV file to import.')
+      return
+    }
+
+    if (!leaveImportFile.name.toLowerCase().endsWith('.csv')) {
+      setLeaveImportStatus('Only CSV files are supported.')
+      return
+    }
+
+    if (leaveImportFile.size > 2 * 1024 * 1024) {
+      setLeaveImportStatus('CSV file must be 2 MB or smaller.')
+      return
+    }
+
+    setLeaveImportLoading(true)
+    setLeaveImportStatus('Importing leave records...')
+    setLeaveImportResult(null)
+
+    try {
+      const csvContent = await leaveImportFile.text()
+      const response = await apiRequest('/api/admin/leaves/import', {
+        method: 'POST',
+        body: JSON.stringify({
+          csv_content: csvContent,
+          default_status: leaveImportDefaultStatus,
+          strict: false,
+          skip_duplicates: true
+        })
+      })
+      const result = response?.data || {}
+      setLeaveImportResult(result)
+      setLeaveImportStatus(
+        `${response?.message || 'Leave import complete'}. Imported ${result.inserted_count || 0}, skipped ${result.skipped_count || 0}, failed ${result.failed_count || 0}.`
+      )
+      await refreshLeaves()
+    } catch (error) {
+      setLeaveImportStatus(error instanceof Error ? error.message : 'Failed to import leave records.')
+    } finally {
+      setLeaveImportLoading(false)
+    }
+  }
 
   const handleCreateEmployee = async () => {
     if (!canWriteAdminData) {
@@ -5089,9 +5195,16 @@ function App() {
               <p className="eyebrow">Approvals</p>
               <h2>Leaves</h2>
             </div>
-            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-              Refresh
-            </button>
+            <div className="employee-actions">
+              {canWriteAdminData ? (
+                <button className="cta dashboard-button" onClick={openLeaveImport} type="button">
+                  Import CSV
+                </button>
+              ) : null}
+              <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+                Refresh
+              </button>
+            </div>
           </div>
           <div className="table-card">
             {leaveRows.length ? (
@@ -5946,6 +6059,90 @@ function App() {
                   </button>
                   <button className="cta" onClick={() => void createHoliday()} disabled={holidayFormLoading} type="button">
                     {holidayFormLoading ? 'Saving...' : 'Add Holiday'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {leaveImportOpen ? (
+            <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Import leaves">
+              <div className="modal-card leave-import-modal">
+                <div className="modal-header">
+                  <div>
+                    <strong>Import Leaves</strong>
+                    <span className="leave-import-subtitle">Upload approved or pending leave history in bulk.</span>
+                  </div>
+                  <button className="ghost" onClick={closeLeaveImport} disabled={leaveImportLoading} type="button">
+                    Close
+                  </button>
+                </div>
+                <div className="modal-body">
+                  <div className="leave-import-guide">
+                    <strong>Required columns</strong>
+                    <span><code>emp_code</code>, <code>from_date</code>, <code>to_date</code>, <code>leave_type</code></span>
+                    <small>Dates may use YYYY-MM-DD or DD-MM-YYYY. Duplicate leave records are skipped.</small>
+                  </div>
+                  <button className="ghost leave-template-button" onClick={downloadLeaveImportTemplate} type="button">
+                    Download CSV Template
+                  </button>
+                  <div className="form-group">
+                    <label htmlFor="leave-import-file">CSV file</label>
+                    <input
+                      id="leave-import-file"
+                      type="file"
+                      accept=".csv,text/csv"
+                      disabled={leaveImportLoading}
+                      onChange={(event) => {
+                        setLeaveImportFile(event.target.files?.[0] || null)
+                        setLeaveImportStatus('')
+                        setLeaveImportResult(null)
+                      }}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="leave-import-status">Default status for blank status cells</label>
+                    <select
+                      id="leave-import-status"
+                      value={leaveImportDefaultStatus}
+                      disabled={leaveImportLoading}
+                      onChange={(event) =>
+                        setLeaveImportDefaultStatus(event.target.value as 'approved' | 'pending')
+                      }
+                    >
+                      <option value="approved">Approved</option>
+                      <option value="pending">Pending</option>
+                    </select>
+                  </div>
+                  {leaveImportFile ? (
+                    <div className="leave-import-file">
+                      <strong>{leaveImportFile.name}</strong>
+                      <span>{Math.max(1, Math.ceil(leaveImportFile.size / 1024))} KB</span>
+                    </div>
+                  ) : null}
+                  {leaveImportResult ? (
+                    <div className="leave-import-summary">
+                      <span><strong>{leaveImportResult.inserted_count || 0}</strong> imported</span>
+                      <span><strong>{leaveImportResult.skipped_count || 0}</strong> skipped</span>
+                      <span><strong>{leaveImportResult.failed_count || 0}</strong> failed</span>
+                    </div>
+                  ) : null}
+                  {leaveImportResult?.failed?.length ? (
+                    <div className="leave-import-errors">
+                      {leaveImportResult.failed.slice(0, 5).map((issue, index) => (
+                        <span key={`${issue.row || index}-${issue.reason || ''}`}>
+                          Row {issue.row || index + 1}: {issue.reason || 'Import failed'}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {leaveImportStatus ? <p className="form-note">{leaveImportStatus}</p> : null}
+                </div>
+                <div className="modal-actions">
+                  <button className="ghost" onClick={closeLeaveImport} disabled={leaveImportLoading} type="button">
+                    Cancel
+                  </button>
+                  <button className="cta" onClick={() => void handleLeaveImport()} disabled={leaveImportLoading} type="button">
+                    {leaveImportLoading ? 'Importing...' : 'Import Leaves'}
                   </button>
                 </div>
               </div>

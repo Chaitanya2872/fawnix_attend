@@ -27,12 +27,14 @@ from services.notification_service import (
     trigger_scheduled_notification,
 )
 from services.attendance_exceptions_service import get_team_exceptions
+from services.leaves_import_service import import_leave_rows, import_leaves_from_csv
 
 from database.connection import get_db_connection, return_connection
 from datetime import datetime, date, time
 from flask import request
 
 admin_bp = Blueprint('admin', __name__)
+MAX_LEAVE_IMPORT_BYTES = 2 * 1024 * 1024
 
 
 def serialize_row(row):
@@ -43,6 +45,14 @@ def serialize_row(row):
         else:
             result[key] = value
     return result
+
+
+def _parse_boolean_option(value, default=False):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
 def _devtester_super_admin_required(current_user):
@@ -929,6 +939,92 @@ def get_all_leaves(current_user):
         from_date=from_date,
         to_date=to_date
     )
+
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/leaves/import', methods=['POST'])
+@token_required
+@hr_or_devtester_required
+def import_leaves(current_user):
+    """
+    Bulk import leave records from CSV text, a CSV upload, or JSON rows.
+
+    Required CSV columns:
+    - emp_code
+    - from_date
+    - to_date
+    - leave_type
+    """
+    payload = request.get_json(silent=True) if request.is_json else {}
+    payload = payload if isinstance(payload, dict) else {}
+
+    default_status = request.form.get('default_status', payload.get('default_status', 'approved'))
+    strict = _parse_boolean_option(request.form.get('strict', payload.get('strict')), default=False)
+    skip_duplicates = _parse_boolean_option(
+        request.form.get('skip_duplicates', payload.get('skip_duplicates')),
+        default=True,
+    )
+
+    try:
+        upload = request.files.get('file')
+        if upload:
+            filename = (upload.filename or '').strip()
+            if not filename.lower().endswith('.csv'):
+                return jsonify({
+                    'success': False,
+                    'message': 'Only CSV files are supported for leave import',
+                }), 400
+
+            file_bytes = upload.read(MAX_LEAVE_IMPORT_BYTES + 1)
+            if len(file_bytes) > MAX_LEAVE_IMPORT_BYTES:
+                return jsonify({
+                    'success': False,
+                    'message': 'Leave import file must be 2 MB or smaller',
+                }), 400
+
+            csv_content = file_bytes.decode('utf-8-sig')
+            response, status_code = import_leaves_from_csv(
+                csv_content=csv_content,
+                default_status=default_status,
+                strict=strict,
+                skip_duplicates=skip_duplicates,
+            )
+        elif isinstance(payload.get('rows'), list):
+            response, status_code = import_leave_rows(
+                rows=payload['rows'],
+                default_status=default_status,
+                strict=strict,
+                skip_duplicates=skip_duplicates,
+            )
+        elif isinstance(payload.get('csv_content'), str):
+            if len(payload['csv_content'].encode('utf-8')) > MAX_LEAVE_IMPORT_BYTES:
+                return jsonify({
+                    'success': False,
+                    'message': 'Leave import file must be 2 MB or smaller',
+                }), 400
+
+            response, status_code = import_leaves_from_csv(
+                csv_content=payload['csv_content'],
+                default_status=default_status,
+                strict=strict,
+                skip_duplicates=skip_duplicates,
+            )
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Provide a CSV file, csv_content, or a rows array',
+            }), 400
+    except UnicodeDecodeError:
+        return jsonify({
+            'success': False,
+            'message': 'CSV file must use UTF-8 encoding',
+        }), 400
+    except ValueError as exc:
+        return jsonify({
+            'success': False,
+            'message': str(exc),
+        }), 400
 
     return jsonify(response), status_code
 

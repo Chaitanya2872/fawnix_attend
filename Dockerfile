@@ -44,4 +44,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:5000/health || exit 1
 
 # Run application
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:app"]
+# Meeting-note generation can take longer than default worker timeouts
+# because it downloads audio, calls the AI provider, and uploads a PDF.
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "--timeout", "300", "--graceful-timeout", "30", "app:app"]

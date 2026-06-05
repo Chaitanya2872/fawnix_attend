@@ -93,11 +93,12 @@ def test_generate_meeting_notes_success(monkeypatch):
             }
         ) or {
             "bucket": "test-bucket",
-            "object_name": "meeting-notes/generated-reports/test.json",
-            "file_name": "weekly-sync.json",
-            "content_type": "application/json",
+            "object_name": "meeting-notes/generated-reports/test.pdf",
+            "file_name": "weekly-sync.pdf",
+            "content_type": "application/pdf",
             "size_bytes": 512,
-            "url": "https://test-bucket.s3.ap-south-1.amazonaws.com/meeting-notes/generated-reports/test.json",
+            "url": "https://test-bucket.s3.ap-south-1.amazonaws.com/meeting-notes/generated-reports/test.pdf",
+            "download_url": "https://test-bucket.s3.ap-south-1.amazonaws.com/meeting-notes/generated-reports/test.pdf",
         },
     )
 
@@ -123,6 +124,7 @@ def test_generate_meeting_notes_success(monkeypatch):
     assert response["data"]["transcript"] == "Alice reviewed the roadmap and assigned follow-ups."
     assert response["data"]["audio_storage"]["bucket"] == "test-bucket"
     assert response["data"]["report_storage"]["bucket"] == "test-bucket"
+    assert response["data"]["report_storage"]["content_type"] == "application/pdf"
     assert ":generateContent?key=gemini-test-key" in calls[0]["url"]
     assert calls[0]["json"]["contents"][0]["parts"][1]["inline_data"]["mime_type"] == "audio/mpeg"
     assert uploads[0]["filename"] == "meeting.mp3"

@@ -597,6 +597,8 @@ def api_docs():
                 'GET /api/tracking/history': 'Get tracking history'
             },
             'meeting_notes': {
+                'GET /api/meeting-notes': 'List saved meeting-note records for the logged-in employee',
+                'GET /api/meeting-notes/{meeting_note_id}': 'Fetch one saved meeting-note record',
                 'POST /api/meeting-notes/upload': 'Upload meeting audio and save it to S3',
                 'POST /api/meeting-notes/generate': 'Generate transcript, summary, MOM, and PDF report from a saved meeting note'
             }
@@ -717,6 +719,8 @@ def features():
                     'description': 'Upload meeting audio to S3, then generate transcript, summary, MOM, and downloadable PDF',
                     'status': 'active',
                     'endpoints': [
+                        'GET /api/meeting-notes',
+                        'GET /api/meeting-notes/{meeting_note_id}',
                         'POST /api/meeting-notes/upload',
                         'POST /api/meeting-notes/generate'
                     ]

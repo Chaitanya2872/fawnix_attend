@@ -215,6 +215,99 @@ def test_generate_meeting_notes_route_from_saved_record(monkeypatch):
     assert captured["emp_code"] == "E001"
 
 
+def test_list_meeting_notes_route(monkeypatch):
+    app = create_test_app()
+    client = app.test_client()
+
+    authenticate_request(
+        monkeypatch,
+        {
+            "id": 7,
+            "emp_code": "E001",
+            "role": "employee",
+            "is_active": True,
+        },
+    )
+
+    captured = {}
+
+    def fake_list_meeting_note_records(*, emp_code, status=None, limit=50):
+        captured["emp_code"] = emp_code
+        captured["status"] = status
+        captured["limit"] = limit
+        return (
+            {
+                "success": True,
+                "data": {
+                    "items": [{"meeting_note_id": "mn_list_001"}],
+                    "count": 1,
+                    "total_count": 1,
+                    "limit": limit,
+                    "status_filter": status,
+                },
+            },
+            200,
+        )
+
+    monkeypatch.setattr(meeting_notes_routes, "list_meeting_note_records", fake_list_meeting_note_records)
+
+    response = client.get(
+        "/api/meeting-notes?status=generated&limit=25",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["success"] is True
+    assert response.get_json()["data"]["items"][0]["meeting_note_id"] == "mn_list_001"
+    assert captured["emp_code"] == "E001"
+    assert captured["status"] == "generated"
+    assert captured["limit"] == 25
+
+
+def test_get_meeting_note_route(monkeypatch):
+    app = create_test_app()
+    client = app.test_client()
+
+    authenticate_request(
+        monkeypatch,
+        {
+            "id": 7,
+            "emp_code": "E001",
+            "role": "employee",
+            "is_active": True,
+        },
+    )
+
+    captured = {}
+
+    def fake_get_meeting_note_record(meeting_note_id, *, emp_code):
+        captured["meeting_note_id"] = meeting_note_id
+        captured["emp_code"] = emp_code
+        return (
+            {
+                "success": True,
+                "data": {
+                    "meeting_note_id": meeting_note_id,
+                    "status": "generated",
+                },
+            },
+            200,
+        )
+
+    monkeypatch.setattr(meeting_notes_routes, "get_meeting_note_record", fake_get_meeting_note_record)
+
+    response = client.get(
+        "/api/meeting-notes/mn_detail_001",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["success"] is True
+    assert response.get_json()["data"]["meeting_note_id"] == "mn_detail_001"
+    assert captured["meeting_note_id"] == "mn_detail_001"
+    assert captured["emp_code"] == "E001"
+
+
 def test_generate_meeting_notes_route_returns_json_for_oversized_upload(monkeypatch):
     app = create_test_app()
     app.config["MAX_CONTENT_LENGTH"] = 4

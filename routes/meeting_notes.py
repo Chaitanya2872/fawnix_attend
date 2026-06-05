@@ -10,11 +10,50 @@ from middleware.auth_middleware import token_required
 from services.meeting_notes_service import (
     generate_meeting_notes,
     generate_meeting_notes_from_saved,
+    get_meeting_note_record,
+    list_meeting_note_records,
     upload_meeting_note_audio,
 )
 
 meeting_notes_bp = Blueprint("meeting_notes", __name__)
 logger = logging.getLogger(__name__)
+
+
+@meeting_notes_bp.route("", methods=["GET"])
+@token_required
+def list_records(current_user):
+    """
+    List saved meeting-note records for the logged-in employee.
+
+    Query params:
+    - status: optional status filter
+    - limit: optional max records, default 50, max 100
+    """
+    status = (request.args.get("status") or "").strip() or None
+    try:
+        limit = int(request.args.get("limit", 50))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "limit must be a valid integer"}), 400
+
+    response_body, status_code = list_meeting_note_records(
+        emp_code=current_user.get("emp_code"),
+        status=status,
+        limit=limit,
+    )
+    return jsonify(response_body), status_code
+
+
+@meeting_notes_bp.route("/<meeting_note_id>", methods=["GET"])
+@token_required
+def get_record(current_user, meeting_note_id):
+    """
+    Fetch a single saved meeting-note record for the logged-in employee.
+    """
+    response_body, status_code = get_meeting_note_record(
+        meeting_note_id,
+        emp_code=current_user.get("emp_code"),
+    )
+    return jsonify(response_body), status_code
 
 
 @meeting_notes_bp.route("/generate", methods=["POST"])

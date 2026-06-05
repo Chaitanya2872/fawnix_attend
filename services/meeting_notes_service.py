@@ -382,6 +382,8 @@ def _row_to_meeting_note_payload(row) -> Dict[str, Any]:
         "audio_storage": _row_to_audio_storage(row),
         "report_storage": _row_to_report_storage(row),
         "generated_at": row.get("generated_at").isoformat() if row.get("generated_at") else None,
+        "created_at": row.get("created_at").isoformat() if row.get("created_at") else None,
+        "updated_at": row.get("updated_at").isoformat() if row.get("updated_at") else None,
         "error_message": row.get("error_message"),
     }
 
@@ -401,6 +403,81 @@ def _fetch_meeting_note_record(meeting_note_id: str, emp_code: str | None = None
     finally:
         cursor.close()
         return_connection(conn)
+
+
+def list_meeting_note_records(
+    *,
+    emp_code: str,
+    status: str | None = None,
+    limit: int = 50,
+) -> Tuple[Dict[str, Any], int]:
+    safe_limit = max(1, min(limit, 100))
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        params = [emp_code]
+        where_clauses = ["emp_code = %s"]
+        if status:
+            where_clauses.append("status = %s")
+            params.append(status)
+
+        where_sql = " AND ".join(where_clauses)
+        cursor.execute(
+            f"""
+            SELECT COUNT(*) AS total_count
+            FROM meeting_notes_records
+            WHERE {where_sql}
+            """,
+            tuple(params),
+        )
+        total_row = cursor.fetchone() or {}
+        total_count = int(total_row.get("total_count") or 0)
+
+        cursor.execute(
+            f"""
+            SELECT *
+            FROM meeting_notes_records
+            WHERE {where_sql}
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            tuple(params + [safe_limit]),
+        )
+        rows = cursor.fetchall() or []
+        items = [_row_to_meeting_note_payload(dict(row)) for row in rows]
+        return (
+            {
+                "success": True,
+                "data": {
+                    "items": items,
+                    "count": len(items),
+                    "total_count": total_count,
+                    "limit": safe_limit,
+                    "status_filter": status,
+                },
+            },
+            200,
+        )
+    finally:
+        cursor.close()
+        return_connection(conn)
+
+
+def get_meeting_note_record(
+    meeting_note_id: str,
+    *,
+    emp_code: str,
+) -> Tuple[Dict[str, Any], int]:
+    record = _fetch_meeting_note_record(meeting_note_id, emp_code=emp_code)
+    if not record:
+        return _error("Meeting note not found", 404)
+    return (
+        {
+            "success": True,
+            "data": _row_to_meeting_note_payload(record),
+        },
+        200,
+    )
 
 
 def _insert_meeting_note_upload_record(

@@ -79,7 +79,17 @@ def import_leave_rows(
             400,
         )
 
-    normalized_default_status = _normalize_status(default_status, fallback="approved")
+    try:
+        normalized_default_status = _normalize_status(default_status, fallback="approved")
+    except ValueError as exc:
+        return (
+            {
+                "success": False,
+                "message": str(exc),
+                "data": {"total_rows": len(rows), "inserted_count": 0, "skipped_count": 0, "failed_count": 0},
+            },
+            400,
+        )
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -210,7 +220,8 @@ def import_leave_rows(
             message = "No new leaves imported. All provided rows were duplicates"
         else:
             status_code = 400
-            message = "Leave import failed. No rows were imported"
+            first_failure = failed[0]["reason"] if failed else "No rows were imported"
+            message = f"Leave import failed: {first_failure}"
 
         return (
             {

@@ -237,6 +237,36 @@ const sidebarItems: SidebarItem[] = [
   { id: 'field-visits', label: 'Field Visits', icon: 'pin' }
 ] as const
 
+type LeaveFilterState = {
+  employeeName: string
+  employeeId: string
+  leaveType: string
+  fromDate: string
+  toDate: string
+  status: string
+}
+
+const LEAVE_TYPE_FILTER_OPTIONS = [
+  { value: 'casual', label: 'Casual' },
+  { value: 'sick', label: 'Sick' },
+  { value: 'annual', label: 'Annual' },
+  { value: 'monthly', label: 'Monthly' }
+]
+const LEAVE_STATUS_FILTER_OPTIONS = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'cancelled', label: 'Cancelled' }
+]
+const EMPTY_LEAVE_FILTERS: LeaveFilterState = {
+  employeeName: '',
+  employeeId: '',
+  leaveType: '',
+  fromDate: '',
+  toDate: '',
+  status: ''
+}
+
 function isPrivilegedUser(profile: AdminProfile | null) {
   if (!profile) {
     return false
@@ -1043,6 +1073,9 @@ function FawnixApp() {
     efficiencyScore: 0
   })
   const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([])
+  const [leaveFilters, setLeaveFilters] = useState<LeaveFilterState>({ ...EMPTY_LEAVE_FILTERS })
+  const [leaveFilterLoading, setLeaveFilterLoading] = useState(false)
+  const [leaveFilterStatus, setLeaveFilterStatus] = useState('')
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
   const [fieldVisitDurationTick, setFieldVisitDurationTick] = useState(() => Date.now())
@@ -1581,6 +1614,8 @@ function FawnixApp() {
     setAttendanceExceptionSummary({ lateArrivals: 0, earlyLeaves: 0 })
     setAttendanceView('attendance')
     setLeaveRows([])
+    setLeaveFilters({ ...EMPTY_LEAVE_FILTERS })
+    setLeaveFilterStatus('')
     setActivityRows([])
     setFieldVisitRows([])
     setMissedLoginEmpCodes([])
@@ -1603,7 +1638,7 @@ function FawnixApp() {
       const [employeesResponse, attendanceResponse, leavesResponse, activitiesResponse] = await Promise.all([
         apiRequest('/api/admin/employees', {}, token),
         apiRequest(attendancePath, {}, token),
-        apiRequest('/api/admin/leaves?limit=30', {}, token),
+        apiRequest('/api/admin/leaves?limit=500', {}, token),
         apiRequest('/api/admin/activities?limit=30&include_tracking=true&include_activity_tracking=true', {}, token)
       ])
       let exceptionsResponse: any = null
@@ -2274,6 +2309,49 @@ function FawnixApp() {
 
   const canWriteAdminData = hasWriteAccess(profile)
 
+  const updateLeaveFilter = (field: keyof LeaveFilterState, value: string) => {
+    setLeaveFilters((current) => ({ ...current, [field]: value }))
+  }
+
+  const refreshLeaves = async (filters: LeaveFilterState = leaveFilters, showStatus = false) => {
+    if (filters.fromDate && filters.toDate && filters.fromDate > filters.toDate) {
+      setLeaveFilterStatus('From date must be on or before To date.')
+      return
+    }
+
+    setLeaveFilterLoading(true)
+    if (showStatus) {
+      setLeaveFilterStatus('Applying leave filters...')
+    }
+
+    const params = new URLSearchParams({ limit: '500' })
+    if (filters.employeeName.trim()) params.set('employee_name', filters.employeeName.trim())
+    if (filters.employeeId.trim()) params.set('employee_id', filters.employeeId.trim())
+    if (filters.leaveType.trim()) params.set('leave_type', filters.leaveType.trim().toLowerCase())
+    if (filters.fromDate) params.set('from_date', filters.fromDate)
+    if (filters.toDate) params.set('to_date', filters.toDate)
+    if (filters.status.trim()) params.set('status', filters.status.trim().toLowerCase())
+
+    try {
+      const response = await apiRequest(`/api/admin/leaves?${params.toString()}`)
+      const leavesData = Array.isArray(response?.data?.leaves) ? response.data.leaves : []
+      setLeaveRows(leavesData)
+      if (showStatus) {
+        setLeaveFilterStatus(`${leavesData.length} leave record${leavesData.length === 1 ? '' : 's'} found.`)
+      }
+    } catch (error) {
+      setLeaveFilterStatus(error instanceof Error ? error.message : 'Failed to filter leave records.')
+    } finally {
+      setLeaveFilterLoading(false)
+    }
+  }
+
+  const clearLeaveFilters = async () => {
+    const emptyFilters = { ...EMPTY_LEAVE_FILTERS }
+    setLeaveFilters(emptyFilters)
+    await refreshLeaves(emptyFilters, true)
+  }
+
   const handleCreateEmployee = async () => {
     if (!canWriteAdminData) {
       setCreateEmployeeStatus('Write permission is required to create employees.')
@@ -2438,7 +2516,7 @@ function FawnixApp() {
   ).sort((left, right) => {
     const leftTime = left.login_time ? new Date(left.login_time).getTime() : 0
     const rightTime = right.login_time ? new Date(right.login_time).getTime() : 0
-    return leftTime - rightTime
+    return rightTime - leftTime
   })
 
   const lateLoginCutoff = new Date(`${selectedAttendanceDate}T10:00:00`)
@@ -2759,8 +2837,25 @@ function FawnixApp() {
               employee.emp_manager || ''
             ].join(' ').toLowerCase()
         return haystack.includes(normalizedEmployeeSearch)
-          })
-      const filteredActivities = showTodayActivities
+      })
+      .sort((left, right) => {
+        const leftCode = (left.emp_code || '').trim()
+        const rightCode = (right.emp_code || '').trim()
+        if (!leftCode) {
+          return rightCode ? 1 : 0
+        }
+        if (!rightCode) {
+          return -1
+        }
+        return leftCode.localeCompare(rightCode, undefined, { numeric: true, sensitivity: 'base' })
+      })
+    const leaveEmployeeNameOptions = Array.from(
+      new Set(employees.map((employee) => (employee.emp_full_name || '').trim()).filter(Boolean))
+    ).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }))
+    const leaveEmployeeIdOptions = Array.from(
+      new Set(employees.map((employee) => (employee.emp_code || '').trim()).filter(Boolean))
+    ).sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }))
+    const filteredActivities = showTodayActivities
       ? activityRows.filter((row) => isSameDate(row.start_time, todayDateValue))
       : activityRows
 
@@ -3765,10 +3860,113 @@ function FawnixApp() {
               <p className="eyebrow">Approvals</p>
               <h2>Leaves</h2>
             </div>
-            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-              Refresh
+            <button
+              className="ghost dashboard-button"
+              onClick={() => void refreshLeaves(leaveFilters, true)}
+              disabled={leaveFilterLoading}
+              type="button"
+            >
+              {leaveFilterLoading ? 'Loading...' : 'Refresh'}
             </button>
           </div>
+          <form
+            className="leave-filter-card"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void refreshLeaves(leaveFilters, true)
+            }}
+          >
+            <div className="leave-filter-head">
+              <div>
+                <strong>Search Leave Records</strong>
+                <span>Filter by employee, leave details, date range, or status.</span>
+              </div>
+              <span className="leave-filter-count">{leaveRows.length} result{leaveRows.length === 1 ? '' : 's'}</span>
+            </div>
+            <div className="leave-filter-grid">
+              <label className="leave-filter-field">
+                <span>Employee Name</span>
+                <input
+                  type="search"
+                  list="leave-employee-name-options"
+                  value={leaveFilters.employeeName}
+                  onChange={(event) => updateLeaveFilter('employeeName', event.target.value)}
+                  placeholder="Search employee name"
+                />
+                <datalist id="leave-employee-name-options">
+                  {leaveEmployeeNameOptions.map((name) => <option key={name} value={name} />)}
+                </datalist>
+              </label>
+              <label className="leave-filter-field">
+                <span>Employee ID</span>
+                <input
+                  type="search"
+                  list="leave-employee-id-options"
+                  value={leaveFilters.employeeId}
+                  onChange={(event) => updateLeaveFilter('employeeId', event.target.value)}
+                  placeholder="Search employee ID"
+                />
+                <datalist id="leave-employee-id-options">
+                  {leaveEmployeeIdOptions.map((employeeId) => <option key={employeeId} value={employeeId} />)}
+                </datalist>
+              </label>
+              <label className="leave-filter-field">
+                <span>Leave Type</span>
+                <input
+                  type="search"
+                  list="leave-type-options"
+                  value={leaveFilters.leaveType}
+                  onChange={(event) => updateLeaveFilter('leaveType', event.target.value)}
+                  placeholder="Search leave type"
+                />
+                <datalist id="leave-type-options">
+                  {LEAVE_TYPE_FILTER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </datalist>
+              </label>
+              <label className="leave-filter-field">
+                <span>From Date</span>
+                <input
+                  type="date"
+                  value={leaveFilters.fromDate}
+                  onChange={(event) => updateLeaveFilter('fromDate', event.target.value)}
+                />
+              </label>
+              <label className="leave-filter-field">
+                <span>To Date</span>
+                <input
+                  type="date"
+                  value={leaveFilters.toDate}
+                  onChange={(event) => updateLeaveFilter('toDate', event.target.value)}
+                />
+              </label>
+              <label className="leave-filter-field">
+                <span>Leave Status</span>
+                <input
+                  type="search"
+                  list="leave-status-options"
+                  value={leaveFilters.status}
+                  onChange={(event) => updateLeaveFilter('status', event.target.value)}
+                  placeholder="Search leave status"
+                />
+                <datalist id="leave-status-options">
+                  {LEAVE_STATUS_FILTER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </datalist>
+              </label>
+            </div>
+            <div className="leave-filter-actions">
+              {leaveFilterStatus ? <span className="leave-filter-status">{leaveFilterStatus}</span> : <span />}
+              <button className="ghost" type="button" onClick={() => void clearLeaveFilters()} disabled={leaveFilterLoading}>
+                Clear Filters
+              </button>
+              <button className="cta" type="submit" disabled={leaveFilterLoading}>
+                {leaveFilterLoading ? 'Applying...' : 'Apply Filters'}
+              </button>
+            </div>
+          </form>
           <div className="table-card">
             {leaveRows.length ? (
               <div className="table-scroll">
@@ -3788,6 +3986,7 @@ function FawnixApp() {
                       <tr key={`${row.id || row.emp_code || index}`}>
                         <td>
                           <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
+                          <span className="table-meta">{row.emp_code || 'Employee ID unavailable'}</span>
                         </td>
                         <td>{formatLeaveTypeLabel(row)}</td>
                         <td>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</td>
@@ -3802,7 +4001,7 @@ function FawnixApp() {
                 </table>
               </div>
             ) : (
-              <div className="empty-state">No leave requests found.</div>
+              <div className="empty-state">No leave requests match the current filters.</div>
             )}
           </div>
         </>

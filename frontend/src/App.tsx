@@ -290,6 +290,28 @@ type LeaveRow = {
   status?: string
 }
 
+type LeaveImportIssue = {
+  row?: number
+  reason?: string
+}
+
+type LeaveImportResult = {
+  total_rows?: number
+  inserted_count?: number
+  skipped_count?: number
+  failed_count?: number
+  failed?: LeaveImportIssue[]
+}
+
+type LeaveFilterState = {
+  employeeName: string
+  employeeId: string
+  leaveType: string
+  fromDate: string
+  toDate: string
+  status: string
+}
+
 type AttendanceExceptionRow = {
   id?: number
   emp_code?: string
@@ -467,6 +489,26 @@ const HOLIDAY_TYPE_OPTIONS: HolidayCategory[] = [
 ]
 const HOLIDAY_STATUS_OPTIONS: HolidayStatus[] = ['Active', 'Inactive']
 const BLOOD_GROUP_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const
+const LEAVE_TYPE_FILTER_OPTIONS = [
+  { value: 'casual', label: 'Casual' },
+  { value: 'sick', label: 'Sick' },
+  { value: 'annual', label: 'Annual' },
+  { value: 'monthly', label: 'Monthly' }
+]
+const LEAVE_STATUS_FILTER_OPTIONS = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'cancelled', label: 'Cancelled' }
+]
+const EMPTY_LEAVE_FILTERS: LeaveFilterState = {
+  employeeName: '',
+  employeeId: '',
+  leaveType: '',
+  fromDate: '',
+  toDate: '',
+  status: ''
+}
 type BloodGroupFilter = 'all' | (typeof BLOOD_GROUP_OPTIONS)[number]
 
 function isPrivilegedUser(profile: AdminProfile | null) {
@@ -1359,6 +1401,15 @@ function App() {
     efficiencyScore: 0
   })
   const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([])
+  const [leaveFilters, setLeaveFilters] = useState<LeaveFilterState>({ ...EMPTY_LEAVE_FILTERS })
+  const [leaveFilterLoading, setLeaveFilterLoading] = useState(false)
+  const [leaveFilterStatus, setLeaveFilterStatus] = useState('')
+  const [leaveImportOpen, setLeaveImportOpen] = useState(false)
+  const [leaveImportFile, setLeaveImportFile] = useState<File | null>(null)
+  const [leaveImportDefaultStatus, setLeaveImportDefaultStatus] = useState<'approved' | 'pending'>('approved')
+  const [leaveImportLoading, setLeaveImportLoading] = useState(false)
+  const [leaveImportStatus, setLeaveImportStatus] = useState('')
+  const [leaveImportResult, setLeaveImportResult] = useState<LeaveImportResult | null>(null)
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
   const [fieldVisitDurationTick, setFieldVisitDurationTick] = useState(() => Date.now())
@@ -2082,6 +2133,8 @@ function App() {
     setAttendanceExceptionSummary({ lateArrivals: 0, earlyLeaves: 0 })
     setAttendanceView('attendance')
     setLeaveRows([])
+    setLeaveFilters({ ...EMPTY_LEAVE_FILTERS })
+    setLeaveFilterStatus('')
     setActivityRows([])
     setFieldVisitRows([])
     setCalendarSummaryRows([])
@@ -2113,7 +2166,7 @@ function App() {
       const [employeesResponse, attendanceResponse, leavesResponse, activitiesResponse] = await Promise.all([
         apiRequest('/api/admin/employees', {}, token),
         apiRequest(attendancePath, {}, token),
-        apiRequest('/api/admin/leaves', {}, token),
+        apiRequest('/api/admin/leaves?limit=500', {}, token),
         apiRequest('/api/admin/activities?limit=30&include_tracking=true&include_activity_tracking=true', {}, token)
       ])
       let exceptionsResponse: any = null
@@ -3050,6 +3103,130 @@ function App() {
 
   const canWriteAdminData = hasWriteAccess(profile)
 
+  const updateLeaveFilter = (field: keyof LeaveFilterState, value: string) => {
+    setLeaveFilters((current) => ({ ...current, [field]: value }))
+  }
+
+  const refreshLeaves = async (filters: LeaveFilterState = leaveFilters, showStatus = false) => {
+    if (filters.fromDate && filters.toDate && filters.fromDate > filters.toDate) {
+      setLeaveFilterStatus('From date must be on or before To date.')
+      return
+    }
+
+    setLeaveFilterLoading(true)
+    if (showStatus) {
+      setLeaveFilterStatus('Applying leave filters...')
+    }
+
+    const params = new URLSearchParams({ limit: '500' })
+    if (filters.employeeName.trim()) params.set('employee_name', filters.employeeName.trim())
+    if (filters.employeeId.trim()) params.set('employee_id', filters.employeeId.trim())
+    if (filters.leaveType.trim()) params.set('leave_type', filters.leaveType.trim().toLowerCase())
+    if (filters.fromDate) params.set('from_date', filters.fromDate)
+    if (filters.toDate) params.set('to_date', filters.toDate)
+    if (filters.status.trim()) params.set('status', filters.status.trim().toLowerCase())
+
+    try {
+      const response = await apiRequest(`/api/admin/leaves?${params.toString()}`)
+      const leavesData = Array.isArray(response?.data?.leaves) ? response.data.leaves : []
+      setLeaveRows(leavesData)
+      if (showStatus) {
+        setLeaveFilterStatus(`${leavesData.length} leave record${leavesData.length === 1 ? '' : 's'} found.`)
+      }
+    } catch (error) {
+      setLeaveFilterStatus(error instanceof Error ? error.message : 'Failed to filter leave records.')
+    } finally {
+      setLeaveFilterLoading(false)
+    }
+  }
+
+  const clearLeaveFilters = async () => {
+    const emptyFilters = { ...EMPTY_LEAVE_FILTERS }
+    setLeaveFilters(emptyFilters)
+    await refreshLeaves(emptyFilters, true)
+  }
+
+  const openLeaveImport = () => {
+    if (!canWriteAdminData) {
+      return
+    }
+    setLeaveImportFile(null)
+    setLeaveImportStatus('')
+    setLeaveImportResult(null)
+    setLeaveImportOpen(true)
+  }
+
+  const closeLeaveImport = () => {
+    if (leaveImportLoading) {
+      return
+    }
+    setLeaveImportOpen(false)
+  }
+
+  const downloadLeaveImportTemplate = () => {
+    const csvContent = [
+      'emp_code,from_date,to_date,leave_type,duration,leave_count,notes,status,applied_at,reviewed_by,reviewed_at,remarks',
+      'EMP001,2026-06-01,2026-06-01,casual,full_day,1,Personal leave,approved,2026-05-28 10:00:00,MANAGER001,2026-05-28 11:00:00,Approved'
+    ].join('\n')
+    const blobUrl = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8' }))
+    const anchor = document.createElement('a')
+    anchor.href = blobUrl
+    anchor.download = 'leave-import-template.csv'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(blobUrl)
+  }
+
+  const handleLeaveImport = async () => {
+    if (!canWriteAdminData) {
+      setLeaveImportStatus('Write permission is required to import leaves.')
+      return
+    }
+
+    if (!leaveImportFile) {
+      setLeaveImportStatus('Choose a CSV file to import.')
+      return
+    }
+
+    if (!leaveImportFile.name.toLowerCase().endsWith('.csv')) {
+      setLeaveImportStatus('Only CSV files are supported.')
+      return
+    }
+
+    if (leaveImportFile.size > 2 * 1024 * 1024) {
+      setLeaveImportStatus('CSV file must be 2 MB or smaller.')
+      return
+    }
+
+    setLeaveImportLoading(true)
+    setLeaveImportStatus('Importing leave records...')
+    setLeaveImportResult(null)
+
+    try {
+      const csvContent = await leaveImportFile.text()
+      const response = await apiRequest('/api/admin/leaves/import', {
+        method: 'POST',
+        body: JSON.stringify({
+          csv_content: csvContent,
+          default_status: leaveImportDefaultStatus,
+          strict: false,
+          skip_duplicates: true
+        })
+      })
+      const result = response?.data || {}
+      setLeaveImportResult(result)
+      setLeaveImportStatus(
+        `${response?.message || 'Leave import complete'}. Imported ${result.inserted_count || 0}, skipped ${result.skipped_count || 0}, failed ${result.failed_count || 0}.`
+      )
+      await refreshLeaves()
+    } catch (error) {
+      setLeaveImportStatus(error instanceof Error ? error.message : 'Failed to import leave records.')
+    } finally {
+      setLeaveImportLoading(false)
+    }
+  }
+
   const handleCreateEmployee = async () => {
     if (!canWriteAdminData) {
       setCreateEmployeeStatus('Write permission is required to create employees.')
@@ -3216,7 +3393,7 @@ function App() {
   ).sort((left, right) => {
     const leftTime = left.login_time ? new Date(left.login_time).getTime() : 0
     const rightTime = right.login_time ? new Date(right.login_time).getTime() : 0
-    return leftTime - rightTime
+    return rightTime - leftTime
   })
 
   const lateLoginCutoff = new Date(`${selectedAttendanceDate}T10:00:00`)
@@ -3565,8 +3742,25 @@ function App() {
               employee.emp_manager || ''
             ].join(' ').toLowerCase()
         return haystack.includes(normalizedEmployeeSearch)
-          })
-      const filteredActivities = showTodayActivities
+      })
+      .sort((left, right) => {
+        const leftCode = (left.emp_code || '').trim()
+        const rightCode = (right.emp_code || '').trim()
+        if (!leftCode) {
+          return rightCode ? 1 : 0
+        }
+        if (!rightCode) {
+          return -1
+        }
+        return leftCode.localeCompare(rightCode, undefined, { numeric: true, sensitivity: 'base' })
+      })
+    const leaveEmployeeNameOptions = Array.from(
+      new Set(employees.map((employee) => (employee.emp_full_name || '').trim()).filter(Boolean))
+    ).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }))
+    const leaveEmployeeIdOptions = Array.from(
+      new Set(employees.map((employee) => (employee.emp_code || '').trim()).filter(Boolean))
+    ).sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }))
+    const filteredActivities = showTodayActivities
       ? activityRows.filter((row) => isSameDate(row.start_time, todayDateValue))
       : activityRows
 
@@ -5089,10 +5283,120 @@ function App() {
               <p className="eyebrow">Approvals</p>
               <h2>Leaves</h2>
             </div>
-            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-              Refresh
-            </button>
+            <div className="employee-actions">
+              {canWriteAdminData ? (
+                <button className="cta dashboard-button" onClick={openLeaveImport} type="button">
+                  Import CSV
+                </button>
+              ) : null}
+              <button
+                className="ghost dashboard-button"
+                onClick={() => void refreshLeaves(leaveFilters, true)}
+                disabled={leaveFilterLoading}
+                type="button"
+              >
+                {leaveFilterLoading ? 'Loading...' : 'Refresh'}
+              </button>
+            </div>
           </div>
+          <form
+            className="leave-filter-card"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void refreshLeaves(leaveFilters, true)
+            }}
+          >
+            <div className="leave-filter-head">
+              <div>
+                <strong>Search Leave Records</strong>
+                <span>Filter by employee, leave details, date range, or status.</span>
+              </div>
+              <span className="leave-filter-count">{leaveRows.length} result{leaveRows.length === 1 ? '' : 's'}</span>
+            </div>
+            <div className="leave-filter-grid">
+              <label className="leave-filter-field">
+                <span>Employee Name</span>
+                <input
+                  type="search"
+                  list="leave-employee-name-options"
+                  value={leaveFilters.employeeName}
+                  onChange={(event) => updateLeaveFilter('employeeName', event.target.value)}
+                  placeholder="Search employee name"
+                />
+                <datalist id="leave-employee-name-options">
+                  {leaveEmployeeNameOptions.map((name) => <option key={name} value={name} />)}
+                </datalist>
+              </label>
+              <label className="leave-filter-field">
+                <span>Employee ID</span>
+                <input
+                  type="search"
+                  list="leave-employee-id-options"
+                  value={leaveFilters.employeeId}
+                  onChange={(event) => updateLeaveFilter('employeeId', event.target.value)}
+                  placeholder="Search employee ID"
+                />
+                <datalist id="leave-employee-id-options">
+                  {leaveEmployeeIdOptions.map((employeeId) => <option key={employeeId} value={employeeId} />)}
+                </datalist>
+              </label>
+              <label className="leave-filter-field">
+                <span>Leave Type</span>
+                <input
+                  type="search"
+                  list="leave-type-options"
+                  value={leaveFilters.leaveType}
+                  onChange={(event) => updateLeaveFilter('leaveType', event.target.value)}
+                  placeholder="Search leave type"
+                />
+                <datalist id="leave-type-options">
+                  {LEAVE_TYPE_FILTER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </datalist>
+              </label>
+              <label className="leave-filter-field">
+                <span>From Date</span>
+                <input
+                  type="date"
+                  value={leaveFilters.fromDate}
+                  onChange={(event) => updateLeaveFilter('fromDate', event.target.value)}
+                />
+              </label>
+              <label className="leave-filter-field">
+                <span>To Date</span>
+                <input
+                  type="date"
+                  value={leaveFilters.toDate}
+                  onChange={(event) => updateLeaveFilter('toDate', event.target.value)}
+                />
+              </label>
+              <label className="leave-filter-field">
+                <span>Leave Status</span>
+                <input
+                  type="search"
+                  list="leave-status-options"
+                  value={leaveFilters.status}
+                  onChange={(event) => updateLeaveFilter('status', event.target.value)}
+                  placeholder="Search leave status"
+                />
+                <datalist id="leave-status-options">
+                  {LEAVE_STATUS_FILTER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </datalist>
+              </label>
+            </div>
+            <div className="leave-filter-actions">
+              {leaveFilterStatus ? <span className="leave-filter-status">{leaveFilterStatus}</span> : <span />}
+              <button className="ghost" type="button" onClick={() => void clearLeaveFilters()} disabled={leaveFilterLoading}>
+                Clear Filters
+              </button>
+              <button className="cta" type="submit" disabled={leaveFilterLoading}>
+                {leaveFilterLoading ? 'Applying...' : 'Apply Filters'}
+              </button>
+            </div>
+          </form>
           <div className="table-card">
             {leaveRows.length ? (
               <div className="table-scroll">
@@ -5112,6 +5416,7 @@ function App() {
                       <tr key={`${row.id || row.emp_code || index}`}>
                         <td>
                           <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
+                          <span className="table-meta">{row.emp_code || 'Employee ID unavailable'}</span>
                         </td>
                         <td>{formatLeaveTypeLabel(row)}</td>
                         <td>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</td>
@@ -5126,7 +5431,7 @@ function App() {
                 </table>
               </div>
             ) : (
-              <div className="empty-state">No leave requests found.</div>
+              <div className="empty-state">No leave requests match the current filters.</div>
             )}
           </div>
         </>
@@ -5946,6 +6251,90 @@ function App() {
                   </button>
                   <button className="cta" onClick={() => void createHoliday()} disabled={holidayFormLoading} type="button">
                     {holidayFormLoading ? 'Saving...' : 'Add Holiday'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {leaveImportOpen ? (
+            <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Import leaves">
+              <div className="modal-card leave-import-modal">
+                <div className="modal-header">
+                  <div>
+                    <strong>Import Leaves</strong>
+                    <span className="leave-import-subtitle">Upload approved or pending leave history in bulk.</span>
+                  </div>
+                  <button className="ghost" onClick={closeLeaveImport} disabled={leaveImportLoading} type="button">
+                    Close
+                  </button>
+                </div>
+                <div className="modal-body">
+                  <div className="leave-import-guide">
+                    <strong>Required columns</strong>
+                    <span><code>emp_code</code>, <code>from_date</code>, <code>to_date</code>, <code>leave_type</code></span>
+                    <small>Dates may use YYYY-MM-DD or DD-MM-YYYY. Duplicate leave records are skipped.</small>
+                  </div>
+                  <button className="ghost leave-template-button" onClick={downloadLeaveImportTemplate} type="button">
+                    Download CSV Template
+                  </button>
+                  <div className="form-group">
+                    <label htmlFor="leave-import-file">CSV file</label>
+                    <input
+                      id="leave-import-file"
+                      type="file"
+                      accept=".csv,text/csv"
+                      disabled={leaveImportLoading}
+                      onChange={(event) => {
+                        setLeaveImportFile(event.target.files?.[0] || null)
+                        setLeaveImportStatus('')
+                        setLeaveImportResult(null)
+                      }}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="leave-import-status">Default status for blank status cells</label>
+                    <select
+                      id="leave-import-status"
+                      value={leaveImportDefaultStatus}
+                      disabled={leaveImportLoading}
+                      onChange={(event) =>
+                        setLeaveImportDefaultStatus(event.target.value as 'approved' | 'pending')
+                      }
+                    >
+                      <option value="approved">Approved</option>
+                      <option value="pending">Pending</option>
+                    </select>
+                  </div>
+                  {leaveImportFile ? (
+                    <div className="leave-import-file">
+                      <strong>{leaveImportFile.name}</strong>
+                      <span>{Math.max(1, Math.ceil(leaveImportFile.size / 1024))} KB</span>
+                    </div>
+                  ) : null}
+                  {leaveImportResult ? (
+                    <div className="leave-import-summary">
+                      <span><strong>{leaveImportResult.inserted_count || 0}</strong> imported</span>
+                      <span><strong>{leaveImportResult.skipped_count || 0}</strong> skipped</span>
+                      <span><strong>{leaveImportResult.failed_count || 0}</strong> failed</span>
+                    </div>
+                  ) : null}
+                  {leaveImportResult?.failed?.length ? (
+                    <div className="leave-import-errors">
+                      {leaveImportResult.failed.slice(0, 5).map((issue, index) => (
+                        <span key={`${issue.row || index}-${issue.reason || ''}`}>
+                          Row {issue.row || index + 1}: {issue.reason || 'Import failed'}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {leaveImportStatus ? <p className="form-note">{leaveImportStatus}</p> : null}
+                </div>
+                <div className="modal-actions">
+                  <button className="ghost" onClick={closeLeaveImport} disabled={leaveImportLoading} type="button">
+                    Cancel
+                  </button>
+                  <button className="cta" onClick={() => void handleLeaveImport()} disabled={leaveImportLoading} type="button">
+                    {leaveImportLoading ? 'Importing...' : 'Import Leaves'}
                   </button>
                 </div>
               </div>

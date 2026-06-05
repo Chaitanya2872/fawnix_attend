@@ -1796,7 +1796,9 @@ def get_all_activities(limit: int = 100, activity_type: str = None,
 
 
 def get_all_leaves(limit: int = 100, status: str = None, emp_code: str = None,
-                   from_date: date = None, to_date: date = None):
+                   from_date: date = None, to_date: date = None,
+                   employee_name: str = None, employee_id: str = None,
+                   leave_type: str = None, overlap_dates: bool = False):
     """Get leave requests for all employees"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -1823,12 +1825,24 @@ def get_all_leaves(limit: int = 100, status: str = None, emp_code: str = None,
             query += " AND l.emp_code = %s"
             params.append(emp_code)
 
+        if employee_name:
+            query += " AND e.emp_full_name ILIKE %s"
+            params.append(f"%{employee_name.strip()}%")
+
+        if employee_id:
+            query += " AND l.emp_code ILIKE %s"
+            params.append(f"%{employee_id.strip()}%")
+
+        if leave_type:
+            query += " AND LOWER(l.leave_type) = LOWER(%s)"
+            params.append(leave_type.strip())
+
         if from_date:
-            query += " AND l.from_date >= %s"
+            query += " AND " + ("l.to_date >= %s" if overlap_dates else "l.from_date >= %s")
             params.append(from_date)
 
         if to_date:
-            query += " AND l.to_date <= %s"
+            query += " AND " + ("l.from_date <= %s" if overlap_dates else "l.to_date <= %s")
             params.append(to_date)
 
         query += " ORDER BY l.applied_at DESC LIMIT %s"

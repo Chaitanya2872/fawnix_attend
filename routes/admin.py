@@ -902,12 +902,18 @@ def get_all_leaves(current_user):
     - limit: number of records (default: 100)
     - status: pending/approved/rejected/cancelled (optional)
     - emp_code: filter by employee code (optional)
+    - employee_name: partial employee name search (optional)
+    - employee_id: partial employee code search (optional)
+    - leave_type: casual/sick/annual/monthly (optional)
     - from_date: YYYY-MM-DD (optional)
     - to_date: YYYY-MM-DD (optional)
     """
     limit = request.args.get('limit', default=100, type=int)
     status = request.args.get('status')
     emp_code = request.args.get('emp_code')
+    employee_name = request.args.get('employee_name')
+    employee_id = request.args.get('employee_id')
+    leave_type = request.args.get('leave_type')
     from_date_str = request.args.get('from_date')
     to_date_str = request.args.get('to_date')
 
@@ -932,12 +938,22 @@ def get_all_leaves(current_user):
                 "message": "Invalid to_date format. Use YYYY-MM-DD"
             }), 400
 
+    if from_date and to_date and from_date > to_date:
+        return jsonify({
+            "success": False,
+            "message": "from_date must be on or before to_date"
+        }), 400
+
     response, status_code = admin_service.get_all_leaves(
         limit=limit,
         status=status,
         emp_code=emp_code,
         from_date=from_date,
-        to_date=to_date
+        to_date=to_date,
+        employee_name=employee_name,
+        employee_id=employee_id,
+        leave_type=leave_type,
+        overlap_dates=True,
     )
 
     return jsonify(response), status_code

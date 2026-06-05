@@ -1,3 +1,4 @@
+from datetime import date
 from io import BytesIO
 from unittest import TestCase
 from unittest.mock import patch
@@ -6,6 +7,7 @@ from flask import Flask
 
 import middleware.auth_middleware as auth_middleware
 import routes.admin as admin_routes
+import services.admin_service as admin_service
 import services.leaves_import_service as leaves_import_service
 from routes.admin import admin_bp
 from services.leaves_import_service import import_leave_rows, parse_leave_csv_rows
@@ -81,6 +83,33 @@ class ImportConnection:
 
     def rollback(self):
         self.rolled_back = True
+
+
+class LeaveFilterCursor:
+    def __init__(self):
+        self.query = ""
+        self.params = []
+
+    def execute(self, query, params=None):
+        self.query = " ".join(query.split())
+        self.params = list(params or [])
+
+    def fetchall(self):
+        return []
+
+    def close(self):
+        pass
+
+
+class LeaveFilterConnection:
+    def __init__(self):
+        self.cursor_obj = LeaveFilterCursor()
+
+    def cursor(self):
+        return self.cursor_obj
+
+    def close(self):
+        pass
 
 
 def create_test_app():
@@ -259,3 +288,82 @@ class LeavesImportRouteTests(TestCase):
         self.assertEqual(response["data"]["inserted"][0]["leave_id"], 101)
         self.assertTrue(connection.committed)
         self.assertIsNotNone(connection.cursor_obj.insert_params)
+
+    def test_leave_filters_are_forwarded_by_admin_route(self):
+        captured = {}
+
+        def fake_get_all_leaves(**kwargs):
+            captured.update(kwargs)
+            return {"success": True, "data": {"leaves": [], "count": 0}}, 200
+
+        auth_decode_patch, auth_db_patch = self.auth_patches()
+        with auth_decode_patch, auth_db_patch, patch.object(
+            admin_routes.admin_service,
+            "get_all_leaves",
+            fake_get_all_leaves,
+        ):
+            response = self.client.get(
+                "/api/admin/leaves"
+                "?employee_name=Alice"
+                "&employee_id=EMP1"
+                "&leave_type=casual"
+                "&status=approved"
+                "&from_date=2026-06-01"
+                "&to_date=2026-06-30"
+                "&limit=500",
+                headers={"Authorization": "Bearer test-token"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(captured["employee_name"], "Alice")
+        self.assertEqual(captured["employee_id"], "EMP1")
+        self.assertEqual(captured["leave_type"], "casual")
+        self.assertEqual(captured["status"], "approved")
+        self.assertEqual(captured["from_date"], date(2026, 6, 1))
+        self.assertEqual(captured["to_date"], date(2026, 6, 30))
+        self.assertTrue(captured["overlap_dates"])
+
+    def test_leave_filter_service_uses_partial_search_and_date_overlap(self):
+        connection = LeaveFilterConnection()
+        with patch.object(admin_service, "get_db_connection", return_value=connection):
+            response, status_code = admin_service.get_all_leaves(
+                limit=500,
+                status="approved",
+                employee_name="Alice",
+                employee_id="EMP1",
+                leave_type="casual",
+                from_date=date(2026, 6, 1),
+                to_date=date(2026, 6, 30),
+                overlap_dates=True,
+            )
+
+        self.assertEqual(status_code, 200)
+        self.assertTrue(response["success"])
+        self.assertIn("e.emp_full_name ILIKE %s", connection.cursor_obj.query)
+        self.assertIn("l.emp_code ILIKE %s", connection.cursor_obj.query)
+        self.assertIn("LOWER(l.leave_type) = LOWER(%s)", connection.cursor_obj.query)
+        self.assertIn("l.to_date >= %s", connection.cursor_obj.query)
+        self.assertIn("l.from_date <= %s", connection.cursor_obj.query)
+        self.assertEqual(
+            connection.cursor_obj.params,
+            [
+                "approved",
+                "%Alice%",
+                "%EMP1%",
+                "casual",
+                date(2026, 6, 1),
+                date(2026, 6, 30),
+                500,
+            ],
+        )
+
+    def test_leave_filter_route_rejects_reversed_date_range(self):
+        auth_decode_patch, auth_db_patch = self.auth_patches()
+        with auth_decode_patch, auth_db_patch:
+            response = self.client.get(
+                "/api/admin/leaves?from_date=2026-06-30&to_date=2026-06-01",
+                headers={"Authorization": "Bearer test-token"},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["message"], "from_date must be on or before to_date")

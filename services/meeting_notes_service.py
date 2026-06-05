@@ -795,6 +795,15 @@ def generate_meeting_notes_from_saved(
             },
             200,
         )
+    except requests.Timeout as exc:
+        logger.exception("Meeting notes provider timeout")
+        timeout_message = (
+            "Meeting notes provider timed out while generating the report. "
+            f"Current timeout is {Config.MEETING_NOTES_REQUEST_TIMEOUT} seconds. "
+            "Try again, increase MEETING_NOTES_REQUEST_TIMEOUT, or use a shorter audio file."
+        )
+        _update_meeting_note_failed(meeting_note_id, timeout_message)
+        return _error(timeout_message, 504)
     except requests.RequestException as exc:
         logger.exception("Meeting notes request error")
         _update_meeting_note_failed(meeting_note_id, f"Meeting notes provider request failed: {exc}")
@@ -877,6 +886,14 @@ def generate_meeting_notes(
             },
             200,
         )
+    except requests.Timeout as exc:
+        logger.exception("Meeting notes provider timeout")
+        timeout_message = (
+            "Meeting notes provider timed out while generating the report. "
+            f"Current timeout is {Config.MEETING_NOTES_REQUEST_TIMEOUT} seconds. "
+            "Try again, increase MEETING_NOTES_REQUEST_TIMEOUT, or use a shorter audio file."
+        )
+        return _error(timeout_message, 504)
     except requests.RequestException as exc:
         logger.exception("Meeting notes request error")
         return _error(f"Meeting notes provider request failed: {exc}", 502)

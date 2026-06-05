@@ -597,7 +597,8 @@ def api_docs():
                 'GET /api/tracking/history': 'Get tracking history'
             },
             'meeting_notes': {
-                'POST /api/meeting-notes/generate': 'Upload voice/audio and generate summary, minutes of meeting, and important points'
+                'POST /api/meeting-notes/upload': 'Upload meeting audio and save it to S3',
+                'POST /api/meeting-notes/generate': 'Generate transcript, summary, MOM, and PDF report from a saved meeting note'
             }
         },
         'new_features_v2': {
@@ -713,9 +714,10 @@ def features():
                 },
                 {
                     'name': 'Meeting Notes AI',
-                    'description': 'Upload meeting audio and generate transcript, summary, MOM, and important points',
+                    'description': 'Upload meeting audio to S3, then generate transcript, summary, MOM, and downloadable PDF',
                     'status': 'active',
                     'endpoints': [
+                        'POST /api/meeting-notes/upload',
                         'POST /api/meeting-notes/generate'
                     ]
                 }

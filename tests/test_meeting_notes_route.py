@@ -115,6 +115,106 @@ def test_generate_meeting_notes_route_accepts_audio_upload(monkeypatch):
     assert captured["emp_code"] == "E001"
 
 
+def test_upload_meeting_note_audio_route(monkeypatch):
+    app = create_test_app()
+    client = app.test_client()
+
+    authenticate_request(
+        monkeypatch,
+        {
+            "id": 7,
+            "emp_code": "E001",
+            "role": "employee",
+            "is_active": True,
+        },
+    )
+
+    captured = {}
+
+    def fake_upload_meeting_note_audio(audio_file, meeting_title=None, language=None, emp_code=None):
+        captured["filename"] = audio_file.filename if audio_file else None
+        captured["meeting_title"] = meeting_title
+        captured["language"] = language
+        captured["emp_code"] = emp_code
+        return (
+            {
+                "success": True,
+                "message": "Audio uploaded successfully",
+                "data": {
+                    "meeting_note_id": "mn_test_001",
+                    "status": "uploaded",
+                },
+            },
+            201,
+        )
+
+    monkeypatch.setattr(meeting_notes_routes, "upload_meeting_note_audio", fake_upload_meeting_note_audio)
+
+    response = client.post(
+        "/api/meeting-notes/upload",
+        headers={"Authorization": "Bearer test-token"},
+        data={
+            "meeting_title": "Board Review",
+            "language": "en",
+            "audio": (BytesIO(b"audio-bytes"), "board.mp3"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 201
+    assert response.get_json()["success"] is True
+    assert response.get_json()["data"]["meeting_note_id"] == "mn_test_001"
+    assert captured["filename"] == "board.mp3"
+    assert captured["meeting_title"] == "Board Review"
+    assert captured["language"] == "en"
+    assert captured["emp_code"] == "E001"
+
+
+def test_generate_meeting_notes_route_from_saved_record(monkeypatch):
+    app = create_test_app()
+    client = app.test_client()
+
+    authenticate_request(
+        monkeypatch,
+        {
+            "id": 7,
+            "emp_code": "E001",
+            "role": "employee",
+            "is_active": True,
+        },
+    )
+
+    captured = {}
+
+    def fake_generate_from_saved(meeting_note_id, emp_code=None):
+        captured["meeting_note_id"] = meeting_note_id
+        captured["emp_code"] = emp_code
+        return (
+            {
+                "success": True,
+                "message": "Meeting notes generated successfully",
+                "data": {
+                    "meeting_note_id": meeting_note_id,
+                    "status": "generated",
+                },
+            },
+            200,
+        )
+
+    monkeypatch.setattr(meeting_notes_routes, "generate_meeting_notes_from_saved", fake_generate_from_saved)
+
+    response = client.post(
+        "/api/meeting-notes/generate",
+        headers={"Authorization": "Bearer test-token"},
+        json={"meeting_note_id": "mn_saved_001"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["success"] is True
+    assert captured["meeting_note_id"] == "mn_saved_001"
+    assert captured["emp_code"] == "E001"
+
+
 def test_generate_meeting_notes_route_returns_json_for_oversized_upload(monkeypatch):
     app = create_test_app()
     app.config["MAX_CONTENT_LENGTH"] = 4

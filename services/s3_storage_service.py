@@ -291,3 +291,18 @@ def upload_meeting_report(
         "provider": "s3",
         "download_url": _public_url(bucket_name, object_name),
     }
+
+
+def download_s3_object(bucket_name: str, object_name: str) -> Dict[str, Any]:
+    """Download an S3 object and return bytes plus basic metadata."""
+    if not is_s3_configured():
+        raise RuntimeError("S3 is not configured")
+
+    client = _build_s3_client()
+    response = client.get_object(Bucket=bucket_name, Key=object_name)
+    body = response["Body"].read()
+    return {
+        "bytes": body,
+        "content_type": response.get("ContentType") or "application/octet-stream",
+        "size_bytes": len(body),
+    }

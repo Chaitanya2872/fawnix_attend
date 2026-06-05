@@ -43,13 +43,22 @@ except ImportError:  # pragma: no cover - optional dependency
 
 def is_s3_configured() -> bool:
     """Return True when S3 credentials are available."""
-    return bool(
-        boto3 is not None
-        and Config.MEETING_NOTES_S3_BUCKET
-        and Config.MEETING_NOTES_AWS_ACCESS_KEY_ID
-        and Config.MEETING_NOTES_AWS_SECRET_ACCESS_KEY
-        and Config.MEETING_NOTES_S3_REGION
-    )
+    return get_s3_configuration_error() is None
+
+
+def get_s3_configuration_error() -> str | None:
+    """Return a human-readable S3 setup error, or None when ready."""
+    if boto3 is None:
+        return "boto3 package is not installed"
+    if not Config.MEETING_NOTES_S3_BUCKET:
+        return "S3 bucket name is missing"
+    if not Config.MEETING_NOTES_AWS_ACCESS_KEY_ID:
+        return "AWS access key ID is missing"
+    if not Config.MEETING_NOTES_AWS_SECRET_ACCESS_KEY:
+        return "AWS secret access key is missing"
+    if not Config.MEETING_NOTES_S3_REGION:
+        return "S3 region is missing"
+    return None
 
 
 def _build_s3_client():
@@ -219,8 +228,9 @@ def upload_meeting_audio(
     meeting_title: str | None = None,
 ) -> Dict[str, Any]:
     """Upload meeting audio bytes to S3 and return object metadata."""
-    if not is_s3_configured():
-        raise RuntimeError("S3 is not configured")
+    config_error = get_s3_configuration_error()
+    if config_error:
+        raise RuntimeError(config_error)
 
     bucket_name = Config.MEETING_NOTES_S3_BUCKET
     object_name = _build_object_name(
@@ -256,8 +266,9 @@ def upload_meeting_report(
     meeting_title: str | None = None,
 ) -> Dict[str, Any]:
     """Upload generated meeting report PDF to S3 and return object metadata."""
-    if not is_s3_configured():
-        raise RuntimeError("S3 is not configured")
+    config_error = get_s3_configuration_error()
+    if config_error:
+        raise RuntimeError(config_error)
 
     generated_at = datetime.utcnow()
     report_filename = f"{_safe_slug(meeting_title, 'meeting-report')}.pdf"
@@ -295,8 +306,9 @@ def upload_meeting_report(
 
 def download_s3_object(bucket_name: str, object_name: str) -> Dict[str, Any]:
     """Download an S3 object and return bytes plus basic metadata."""
-    if not is_s3_configured():
-        raise RuntimeError("S3 is not configured")
+    config_error = get_s3_configuration_error()
+    if config_error:
+        raise RuntimeError(config_error)
 
     client = _build_s3_client()
     response = client.get_object(Bucket=bucket_name, Key=object_name)

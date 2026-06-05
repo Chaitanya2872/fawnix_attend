@@ -4,10 +4,44 @@ All application settings and environment variables
 """
 
 import os
-from dotenv import load_dotenv
+from pathlib import Path
+
+# Try to use python-dotenv if available; otherwise provide a minimal
+# fallback loader so editors/linters that can't resolve the package
+# won't break runtime behavior when a .env file is present.
+try:
+    from dotenv import load_dotenv  # type: ignore
+except Exception:
+    def load_dotenv(path: str | Path | None = None) -> bool:
+        """Minimal .env loader fallback: reads KEY=VALUE lines and sets os.environ.
+
+        Returns True if a file was found and processed, False otherwise.
+        """
+        if path is None:
+            return False
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                for raw in f:
+                    line = raw.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    if '=' not in line:
+                        continue
+                    key, val = line.split('=', 1)
+                    key = key.strip()
+                    val = val.strip().strip('"').strip("'")
+                    # Do not overwrite existing environment variables
+                    os.environ.setdefault(key, val)
+            return True
+        except FileNotFoundError:
+            return False
 from typing import List
 
-# Load environment variables
+# Load environment variables from the service directory first so local
+# runs work no matter which folder launches the app.
+SERVICE_DIR = Path(__file__).resolve().parent
+SERVICE_ENV_PATH = SERVICE_DIR / ".env"
+load_dotenv(SERVICE_ENV_PATH)
 load_dotenv()
 
 
@@ -136,15 +170,25 @@ class Config:
         ).split(',')
         if extension.strip()
     ]
-    MEETING_NOTES_S3_BUCKET = os.getenv('MEETING_NOTES_S3_BUCKET', os.getenv('bucket_name', '')).strip()
-    MEETING_NOTES_S3_REGION = os.getenv('MEETING_NOTES_S3_REGION', os.getenv('mom_S3_REGION', 'ap-south-1')).strip()
-    MEETING_NOTES_AWS_ACCESS_KEY_ID = os.getenv(
-        'MEETING_NOTES_AWS_ACCESS_KEY_ID',
-        os.getenv('mom_AWS_ACCESS_KEY_ID', '')
+    MEETING_NOTES_S3_BUCKET = (
+        os.getenv('MEETING_NOTES_S3_BUCKET')
+        or os.getenv('bucket_name')
+        or ''
     ).strip()
-    MEETING_NOTES_AWS_SECRET_ACCESS_KEY = os.getenv(
-        'MEETING_NOTES_AWS_SECRET_ACCESS_KEY',
-        os.getenv('momAWS_SECRET_ACCESS_KEY', '')
+    MEETING_NOTES_S3_REGION = (
+        os.getenv('MEETING_NOTES_S3_REGION')
+        or os.getenv('mom_S3_REGION')
+        or 'ap-south-1'
+    ).strip()
+    MEETING_NOTES_AWS_ACCESS_KEY_ID = (
+        os.getenv('MEETING_NOTES_AWS_ACCESS_KEY_ID')
+        or os.getenv('mom_AWS_ACCESS_KEY_ID')
+        or ''
+    ).strip()
+    MEETING_NOTES_AWS_SECRET_ACCESS_KEY = (
+        os.getenv('MEETING_NOTES_AWS_SECRET_ACCESS_KEY')
+        or os.getenv('momAWS_SECRET_ACCESS_KEY')
+        or ''
     ).strip()
     MEETING_NOTES_S3_AUDIO_PREFIX = os.getenv(
         'MEETING_NOTES_S3_AUDIO_PREFIX',

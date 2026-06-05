@@ -22,12 +22,36 @@ from config import Config
 from database.connection import get_db_connection, return_connection
 from services.s3_storage_service import (
     download_s3_object,
+    get_s3_configuration_error,
     is_s3_configured,
     upload_meeting_audio,
     upload_meeting_report,
 )
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Startup diagnostic — logs S3 config state so misconfiguration is visible
+# immediately in server output rather than silently failing at request time.
+# ---------------------------------------------------------------------------
+def _log_s3_config_state() -> None:
+    from services.s3_storage_service import get_s3_configuration_error, is_s3_configured  # local import avoids circular at module load
+    bucket   = Config.MEETING_NOTES_S3_BUCKET
+    region   = Config.MEETING_NOTES_S3_REGION
+    key_id   = Config.MEETING_NOTES_AWS_ACCESS_KEY_ID
+    secret   = Config.MEETING_NOTES_AWS_SECRET_ACCESS_KEY
+
+    logger.info(
+        "S3 config check — bucket=%r region=%r key_id=%r secret_set=%s configured=%s error=%r",
+        bucket or "(empty)",
+        region or "(empty)",
+        key_id or "(empty)",
+        bool(secret),
+        is_s3_configured(),
+        get_s3_configuration_error(),
+    )
+
+_log_s3_config_state()
 
 
 def _error(message: str, status_code: int) -> Tuple[Dict[str, Any], int]:
@@ -645,8 +669,17 @@ def upload_meeting_note_audio(
     if validation_error:
         return validation_error
 
+    logger.info(
+        "upload_meeting_note_audio — S3 check: bucket=%r region=%r key_id=%r secret_set=%s configured=%s error=%r",
+        Config.MEETING_NOTES_S3_BUCKET or "(empty)",
+        Config.MEETING_NOTES_S3_REGION or "(empty)",
+        Config.MEETING_NOTES_AWS_ACCESS_KEY_ID or "(empty)",
+        bool(Config.MEETING_NOTES_AWS_SECRET_ACCESS_KEY),
+        is_s3_configured(),
+        get_s3_configuration_error(),
+    )
     if not is_s3_configured():
-        return _error("S3 is not configured", 503)
+        return _error(get_s3_configuration_error() or "S3 is not configured", 503)
 
     filename = (audio_file.filename or "").strip()
     audio_bytes = _read_audio_bytes(audio_file)

@@ -2438,7 +2438,7 @@ function FawnixApp() {
   ).sort((left, right) => {
     const leftTime = left.login_time ? new Date(left.login_time).getTime() : 0
     const rightTime = right.login_time ? new Date(right.login_time).getTime() : 0
-    return leftTime - rightTime
+    return rightTime - leftTime
   })
 
   const lateLoginCutoff = new Date(`${selectedAttendanceDate}T10:00:00`)
@@ -2759,7 +2759,18 @@ function FawnixApp() {
               employee.emp_manager || ''
             ].join(' ').toLowerCase()
         return haystack.includes(normalizedEmployeeSearch)
-          })
+      })
+      .sort((left, right) => {
+        const leftCode = (left.emp_code || '').trim()
+        const rightCode = (right.emp_code || '').trim()
+        if (!leftCode) {
+          return rightCode ? 1 : 0
+        }
+        if (!rightCode) {
+          return -1
+        }
+        return leftCode.localeCompare(rightCode, undefined, { numeric: true, sensitivity: 'base' })
+      })
       const filteredActivities = showTodayActivities
       ? activityRows.filter((row) => isSameDate(row.start_time, todayDateValue))
       : activityRows

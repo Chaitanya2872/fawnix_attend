@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import threading
+import time
 import uuid
 from typing import Any, Dict, Tuple
 
@@ -23,6 +24,7 @@ from config import Config
 from database.connection import get_db_connection, return_connection
 from services.s3_storage_service import (
     download_s3_object,
+    generate_presigned_download_url,
     get_s3_configuration_error,
     is_s3_configured,
     upload_meeting_audio,
@@ -261,17 +263,36 @@ def _generate_notes_with_gemini(audio_file, meeting_title: str | None = None, la
         ],
     }
 
-    response = requests.post(
-        url,
-        headers={"Content-Type": "application/json"},
-        json=payload,
-        timeout=Config.MEETING_NOTES_REQUEST_TIMEOUT,
-    )
+    response = None
+    max_attempts = max(1, int(Config.GEMINI_MEETING_NOTES_MAX_RETRIES))
+    retry_delay_seconds = max(0.0, float(Config.GEMINI_MEETING_NOTES_RETRY_DELAY_SECONDS))
 
-    if not response.ok:
-        raise RuntimeError(
-            f"Gemini meeting notes generation failed with status {response.status_code}: {response.text}"
+    for attempt in range(1, max_attempts + 1):
+        response = requests.post(
+            url,
+            headers={"Content-Type": "application/json"},
+            json=payload,
+            timeout=Config.MEETING_NOTES_REQUEST_TIMEOUT,
         )
+
+        if response.ok:
+            break
+
+        is_retryable = response.status_code in {429, 500, 502, 503, 504}
+        if not is_retryable or attempt == max_attempts:
+            raise RuntimeError(
+                f"Gemini meeting notes generation failed with status {response.status_code}: {response.text}"
+            )
+
+        sleep_seconds = retry_delay_seconds * attempt
+        logger.warning(
+            "Gemini meeting notes request failed with status %s on attempt %s/%s; retrying in %.1f seconds",
+            response.status_code,
+            attempt,
+            max_attempts,
+            sleep_seconds,
+        )
+        time.sleep(sleep_seconds)
 
     payload = response.json()
     candidates = payload.get("candidates") or []
@@ -364,13 +385,27 @@ def _deserialize_points(raw_value: Any) -> list[str]:
 def _row_to_audio_storage(row) -> Dict[str, Any] | None:
     if not row.get("audio_object_name"):
         return None
+    bucket = row.get("audio_bucket")
+    object_name = row.get("audio_object_name")
+    file_name = row.get("file_name")
+    fresh_url = row.get("audio_url")
+    if is_s3_configured() and bucket and object_name:
+        if Config.MEETING_NOTES_S3_PUBLIC_READ:
+            fresh_url = f"https://{bucket}.s3.{Config.MEETING_NOTES_S3_REGION}.amazonaws.com/{object_name}"
+        else:
+            fresh_url = generate_presigned_download_url(
+                bucket,
+                object_name,
+                download_filename=file_name,
+            )
     return {
-        "bucket": row.get("audio_bucket"),
-        "object_name": row.get("audio_object_name"),
-        "file_name": row.get("file_name"),
+        "bucket": bucket,
+        "object_name": object_name,
+        "file_name": file_name,
         "content_type": row.get("content_type") or "application/octet-stream",
         "size_bytes": row.get("audio_size_bytes"),
-        "url": row.get("audio_url"),
+        "url": fresh_url,
+        "object_url": row.get("audio_url"),
         "folder": Config.MEETING_NOTES_S3_AUDIO_PREFIX,
         "provider": "s3",
     }
@@ -379,14 +414,28 @@ def _row_to_audio_storage(row) -> Dict[str, Any] | None:
 def _row_to_report_storage(row) -> Dict[str, Any] | None:
     if not row.get("report_object_name"):
         return None
+    bucket = row.get("report_bucket")
+    object_name = row.get("report_object_name")
+    file_name = row.get("report_file_name")
+    fresh_download_url = row.get("report_download_url") or row.get("report_url")
+    if is_s3_configured() and bucket and object_name:
+        if Config.MEETING_NOTES_S3_PUBLIC_READ:
+            fresh_download_url = f"https://{bucket}.s3.{Config.MEETING_NOTES_S3_REGION}.amazonaws.com/{object_name}"
+        else:
+            fresh_download_url = generate_presigned_download_url(
+                bucket,
+                object_name,
+                download_filename=file_name,
+            )
     return {
-        "bucket": row.get("report_bucket"),
-        "object_name": row.get("report_object_name"),
-        "file_name": row.get("report_file_name"),
+        "bucket": bucket,
+        "object_name": object_name,
+        "file_name": file_name,
         "content_type": row.get("report_content_type") or "application/pdf",
         "size_bytes": row.get("report_size_bytes"),
-        "url": row.get("report_url"),
-        "download_url": row.get("report_download_url") or row.get("report_url"),
+        "url": fresh_download_url,
+        "object_url": row.get("report_url"),
+        "download_url": fresh_download_url,
         "folder": Config.MEETING_NOTES_S3_REPORT_PREFIX,
         "provider": "s3",
     }

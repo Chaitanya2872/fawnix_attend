@@ -40,9 +40,34 @@ const privacySections: PrivacySection[] = [
     title: 'Information We Collect',
     body: [
       'Fawnix collects account and workforce management information such as employee ID, name, phone number, email address, role, Todays Activity, activity records, leave requests, and device/session details needed to authenticate users and operate the service.',
-      'Fawnix also collects and processes location data to support attendance and workforce features, including clock-in, clock-out, field visits, route tracking, geofence validation, working-hours pause and resume, and attendance-related notifications.'
+      'Fawnix also collects and processes location data to support attendance and workforce features, including clock-in, clock-out, field visits, route tracking, geofence validation, working-hours pause and resume, and attendance-related notifications.',
+      'If your organization enables meeting-notes features, Fawnix may collect audio recordings or uploaded audio files from meetings in order to generate transcripts, summaries, minutes of meeting, and action items.'
     ],
     bullets: []
+  },
+  {
+    title: 'Meeting Audio and AI Processing',
+    body: [
+      'When a user records or uploads meeting audio through Fawnix, that audio is processed to generate meeting documentation such as transcript text, summaries, minutes of meeting, and important discussion points.',
+      'This processing may use secure third-party AI service providers and cloud storage providers acting on behalf of your organization to analyze the audio and return the generated output.'
+    ],
+    bullets: [
+      'Meeting audio recordings or uploaded audio files',
+      'AI-generated transcripts, summaries, minutes of meeting, and key points',
+      'Related metadata such as meeting title, file name, employee identifier, and generation timestamps'
+    ]
+  },
+  {
+    title: 'How We Use Meeting Audio',
+    body: [
+      'Meeting audio and AI-generated content are used only to support authorized workplace productivity and documentation features.'
+    ],
+    bullets: [
+      'Generate transcripts and meeting summaries',
+      'Prepare minutes of meeting and action items',
+      'Store meeting records for organizational reference and reporting',
+      'Improve operational efficiency, follow-up tracking, and internal documentation'
+    ]
   },
   {
     title: 'Location Information',
@@ -104,20 +129,29 @@ const privacySections: PrivacySection[] = [
     ],
     bullets: [
       'Your organization (employer/admin)',
-      'Secure backend services required to provide attendance, reporting, and compliance features'
+      'Secure backend services required to provide attendance, reporting, compliance, and AI meeting-notes features'
     ]
   },
   {
     title: 'Data Retention',
     body: [
-      'Location data is retained only as long as necessary for:'
+      'Location data and meeting-notes data are retained only as long as necessary for:'
     ],
     bullets: [
       'Todays Activity',
       'Field visit logs',
+      'Meeting transcripts, summaries, and generated reports where enabled by your organization',
       'Organizational compliance and reporting',
       'Retention duration may vary based on organizational policies. Data is securely stored and protected.'
     ]
+  },
+  {
+    title: 'User Choice and Consent',
+    body: [
+      'Users should record or upload meeting audio only when authorized by their organization and permitted by applicable law and internal policy.',
+      'If meeting recording features are optional in your deployment, you may choose not to use those features. Device permissions such as microphone access can also be managed through system settings.'
+    ],
+    bullets: []
   },
   {
     title: 'Retention and Deletion',

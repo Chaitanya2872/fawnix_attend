@@ -2,6 +2,7 @@ from io import BytesIO
 
 from werkzeug.datastructures import FileStorage
 
+import services.s3_storage_service as s3_storage_service
 import services.meeting_notes_service as meeting_notes_service
 
 
@@ -148,3 +149,90 @@ def test_generate_meeting_notes_requires_configuration(monkeypatch):
     assert status_code == 503
     assert response["success"] is False
     assert "GEMINI_API_KEY" in response["message"]
+
+
+def test_generate_notes_with_gemini_retries_temporary_unavailable(monkeypatch):
+    monkeypatch.setattr(meeting_notes_service.Config, "GEMINI_API_KEY", "gemini-test-key")
+    monkeypatch.setattr(meeting_notes_service.Config, "GEMINI_MEETING_NOTES_MAX_RETRIES", 3)
+    monkeypatch.setattr(meeting_notes_service.Config, "GEMINI_MEETING_NOTES_RETRY_DELAY_SECONDS", 0)
+
+    responses = [
+        FakeResponse(
+            {
+                "error": {
+                    "code": 503,
+                    "message": "high demand",
+                    "status": "UNAVAILABLE",
+                }
+            },
+            status_code=503,
+            text='{"error":{"code":503,"message":"high demand","status":"UNAVAILABLE"}}',
+        ),
+        FakeResponse(
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "text": (
+                                        '{"transcript":"Transcript",'
+                                        '"summary":"Summary",'
+                                        '"minutes_of_meeting":"Minutes",'
+                                        '"important_points":["Point 1"]}'
+                                    )
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        ),
+    ]
+    call_count = {"count": 0}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        call_count["count"] += 1
+        return responses.pop(0)
+
+    monkeypatch.setattr(meeting_notes_service.requests, "post", fake_post)
+    monkeypatch.setattr(meeting_notes_service.time, "sleep", lambda seconds: None)
+
+    audio_file = FileStorage(
+        stream=BytesIO(b"fake-audio"),
+        filename="meeting.mp3",
+        content_type="audio/mpeg",
+    )
+
+    structured = meeting_notes_service._generate_notes_with_gemini(audio_file, meeting_title="Retry Test")
+
+    assert call_count["count"] == 2
+    assert structured["summary"] == "Summary"
+
+
+def test_upload_meeting_report_returns_public_url_when_enabled(monkeypatch):
+    monkeypatch.setattr(s3_storage_service.Config, "MEETING_NOTES_S3_BUCKET", "test-bucket")
+    monkeypatch.setattr(s3_storage_service.Config, "MEETING_NOTES_S3_REGION", "ap-south-1")
+    monkeypatch.setattr(s3_storage_service.Config, "MEETING_NOTES_S3_REPORT_PREFIX", "meeting-notes/generated-reports")
+    monkeypatch.setattr(s3_storage_service.Config, "MEETING_NOTES_S3_PUBLIC_READ", True)
+    monkeypatch.setattr(s3_storage_service, "_build_meeting_report_pdf", lambda report_payload, generated_at=None: b"pdf-bytes")
+
+    captured = {}
+
+    class FakeClient:
+        def upload_fileobj(self, Fileobj=None, Bucket=None, Key=None, ExtraArgs=None):
+            captured["bucket"] = Bucket
+            captured["key"] = Key
+            captured["extra_args"] = ExtraArgs
+
+    monkeypatch.setattr(s3_storage_service, "_build_s3_client", lambda: FakeClient())
+
+    result = s3_storage_service.upload_meeting_report(
+        {"meeting_title": "Weekly Sync"},
+        emp_code="EMP001",
+        meeting_title="Weekly Sync",
+    )
+
+    assert captured["extra_args"]["ACL"] == "public-read"
+    assert result["url"] == result["object_url"]
+    assert result["download_url"] == result["object_url"]

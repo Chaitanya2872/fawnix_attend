@@ -150,6 +150,8 @@ class Config:
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '').strip()
     GEMINI_BASE_URL = os.getenv('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta').rstrip('/')
     GEMINI_MEETING_NOTES_MODEL = os.getenv('GEMINI_MEETING_NOTES_MODEL', 'gemini-1.5-flash').strip()
+    GEMINI_MEETING_NOTES_MAX_RETRIES = int(os.getenv('GEMINI_MEETING_NOTES_MAX_RETRIES', 3))
+    GEMINI_MEETING_NOTES_RETRY_DELAY_SECONDS = float(os.getenv('GEMINI_MEETING_NOTES_RETRY_DELAY_SECONDS', 5))
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '').strip()
     OPENAI_BASE_URL = os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1').rstrip('/')
     MEETING_NOTES_TRANSCRIPTION_MODEL = os.getenv('MEETING_NOTES_TRANSCRIPTION_MODEL', 'whisper-1').strip()
@@ -198,6 +200,13 @@ class Config:
         'MEETING_NOTES_S3_REPORT_PREFIX',
         'meeting-notes/generated-reports'
     ).strip().strip('/')
+    MEETING_NOTES_S3_PUBLIC_READ = os.getenv(
+        'MEETING_NOTES_S3_PUBLIC_READ',
+        'False'
+    ).lower() == 'true'
+    MEETING_NOTES_S3_PRESIGNED_URL_TTL_SECONDS = int(
+        os.getenv('MEETING_NOTES_S3_PRESIGNED_URL_TTL_SECONDS', 3600)
+    )
     MAX_CONTENT_LENGTH = max(MAX_CONTENT_LENGTH_MB, MEETING_NOTES_MAX_UPLOAD_MB) * 1024 * 1024
     
     @classmethod

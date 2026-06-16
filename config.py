@@ -154,11 +154,11 @@ class Config:
     GEMINI_MEETING_NOTES_RETRY_DELAY_SECONDS = float(os.getenv('GEMINI_MEETING_NOTES_RETRY_DELAY_SECONDS', 5))
     MEETING_NOTES_USE_LOCAL_TRANSCRIPTION = os.getenv(
         'MEETING_NOTES_USE_LOCAL_TRANSCRIPTION',
-        'True'
+        'False'
     ).lower() == 'true'
     MEETING_NOTES_ENABLE_DIARIZATION = os.getenv(
         'MEETING_NOTES_ENABLE_DIARIZATION',
-        'True'
+        'False'
     ).lower() == 'true'
     MEETING_NOTES_FASTER_WHISPER_MODEL = os.getenv(
         'MEETING_NOTES_FASTER_WHISPER_MODEL',

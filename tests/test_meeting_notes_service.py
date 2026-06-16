@@ -257,6 +257,60 @@ def test_generate_transcript_falls_back_to_openai_when_local_disabled(monkeypatc
     assert transcript == "Remote transcript"
 
 
+def test_generate_transcript_falls_back_to_openai_when_local_pipeline_fails(monkeypatch):
+    monkeypatch.setattr(meeting_notes_service.Config, "MEETING_NOTES_USE_LOCAL_TRANSCRIPTION", True)
+    monkeypatch.setattr(meeting_notes_service.Config, "OPENAI_API_KEY", "openai-test-key")
+    monkeypatch.setattr(
+        meeting_notes_service,
+        "_transcribe_audio_locally",
+        lambda audio_file, language=None: (_ for _ in ()).throw(RuntimeError("local pipeline failed")),
+    )
+    monkeypatch.setattr(
+        meeting_notes_service,
+        "_generate_transcript_with_openai",
+        lambda audio_file, language=None: "Fallback transcript",
+    )
+
+    audio_file = FileStorage(
+        stream=BytesIO(b"fake-audio"),
+        filename="meeting.mp3",
+        content_type="audio/mpeg",
+    )
+
+    transcript = meeting_notes_service._generate_transcript(audio_file, language="en")
+
+    assert transcript == "Fallback transcript"
+
+
+def test_generate_notes_with_gemini_falls_back_to_direct_audio_when_transcript_fails(monkeypatch):
+    monkeypatch.setattr(meeting_notes_service.Config, "GEMINI_API_KEY", "gemini-test-key")
+    monkeypatch.setattr(
+        meeting_notes_service,
+        "_generate_transcript",
+        lambda audio_file, language=None: (_ for _ in ()).throw(RuntimeError("transcript failed")),
+    )
+    monkeypatch.setattr(
+        meeting_notes_service,
+        "_generate_notes_with_gemini_from_audio",
+        lambda audio_file, meeting_title=None, language=None: {
+            "transcript": "Fallback transcript",
+            "summary": "Fallback summary",
+            "minutes_of_meeting": "Fallback minutes",
+            "important_points": ["Fallback point"],
+        },
+    )
+
+    audio_file = FileStorage(
+        stream=BytesIO(b"fake-audio"),
+        filename="meeting.mp3",
+        content_type="audio/mpeg",
+    )
+
+    structured = meeting_notes_service._generate_notes_with_gemini(audio_file, meeting_title="Retry Test")
+
+    assert structured["summary"] == "Fallback summary"
+
+
 def test_upload_meeting_report_returns_public_url_when_enabled(monkeypatch):
     monkeypatch.setattr(s3_storage_service.Config, "MEETING_NOTES_S3_BUCKET", "test-bucket")
     monkeypatch.setattr(s3_storage_service.Config, "MEETING_NOTES_S3_REGION", "ap-south-1")

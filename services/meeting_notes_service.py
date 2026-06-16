@@ -7,6 +7,7 @@ OpenAI-compatible fallback when OPENAI_API_KEY is configured instead.
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 import json
@@ -312,7 +313,14 @@ def _build_openai_headers() -> Dict[str, str]:
 
 def _generate_transcript(audio_file, language: str | None = None) -> str:
     if Config.MEETING_NOTES_USE_LOCAL_TRANSCRIPTION:
-        return _transcribe_audio_locally(audio_file, language=language)
+        try:
+            return _transcribe_audio_locally(audio_file, language=language)
+        except Exception as exc:
+            logger.warning("Local meeting-notes transcription failed; falling back to API transcription: %s", exc)
+            if not Config.OPENAI_API_KEY:
+                raise RuntimeError(
+                    "Local transcription failed and OPENAI_API_KEY is not configured for fallback transcription."
+                ) from exc
     return _generate_transcript_with_openai(audio_file, language=language)
 
 
@@ -345,6 +353,72 @@ def _generate_transcript_with_openai(audio_file, language: str | None = None) ->
     if not transcript:
         raise RuntimeError("Transcription completed but no transcript was returned")
     return transcript
+
+
+def _generate_notes_with_gemini_from_audio(
+    audio_file,
+    *,
+    meeting_title: str | None = None,
+    language: str | None = None,
+) -> Dict[str, Any]:
+    audio_bytes = _read_audio_bytes(audio_file)
+    mime_type = audio_file.mimetype or "application/octet-stream"
+
+    url = (
+        f"{Config.GEMINI_BASE_URL}/models/{Config.GEMINI_MEETING_NOTES_MODEL}:generateContent"
+        f"?key={Config.GEMINI_API_KEY}"
+    )
+    payload = {
+        "generationConfig": {
+            "temperature": 0.2,
+            "responseMimeType": "application/json",
+        },
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": (
+                            "Listen to the uploaded meeting audio and return valid JSON with keys "
+                            "`transcript`, `summary`, `minutes_of_meeting`, and `important_points` only.\n"
+                            "Use the transcript content only. If anything is unclear, say Not Specified.\n"
+                            f"Meeting title: {(meeting_title or '').strip() or 'Not Specified'}\n"
+                            f"Preferred language handling: {(language or '').strip() or 'Not Specified'}"
+                        )
+                    },
+                    {
+                        "inline_data": {
+                            "mime_type": mime_type,
+                            "data": base64.b64encode(audio_bytes).decode("ascii"),
+                        }
+                    },
+                ]
+            }
+        ],
+    }
+
+    response = requests.post(
+        url,
+        headers={"Content-Type": "application/json"},
+        json=payload,
+        timeout=Config.MEETING_NOTES_REQUEST_TIMEOUT,
+    )
+    if not response.ok:
+        raise RuntimeError(
+            f"Gemini fallback meeting notes generation failed with status {response.status_code}: {response.text}"
+        )
+
+    payload = response.json()
+    candidates = payload.get("candidates") or []
+    if not candidates:
+        raise RuntimeError("Gemini fallback meeting notes generation returned no candidates")
+
+    content = candidates[0].get("content") or {}
+    parts = content.get("parts") or []
+    raw_text = "".join(str(part.get("text") or "") for part in parts).strip()
+    if not raw_text:
+        raise RuntimeError("Gemini fallback meeting notes generation returned empty content")
+
+    return _parse_structured_notes(raw_text)
 
 
 def _generate_notes_with_openai(audio_file, meeting_title: str | None = None, language: str | None = None) -> Dict[str, Any]:
@@ -396,7 +470,16 @@ def _generate_notes_with_openai(audio_file, meeting_title: str | None = None, la
 
 
 def _generate_notes_with_gemini(audio_file, meeting_title: str | None = None, language: str | None = None) -> Dict[str, Any]:
-    transcript = _generate_transcript(audio_file, language=language)
+    try:
+        transcript = _generate_transcript(audio_file, language=language)
+    except Exception as exc:
+        logger.warning("Transcript-first Gemini flow failed; using direct-audio Gemini fallback: %s", exc)
+        return _generate_notes_with_gemini_from_audio(
+            audio_file,
+            meeting_title=meeting_title,
+            language=language,
+        )
+
     url = (
         f"{Config.GEMINI_BASE_URL}/models/{Config.GEMINI_MEETING_NOTES_MODEL}:generateContent"
         f"?key={Config.GEMINI_API_KEY}"

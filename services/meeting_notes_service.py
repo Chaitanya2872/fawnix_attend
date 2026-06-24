@@ -37,6 +37,9 @@ logger = logging.getLogger(__name__)
 _FASTER_WHISPER_MODEL = None
 _PYANNOTE_PIPELINE = None
 
+# Gemini inline_data is capped at ~20MB; use the File API for larger files
+_GEMINI_INLINE_MAX_BYTES = 15 * 1024 * 1024  # 15 MB
+
 # ---------------------------------------------------------------------------
 # Startup diagnostic — logs S3 config state so misconfiguration is visible
 # immediately in server output rather than silently failing at request time.
@@ -355,6 +358,72 @@ def _generate_transcript_with_openai(audio_file, language: str | None = None) ->
     return transcript
 
 
+def _upload_to_gemini_file_api(audio_bytes: bytes, mime_type: str, filename: str) -> str:
+    """Upload audio to Gemini File API via resumable upload and return the file URI."""
+    start_url = (
+        "https://generativelanguage.googleapis.com/upload/v1beta/files"
+        f"?key={Config.GEMINI_API_KEY}"
+    )
+    start_headers = {
+        "X-Goog-Upload-Protocol": "resumable",
+        "X-Goog-Upload-Command": "start",
+        "X-Goog-Upload-Header-Content-Length": str(len(audio_bytes)),
+        "X-Goog-Upload-Header-Content-Type": mime_type,
+        "Content-Type": "application/json",
+    }
+    start_response = requests.post(
+        start_url,
+        headers=start_headers,
+        json={"file": {"display_name": filename}},
+        timeout=60,
+    )
+    if not start_response.ok:
+        raise RuntimeError(
+            f"Gemini File API upload initiation failed with status "
+            f"{start_response.status_code}: {start_response.text}"
+        )
+    upload_url = start_response.headers.get("X-Goog-Upload-URL")
+    if not upload_url:
+        raise RuntimeError("Gemini File API did not return an upload URL")
+
+    upload_headers = {
+        "Content-Length": str(len(audio_bytes)),
+        "X-Goog-Upload-Offset": "0",
+        "X-Goog-Upload-Command": "upload, finalize",
+    }
+    upload_response = requests.post(
+        upload_url,
+        headers=upload_headers,
+        data=audio_bytes,
+        timeout=Config.MEETING_NOTES_REQUEST_TIMEOUT,
+    )
+    if not upload_response.ok:
+        raise RuntimeError(
+            f"Gemini File API upload failed with status "
+            f"{upload_response.status_code}: {upload_response.text}"
+        )
+    file_data = upload_response.json().get("file") or {}
+    file_uri = file_data.get("uri")
+    file_name = file_data.get("name")
+    if not file_uri:
+        raise RuntimeError("Gemini File API upload completed but returned no file URI")
+    logger.info("Gemini File API upload completed file_uri=%s", file_uri)
+
+    # Poll until ACTIVE (audio files transition quickly, but large files may take a moment)
+    if file_name:
+        for _ in range(10):
+            state_resp = requests.get(
+                f"https://generativelanguage.googleapis.com/v1beta/{file_name}"
+                f"?key={Config.GEMINI_API_KEY}",
+                timeout=30,
+            )
+            if state_resp.ok and state_resp.json().get("state") == "ACTIVE":
+                break
+            time.sleep(2)
+
+    return file_uri
+
+
 def _generate_notes_with_gemini_from_audio(
     audio_file,
     *,
@@ -363,6 +432,28 @@ def _generate_notes_with_gemini_from_audio(
 ) -> Dict[str, Any]:
     audio_bytes = _read_audio_bytes(audio_file)
     mime_type = audio_file.mimetype or "application/octet-stream"
+    filename = (audio_file.filename or "meeting-audio")
+
+    if len(audio_bytes) > _GEMINI_INLINE_MAX_BYTES:
+        logger.info(
+            "Audio is %d bytes (>%d); uploading via Gemini File API",
+            len(audio_bytes),
+            _GEMINI_INLINE_MAX_BYTES,
+        )
+        file_uri = _upload_to_gemini_file_api(audio_bytes, mime_type, filename)
+        audio_part = {
+            "file_data": {
+                "mime_type": mime_type,
+                "file_uri": file_uri,
+            }
+        }
+    else:
+        audio_part = {
+            "inline_data": {
+                "mime_type": mime_type,
+                "data": base64.b64encode(audio_bytes).decode("ascii"),
+            }
+        }
 
     url = (
         f"{Config.GEMINI_BASE_URL}/models/{Config.GEMINI_MEETING_NOTES_MODEL}:generateContent"
@@ -385,12 +476,7 @@ def _generate_notes_with_gemini_from_audio(
                             f"Preferred language handling: {(language or '').strip() or 'Not Specified'}"
                         )
                     },
-                    {
-                        "inline_data": {
-                            "mime_type": mime_type,
-                            "data": base64.b64encode(audio_bytes).decode("ascii"),
-                        }
-                    },
+                    audio_part,
                 ]
             }
         ],
@@ -404,19 +490,19 @@ def _generate_notes_with_gemini_from_audio(
     )
     if not response.ok:
         raise RuntimeError(
-            f"Gemini fallback meeting notes generation failed with status {response.status_code}: {response.text}"
+            f"Gemini meeting notes generation failed with status {response.status_code}: {response.text}"
         )
 
-    payload = response.json()
-    candidates = payload.get("candidates") or []
+    result = response.json()
+    candidates = result.get("candidates") or []
     if not candidates:
-        raise RuntimeError("Gemini fallback meeting notes generation returned no candidates")
+        raise RuntimeError("Gemini meeting notes generation returned no candidates")
 
     content = candidates[0].get("content") or {}
     parts = content.get("parts") or []
     raw_text = "".join(str(part.get("text") or "") for part in parts).strip()
     if not raw_text:
-        raise RuntimeError("Gemini fallback meeting notes generation returned empty content")
+        raise RuntimeError("Gemini meeting notes generation returned empty content")
 
     return _parse_structured_notes(raw_text)
 
@@ -1249,14 +1335,20 @@ def queue_meeting_notes_generation_from_saved(
     active_job = _fetch_active_meeting_note_job(meeting_note_id)
     active_job_is_stale = _is_meeting_note_job_stale(active_job)
     if active_job and not force:
+        job_status = active_job.get("status")
+        message = (
+            "Meeting notes generation is already in progress"
+            if job_status == "processing"
+            else "Meeting notes generation is already queued"
+        )
         return (
             {
                 "success": True,
-                "message": "Meeting notes generation is already queued",
+                "message": message,
                 "data": {
                     **_row_to_meeting_note_payload(record),
                     "job_id": active_job.get("job_id"),
-                    "job_status": active_job.get("status"),
+                    "job_status": job_status,
                 },
             },
             202,

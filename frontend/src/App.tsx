@@ -1,4 +1,11 @@
-import { type CSSProperties, useEffect, useRef, useState } from 'react'
+import {
+  type ClipboardEvent as ReactClipboardEvent,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useRef,
+  useState
+} from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import './App.css'
@@ -229,10 +236,10 @@ const steps = [
 ]
 
 const sidebarItems = [
+  { id: 'reports', label: 'Dashboard' },
   { id: 'employees', label: 'Employees List' },
   { id: 'attendance', label: 'Todays Activity' },
   { id: 'calendar', label: 'Calendar View' },
-  { id: 'reports', label: 'Reports & Analytics' },
   { id: 'leaves', label: 'Leaves' },
   { id: 'activities', label: 'Activities' },
   { id: 'field-visits', label: 'Field Visits' }
@@ -1346,39 +1353,6 @@ function PrivacyPolicyPage() {
   )
 }
 
-type LoginSceneMode = 'dawn' | 'day' | 'dusk' | 'night'
-
-function getLoginSceneMode(value: Date): LoginSceneMode {
-  const hour = value.getHours()
-
-  if (hour >= 5 && hour < 10) {
-    return 'dawn'
-  }
-
-  if (hour >= 10 && hour < 17) {
-    return 'day'
-  }
-
-  if (hour >= 17 && hour < 20) {
-    return 'dusk'
-  }
-
-  return 'night'
-}
-
-function formatCoordinate(value: number, positive: string, negative: string) {
-  return `${Math.abs(value).toFixed(2)}°${value >= 0 ? positive : negative}`
-}
-
-function formatTimeZoneLabel(timeZone: string) {
-  if (!timeZone) {
-    return 'Device Time'
-  }
-
-  const parts = timeZone.split('/')
-  return parts[parts.length - 1].replace(/_/g, ' ')
-}
-
 function App() {
   const [empCode, setEmpCode] = useState('')
   const [otp, setOtp] = useState('')
@@ -1392,8 +1366,7 @@ function App() {
   const [authStatus, setAuthStatus] = useState('')
   const [adminEmpCode, setAdminEmpCode] = useState('')
   const [adminOtp, setAdminOtp] = useState('')
-  const [loginSceneTime, setLoginSceneTime] = useState(() => new Date())
-  const [loginLocationDetails, setLoginLocationDetails] = useState('Waiting for device location')
+  const adminOtpRefs = useRef<Array<HTMLInputElement | null>>([])
   const [accessToken, setAccessToken] = useState('')
   const [refreshToken, setRefreshToken] = useState('')
   const [profile, setProfile] = useState<AdminProfile | null>(null)
@@ -1411,6 +1384,7 @@ function App() {
   const [employeeStatusFilter, setEmployeeStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
   const [employeeBloodGroupFilter, setEmployeeBloodGroupFilter] = useState<BloodGroupFilter>('all')
   const [employeeStatusMenuOpen, setEmployeeStatusMenuOpen] = useState(false)
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const [employeePanelMode, setEmployeePanelMode] = useState<'add' | 'edit' | null>(null)
   const [deleteEmployeeTarget, setDeleteEmployeeTarget] = useState<EmployeeRow | null>(null)
   const [deleteEmployeeLoading, setDeleteEmployeeLoading] = useState(false)
@@ -1506,6 +1480,7 @@ function App() {
   const mapRef = useRef<L.Map | null>(null)
   const attendanceDatePickerRef = useRef<HTMLDivElement | null>(null)
   const employeeStatusMenuRef = useRef<HTMLDivElement | null>(null)
+  const profileMenuRef = useRef<HTMLDivElement | null>(null)
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
   const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
   const [missedLoginEmpCodes, setMissedLoginEmpCodes] = useState<string[]>([])
@@ -1628,15 +1603,19 @@ function App() {
   }, [employeeStatusMenuOpen])
 
   useEffect(() => {
-    if (!showDashboard || !showAdminLogin) {
-      return
+    if (!profileMenuOpen) {
+      return undefined
     }
 
-    setLoginSceneTime(new Date())
-    const intervalId = window.setInterval(() => setLoginSceneTime(new Date()), 60000)
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!profileMenuRef.current?.contains(event.target as Node)) {
+        setProfileMenuOpen(false)
+      }
+    }
 
-    return () => window.clearInterval(intervalId)
-  }, [showDashboard, showAdminLogin])
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [profileMenuOpen])
 
   useEffect(() => {
     if (!showDashboard || showAdminLogin) {
@@ -1654,47 +1633,6 @@ function App() {
 
     return () => window.clearInterval(intervalId)
   }, [showDashboard, showAdminLogin, fieldVisitRows])
-
-  useEffect(() => {
-    if (!showDashboard || !showAdminLogin) {
-      return
-    }
-
-    if (!('geolocation' in navigator)) {
-      setLoginLocationDetails('Location unavailable in this browser')
-      return
-    }
-
-    let cancelled = false
-    setLoginLocationDetails('Locating device')
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        if (cancelled) {
-          return
-        }
-
-        const { latitude, longitude } = position.coords
-        setLoginLocationDetails(
-          `${formatCoordinate(latitude, 'N', 'S')} / ${formatCoordinate(longitude, 'E', 'W')}`
-        )
-      },
-      () => {
-        if (!cancelled) {
-          setLoginLocationDetails('Location access is off')
-        }
-      },
-      {
-        enableHighAccuracy: false,
-        timeout: 8000,
-        maximumAge: 300000
-      }
-    )
-
-    return () => {
-      cancelled = true
-    }
-  }, [showDashboard, showAdminLogin])
 
   useEffect(() => {
     if (!accessToken || !showDashboard || showAdminLogin) {
@@ -2693,6 +2631,34 @@ function App() {
     }
   }
 
+  const updateAdminOtpDigit = (index: number, value: string) => {
+    const digit = value.replace(/\D/g, '').slice(-1)
+    const digits = Array.from({ length: 6 }, (_, digitIndex) => adminOtp[digitIndex] || '')
+    digits[index] = digit
+    setAdminOtp(digits.join(''))
+
+    if (digit && index < 5) {
+      adminOtpRefs.current[index + 1]?.focus()
+    }
+  }
+
+  const handleAdminOtpKeyDown = (index: number, event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Backspace' && !adminOtp[index] && index > 0) {
+      adminOtpRefs.current[index - 1]?.focus()
+    }
+  }
+
+  const handleAdminOtpPaste = (event: ReactClipboardEvent<HTMLDivElement>) => {
+    const pastedOtp = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
+    if (!pastedOtp) {
+      return
+    }
+
+    event.preventDefault()
+    setAdminOtp(pastedOtp)
+    adminOtpRefs.current[Math.min(pastedOtp.length, 6) - 1]?.focus()
+  }
+
   const handleAdminLogin = async () => {
     if (!adminEmpCode.trim() || !adminOtp.trim()) {
       setAuthStatus('Employee ID and OTP are required.')
@@ -3602,11 +3568,72 @@ function App() {
   const weeklyAttendanceTrend = buildWeeklyAttendanceTrend(attendanceRows, selectedAttendanceDate)
   const attendanceEfficiencyScores = buildAttendanceEfficiencyScores(employees, attendanceRows, selectedAttendanceDate)
   const maxWeeklyAttendance = Math.max(...weeklyAttendanceTrend.map((item) => item.count), 1)
-  const weeklyTrendPoints = weeklyAttendanceTrend.map((item, index) => {
-    const x = weeklyAttendanceTrend.length > 1 ? (index / (weeklyAttendanceTrend.length - 1)) * 100 : 50
-    const y = 100 - (item.count / maxWeeklyAttendance) * 100
-    return `${x},${y}`
-  }).join(' ')
+  const activeEmployeeCount = Math.max(employees.filter((employee) => employee.is_active !== false).length, 1)
+  const weeklyClockInTotal = weeklyAttendanceTrend.reduce((total, item) => total + item.count, 0)
+  const weeklyAttendanceRate = Math.min(100, (weeklyClockInTotal / (activeEmployeeCount * 7)) * 100)
+  const workingHourValues = attendanceRows
+    .map((row) => Number(row.working_hours))
+    .filter((value) => Number.isFinite(value) && value > 0)
+  const averageWorkingHours = workingHourValues.length
+    ? workingHourValues.reduce((total, value) => total + value, 0) / workingHourValues.length
+    : 0
+  const weeklyDateKeys = new Set(weeklyAttendanceTrend.map((item) => item.dateKey))
+  const weeklyLateArrivalCount = attendanceExceptions.filter((item) => {
+    if (item.exception_type !== 'late_arrival') {
+      return false
+    }
+    const rawDate = item.exception_date || item.requested_at
+    if (!rawDate) {
+      return false
+    }
+    const parsedDate = new Date(rawDate)
+    return !Number.isNaN(parsedDate.getTime()) && weeklyDateKeys.has(toDateInputValue(parsedDate))
+  }).length
+  const employeeDepartmentByEmail = new Map(
+    employees
+      .filter((employee) => employee.emp_email)
+      .map((employee) => [
+        (employee.emp_email || '').toLowerCase(),
+        (employee.emp_department || 'Unassigned').trim() || 'Unassigned'
+      ])
+  )
+  const departmentEmployeeCounts = new Map<string, number>()
+  employees
+    .filter((employee) => employee.is_active !== false)
+    .forEach((employee) => {
+      const department = (employee.emp_department || 'Unassigned').trim() || 'Unassigned'
+      departmentEmployeeCounts.set(department, (departmentEmployeeCounts.get(department) || 0) + 1)
+    })
+  const departmentAttendanceDays = new Map<string, Set<string>>()
+  attendanceRows.forEach((row) => {
+    if (!row.login_time || !row.employee_email) {
+      return
+    }
+    const parsedDate = new Date(row.login_time)
+    if (Number.isNaN(parsedDate.getTime())) {
+      return
+    }
+    const dateKey = toDateInputValue(parsedDate)
+    if (!weeklyDateKeys.has(dateKey)) {
+      return
+    }
+    const employeeEmail = row.employee_email.toLowerCase()
+    const department = employeeDepartmentByEmail.get(employeeEmail) || 'Unassigned'
+    if (!departmentAttendanceDays.has(department)) {
+      departmentAttendanceDays.set(department, new Set<string>())
+    }
+    departmentAttendanceDays.get(department)!.add(`${employeeEmail}-${dateKey}`)
+  })
+  const departmentAttendance = Array.from(departmentEmployeeCounts.entries())
+    .map(([department, employeeCount]) => ({
+      department,
+      percentage: Math.min(
+        100,
+        Math.round(((departmentAttendanceDays.get(department)?.size || 0) / Math.max(employeeCount * 7, 1)) * 100)
+      )
+    }))
+    .sort((left, right) => right.percentage - left.percentage || left.department.localeCompare(right.department))
+    .slice(0, 6)
     const missedLoginEmployees = missedLoginEmpCodes
       .map((empCode) => {
         const normalizedEmpCode = (empCode || '').trim()
@@ -3660,14 +3687,6 @@ function App() {
     const calendarAttendanceCount = calendarRowsForMonth.reduce((total, row) => total + row.attendanceCount, 0)
     const calendarLeaveCount = calendarRowsForMonth.reduce((total, row) => total + row.leaveCount, 0)
     const calendarBirthdayCount = calendarRowsForMonth.reduce((total, row) => total + row.birthdayCount, 0)
-    const calendarActiveModuleCount =
-      calendarViewType === 'holidays'
-        ? calendarHolidayCount
-        : calendarViewType === 'leaves'
-          ? calendarLeaveCount
-          : calendarViewType === 'birthdays'
-            ? calendarBirthdayCount
-            : calendarAttendanceCount
     const calendarDepartmentOptions = Array.from(
       new Set(
         employees
@@ -3882,22 +3901,6 @@ function App() {
                   ))}
                 </select>
               </div>
-            </div>
-          </div>
-          <div className="metric-row">
-            <div className="metric-card">
-              <span>Total Employees</span>
-              <strong>{employees.length}</strong>
-            </div>
-            <div className="metric-card">
-              <span>HR / Admin</span>
-              <strong>
-                {
-                  filteredEmployees.filter((employee) =>
-                    ['hr', 'cmd', 'admin'].includes((employee.emp_designation || '').toLowerCase())
-                  ).length
-                }
-              </strong>
             </div>
           </div>
           <div className="table-card">
@@ -4328,14 +4331,6 @@ function App() {
                 >
                   First Clock-Ins
                   <span>{attendanceTabCount}</span>
-                </button>
-                <button
-                  className={`attendance-tab ${attendanceView === 'calendar' ? 'active' : ''}`}
-                  type="button"
-                  onClick={() => setAttendanceView('calendar')}
-                >
-                  Operations Calendar
-                  <span>{calendarActiveModuleCount}</span>
                 </button>
                 <button
                   className={`attendance-tab ${attendanceView === 'late-arrivals' ? 'active' : ''}`}
@@ -5151,7 +5146,7 @@ function App() {
           <div className="dashboard-section-head">
             <div>
               <p className="eyebrow">Insights</p>
-              <h2>Reports & Analytics</h2>
+              <h2>Dashboard</h2>
             </div>
             <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
               Refresh
@@ -5159,6 +5154,68 @@ function App() {
           </div>
 
           <div className="reports-main">
+              <div className="dashboard-analytics-grid">
+                <article className="dashboard-analytics-card weekly-attendance-card">
+                  <div className="dashboard-analytics-head">
+                    <strong>Weekly attendance</strong>
+                    <span>This week</span>
+                  </div>
+
+                  <div className="weekly-attendance-bars">
+                    {weeklyAttendanceTrend.map((item, index) => (
+                      <div className="weekly-attendance-column" key={item.dateKey}>
+                        <div className="weekly-attendance-bar-shell">
+                          <div
+                            className={`weekly-attendance-bar${index === weeklyAttendanceTrend.length - 1 ? ' current' : ''}`}
+                            style={{ height: `${Math.max((item.count / maxWeeklyAttendance) * 100, item.count ? 16 : 5)}%` }}
+                            title={`${item.count} clock-ins`}
+                          />
+                        </div>
+                        <span className={index === weeklyAttendanceTrend.length - 1 ? 'current' : ''}>{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="weekly-attendance-metrics">
+                    <div>
+                      <span>Attendance rate</span>
+                      <strong>{weeklyAttendanceRate.toFixed(1)}%</strong>
+                    </div>
+                    <div>
+                      <span>Avg. work hours</span>
+                      <strong>{averageWorkingHours.toFixed(1)}h</strong>
+                    </div>
+                    <div>
+                      <span>Late arrivals</span>
+                      <strong>{weeklyLateArrivalCount}</strong>
+                    </div>
+                  </div>
+                </article>
+
+                <article className="dashboard-analytics-card department-attendance-card">
+                  <div className="dashboard-analytics-head">
+                    <strong>By department</strong>
+                  </div>
+                  <div className="department-attendance-list">
+                    {departmentAttendance.length ? (
+                      departmentAttendance.map((item) => (
+                        <div className="department-attendance-row" key={item.department}>
+                          <div>
+                            <span>{item.department}</span>
+                            <strong>{item.percentage}%</strong>
+                          </div>
+                          <div className="department-attendance-track">
+                            <div style={{ width: `${item.percentage}%` }} />
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="empty-state">No department data available.</div>
+                    )}
+                  </div>
+                </article>
+              </div>
+
               <div className="report-toolbar">
                 <div className="attendance-filter attendance-filter-date">
                   <label htmlFor="reports-date">Reference Date</label>
@@ -5242,40 +5299,6 @@ function App() {
                   </button>
                 </div>
                 {attendanceReportStatus ? <span className="report-status attendance-report-status">{attendanceReportStatus}</span> : null}
-              </div>
-
-              <div className="chart-card">
-                <div className="chart-card-head">
-                  <div>
-                    <strong>Weekly Attendance Trend</strong>
-                    <span>Unique employee clock-ins across the last 7 days.</span>
-                  </div>
-                </div>
-                <div className="line-chart-shell">
-                  <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="line-chart">
-                    <polyline
-                      fill="none"
-                      stroke="#1fa7a4"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      points={weeklyTrendPoints}
-                    />
-                    {weeklyAttendanceTrend.map((item, index) => {
-                      const x = weeklyAttendanceTrend.length > 1 ? (index / (weeklyAttendanceTrend.length - 1)) * 100 : 50
-                      const y = 100 - (item.count / maxWeeklyAttendance) * 100
-                      return <circle key={item.dateKey} cx={x} cy={y} r="2.5" fill="#112c32" />
-                    })}
-                  </svg>
-                  <div className="line-chart-labels">
-                    {weeklyAttendanceTrend.map((item) => (
-                      <div key={item.dateKey} className="chart-label-block">
-                        <strong>{item.count}</strong>
-                        <span>{item.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
               </div>
 
               <div className="chart-card">
@@ -5637,17 +5660,6 @@ function App() {
   if (showDashboard) {
     const fieldPointCount = mapFieldTrackingPoints.length
     const activityPointCount = mapTrackingPoints.length || mapSummary?.pointsCount || 0
-    const loginTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Device Time'
-    const loginTimeLabel = new Intl.DateTimeFormat([], {
-      hour: 'numeric',
-      minute: '2-digit'
-    }).format(loginSceneTime)
-    const loginDateLabel = new Intl.DateTimeFormat([], {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric'
-    }).format(loginSceneTime)
-    const loginSceneMode = getLoginSceneMode(loginSceneTime)
     const startPoint =
       mapSummary?.startCoords ||
       (mapTrackingPoints.length ? { lat: mapTrackingPoints[0].lat, lon: mapTrackingPoints[0].lon } : null) ||
@@ -5667,6 +5679,16 @@ function App() {
           fieldVisitDurationTick
         )
       : null
+    const employeeDepartmentOverview = Array.from(
+      employees.reduce((counts, employee) => {
+        const department = (employee.emp_department || 'Unassigned').trim() || 'Unassigned'
+        counts.set(department, (counts.get(department) || 0) + 1)
+        return counts
+      }, new Map<string, number>())
+    )
+      .map(([department, count]) => ({ department, count }))
+      .sort((left, right) => right.count - left.count || left.department.localeCompare(right.department))
+    const totalEmployeeDepartments = employeeDepartmentOverview.length
 
     return (
       <div className={`admin-shell${showAdminLogin ? ' admin-shell-login' : ''}`}>
@@ -5680,11 +5702,6 @@ function App() {
             </div>
           </div>
 
-          <div className="sidebar-user">
-            <strong>{profile?.emp_full_name || 'Admin'}</strong>
-            <span>{profile?.emp_designation || profile?.role || profile?.emp_code}</span>
-          </div>
-
           <div className="sidebar-group">
             {sidebarItems.map((item) => (
               <button
@@ -5695,9 +5712,6 @@ function App() {
                 {item.label}
               </button>
             ))}
-            <button className="sidebar-link logout-link" onClick={handleLogout}>
-              Logout
-            </button>
           </div>
 
           <div className="sidebar-foot">
@@ -5849,15 +5863,8 @@ function App() {
             </div>
           ) : null}
           {showAdminLogin ? (
-            <section className={`login-stage login-stage-${loginSceneMode}`}>
-              <div className="login-stage-wallpaper" aria-hidden="true">
-                <div className="login-stage-grid" />
-                <div className="login-stage-glow login-stage-glow-one" />
-                <div className="login-stage-glow login-stage-glow-two" />
-                <div className="login-stage-glow login-stage-glow-three" />
-              </div>
-
-              <div className="login-stage-topbar">
+            <section className="login-stage">
+              <div className="login-reference-shell">
                 <button
                   className="ghost login-stage-back"
                   onClick={() => setShowDashboard(false)}
@@ -5876,36 +5883,52 @@ function App() {
                   </svg>
                 </button>
 
-                <div className="login-stage-meta">
-                  <div className="login-stage-chip">
-                    <span>Local time</span>
-                    <strong>{loginTimeLabel}</strong>
-                    <small>{loginDateLabel}</small>
+                <aside className="login-reference-story">
+                  <div className="login-reference-brand">
+                    <img className="login-reference-logo" src={fawnixBg} alt="Fawnix logo" />
+                    <strong>Fawnix</strong>
                   </div>
-                  <div className="login-stage-chip login-stage-chip-location">
-                    <span>{formatTimeZoneLabel(loginTimeZone)}</span>
-                    <strong>Device location</strong>
-                    <small>{loginLocationDetails}</small>
-                  </div>
-                </div>
-              </div>
 
-              <div className="login-stage-center">
-                <div className="login-stage-panel">
-                  <div className="login-stage-panel-head">
-                    <div className="login-stage-brand">
-                      <img className="login-stage-brand-image" src={fawnixBg} alt="Fawnix" />
-                      <div>
-                        <p className="eyebrow">Fawnix Admin Login</p>
-                        <h2>Secure Sign in</h2>
+                  <div className="login-reference-message">
+                    <span>HR Operations</span>
+                    <h1>Daily activity tracking<br />that actually keeps up.</h1>
+
+                    <div className="login-reference-chart">
+                      <div className="login-chart-head">
+                        <span>Today · check-ins</span>
+                        <strong>▲ 12%</strong>
+                      </div>
+                      <div className="login-chart-bars" aria-hidden="true">
+                        {[34, 56, 41, 74, 52, 83, 47].map((height, index) => (
+                          <i key={index} style={{ height: `${height}%` }} />
+                        ))}
+                      </div>
+                      <div className="login-chart-days" aria-hidden="true">
+                        <span>M</span><span>T</span><span>W</span><span>T</span>
+                        <span>F</span><span>S</span><span>S</span>
                       </div>
                     </div>
-                    <p className="login-stage-support">
-                      Access with Employee ID & OTP
-                    </p>
                   </div>
 
-                  <div className="login-card login-stage-card">
+                  <p className="login-reference-disclaimer">
+                    Authorized HR personnel only.<br />
+                    All sign-ins are logged and monitored.
+                  </p>
+                </aside>
+
+                <main className="login-reference-form-panel">
+                  <form
+                    className="login-reference-form"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      void handleAdminLogin()
+                    }}
+                  >
+                    <div className="login-reference-heading">
+                      <h2>Admin sign in</h2>
+                      <p>Enter your Employee ID and the one-time password sent to your registered device.</p>
+                    </div>
+
                     <label htmlFor="admin-emp-code">Employee ID</label>
                     <input
                       id="admin-emp-code"
@@ -5913,44 +5936,141 @@ function App() {
                       value={adminEmpCode}
                       onChange={(event) => setAdminEmpCode(event.target.value)}
                       placeholder="Enter employee code"
+                      autoComplete="username"
                     />
-                    <label htmlFor="admin-otp">OTP</label>
-                    <input
-                      id="admin-otp"
-                      type="text"
-                      value={adminOtp}
-                      onChange={(event) => setAdminOtp(event.target.value)}
-                      placeholder="Enter OTP sent to your whatsapp"
-                    />
-                    <div className="login-actions">
-                      <button className="ghost" onClick={handleAdminRequestOtp} disabled={authLoading}>
+
+                    <div className="login-otp-heading">
+                      <label htmlFor="admin-otp-0">One-time password</label>
+                      <button
+                        className="login-resend"
+                        type="button"
+                        onClick={handleAdminRequestOtp}
+                        disabled={authLoading}
+                      >
                         Request OTP
                       </button>
-                      <button className="cta" onClick={handleAdminLogin} disabled={authLoading}>
-                        Login
-                      </button>
                     </div>
+
+                    <div className="login-otp-cells" onPaste={handleAdminOtpPaste}>
+                      {Array.from({ length: 6 }, (_, index) => (
+                        <input
+                          id={`admin-otp-${index}`}
+                          key={index}
+                          ref={(element) => {
+                            adminOtpRefs.current[index] = element
+                          }}
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                          maxLength={1}
+                          aria-label={`OTP digit ${index + 1}`}
+                          value={adminOtp[index] || ''}
+                          onChange={(event) => updateAdminOtpDigit(index, event.target.value)}
+                          onKeyDown={(event) => handleAdminOtpKeyDown(index, event)}
+                        />
+                      ))}
+                    </div>
+
+                    <button className="login-reference-submit" type="submit" disabled={authLoading}>
+                      {authLoading ? 'Verifying…' : 'Verify & sign in →'}
+                    </button>
+
                     {authStatus ? <p className="delete-note">{authStatus}</p> : null}
-                  </div>
-                </div>
+                    <p className="login-reference-help">Trouble signing in? Contact IT Helpdesk</p>
+                  </form>
+                </main>
               </div>
             </section>
           ) : (
             <>
-          <section className="dashboard-hero">
-            <div>
-              <p className="eyebrow">Admin dashboard</p>
-              <h1>Keep teams visible, accountable, and moving.</h1>
-              <p className="dashboard-copy">
-                Live data from admin APIs for employees, attendance, leave approvals,
-                activities, and field movement.
-              </p>
-              {refreshNotice ? <div className="refresh-toast">{refreshNotice}</div> : null}
-            </div>
-            <div className="dashboard-highlight">
-              <span>Shift Compliance</span>
-              <strong>{lateLogins + onTimeLogins}</strong>
-              <p>{`Late logins: ${lateLogins} · On-time logins: ${onTimeLogins}`}</p>
+          <section className={`dashboard-hero${activePanel === 'employees' ? ' employee-overview-hero' : ''}`}>
+            {activePanel === 'employees' ? (
+              <div className="employee-overview-content">
+                <div className="employee-overview-heading">
+                  <div>
+                    <p className="eyebrow">Workforce overview</p>
+                    <h1>Employees at a glance</h1>
+                  </div>
+                  {refreshNotice ? <div className="refresh-toast">{refreshNotice}</div> : null}
+                </div>
+                <div className="employee-overview-grid">
+                  <div className="employee-overview-kpis">
+                    <article className="employee-overview-kpi">
+                      <span>Total employees</span>
+                      <strong>{employees.length}</strong>
+                      <small>Across the organization</small>
+                    </article>
+                    <article className="employee-overview-kpi accent">
+                      <span>Total departments</span>
+                      <strong>{totalEmployeeDepartments}</strong>
+                      <small>Active workforce groups</small>
+                    </article>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <p className="eyebrow">Admin dashboard</p>
+                <h1>Keep teams visible, accountable, and moving.</h1>
+                <p className="dashboard-copy">
+                  Live data from admin APIs for employees, attendance, leave approvals,
+                  activities, and field movement.
+                </p>
+                {refreshNotice ? <div className="refresh-toast">{refreshNotice}</div> : null}
+              </div>
+            )}
+            <div className="dashboard-hero-side">
+              <div className="dashboard-profile-menu" ref={profileMenuRef}>
+                <div className="dashboard-profile-trigger-row">
+                  <span className="dashboard-theme-icon" aria-hidden="true">◔</span>
+                  <button
+                    className="dashboard-user-card"
+                    type="button"
+                    aria-haspopup="menu"
+                    aria-expanded={profileMenuOpen}
+                    onClick={() => setProfileMenuOpen((current) => !current)}
+                  >
+                    <div className="dashboard-user-avatar">
+                      {(profile?.emp_full_name || 'A')
+                        .trim()
+                        .split(/\s+/)
+                        .slice(0, 2)
+                        .map((name) => name.charAt(0))
+                        .join('')
+                        .toUpperCase()}
+                    </div>
+                    <strong>{profile?.emp_full_name || 'Admin'}</strong>
+                    <span className={`dashboard-user-chevron${profileMenuOpen ? ' open' : ''}`}>⌄</span>
+                  </button>
+                </div>
+                {profileMenuOpen ? (
+                  <div className="dashboard-profile-dropdown" role="menu">
+                    <div className="dashboard-profile-summary">
+                      <span>Signed in as</span>
+                      <strong>{profile?.emp_designation || profile?.role || profile?.emp_code}</strong>
+                    </div>
+                    <button
+                      className="dashboard-profile-action logout"
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setProfileMenuOpen(false)
+                        void handleLogout()
+                      }}
+                    >
+                      <span aria-hidden="true">↪</span>
+                      Logout
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              {activePanel === 'attendance' ? (
+                <div className="dashboard-highlight">
+                  <span>Shift Compliance</span>
+                  <strong>{lateLogins + onTimeLogins}</strong>
+                  <p>{`Late logins: ${lateLogins} · On-time logins: ${onTimeLogins}`}</p>
+                </div>
+              ) : null}
             </div>
           </section>
 
@@ -6414,7 +6534,7 @@ function App() {
       <header className="hero" data-animate>
         <nav className="nav">
           <div className="brand">
-            <span className="brand-mark" aria-hidden="true" />
+            <img className="brand-mark brand-mark-logo" src={fawnixBg} alt="Fawnix logo" />
             <div>
               <div className="brand-name">Fawnix</div>
               <div className="brand-tag">Workforce Operations Suite</div>

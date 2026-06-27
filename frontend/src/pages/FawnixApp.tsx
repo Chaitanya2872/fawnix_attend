@@ -4,6 +4,12 @@ import 'leaflet/dist/leaflet.css'
 import { useNavigate } from 'react-router-dom'
 import { appRoutes } from '../app/config/routes'
 import '../App.css'
+import {
+  EMPTY_LEAVE_FILTERS,
+  LEAVE_STATUS_FILTER_OPTIONS,
+  LEAVE_TYPE_FILTER_OPTIONS,
+  sidebarItems as sidebarItemDefinitions
+} from '../features/admin/config/sidebar'
 import { useAdminLoginExperience } from '../features/admin/hooks/useAdminLoginExperience'
 import { useAdminSession } from '../features/admin/hooks/useAdminSession'
 import AdminLoginPage from '../features/admin/pages/AdminLoginPage'
@@ -16,6 +22,35 @@ import AdminFieldVisitsPage from '../features/admin/pages/sidebar/AdminFieldVisi
 import AdminLeavesPage from '../features/admin/pages/sidebar/AdminLeavesPage'
 import AdminOverviewPage from '../features/admin/pages/sidebar/AdminOverviewPage'
 import AdminReportsPage from '../features/admin/pages/sidebar/AdminReportsPage'
+import type { LeaveFilterState } from '../features/admin/types/sidebar'
+import {
+  formatCoords,
+  formatDistanceKm,
+  formatEmployeeGrade,
+  formatLeaveTypeLabel,
+  formatWorkingHours,
+  getLeaveApproverLabel,
+  getLeaveReasonLabel,
+  toTitleCase
+} from '../features/admin/utils/formatters'
+import {
+  buildFieldVisitTimelineItems,
+  buildRoutePoints,
+  calculateDistanceKm,
+  compactCoords,
+  formatCoordsValue,
+  formatDestinationLocation,
+  formatVisitDuration,
+  getDestinationVisitCounts,
+  getDestinationVisitFlag,
+  getDestinationVisitedStatus,
+  getLocationName,
+  isCompletedVisitStatus,
+  normalizeFieldVisitTrackingPoints,
+  parseCoords,
+  resolveVisitDurationMinutes
+} from '../features/admin/utils/fieldVisits'
+import { hasWriteAccess, isPrivilegedUser } from '../features/admin/utils/permissions'
 import { features, useCases, workflowSteps as steps } from '../features/public/constants/publicContent'
 import { useClickOutside } from '../hooks/useClickOutside'
 import {
@@ -26,7 +61,7 @@ import {
   isSameDate,
   parseDateInputValue,
   toDateInputValue
-} from '../services/dateUtils'
+} from '../utils/date/dateUtils'
 import type {
   ActivityRow,
   AdminProfile,
@@ -41,479 +76,7 @@ import type {
   SidebarId
 } from '../types/admin'
 
-type SidebarItem = {
-  id: SidebarId
-  label: string
-  icon: 'home' | 'users' | 'pulse' | 'alert' | 'calendar' | 'chart' | 'leaf' | 'activity' | 'pin'
-  badge?: string
-}
-
-const sidebarItems: SidebarItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: 'home' },
-  { id: 'employees', label: 'Employees List', icon: 'users' },
-  { id: 'attendance', label: "Today's Activities", icon: 'pulse' },
-  { id: 'leaves', label: 'Leaves', icon: 'leaf' },
-  { id: 'activities', label: 'Activities', icon: 'activity' },
-  { id: 'field-visits', label: 'Field Visits', icon: 'pin' },
-  { id: 'calendar', label: 'Calendar View', icon: 'calendar' },
-  { id: 'exceptions', label: 'Exceptions', icon: 'alert' },
-  { id: 'reports', label: 'Reports & Analytics', icon: 'chart' }
-] as const
-
-type LeaveFilterState = {
-  employeeName: string
-  employeeId: string
-  leaveType: string
-  fromDate: string
-  toDate: string
-  status: string
-}
-
-const LEAVE_TYPE_FILTER_OPTIONS = [
-  { value: 'casual', label: 'Casual' },
-  { value: 'sick', label: 'Sick' },
-  { value: 'annual', label: 'Annual' },
-  { value: 'monthly', label: 'Monthly' }
-]
-const LEAVE_STATUS_FILTER_OPTIONS = [
-  { value: 'pending', label: 'Pending' },
-  { value: 'approved', label: 'Approved' },
-  { value: 'rejected', label: 'Rejected' },
-  { value: 'cancelled', label: 'Cancelled' }
-]
-const EMPTY_LEAVE_FILTERS: LeaveFilterState = {
-  employeeName: '',
-  employeeId: '',
-  leaveType: '',
-  fromDate: '',
-  toDate: '',
-  status: ''
-}
-
-function isPrivilegedUser(profile: AdminProfile | null) {
-  if (!profile) {
-    return false
-  }
-
-  const designation = (profile.emp_designation || '').trim().toLowerCase()
-  if (designation === 'devtester') {
-    return true
-  }
-
-  const role = (profile.role || '').trim().toLowerCase()
-  if (role !== 'admin') {
-    return false
-  }
-
-  return Boolean(profile.can_read || profile.can_write)
-}
-
-function hasWriteAccess(profile: AdminProfile | null) {
-  if (!profile) {
-    return false
-  }
-
-  const designation = (profile.emp_designation || '').trim().toLowerCase()
-  if (designation === 'devtester') {
-    return true
-  }
-
-  return (profile.role || '').trim().toLowerCase() === 'admin' && Boolean(profile.can_write)
-}
-
-function formatEmployeeGrade(value?: string) {
-  const raw = (value || '').trim()
-  if (!raw) {
-    return '--'
-  }
-
-  const normalized = raw.toUpperCase()
-  const compact = normalized.replace(/[\s\-_]/g, '')
-
-  if (normalized === 'NF' || compact === 'NONFLEXIBLE') {
-    return 'NF'
-  }
-  if (normalized === 'F' || compact === 'FLEXIBLE') {
-    return 'F'
-  }
-  if (normalized === 'M' || compact === 'MODERATE') {
-    return 'M'
-  }
-
-  return raw
-}
-
-function formatDistanceKm(value?: number | null) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return '--'
-  }
-  return `${value.toFixed(2)} km`
-}
-
-function formatWorkingHours(value?: number | string | null) {
-  if (value === null || value === undefined || value === '') {
-    return '--'
-  }
-  const numericValue = Number(value)
-  if (!Number.isFinite(numericValue)) {
-    return '--'
-  }
-  return `${numericValue.toFixed(2)} h`
-}
-
-function formatCoords(value?: { lat: number; lon: number } | null) {
-  if (!value) {
-    return '--'
-  }
-  return `${value.lat.toFixed(6)}, ${value.lon.toFixed(6)}`
-}
-
-function toTitleCase(value: string) {
-  return value.replace(/\b\w/g, (match) => match.toUpperCase())
-}
-
-function formatLeaveTypeLabel(leave: LeaveRow) {
-  const rawType = (leave.leave_type || '').trim()
-  const normalizedType = rawType.toLowerCase()
-  if (!rawType) {
-    return 'Leave'
-  }
-
-  let count: number | null = null
-  if (normalizedType === 'sick' || normalizedType === 'casual') {
-    const duration = (leave.duration || '').trim().toLowerCase()
-    if (duration === 'first_half' || duration === 'second_half') {
-      count = 0.5
-    } else if (duration === 'full_day') {
-      count = 1
-    } else if (leave.leave_count !== undefined && leave.leave_count !== null) {
-      const numericCount = Number(leave.leave_count)
-      if (Number.isFinite(numericCount)) {
-        count = numericCount
-      }
-    }
-  }
-
-  const display = toTitleCase(rawType.replace(/_/g, ' '))
-  return count !== null ? `${display} (${count})` : display
-}
-
-function getLeaveApproverLabel(leave: LeaveRow, employees: EmployeeRow[]) {
-  const fallback = leave.reviewed_by || leave.manager_code || leave.manager_email || '--'
-  const match =
-    employees.find((employee) => employee.emp_code && employee.emp_code === leave.reviewed_by) ||
-    employees.find((employee) => employee.emp_code && employee.emp_code === leave.manager_code) ||
-    employees.find((employee) => employee.emp_email && employee.emp_email === leave.manager_email)
-  return match?.emp_full_name || fallback
-}
-
-function getLeaveReasonLabel(leave: LeaveRow) {
-  return leave.notes || leave.remarks || '--'
-}
-
-function parseCoords(lat?: number | string, lon?: number | string) {
-  const latNum = Number(lat)
-  const lonNum = Number(lon)
-  if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) {
-    return null
-  }
-  // Treat backend-default "0,0" as missing location data.
-  if (latNum === 0 && lonNum === 0) {
-    return null
-  }
-  return { lat: latNum, lon: lonNum }
-}
-
-function formatCoordsValue(coords?: { lat: number; lon: number } | null) {
-  if (!coords) {
-    return undefined
-  }
-  return `${coords.lat.toFixed(6)}, ${coords.lon.toFixed(6)}`
-}
-
-function isCompletedVisitStatus(status?: string) {
-  const normalized = (status || '').trim().toLowerCase()
-  return ['completed', 'complete', 'closed', 'ended'].includes(normalized)
-}
-
-function parseDateTimeValue(value?: string) {
-  if (!value) {
-    return null
-  }
-
-  const parsed = new Date(value)
-  if (!Number.isNaN(parsed.getTime())) {
-    return parsed
-  }
-
-  // Support backend timestamps shaped like "YYYY-MM-DD HH:MM:SS".
-  const normalized = value.includes(' ') && !value.includes('T')
-    ? value.replace(' ', 'T')
-    : value
-  const fallback = new Date(normalized)
-  if (!Number.isNaN(fallback.getTime())) {
-    return fallback
-  }
-
-  return null
-}
-
-function normalizeDurationMinutes(value?: number | string | null) {
-  if (value === null || value === undefined) {
-    return null
-  }
-
-  const minutes = Number(value)
-  if (!Number.isFinite(minutes)) {
-    return null
-  }
-
-  return Math.max(0, Math.floor(minutes))
-}
-
-function resolveVisitDurationMinutes(
-  durationMinutes?: number | string | null,
-  startTime?: string,
-  endTime?: string,
-  isCompleted = false,
-  referenceTimestamp?: number
-) {
-  const persistedDuration = normalizeDurationMinutes(durationMinutes)
-  if (persistedDuration !== null) {
-    return persistedDuration
-  }
-
-  const startDate = parseDateTimeValue(startTime)
-  if (!startDate) {
-    return null
-  }
-
-  const endDate = parseDateTimeValue(endTime) || (!isCompleted
-    ? new Date(referenceTimestamp || Date.now())
-    : null)
-  if (!endDate) {
-    return null
-  }
-
-  const minutes = Math.floor((endDate.getTime() - startDate.getTime()) / 60000)
-  if (!Number.isFinite(minutes)) {
-    return null
-  }
-
-  return Math.max(0, minutes)
-}
-
-function formatVisitDuration(minutes?: number | null) {
-  if (minutes === null || minutes === undefined) {
-    return '--'
-  }
-
-  const totalMinutes = Math.max(0, Math.floor(minutes))
-  const hours = Math.floor(totalMinutes / 60)
-  const remainingMinutes = totalMinutes % 60
-
-  if (!hours) {
-    return `${remainingMinutes}m`
-  }
-  if (!remainingMinutes) {
-    return `${hours}h`
-  }
-
-  return `${hours}h ${remainingMinutes}m`
-}
-
-function getLocationName(address?: string, fallback = 'Location') {
-  const text = (address || '').trim()
-  if (!text) {
-    return fallback
-  }
-  const [firstPart] = text.split(',')
-  const name = (firstPart || '').trim()
-  return name || text
-}
-
-function compactCoords(points: Array<{ lat: number; lon: number } | null | undefined>) {
-  return points.filter((point): point is { lat: number; lon: number } => Boolean(point))
-}
-
-function calculateDistanceKm(points: Array<{ lat: number; lon: number }>) {
-  if (points.length < 2) {
-    return 0
-  }
-
-  const toRad = (value: number) => (value * Math.PI) / 180
-  const earthRadius = 6371
-  let total = 0
-
-  for (let i = 1; i < points.length; i += 1) {
-    const prev = points[i - 1]
-    const curr = points[i]
-    const deltaLat = toRad(curr.lat - prev.lat)
-    const deltaLon = toRad(curr.lon - prev.lon)
-    const lat1 = toRad(prev.lat)
-    const lat2 = toRad(curr.lat)
-    const a =
-      Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-      Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2)
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    total += earthRadius * c
-  }
-
-  return total
-}
-
-function formatDestinationLocation(destinations?: ActivityRow['destinations']) {
-  if (!Array.isArray(destinations) || !destinations.length) {
-    return '--'
-  }
-
-  const labels = destinations
-    .map((destination) => destination?.name || destination?.address)
-    .filter((value): value is string => Boolean(value && value.trim()))
-
-  return labels.length ? labels.join(', ') : '--'
-}
-
-function getDestinationVisitedStatus(destinations?: ActivityRow['destinations']) {
-  if (!Array.isArray(destinations) || !destinations.length) {
-    return null
-  }
-
-  return destinations.every((destination) => Boolean(destination?.visited))
-}
-
-function getDestinationVisitFlag(destinations?: ActivityRow['destinations']) {
-  if (!Array.isArray(destinations) || !destinations.length) {
-    return null
-  }
-
-  return destinations.some((destination) => Boolean(destination?.visited))
-}
-
-function getDestinationVisitCounts(destinations?: ActivityRow['destinations']) {
-  if (!Array.isArray(destinations) || !destinations.length) {
-    return { visitedCount: 0, totalCount: 0 }
-  }
-
-  return {
-    visitedCount: destinations.filter((destination) => Boolean(destination?.visited)).length,
-    totalCount: destinations.length
-  }
-}
-
-function normalizeFieldVisitTrackingPoints(points: FieldVisitTrackingPoint[] = []): MapTrackingPoint[] {
-  const normalized: MapTrackingPoint[] = []
-
-  points.forEach((point) => {
-    const parsedFromLatLon = parseCoords(point.latitude, point.longitude)
-    const parsedFromLocation = point.location
-      ? (() => {
-          const [latValue = '', lonValue = ''] = point.location.split(',').map((value) => value.trim())
-          return parseCoords(latValue, lonValue)
-        })()
-      : null
-    const coords = parsedFromLatLon || parsedFromLocation
-    if (!coords) {
-      return
-    }
-
-    normalized.push({
-      lat: coords.lat,
-      lon: coords.lon,
-      trackedAt: point.tracked_at,
-      trackingType: point.tracking_type
-    })
-  })
-
-  return normalized
-}
-
-function buildFieldVisitTimelineItems(
-  row: FieldVisitRow,
-  activityTracking: FieldVisitTrackingPoint[] = [],
-  fieldTracking: FieldVisitTrackingPoint[] = []
-): FieldVisitTimelineItem[] {
-  const items: FieldVisitTimelineItem[] = []
-
-  items.push({
-    id: `${row.activityId}-start`,
-    kind: 'start',
-    title: row.startName || 'Start',
-    address: row.startAddress || row.location || 'Start address unavailable',
-    coords: row.startCoords,
-    trackedAt: row.visitDate
-  })
-
-  const trackingSource = activityTracking.length ? activityTracking : fieldTracking
-  trackingSource.forEach((point, index) => {
-    const coords =
-      parseCoords(point.latitude, point.longitude) ||
-      (point.location
-        ? (() => {
-            const [latValue = '', lonValue = ''] = point.location.split(',').map((value) => value.trim())
-            return parseCoords(latValue, lonValue)
-          })()
-        : null)
-
-    items.push({
-      id: `${row.activityId}-point-${index}`,
-      kind: 'point',
-      title: point.tracking_type ? toTitleCase(point.tracking_type.replace(/_/g, ' ')) : `Point ${index + 1}`,
-      address: point.address || point.location || 'Address unavailable',
-      coords,
-      trackedAt: point.tracked_at,
-      trackingType: point.tracking_type
-    })
-  })
-
-  if (row.isCompleted) {
-    items.push({
-      id: `${row.activityId}-end`,
-      kind: 'end',
-      title: row.endName || 'End',
-      address: row.endAddress || 'End address unavailable',
-      coords: row.endCoords,
-      trackedAt: undefined
-    })
-  }
-
-  return items
-}
-
-function areSameCoords(
-  left?: { lat: number; lon: number } | null,
-  right?: { lat: number; lon: number } | null
-) {
-  if (!left || !right) {
-    return false
-  }
-
-  return Math.abs(left.lat - right.lat) < 0.000001 && Math.abs(left.lon - right.lon) < 0.000001
-}
-
-function buildRoutePoints(
-  start?: { lat: number; lon: number } | null,
-  tracked: Array<{ lat: number; lon: number }> = [],
-  end?: { lat: number; lon: number } | null
-) {
-  const route: Array<{ lat: number; lon: number }> = []
-
-  if (start) {
-    route.push(start)
-  }
-
-  for (const point of tracked) {
-    if (!route.length || !areSameCoords(route[route.length - 1], point)) {
-      route.push(point)
-    }
-  }
-
-  if (end && (!route.length || !areSameCoords(route[route.length - 1], end))) {
-    route.push(end)
-  }
-
-  return route
-}
+const sidebarItems = sidebarItemDefinitions
 
 function getExceptionDateValue(row: AttendanceExceptionRow) {
   return row.exception_date || row.requested_at
@@ -1935,6 +1498,46 @@ function FawnixApp() {
     }
   }
 
+  const alertLeaveManager = async (leave: LeaveRow) => {
+    const matchedManager =
+      employees.find((employee) => employee.emp_code && employee.emp_code === leave.manager_code) ||
+      employees.find((employee) => employee.emp_email && employee.emp_email === leave.manager_email)
+    const managerEmail = (leave.manager_email || matchedManager?.emp_email || '').trim()
+    const managerName = matchedManager?.emp_full_name || getLeaveApproverLabel(leave, employees)
+
+    if (!managerEmail) {
+      throw new Error('Manager email is unavailable for this leave request.')
+    }
+
+    const employeeName = leave.emp_full_name || leave.emp_code || 'An employee'
+    const leaveType = formatLeaveTypeLabel(leave)
+    const leaveDateRange = `${formatDate(leave.from_date)} - ${formatDate(leave.to_date)}`
+
+    await apiRequest('/api/notifications/send', {
+      method: 'POST',
+      body: JSON.stringify({
+        module: 'admin_dashboard',
+        eventType: 'leave_pending_manager_alert',
+        recipients: [
+          {
+            email: managerEmail,
+            name: managerName
+          }
+        ],
+        channels: ['email'],
+        content: {
+          title: 'Pending leave approval reminder',
+          bodyText: `${employeeName} has a pending ${leaveType} request for ${leaveDateRange}. Please review it from the admin dashboard.`
+        },
+        deeplinkUrl: `${window.location.origin}${appRoutes.admin}`,
+        priority: 'normal',
+        idempotencyKey: `leave-manager-alert-${leave.id || leave.emp_code || 'request'}-${Date.now()}`
+      })
+    })
+
+    return `Alert sent to ${managerName || managerEmail}.`
+  }
+
   const clearLeaveFilters = async () => {
     const emptyFilters = { ...EMPTY_LEAVE_FILTERS }
     setLeaveFilters(emptyFilters)
@@ -2471,7 +2074,11 @@ function FawnixApp() {
           employees={employees}
           fieldVisitRows={fieldVisitRows}
           firstClockInRows={firstClockInRows}
+          formatLeaveTypeLabel={formatLeaveTypeLabel}
+          leaveRows={leaveRows}
           loadDashboard={() => loadDashboard(accessToken)}
+          onAlertManager={alertLeaveManager}
+          selectedDateExceptions={selectedDateExceptions}
           selectedDateLeaves={selectedDateLeaves}
           weeklyAttendanceTrend={weeklyAttendanceTrend}
         />
@@ -2626,6 +2233,7 @@ function FawnixApp() {
           leaveRows={leaveRows}
           leaveStatusOptions={LEAVE_STATUS_FILTER_OPTIONS}
           leaveTypeOptions={LEAVE_TYPE_FILTER_OPTIONS}
+          onAlertManager={alertLeaveManager}
           refreshLeaves={refreshLeaves}
           updateLeaveFilter={updateLeaveFilter}
         />

@@ -1,3 +1,5 @@
+import { useMemo, useState } from 'react'
+
 type Props = any
 
 export default function AdminLeavesPage({
@@ -15,9 +17,32 @@ export default function AdminLeavesPage({
   leaveRows,
   leaveStatusOptions,
   leaveTypeOptions,
+  onAlertManager,
   refreshLeaves,
   updateLeaveFilter
 }: Props) {
+  const [pendingExpanded, setPendingExpanded] = useState(true)
+  const [alertLoadingKey, setAlertLoadingKey] = useState('')
+  const [alertStatus, setAlertStatus] = useState('')
+
+  const pendingLeaveRows = useMemo(
+    () => leaveRows.filter((row: any) => (row.status || '').trim().toLowerCase() === 'pending'),
+    [leaveRows]
+  )
+
+  const handleAlertManager = async (row: any, fallbackKey: string) => {
+    setAlertLoadingKey(fallbackKey)
+    setAlertStatus('')
+    try {
+      const nextStatus = await onAlertManager(row)
+      setAlertStatus(nextStatus)
+    } catch (error) {
+      setAlertStatus(error instanceof Error ? error.message : 'Failed to alert manager.')
+    } finally {
+      setAlertLoadingKey('')
+    }
+  }
+
   return (
     <>
       <div className="dashboard-section-head">
@@ -34,6 +59,56 @@ export default function AdminLeavesPage({
           {leaveFilterLoading ? 'Loading...' : 'Refresh'}
         </button>
       </div>
+
+      <div className="chart-card pending-approvals-card leave-pending-card">
+        <button
+          className={`pending-approvals-toggle${pendingExpanded ? ' open' : ''}`}
+          onClick={() => setPendingExpanded((current) => !current)}
+          type="button"
+        >
+          <div>
+            <strong>Pending Approvals</strong>
+            <span>Collapsed/expanded manager queue for pending leave requests</span>
+          </div>
+          <span className="pending-approvals-pill">
+            {pendingExpanded ? 'Collapse' : 'Expand'} · {pendingLeaveRows.length}
+          </span>
+        </button>
+
+        {pendingExpanded ? (
+          <div className="pending-approvals-list">
+            {pendingLeaveRows.length ? (
+              pendingLeaveRows.map((row: any, index: number) => {
+                const rowKey = String(row.id || row.emp_code || index)
+                return (
+                  <div key={rowKey} className="pending-approval-row detailed">
+                    <div className="pending-approval-copy">
+                      <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
+                      <span>{formatLeaveTypeLabel(row)}</span>
+                      <small>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</small>
+                    </div>
+                    <div className="pending-approval-meta">
+                      <span>{getLeaveApproverLabel(row, employees)}</span>
+                      <button
+                        className="ghost dashboard-button"
+                        onClick={() => void handleAlertManager(row, rowKey)}
+                        disabled={alertLoadingKey === rowKey}
+                        type="button"
+                      >
+                        {alertLoadingKey === rowKey ? 'Alerting...' : 'Alert Manager'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <div className="empty-state">No pending leave approvals match the current filters.</div>
+            )}
+            {alertStatus ? <span className="report-status">{alertStatus}</span> : null}
+          </div>
+        ) : null}
+      </div>
+
       <form
         className="leave-filter-card"
         onSubmit={(event) => {
@@ -132,6 +207,7 @@ export default function AdminLeavesPage({
           </button>
         </div>
       </form>
+
       <div className="table-card">
         {leaveRows.length ? (
           <div className="table-scroll">
@@ -144,24 +220,43 @@ export default function AdminLeavesPage({
                   <th>Approver</th>
                   <th>Reason</th>
                   <th>Status</th>
+                  <th>Manager Alert</th>
                 </tr>
               </thead>
               <tbody>
-                {leaveRows.map((row: any, index: number) => (
-                  <tr key={`${row.id || row.emp_code || index}`}>
-                    <td>
-                      <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
-                      <span className="table-meta">{row.emp_code || 'Employee ID unavailable'}</span>
-                    </td>
-                    <td>{formatLeaveTypeLabel(row)}</td>
-                    <td>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</td>
-                    <td>{getLeaveApproverLabel(row, employees)}</td>
-                    <td>{getLeaveReasonLabel(row)}</td>
-                    <td>
-                      <span className="table-pill">{row.status || 'Unknown'}</span>
-                    </td>
-                  </tr>
-                ))}
+                {leaveRows.map((row: any, index: number) => {
+                  const rowKey = String(row.id || row.emp_code || index)
+                  const isPending = (row.status || '').trim().toLowerCase() === 'pending'
+                  return (
+                    <tr key={`${row.id || row.emp_code || index}`}>
+                      <td>
+                        <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
+                        <span className="table-meta">{row.emp_code || 'Employee ID unavailable'}</span>
+                      </td>
+                      <td>{formatLeaveTypeLabel(row)}</td>
+                      <td>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</td>
+                      <td>{getLeaveApproverLabel(row, employees)}</td>
+                      <td>{getLeaveReasonLabel(row)}</td>
+                      <td>
+                        <span className="table-pill">{row.status || 'Unknown'}</span>
+                      </td>
+                      <td>
+                        {isPending ? (
+                          <button
+                            className="ghost dashboard-button compact-action-button"
+                            onClick={() => void handleAlertManager(row, rowKey)}
+                            disabled={alertLoadingKey === rowKey}
+                            type="button"
+                          >
+                            {alertLoadingKey === rowKey ? 'Alerting...' : 'Alert Manager'}
+                          </button>
+                        ) : (
+                          <span className="table-meta">Resolved</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

@@ -4,7 +4,7 @@ import {
   persistAdminProfile,
   persistAdminTokens,
   readStoredAdminSession
-} from '../../../services/adminStorage'
+} from '../../../services/storage/adminStorage'
 import type { AdminProfile } from '../../../types/admin'
 
 type UseAdminSessionOptions = {

@@ -1,16 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { useNavigate } from 'react-router-dom'
+import { appRoutes } from '../app/config/routes'
 import '../App.css'
-import fawnixBg from '../assets/fawnix_bg.png'
-import AttendanceDatePicker from '../components/AttendanceDatePicker'
+import { useAdminLoginExperience } from '../features/admin/hooks/useAdminLoginExperience'
+import { useAdminSession } from '../features/admin/hooks/useAdminSession'
+import AdminLoginPage from '../features/admin/pages/AdminLoginPage'
+import AdminActivitiesPage from '../features/admin/pages/sidebar/AdminActivitiesPage'
+import AdminAttendancePage from '../features/admin/pages/sidebar/AdminAttendancePage'
+import AdminCalendarPage from '../features/admin/pages/sidebar/AdminCalendarPage'
+import AdminEmployeesPage from '../features/admin/pages/sidebar/AdminEmployeesPage'
+import AdminExceptionsPage from '../features/admin/pages/sidebar/AdminExceptionsPage'
+import AdminFieldVisitsPage from '../features/admin/pages/sidebar/AdminFieldVisitsPage'
+import AdminLeavesPage from '../features/admin/pages/sidebar/AdminLeavesPage'
+import AdminOverviewPage from '../features/admin/pages/sidebar/AdminOverviewPage'
+import AdminReportsPage from '../features/admin/pages/sidebar/AdminReportsPage'
+import { features, useCases, workflowSteps as steps } from '../features/public/constants/publicContent'
 import { useClickOutside } from '../hooks/useClickOutside'
-import {
-  clearStoredAdminSession,
-  persistAdminProfile,
-  persistAdminTokens,
-  readStoredAdminSession
-} from '../services/adminStorage'
 import {
   formatDate,
   formatDateTime,
@@ -31,227 +38,8 @@ import type {
   FieldVisitTrackingPoint,
   LeaveRow,
   MapTrackingPoint,
-  PrivacySection,
   SidebarId
 } from '../types/admin'
-
-const privacySections: PrivacySection[] = [
-  {
-    title: 'Information We Collect',
-    body: [
-      'Fawnix collects account and workforce management information such as employee ID, name, phone number, email address, role, Todays Activity, activity records, leave requests, and device/session details needed to authenticate users and operate the service.',
-      'Fawnix also collects and processes location data to support attendance and workforce features, including clock-in, clock-out, field visits, route tracking, geofence validation, working-hours pause and resume, and attendance-related notifications.',
-      'If your organization enables meeting-notes features, Fawnix may collect audio recordings or uploaded audio files from meetings in order to generate transcripts, summaries, minutes of meeting, and action items.'
-    ],
-    bullets: []
-  },
-  {
-    title: 'Meeting Audio and AI Processing',
-    body: [
-      'When a user records or uploads meeting audio through Fawnix, that audio is processed to generate meeting documentation such as transcript text, summaries, minutes of meeting, and important discussion points.',
-      'This processing may use secure third-party AI service providers and cloud storage providers acting on behalf of your organization to analyze the audio and return the generated output.'
-    ],
-    bullets: [
-      'Meeting audio recordings or uploaded audio files',
-      'AI-generated transcripts, summaries, minutes of meeting, and key points',
-      'Related metadata such as meeting title, file name, employee identifier, and generation timestamps'
-    ]
-  },
-  {
-    title: 'How We Use Meeting Audio',
-    body: [
-      'Meeting audio and AI-generated content are used only to support authorized workplace productivity and documentation features.'
-    ],
-    bullets: [
-      'Generate transcripts and meeting summaries',
-      'Prepare minutes of meeting and action items',
-      'Store meeting records for organizational reference and reporting',
-      'Improve operational efficiency, follow-up tracking, and internal documentation'
-    ]
-  },
-  {
-    title: 'Location Information',
-    body: [
-      'Our app collects and processes location data to support attendance and workforce management features such as clock-in/clock-out, field visits, route tracking, and geofence-based validation.'
-    ],
-    bullets: []
-  },
-  {
-    title: 'What Location Data We Collect',
-    body: [],
-    bullets: [
-      'Precise location data from your device (GPS and network-based)',
-      'Clock-in and clock-out location coordinates',
-      'Field visit locations and movement tracking',
-      'Background location data (only when enabled) for attendance and geofence monitoring'
-    ]
-  },
-  {
-    title: 'How We Use Location Data',
-    body: [
-      'We use location data to:'
-    ],
-    bullets: [
-      'Verify attendance actions such as clock-in and clock-out',
-      'Ensure employees are within the assigned work or geofence area',
-      'Automatically pause or resume working hours based on location rules',
-      'Enable field visit tracking and route history',
-      'Improve accuracy, security, and compliance of Todays Activity'
-    ]
-  },
-  {
-    title: 'When Location Is Collected',
-    body: [
-      'Location data may be collected:'
-    ],
-    bullets: [
-      'While the app is actively in use',
-      'In the background, only when attendance tracking or field visit tracking is enabled, and required permissions are granted'
-    ]
-  },
-  {
-    title: 'Background Location Usage',
-    body: [
-      'Background location is used strictly for attendance and workforce tracking features, such as:'
-    ],
-    bullets: [
-      'Ensuring accurate work hour tracking',
-      'Validating presence within assigned locations',
-      'Supporting continuous field visit tracking',
-      'Users are informed and can control this permission at any time through device settings.'
-    ]
-  },
-  {
-    title: 'Sharing of Location Data',
-    body: [
-      'Location data is shared only with:',
-      'We do not sell or use location data for advertising purposes.'
-    ],
-    bullets: [
-      'Your organization (employer/admin)',
-      'Secure backend services required to provide attendance, reporting, compliance, and AI meeting-notes features'
-    ]
-  },
-  {
-    title: 'Data Retention',
-    body: [
-      'Location data and meeting-notes data are retained only as long as necessary for:'
-    ],
-    bullets: [
-      'Todays Activity',
-      'Field visit logs',
-      'Meeting transcripts, summaries, and generated reports where enabled by your organization',
-      'Organizational compliance and reporting',
-      'Retention duration may vary based on organizational policies. Data is securely stored and protected.'
-    ]
-  },
-  {
-    title: 'User Choice and Consent',
-    body: [
-      'Users should record or upload meeting audio only when authorized by their organization and permitted by applicable law and internal policy.',
-      'If meeting recording features are optional in your deployment, you may choose not to use those features. Device permissions such as microphone access can also be managed through system settings.'
-    ],
-    bullets: []
-  },
-  {
-    title: 'Retention and Deletion',
-    body: [
-      'Users can request account deletion from the website section below. After a valid deletion request is completed, personal data is deleted or anonymized except where retention is required for legal, fraud-prevention, security, payroll, tax, or dispute-resolution purposes.'
-    ],
-    bullets: []
-  },
-  {
-    title: 'User Control',
-    body: [
-      'Users can:'
-    ],
-    bullets: [
-      'Enable or disable location permissions at any time via device settings',
-      'Stop background tracking by disabling permissions or logging out of the app'
-    ]
-  },
-  {
-    title: 'Security',
-    body: [
-      'Fawnix uses reasonable administrative, technical, and organizational measures to protect personal information from unauthorized access, disclosure, alteration, or loss. No method of storage or transmission is completely secure, so absolute security cannot be guaranteed.'
-    ],
-    bullets: []
-  },
-  {
-    title: 'Contact',
-    body: [
-      'For privacy questions, data requests, or policy concerns, contact ACS Technologies Ltd.',
-      'Email: chaitanya.k@acstechnologies.co.in',
-      'Phone: 6304718795'
-    ],
-    bullets: []
-  }
-]
-
-const useCases = [
-  {
-    title: 'Field Teams',
-    desc: 'Track visits, travel, and attendance with location-aware check-ins.'
-  },
-  {
-    title: 'Retail & Branch Ops',
-    desc: 'Ensure shift compliance, break discipline, and daily closure visibility.'
-  },
-  {
-    title: 'Sales & Leads',
-    desc: 'Tie activities to leads and keep a verified visit history.'
-  },
-  {
-    title: 'HR & Admin',
-    desc: 'One place for approvals, exceptions, and compliance auditing.'
-  }
-]
-
-const features = [
-  {
-    title: 'Smart Attendance',
-    desc: 'Clock-in/out with geo-tagging, auto shift hours, and late detection.'
-  },
-  {
-    title: 'Activity Tracking',
-    desc: 'Start/end activities, log visits, and capture route evidence.'
-  },
-  {
-    title: 'Approvals & Exceptions',
-    desc: 'Late arrivals and early leave requests with manager workflows.'
-  },
-  {
-    title: 'Leave & Comp-off',
-    desc: 'Apply leave, track status, and redeem comp-off automatically.'
-  },
-  {
-    title: 'Distance Alerts',
-    desc: 'Detect out-of-range movement to protect attendance integrity.'
-  },
-  {
-    title: 'Auto Clock-out',
-    desc: 'Prevents missing logs with configurable shift-end closure.'
-  }
-]
-
-const steps = [
-  {
-    title: 'Start Day',
-    desc: 'Employee clocks in with location and begins the shift.'
-  },
-  {
-    title: 'Track Work',
-    desc: 'Activities, visits, and breaks are recorded in real time.'
-  },
-  {
-    title: 'Review & Approve',
-    desc: 'Managers handle exceptions and approvals within the app.'
-  },
-  {
-    title: 'Close Day',
-    desc: 'Clock-out completes hours and comp-off calculations.'
-  }
-]
 
 type SidebarItem = {
   id: SidebarId
@@ -756,11 +544,6 @@ function isDateWithinRange(
   return targetDate >= startDate.slice(0, 10) && targetDate <= endDate.slice(0, 10)
 }
 
-function normalizePath(pathname: string) {
-  const trimmed = pathname.replace(/\/+$/, '')
-  return trimmed || '/'
-}
-
 function buildWeeklyAttendanceTrend(rows: AttendanceRow[], endDateValue: string) {
   const endDate = new Date(`${endDateValue}T00:00:00`)
   if (Number.isNaN(endDate.getTime())) {
@@ -853,82 +636,6 @@ function buildAttendanceEfficiencyScores(
     })
 }
 
-function PrivacyPolicyPage() {
-  return (
-    <div className="policy-page">
-      <header className="policy-hero">
-        <div className="policy-hero-inner">
-          <a className="policy-back" href="/">
-            Back to home
-          </a>
-          <p className="eyebrow">Privacy Policy</p>
-          <h1>Privacy Policy for Fawnix</h1>
-          <p className="policy-lead">
-            Effective date: April 5, 2026. This policy explains how Fawnix collects, uses,
-            shares, retains, and protects personal information, including location data used
-            for attendance and field operations.
-          </p>
-        </div>
-      </header>
-
-      <main className="policy-content">
-        <section className="policy-card">
-          <h2>Summary</h2>
-          <p>
-            Fawnix is a workforce operations platform used for attendance, activity tracking,
-            field visits, approvals, reporting, and account management. Because these features
-            rely on verified work-location events, the app collects location data when required
-            for attendance and field workflows.
-          </p>
-        </section>
-
-        {privacySections.map((section) => (
-          <section key={section.title} className="policy-card">
-            <h2>{section.title}</h2>
-            {section.body.map((paragraph) => (
-              <p key={paragraph}>{paragraph}</p>
-            ))}
-            {section.bullets.length ? (
-              <ul className="policy-list">
-                {section.bullets.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            ) : null}
-          </section>
-        ))}
-
-        <section className="policy-card">
-          <h2>Children</h2>
-          <p>
-            Fawnix is intended for workforce and business use and is not directed to children.
-          </p>
-        </section>
-
-        <section className="policy-card">
-          <h2>Policy Updates</h2>
-          <p>
-            We may update this Privacy Policy from time to time. Material updates will be
-            reflected on this page with a revised effective date.
-          </p>
-        </section>
-      </main>
-
-      <footer className="footer">
-        <div>
-          <strong>Fawnix</strong>
-          <p>Modern workforce operations for distributed teams.</p>
-        </div>
-        <div className="footer-links">
-          <a href="/privacy-policy">Privacy</a>
-          <a href="/">Home</a>
-          <a href="/#delete">Delete account</a>
-        </div>
-      </footer>
-    </div>
-  )
-}
-
 type LoginSceneMode = 'dawn' | 'day' | 'dusk' | 'night'
 
 function getLoginSceneMode(value: Date): LoginSceneMode {
@@ -952,6 +659,8 @@ function getLoginSceneMode(value: Date): LoginSceneMode {
 function formatCoordinate(value: number, positive: string, negative: string) {
   return `${Math.abs(value).toFixed(2)}°${value >= 0 ? positive : negative}`
 }
+
+void formatCoordinate
 
 function formatTimeZoneLabel(timeZone: string) {
   if (!timeZone) {
@@ -1064,27 +773,20 @@ function SidebarIcon({ name }: { name: 'home' | 'users' | 'pulse' | 'alert' | 'c
 }
 
 function FawnixApp() {
+  const navigate = useNavigate()
   const [empCode, setEmpCode] = useState('')
   const [otp, setOtp] = useState('')
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(false)
-
-  const [showDashboard, setShowDashboard] = useState(false)
+  const [showDashboard, setShowDashboard] = useState(true)
   const [activePanel, setActivePanel] = useState<SidebarId>('dashboard')
-  const [showAdminLogin, setShowAdminLogin] = useState(false)
+  const [showAdminLogin, setShowAdminLogin] = useState(true)
   const [authLoading, setAuthLoading] = useState(false)
   const [authStatus, setAuthStatus] = useState('')
   const [adminEmpCode, setAdminEmpCode] = useState('')
   const [adminOtp, setAdminOtp] = useState('')
-  const [loginSceneTime, setLoginSceneTime] = useState(() => new Date())
-  const [loginLocationDetails, setLoginLocationDetails] = useState('Waiting for device location')
-  const [accessToken, setAccessToken] = useState('')
-  const [refreshToken, setRefreshToken] = useState('')
-  const [profile, setProfile] = useState<AdminProfile | null>(null)
   const [dashboardLoading, setDashboardLoading] = useState(false)
   const [dashboardError, setDashboardError] = useState('')
-  const [refreshNotice, setRefreshNotice] = useState('')
-  const refreshPromiseRef = useRef<Promise<string> | null>(null)
 
   const [employees, setEmployees] = useState<EmployeeRow[]>([])
   const [editingEmployee, setEditingEmployee] = useState<EmployeeRow | null>(null)
@@ -1182,25 +884,47 @@ function FawnixApp() {
     role: 'employee'
   })
   const attendancePageSize = 1000
-  const currentPath = normalizePath(window.location.pathname)
-  const isPrivacyPage = currentPath === '/privacy-policy' || currentPath === '/privacy'
-
-  if (isPrivacyPage) {
-    return <PrivacyPolicyPage />
+  const clearAdminData = () => {
+    setEmployees([])
+    setAttendanceRows([])
+    setAttendanceExceptions([])
+    setAttendanceExceptionSummary({ lateArrivals: 0, earlyLeaves: 0 })
+    setAttendanceView('attendance')
+    setLeaveRows([])
+    setLeaveFilters({ ...EMPTY_LEAVE_FILTERS })
+    setLeaveFilterStatus('')
+    setActivityRows([])
+    setFieldVisitRows([])
+    setMissedLoginEmpCodes([])
+    setAlertEligibleEmpCodes([])
+    setAlertSentEmpCodes([])
+    setAlertSendCounts({})
+    setSelectedMissedLoginEmpCodes([])
   }
+  const {
+    accessToken,
+    hasStoredSession,
+    refreshToken,
+    profile,
+    refreshNotice,
+    persistSession,
+    clearSession,
+    refreshAccessToken,
+    apiRequest
+  } = useAdminSession({
+    onSessionCleared: clearAdminData,
+    onSessionExpired: (message) => {
+      setShowAdminLogin(true)
+      setAuthStatus(message)
+    }
+  })
+  const { loginSceneTime, loginLocationDetails } = useAdminLoginExperience(showAdminLogin)
 
   useEffect(() => {
-    const storedSession = readStoredAdminSession()
-    if (storedSession.accessToken) {
-      setAccessToken(storedSession.accessToken)
+    if (hasStoredSession) {
+      setShowAdminLogin(false)
     }
-    if (storedSession.refreshToken) {
-      setRefreshToken(storedSession.refreshToken)
-    }
-    if (storedSession.profile) {
-      setProfile(storedSession.profile)
-    }
-  }, [])
+  }, [hasStoredSession])
 
   useEffect(() => {
     setCalendarMonthView(parseDateInputValue(attendanceDateFilter || toDateInputValue(new Date())))
@@ -1211,18 +935,7 @@ function FawnixApp() {
   })
 
   useEffect(() => {
-    if (!showDashboard || !showAdminLogin) {
-      return
-    }
-
-    setLoginSceneTime(new Date())
-    const intervalId = window.setInterval(() => setLoginSceneTime(new Date()), 60000)
-
-    return () => window.clearInterval(intervalId)
-  }, [showDashboard, showAdminLogin])
-
-  useEffect(() => {
-    if (!showDashboard || showAdminLogin) {
+    if (showAdminLogin) {
       return undefined
     }
 
@@ -1236,59 +949,18 @@ function FawnixApp() {
     }, 60000)
 
     return () => window.clearInterval(intervalId)
-  }, [showDashboard, showAdminLogin, fieldVisitRows])
+  }, [showAdminLogin, fieldVisitRows])
 
   useEffect(() => {
-    if (!showDashboard || !showAdminLogin) {
-      return
-    }
-
-    if (!('geolocation' in navigator)) {
-      setLoginLocationDetails('Location unavailable in this browser')
-      return
-    }
-
-    let cancelled = false
-    setLoginLocationDetails('Locating device')
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        if (cancelled) {
-          return
-        }
-
-        const { latitude, longitude } = position.coords
-        setLoginLocationDetails(
-          `${formatCoordinate(latitude, 'N', 'S')} / ${formatCoordinate(longitude, 'E', 'W')}`
-        )
-      },
-      () => {
-        if (!cancelled) {
-          setLoginLocationDetails('Location access is off')
-        }
-      },
-      {
-        enableHighAccuracy: false,
-        timeout: 8000,
-        maximumAge: 300000
-      }
-    )
-
-    return () => {
-      cancelled = true
-    }
-  }, [showDashboard, showAdminLogin])
-
-  useEffect(() => {
-    if (!accessToken || !showDashboard || showAdminLogin) {
+    if (!accessToken || showAdminLogin) {
       return
     }
 
     void loadDashboard(accessToken)
-  }, [accessToken, showDashboard, showAdminLogin])
+  }, [accessToken, showAdminLogin])
 
   useEffect(() => {
-    if (!accessToken || !showDashboard || showAdminLogin || activePanel !== 'attendance') {
+    if (!accessToken || showAdminLogin || activePanel !== 'attendance') {
       return
     }
 
@@ -1351,7 +1023,7 @@ function FawnixApp() {
     return () => {
       cancelled = true
     }
-  }, [accessToken, showDashboard, showAdminLogin, activePanel, attendanceDateFilter])
+  }, [accessToken, showAdminLogin, activePanel, attendanceDateFilter])
 
   useEffect(() => {
     setAlertTriggerStatus('')
@@ -1365,100 +1037,6 @@ function FawnixApp() {
       previousCodes.filter((empCode) => missedLoginEmpCodes.includes(empCode))
     )
   }, [missedLoginEmpCodes])
-
-  const updateTokens = (nextAccessToken: string, nextRefreshToken: string) => {
-    setAccessToken(nextAccessToken)
-    setRefreshToken(nextRefreshToken)
-    persistAdminTokens(nextAccessToken, nextRefreshToken)
-  }
-
-  const refreshAccessToken = async () => {
-    if (!refreshToken) {
-      throw new Error('Refresh token missing')
-    }
-
-    if (!refreshPromiseRef.current) {
-      refreshPromiseRef.current = (async () => {
-        const response = await fetch('/api/auth/refresh', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh_token: refreshToken })
-        })
-
-        const data = await response.json().catch(() => ({}))
-
-        if (!response.ok) {
-          throw new Error(data?.message || 'Unable to refresh session')
-        }
-
-        const nextAccessToken = data?.access_token || ''
-        const nextRefreshToken = data?.refresh_token || ''
-
-        if (!nextAccessToken || !nextRefreshToken) {
-          throw new Error('Invalid refresh response')
-        }
-
-        updateTokens(nextAccessToken, nextRefreshToken)
-        setRefreshNotice('Session refreshed')
-        window.setTimeout(() => setRefreshNotice(''), 2500)
-        return nextAccessToken
-      })()
-        .finally(() => {
-          refreshPromiseRef.current = null
-        })
-    }
-
-    return refreshPromiseRef.current
-  }
-
-  const apiRequest = async (
-    path: string,
-    options: RequestInit = {},
-    tokenOverride?: string,
-    allowRetry = true
-  ) => {
-    const token = tokenOverride || accessToken
-    const headers = new Headers(options.headers || {})
-
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`)
-    }
-
-    if (!headers.has('Content-Type') && options.body) {
-      headers.set('Content-Type', 'application/json')
-    }
-
-    const response = await fetch(path, {
-      ...options,
-      headers
-    })
-
-    const data = await response.json().catch(() => ({}))
-
-    if (!response.ok) {
-      const message = data?.message || 'Request failed'
-      const shouldRefresh =
-        allowRetry &&
-        (response.status === 401 || message.toLowerCase().includes('token') || message.toLowerCase().includes('expired'))
-
-      if (shouldRefresh) {
-        try {
-          const nextAccessToken = await refreshAccessToken()
-          return apiRequest(path, options, nextAccessToken, false)
-        } catch (refreshError) {
-          clearSession()
-          setShowAdminLogin(true)
-          setShowDashboard(true)
-          setAuthStatus('Session expired. Please log in again.')
-          throw refreshError
-        }
-      }
-
-      throw new Error(message)
-    }
-
-    return data
-  }
 
   const resolveDownloadFilename = (response: Response, fallbackFilename: string) => {
     const disposition = response.headers.get('Content-Disposition') || ''
@@ -1641,36 +1219,6 @@ function FawnixApp() {
     }
   }
 
-  const persistSession = (nextAccessToken: string, nextRefreshToken: string, nextProfile: AdminProfile) => {
-    setAccessToken(nextAccessToken)
-    setRefreshToken(nextRefreshToken)
-    setProfile(nextProfile)
-    persistAdminTokens(nextAccessToken, nextRefreshToken)
-    persistAdminProfile(nextProfile)
-  }
-
-  const clearSession = () => {
-    setAccessToken('')
-    setRefreshToken('')
-    setProfile(null)
-    setEmployees([])
-    setAttendanceRows([])
-    setAttendanceExceptions([])
-    setAttendanceExceptionSummary({ lateArrivals: 0, earlyLeaves: 0 })
-    setAttendanceView('attendance')
-    setLeaveRows([])
-    setLeaveFilters({ ...EMPTY_LEAVE_FILTERS })
-    setLeaveFilterStatus('')
-    setActivityRows([])
-    setFieldVisitRows([])
-    setMissedLoginEmpCodes([])
-    setAlertEligibleEmpCodes([])
-    setAlertSentEmpCodes([])
-    setAlertSendCounts({})
-    setSelectedMissedLoginEmpCodes([])
-    clearStoredAdminSession()
-  }
-
   const loadDashboard = async (token: string) => {
     setDashboardLoading(true)
     setDashboardError('')
@@ -1828,7 +1376,6 @@ function FawnixApp() {
       if (message.toLowerCase().includes('expired') || message.toLowerCase().includes('token')) {
         clearSession()
         setShowAdminLogin(true)
-        setShowDashboard(true)
       }
     } finally {
       setDashboardLoading(false)
@@ -1840,20 +1387,22 @@ function FawnixApp() {
       setStatus('Enter your Employee ID to request OTP.')
       return
     }
+
     setLoading(true)
     setStatus('Requesting OTP...')
+
     try {
-      const res = await fetch('/api/auth/request-otp', {
+      const response = await fetch('/api/auth/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ emp_code: empCode.trim() })
       })
-      const data = await res.json()
-      if (!res.ok) {
-        setStatus(data?.message || 'Failed to request OTP.')
-      } else {
-        setStatus('OTP sent. Please check your device and enter it below.')
-      }
+      const data = await response.json().catch(() => ({}))
+      setStatus(
+        response.ok
+          ? 'OTP sent. Please check your device and enter it below.'
+          : data?.message || 'Failed to request OTP.'
+      )
     } catch {
       setStatus('Unable to reach server. Please try again later.')
     } finally {
@@ -1866,20 +1415,22 @@ function FawnixApp() {
       setStatus('Employee ID and OTP are required.')
       return
     }
+
     setLoading(true)
     setStatus('Submitting delete request...')
+
     try {
-      const res = await fetch('/api/auth/account/delete', {
+      const response = await fetch('/api/auth/account/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ emp_code: empCode.trim(), otp: otp.trim() })
       })
-      const data = await res.json()
-      if (!res.ok) {
-        setStatus(data?.message || 'Delete request failed.')
-      } else {
-        setStatus('Account deletion submitted successfully.')
-      }
+      const data = await response.json().catch(() => ({}))
+      setStatus(
+        response.ok
+          ? 'Account deletion submitted successfully.'
+          : data?.message || 'Delete request failed.'
+      )
     } catch {
       setStatus('Unable to reach server. Please try again later.')
     } finally {
@@ -1949,7 +1500,6 @@ function FawnixApp() {
 
       persistSession(nextAccessToken, nextRefreshToken, nextProfile as AdminProfile)
       setShowAdminLogin(false)
-      setShowDashboard(true)
       setAuthStatus('Admin login successful.')
       setAdminOtp('')
       await loadDashboard(nextAccessToken)
@@ -1973,21 +1523,15 @@ function FawnixApp() {
       // Ignore logout failures and clear local session anyway.
     } finally {
       clearSession()
-      setShowDashboard(false)
-      setShowAdminLogin(false)
+      setShowAdminLogin(true)
       setAuthStatus('')
     }
   }
 
   const openAdminDashboard = () => {
     setShowDashboard(true)
-    if (!accessToken) {
-      setShowAdminLogin(true)
-      setAuthStatus('')
-      return
-    }
-
-    setShowAdminLogin(false)
+    setShowAdminLogin(!accessToken)
+    setAuthStatus('')
   }
 
   const openFieldVisitPanel = async (row: FieldVisitRow) => {
@@ -2921,446 +2465,60 @@ function FawnixApp() {
     }
 
     if (activePanel === 'dashboard') {
-      const activeEmployees = employees.filter((e) => e.is_active !== false).length
-      const presentToday = firstClockInRows.length
-      const onLeaveToday = selectedDateLeaves.length
-      const fieldVisitsToday = fieldVisitRows.filter((r) => {
-        const d = r.visitDate || r.visitStartTime || ''
-        return d.startsWith(attendanceDateFilter)
-      }).length
-      const deptMap: Record<string, number> = {}
-      employees.forEach((e) => {
-        const dept = (e.emp_department || 'Unassigned').trim()
-        deptMap[dept] = (deptMap[dept] || 0) + 1
-      })
-      const deptEntries = Object.entries(deptMap).sort((a, b) => b[1] - a[1]).slice(0, 5)
-      const maxDept = Math.max(...deptEntries.map((d) => d[1]), 1)
       return (
-        <>
-          <div className="dashboard-section-head">
-            <div>
-              <p className="eyebrow">Overview</p>
-              <h2>Dashboard</h2>
-            </div>
-            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-              Refresh
-            </button>
-          </div>
-          <div className="kpi-row">
-            <div className="kpi-card">
-              <div className="kpi-icon kpi-blue">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </div>
-              <div className="kpi-body">
-                <span className="kpi-label">Total Employees</span>
-                <strong className="kpi-value">{employees.length}</strong>
-                <span className="kpi-sub">{activeEmployees} active</span>
-              </div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-icon kpi-green">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><polyline points="22 4 12 14.01 9 11.01" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </div>
-              <div className="kpi-body">
-                <span className="kpi-label">Present Today</span>
-                <strong className="kpi-value">{presentToday}</strong>
-                <span className="kpi-sub">{employees.length ? Math.round((presentToday / employees.length) * 100) : 0}% attendance</span>
-              </div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-icon kpi-orange">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" fill="none" stroke="currentColor" strokeWidth="1.8"/><line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" strokeWidth="1.8"/></svg>
-              </div>
-              <div className="kpi-body">
-                <span className="kpi-label">On Leave</span>
-                <strong className="kpi-value">{onLeaveToday}</strong>
-                <span className="kpi-sub">Approved leaves</span>
-              </div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-icon kpi-purple">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" fill="none" stroke="currentColor" strokeWidth="1.8"/><circle cx="12" cy="10" r="3" fill="none" stroke="currentColor" strokeWidth="1.8"/></svg>
-              </div>
-              <div className="kpi-body">
-                <span className="kpi-label">Field Visits</span>
-                <strong className="kpi-value">{fieldVisitsToday}</strong>
-                <span className="kpi-sub">Today</span>
-              </div>
-            </div>
-          </div>
-          <div className="dashboard-charts-row">
-            <div className="chart-card">
-              <div className="chart-card-head">
-                <strong>Weekly Attendance</strong>
-                <span className="chart-card-sub">Last 7 days</span>
-              </div>
-              <div className="weekly-bar-chart">
-                {weeklyAttendanceTrend.map((item) => (
-                  <div key={item.label} className="weekly-bar-col">
-                    <div className="weekly-bar-wrap">
-                      <div
-                        className="weekly-bar-fill"
-                        style={{ height: `${maxWeeklyAttendance > 0 ? Math.round((item.count / maxWeeklyAttendance) * 100) : 0}%` }}
-                        title={`${item.count} present`}
-                      />
-                    </div>
-                    <span className="weekly-bar-label">{item.label}</span>
-                    <span className="weekly-bar-count">{item.count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="chart-card">
-              <div className="chart-card-head">
-                <strong>Departments</strong>
-                <span className="chart-card-sub">Employee distribution</span>
-              </div>
-              <div className="dept-bars">
-                {deptEntries.map(([dept, count]) => (
-                  <div key={dept} className="dept-bar-row">
-                    <span className="dept-bar-label">{dept}</span>
-                    <div className="dept-bar-track">
-                      <div
-                        className="dept-bar-fill"
-                        style={{ width: `${Math.round((count / maxDept) * 100)}%` }}
-                      />
-                    </div>
-                    <span className="dept-bar-count">{count}</span>
-                  </div>
-                ))}
-                {deptEntries.length === 0 && (
-                  <div className="empty-state" style={{ padding: '24px 0' }}>No department data</div>
-                )}
-              </div>
-            </div>
-          </div>
-        </>
+        <AdminOverviewPage
+          attendanceDateFilter={attendanceDateFilter}
+          employees={employees}
+          fieldVisitRows={fieldVisitRows}
+          firstClockInRows={firstClockInRows}
+          loadDashboard={() => loadDashboard(accessToken)}
+          selectedDateLeaves={selectedDateLeaves}
+          weeklyAttendanceTrend={weeklyAttendanceTrend}
+        />
       )
     }
 
     if (activePanel === 'employees') {
       return (
-        <>
-          <div className="dashboard-section-head">
-            <div>
-              <p className="eyebrow">Directory</p>
-              <h2>Employees List</h2>
-            </div>
-            <div className="employee-actions">
-              {canWriteAdminData ? (
-                <button className="ghost dashboard-button" onClick={openAddEmployeePanel}>
-                  Add Employee
-                </button>
-              ) : null}
-              <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-                Refresh
-              </button>
-            </div>
-          </div>
-          <div className="employee-search-card">
-            <div className="employee-search-copy">
-              <label htmlFor="employee-search">Search Employees</label>
-              <span>
-                {filteredEmployees.length} result{filteredEmployees.length === 1 ? '' : 's'} from {employees.length} employees
-              </span>
-            </div>
-            <div className="employee-search-shell">
-              <span className="employee-search-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" focusable="false">
-                  <path d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.43 4.43 1.06-1.06-4.43-4.43A6.5 6.5 0 0 0 10.5 4Zm0 1.5a5 5 0 1 1 0 10a5 5 0 0 1 0-10Z" />
-                </svg>
-              </span>
-              <input
-                id="employee-search"
-                type="text"
-                value={employeeSearch}
-                onChange={(event) => setEmployeeSearch(event.target.value)}
-                placeholder="Search by name, code, email, designation, department, or manager"
-              />
-              {employeeSearch ? (
-                <button
-                  className="employee-search-clear"
-                  type="button"
-                  onClick={() => setEmployeeSearch('')}
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
-            <div className="employee-toolbar-meta">
-              <span className="employee-filter-chip">
-                Status: {employeeStatusFilter === 'all' ? 'All' : employeeStatusFilter === 'active' ? 'Active' : 'Inactive'}
-              </span>
-            </div>
-          </div>
-          <div className="metric-row">
-            <div className="metric-card">
-              <span>Total Employees</span>
-              <strong>{employees.length}</strong>
-            </div>
-            <div className="metric-card">
-              <span>HR / Admin</span>
-              <strong>
-                {
-                  filteredEmployees.filter((employee) =>
-                    ['hr', 'cmd', 'admin'].includes((employee.emp_designation || '').toLowerCase())
-                  ).length
-                }
-              </strong>
-            </div>
-          </div>
-          <div className="table-card">
-            {filteredEmployees.length ? (
-              <div className="table-scroll">
-                <table className="dashboard-table employee-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Designation</th>
-                      <th>Grade</th>
-                      <th>Department</th>
-                      <th>Contact</th>
-                      <th>Manager</th>
-                      <th className="employee-status-head">
-                        <div className="employee-status-filter" ref={employeeStatusMenuRef}>
-                          <span>Status</span>
-                          <button
-                            className={`employee-status-filter-trigger ${employeeStatusMenuOpen ? 'open' : ''}`}
-                            type="button"
-                            aria-haspopup="menu"
-                            aria-expanded={employeeStatusMenuOpen}
-                            onClick={() => setEmployeeStatusMenuOpen((current) => !current)}
-                          >
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                              <path
-                                d="M4 6h16M7 12h10m-7 6h4"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </button>
-                          {employeeStatusMenuOpen ? (
-                            <div className="employee-status-menu" role="menu">
-                              {[
-                                { id: 'all', label: 'All employees' },
-                                { id: 'active', label: 'Active only' },
-                                { id: 'inactive', label: 'Inactive only' }
-                              ].map((option) => (
-                                <button
-                                  key={option.id}
-                                  className={`employee-status-menu-item ${employeeStatusFilter === option.id ? 'active' : ''}`}
-                                  type="button"
-                                  onClick={() => {
-                                    setEmployeeStatusFilter(option.id as 'all' | 'active' | 'inactive')
-                                    setEmployeeStatusMenuOpen(false)
-                                  }}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      </th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredEmployees.map((employee) => (
-                      <tr key={employee.emp_code} className="employee-row">
-                        <td>
-                          <strong>{employee.emp_full_name || employee.emp_code}</strong>
-                          <span className="table-meta">{employee.emp_code}</span>
-                        </td>
-                        <td>{employee.emp_designation || employee.role || '--'}</td>
-                        <td>{formatEmployeeGrade(employee.emp_grade)}</td>
-                        <td>{employee.emp_department || '--'}</td>
-                        <td>
-                          <strong className="employee-email">{employee.emp_email || '--'}</strong>
-                          <span className="table-meta">{employee.emp_contact || 'Contact unavailable'}</span>
-                        </td>
-                        <td>
-                          <strong>{employee.manager_name || employee.emp_manager || '--'}</strong>
-                          <span className="table-meta">{employee.manager_email || employee.manager_code || 'Manager'}</span>
-                        </td>
-                        <td>
-                          <span className={`table-pill ${employee.is_active ? 'active' : 'inactive'}`}>
-                            {employee.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td>
-                           {canWriteAdminData ? (
-                             <div className="table-actions">
-                               <button className="action-btn icon-btn edit-btn" onClick={() => handleEditEmployee(employee)} title="Edit employee" type="button">
-                                 <svg viewBox="0 0 24 24" aria-hidden="true">
-                                   <path
-                                     d="M4 20h4l10.5-10.5a2.12 2.12 0 1 0-3-3L5 17v3Z"
-                                     fill="none"
-                                     stroke="currentColor"
-                                     strokeWidth="1.8"
-                                     strokeLinecap="round"
-                                     strokeLinejoin="round"
-                                   />
-                                 </svg>
-                               </button>
-                               <button className="action-btn icon-btn delete-btn" onClick={() => requestDeleteEmployee(employee)} title="Delete employee" type="button">
-                                 <svg viewBox="0 0 24 24" aria-hidden="true">
-                                   <path
-                                     d="M5 7h14M9 7V5h6v2m-7 0 1 12h6l1-12M10 11v5m4-5v5"
-                                     fill="none"
-                                     stroke="currentColor"
-                                     strokeWidth="1.8"
-                                     strokeLinecap="round"
-                                     strokeLinejoin="round"
-                                   />
-                                 </svg>
-                               </button>
-                             </div>
-                           ) : (
-                             <span className="table-meta">Read only</span>
-                           )}
-                         </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="empty-state">No employees match this search.</div>
-            )}
-          </div>
-        </>
+        <AdminEmployeesPage
+          canWriteAdminData={canWriteAdminData}
+          employeeSearch={employeeSearch}
+          employeeStatusFilter={employeeStatusFilter}
+          employeeStatusMenuOpen={employeeStatusMenuOpen}
+          employeeStatusMenuRef={employeeStatusMenuRef}
+          employees={employees}
+          filteredEmployees={filteredEmployees}
+          formatEmployeeGrade={formatEmployeeGrade}
+          handleEditEmployee={handleEditEmployee}
+          loadDashboard={() => loadDashboard(accessToken)}
+          openAddEmployeePanel={openAddEmployeePanel}
+          requestDeleteEmployee={requestDeleteEmployee}
+          setEmployeeSearch={setEmployeeSearch}
+          setEmployeeStatusFilter={setEmployeeStatusFilter}
+          setEmployeeStatusMenuOpen={setEmployeeStatusMenuOpen}
+        />
       )
     }
 
     if (activePanel === 'exceptions') {
       return (
-        <>
-          <div className="dashboard-section-head attendance-section-head">
-            <div>
-              <p className="eyebrow">Escalations</p>
-              <h2>Exceptions</h2>
-              <p className="exception-head-copy">
-                Late arrivals and early leaves for the selected date, shown as full-width review cards.
-              </p>
-            </div>
-            <div className="attendance-head-actions">
-              <div className="attendance-controls attendance-controls-inline">
-                <AttendanceDatePicker value={attendanceDateFilter} onChange={setAttendanceDateFilter} />
-                <div className="attendance-filter attendance-filter-search">
-                  <label htmlFor="exception-search">Search</label>
-                  <div className="attendance-input-shell attendance-search-shell">
-                    <input
-                      id="exception-search"
-                      type="text"
-                      value={exceptionSearch}
-                      onChange={(event) => setExceptionSearch(event.target.value)}
-                      placeholder="Search employee, code, type, reason, or status"
-                    />
-                  </div>
-                </div>
-                <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-                  Refresh
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="metric-row">
-            <div className="metric-card">
-              <span>Late Arrivals</span>
-              <strong>{selectedDateLateArrivals.length}</strong>
-            </div>
-            <div className="metric-card">
-              <span>Early Leaves</span>
-              <strong>{selectedDateEarlyLeaves.length}</strong>
-            </div>
-            <div className="metric-card">
-              <span>Total Exceptions</span>
-              <strong>{selectedDateExceptions.length}</strong>
-              <small>{formatDate(attendanceDateFilter)}</small>
-            </div>
-          </div>
-
-          <div className="exception-card-list">
-            {filteredExceptionRows.length ? (
-              filteredExceptionRows.map((row, index) => {
-                const isLateArrival = row.exceptionKind === 'late_arrival'
-                const primaryTime = isLateArrival
-                  ? row.exception_time || row.actual_login_time || '--'
-                  : row.planned_leave_time || row.actual_logout_time || '--'
-                const minuteValue = isLateArrival ? row.late_by_minutes : row.early_by_minutes
-                const statusLabel = isLateArrival
-                  ? (row.status || '').toLowerCase() === 'not_informed'
-                    ? 'Not informed'
-                    : 'Informed'
-                  : row.status || 'Pending'
-
-                return (
-                  <article
-                    key={`${row.exceptionKind}-${row.id || row.emp_code || index}`}
-                    className={`exception-card ${isLateArrival ? 'late' : 'early'}`}
-                  >
-                    <div className="exception-card-top">
-                      <div>
-                        <p className="exception-card-kicker">{isLateArrival ? 'Late Arrival' : 'Early Leave'}</p>
-                        <h3>{row.emp_name || row.emp_code || 'Unknown employee'}</h3>
-                        <span className="table-meta">{row.emp_code || 'Employee code unavailable'}</span>
-                      </div>
-                      <div className="exception-card-pills">
-                        <span className={`table-pill ${isLateArrival ? 'inactive' : 'accent'}`}>
-                          {isLateArrival ? 'Late arrival' : 'Early leave'}
-                        </span>
-                        <span className={`table-pill ${isLateArrival ? ((row.status || '').toLowerCase() === 'not_informed' ? 'inactive' : 'accent') : 'active'}`}>
-                          {statusLabel}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="exception-card-grid">
-                      <div className="exception-card-stat">
-                        <span>{isLateArrival ? 'Late By' : 'Early By'}</span>
-                        <strong>{minuteValue !== undefined && minuteValue !== null ? `${minuteValue} min` : '--'}</strong>
-                      </div>
-                      <div className="exception-card-stat">
-                        <span>{isLateArrival ? 'Login Time' : 'Leave Time'}</span>
-                        <strong>{primaryTime}</strong>
-                      </div>
-                      <div className="exception-card-stat">
-                        <span>Requested</span>
-                        <strong>{formatDateTime(row.requested_at || row.exception_date)}</strong>
-                      </div>
-                    </div>
-
-                    <div className="exception-card-reason">
-                      <span>Reason</span>
-                      <p>{row.reason || 'No reason provided.'}</p>
-                    </div>
-                  </article>
-                )
-              })
-            ) : (
-              <div className="empty-state">
-                {exceptionSearch.trim()
-                  ? 'No exceptions match this search.'
-                  : 'No late arrival or early leave exceptions found for the selected date.'}
-              </div>
-            )}
-          </div>
-        </>
+        <AdminExceptionsPage
+          attendanceDateFilter={attendanceDateFilter}
+          exceptionSearch={exceptionSearch}
+          filteredExceptionRows={filteredExceptionRows}
+          formatDate={formatDate}
+          formatDateTime={formatDateTime}
+          loadDashboard={() => loadDashboard(accessToken)}
+          selectedDateEarlyLeaves={selectedDateEarlyLeaves}
+          selectedDateExceptions={selectedDateExceptions}
+          selectedDateLateArrivals={selectedDateLateArrivals}
+          setAttendanceDateFilter={setAttendanceDateFilter}
+          setExceptionSearch={setExceptionSearch}
+        />
       )
     }
 
     if (activePanel === 'attendance') {
-      const attendanceTabCount = attendancePageRows.length
-
-      const lateArrivalCount = selectedDateLateArrivals.length
-      const earlyLeaveCount = selectedDateEarlyLeaves.length
-      const leaveCount = selectedDateLeaves.length
-      const missedLoginCount = missedLoginEmpCodes.length
       const exceptionRows =
         attendanceView === 'late-arrivals'
           ? selectedDateLateArrivals
@@ -3369,989 +2527,135 @@ function FawnixApp() {
             : []
 
       return (
-        <>
-          <div className="dashboard-section-head attendance-section-head">
-            <div>
-              <p className="eyebrow">Operations</p>
-              <h2>Todays Activity</h2>
-              <div className="attendance-tabs">
-                <button
-                  className={`attendance-tab ${attendanceView === 'attendance' ? 'active' : ''}`}
-                  type="button"
-                  onClick={() => setAttendanceView('attendance')}
-                >
-                  First Clock-Ins
-                  <span>{attendanceTabCount}</span>
-                </button>
-                <button
-                  className={`attendance-tab ${attendanceView === 'late-arrivals' ? 'active' : ''}`}
-                  type="button"
-                  onClick={() => setAttendanceView('late-arrivals')}
-                >
-                  Late Arrivals
-                  <span>{lateArrivalCount}</span>
-                </button>
-                <button
-                  className={`attendance-tab ${attendanceView === 'early-leaves' ? 'active' : ''}`}
-                  type="button"
-                  onClick={() => setAttendanceView('early-leaves')}
-                >
-                  Early Leaves
-                  <span>{earlyLeaveCount}</span>
-                </button>
-                <button
-                  className={`attendance-tab ${attendanceView === 'leaves' ? 'active' : ''}`}
-                  type="button"
-                  onClick={() => setAttendanceView('leaves')}
-                >
-                  Leaves
-                  <span>{leaveCount}</span>
-                </button>
-                <button
-                  className={`attendance-tab ${attendanceView === 'missed-logins' ? 'active' : ''}`}
-                  type="button"
-                  onClick={() => setAttendanceView('missed-logins')}
-                >
-                  Missed Logins
-                  <span>{missedLoginCount}</span>
-                </button>
-              </div>
-            </div>
-            {attendanceView === 'attendance' ? (
-              <div className="attendance-head-actions">
-                <div className="attendance-controls attendance-controls-inline">
-                  <AttendanceDatePicker value={attendanceDateFilter} onChange={setAttendanceDateFilter} />
-                  <div className="attendance-filter attendance-filter-search">
-                    <label htmlFor="attendance-search">Search</label>
-                    <div className="attendance-input-shell attendance-search-shell">
-                      <input
-                        id="attendance-search"
-                        type="text"
-                        value={attendanceSearch}
-                        onChange={(event) => setAttendanceSearch(event.target.value)}
-                        placeholder="Search name, email, type, or location"
-                      />
-                    </div>
-                  </div>
-                  <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-                    Refresh
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-                Refresh
-              </button>
-            )}
-          </div>
-          {attendanceView === 'attendance' ? (
-          <div className="table-card">
-            {filteredAttendanceRows.length ? (
-              <div className="table-scroll">
-                <table className="dashboard-table attendance-table">
-                  <thead>
-                    <tr>
-                      <th>Employee</th>
-                      <th>Clock In</th>
-                      <th>Clock Out</th>
-                      <th>Working Hours</th>
-                      <th>Type</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredAttendanceRows.map((row, index) => (
-                      <tr key={`${row.id || row.employee_email || index}`}>
-                        <td>
-                          <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
-                          <span className="table-meta">{row.emp_designation || row.employee_email || '--'}</span>
-                        </td>
-                        <td>
-                          <strong>{formatDateTime(row.login_time)}</strong>
-                          <span className="table-meta">{row.login_location || 'Login location unavailable'}</span>
-                          <span className="table-meta">{row.login_address || 'Login address unavailable'}</span>
-                        </td>
-                        <td>
-                          <strong>{formatDateTime(row.logout_time)}</strong>
-                          <span className="table-meta">{row.logout_location || 'Logout location unavailable'}</span>
-                          <span className="table-meta">{row.logout_address || 'Logout address unavailable'}</span>
-                        </td>
-                        <td>{formatWorkingHours(row.working_hours)}</td>
-                        <td>{row.attendance_type || 'office'}</td>
-                        <td>
-                          <span className="table-pill accent">{row.status || 'Unknown'}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="empty-state">
-                {attendanceSearch.trim()
-                  ? 'No attendance records match this search.'
-                  : 'No first clock-in records found for the selected date.'}
-              </div>
-            )}
-          </div>
-          ) : attendanceView === 'leaves' ? (
-            <div className="table-card">
-              {selectedDateLeaves.length ? (
-                <div className="table-scroll">
-                  <table className="dashboard-table leave-table">
-                    <thead>
-                      <tr>
-                        <th>Employee</th>
-                        <th>Leave Type</th>
-                        <th>Dates</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedDateLeaves.map((row, index) => (
-                        <tr key={`${row.id || row.emp_code || index}`}>
-                          <td>
-                            <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
-                            <span className="table-meta">{row.emp_designation || formatLeaveTypeLabel(row) || 'Leave Request'}</span>
-                          </td>
-                          <td>{formatLeaveTypeLabel(row)}</td>
-                          <td>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</td>
-                          <td>
-                            <span className="table-pill">{row.status || 'Unknown'}</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="empty-state">No leaves found for the selected date.</div>
-              )}
-            </div>
-          ) : attendanceView === 'missed-logins' ? (
-            <div className="alert-side-card">
-              <div className="chart-card-head">
-                <div>
-                  <strong>Missed Logins</strong>
-                  <span>Employees who have not logged in and are not on leave for {selectedAttendanceDate}.</span>
-                </div>
-              </div>
-              <div className="alert-side-count">
-                <strong>{missedLoginEmployees.length}</strong>
-                <span>{alertCandidatesLoading ? 'Refreshing alerts...' : 'Need attention'}</span>
-              </div>
-              <div className="missed-logins-toolbar">
-                <button
-                  className="ghost dashboard-button"
-                  type="button"
-                  onClick={() => {
-                    setSelectedMissedLoginEmpCodes(actionableMissedLoginEmployeeCodes)
-                    setAlertTriggerStatus('')
-                  }}
-                  disabled={!actionableMissedLoginEmployeeCodes.length || allMissedLoginsSelected}
-                >
-                  Select All
-                </button>
-                <button
-                  className="ghost dashboard-button"
-                  type="button"
-                  onClick={() => {
-                    setSelectedMissedLoginEmpCodes([])
-                    setAlertTriggerStatus('')
-                  }}
-                  disabled={!selectedMissedLoginEmpCodes.length}
-                >
-                  Clear
-                </button>
-              </div>
-              <div className="missed-logins-actions">
-                <span className="missed-logins-selected">
-                  Selected: {selectedMissedLoginCount}
-                </span>
-                <div className={`alert-trigger-wrap${showAlertComposer ? ' open' : ''}`}>
-                  <button
-                    className="cta dashboard-button alert-trigger-button"
-                    type="button"
-                    onClick={() => {
-                      setShowAlertComposer((current) => !current)
-                      setAlertTriggerStatus('')
-                    }}
-                    disabled={alertCandidatesLoading || !selectedMissedLoginCount}
-                  >
-                    {alertTriggerLoading ? 'Triggering...' : 'Trigger Alert'}
-                  </button>
-                  <div className={`alert-trigger-dropdown${showAlertComposer ? ' open' : ''}`}>
-                    <div className="alert-trigger-dropdown-head">
-                      <strong>Reminder options</strong>
-                      <span>{selectedMissedLoginCount} employee{selectedMissedLoginCount === 1 ? '' : 's'} selected for {reminderTargetDate}</span>
-                    </div>
-                    <div className="alert-trigger-message">
-                      <small>Message sending</small>
-                      <strong>{reminderPreviewTitle}</strong>
-                      <p>{reminderPreviewBody}</p>
-                    </div>
-                    <div className="alert-trigger-recipient-list">
-                      {selectedMissedLoginEmpCodes
-                        .map((empCode) => missedLoginEmployees.find((employee) => employee.emp_code === empCode))
-                        .filter((employee): employee is EmployeeRow => Boolean(employee))
-                        .slice(0, 4)
-                        .map((employee) => (
-                          <span key={employee.emp_code} className="alert-trigger-recipient-pill">
-                            {employee.emp_full_name || employee.emp_code}
-                          </span>
-                        ))}
-                      {selectedMissedLoginCount > 4 ? (
-                        <span className="alert-trigger-recipient-pill">+{selectedMissedLoginCount - 4} more</span>
-                      ) : null}
-                    </div>
-                    <div className="alert-trigger-dropdown-actions">
-                      <button
-                        className="ghost dashboard-button"
-                        type="button"
-                        onClick={() => setShowAlertComposer(false)}
-                        disabled={alertTriggerLoading}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className="cta dashboard-button"
-                        type="button"
-                        onClick={() => void triggerAttendanceReminder()}
-                        disabled={alertTriggerLoading || !selectedMissedLoginCount}
-                      >
-                        {alertTriggerLoading ? 'Sending...' : 'Send Reminder'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="alert-side-list">
-                {missedLoginEmployees.length ? (
-                  missedLoginEmployees.map((employee) => {
-                    const isAlertSent = alertSentEmpCodes.includes(employee.emp_code)
-                    const alertSendCount = Number(alertSendCounts[employee.emp_code] || 0)
-                    return (
-                      <label
-                        key={employee.emp_code}
-                        className={`alert-side-item missed-login-item${isAlertSent ? ' sent' : ''}`}
-                      >
-                        <input
-                          className="missed-login-checkbox"
-                          type="checkbox"
-                          checked={selectedMissedLoginEmpCodes.includes(employee.emp_code)}
-                          onChange={(event) => {
-                            const checked = event.target.checked
-                            setSelectedMissedLoginEmpCodes((previousCodes) => {
-                              if (checked) {
-                                return previousCodes.includes(employee.emp_code)
-                                  ? previousCodes
-                                  : [...previousCodes, employee.emp_code]
-                              }
-                              return previousCodes.filter((empCode) => empCode !== employee.emp_code)
-                            })
-                          }}
-                        />
-                        <div className="missed-login-item-copy">
-                          <strong>{employee.emp_full_name || employee.emp_code}</strong>
-                          <span>{employee.emp_designation || employee.emp_department || employee.emp_email || '--'}</span>
-                          <small className={isAlertSent ? 'missed-login-alert-sent' : 'missed-login-alert-not-sent'}>
-                            {isAlertSent ? `Sent ${alertSendCount} time${alertSendCount === 1 ? '' : 's'}` : 'Not Sent'}
-                          </small>
-                        </div>
-                      </label>
-                    )
-                  })
-                ) : (
-                  <div className="empty-state">No missed logins for this date.</div>
-                )}
-              </div>
-              {alertTriggerStatus ? <span className="report-status">{alertTriggerStatus}</span> : null}
-            </div>
-          ) : (
-            <div className="table-card">
-              {exceptionRows.length ? (
-                <div className="table-scroll">
-                  <table className="dashboard-table exception-table">
-                    <thead>
-                      <tr>
-                        <th>Employee</th>
-                        <th>{attendanceView === 'late-arrivals' ? 'Late By' : 'Early By'}</th>
-                        <th>{attendanceView === 'late-arrivals' ? 'Login Time' : 'Leave Time'}</th>
-                        <th>{attendanceView === 'late-arrivals' ? 'Informed' : 'Status'}</th>
-                        <th>Reason</th>
-                        <th>Requested</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {exceptionRows.map((row, index) => (
-                        <tr key={`${row.id || row.emp_code || index}`}>
-                          <td>
-                            <strong>{row.emp_name || row.emp_code || 'Unknown employee'}</strong>
-                          </td>
-                          <td>
-                            {attendanceView === 'late-arrivals'
-                              ? `${row.late_by_minutes ?? '--'} min`
-                              : `${row.early_by_minutes ?? '--'} min`}
-                          </td>
-                          <td>
-                            {attendanceView === 'late-arrivals'
-                              ? row.exception_time || row.actual_login_time || '--'
-                              : row.planned_leave_time || row.actual_logout_time || '--'}
-                          </td>
-                          <td>
-                            {attendanceView === 'late-arrivals' ? (
-                              <span className={`table-pill ${(row.status || '').toLowerCase() === 'not_informed' ? '' : 'accent'}`}>
-                                {(row.status || '').toLowerCase() === 'not_informed' ? 'Not informed' : 'Informed'}
-                              </span>
-                            ) : (
-                              <span className="table-pill">{row.status || 'Pending'}</span>
-                            )}
-                          </td>
-                          <td>{row.reason || 'No reason provided'}</td>
-                          <td>{formatDateTime(row.requested_at || row.exception_date)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="empty-state">No {attendanceView === 'late-arrivals' ? 'late arrival' : 'early leave'} requests found for the selected date.</div>
-              )}
-            </div>
-          )}
-        </>
+        <AdminAttendancePage
+          actionableMissedLoginEmployeeCodes={actionableMissedLoginEmployeeCodes}
+          alertCandidatesLoading={alertCandidatesLoading}
+          alertSentEmpCodes={alertSentEmpCodes}
+          alertSendCounts={alertSendCounts}
+          alertTriggerLoading={alertTriggerLoading}
+          alertTriggerStatus={alertTriggerStatus}
+          allMissedLoginsSelected={allMissedLoginsSelected}
+          attendanceDateFilter={attendanceDateFilter}
+          attendancePageRows={attendancePageRows}
+          attendanceSearch={attendanceSearch}
+          attendanceView={attendanceView}
+          exceptionRows={exceptionRows}
+          filteredAttendanceRows={filteredAttendanceRows}
+          formatDate={formatDate}
+          formatDateTime={formatDateTime}
+          formatLeaveTypeLabel={formatLeaveTypeLabel}
+          formatWorkingHours={formatWorkingHours}
+          loadDashboard={() => loadDashboard(accessToken)}
+          missedLoginEmpCodes={missedLoginEmpCodes}
+          missedLoginEmployees={missedLoginEmployees}
+          reminderPreviewBody={reminderPreviewBody}
+          reminderPreviewTitle={reminderPreviewTitle}
+          reminderTargetDate={reminderTargetDate}
+          selectedAttendanceDate={selectedAttendanceDate}
+          selectedDateEarlyLeaves={selectedDateEarlyLeaves}
+          selectedDateLateArrivals={selectedDateLateArrivals}
+          selectedDateLeaves={selectedDateLeaves}
+          selectedMissedLoginCount={selectedMissedLoginCount}
+          selectedMissedLoginEmpCodes={selectedMissedLoginEmpCodes}
+          setAlertTriggerStatus={setAlertTriggerStatus}
+          setAttendanceDateFilter={setAttendanceDateFilter}
+          setAttendanceSearch={setAttendanceSearch}
+          setAttendanceView={setAttendanceView}
+          setSelectedMissedLoginEmpCodes={setSelectedMissedLoginEmpCodes}
+          setShowAlertComposer={setShowAlertComposer}
+          showAlertComposer={showAlertComposer}
+          triggerAttendanceReminder={triggerAttendanceReminder}
+        />
       )
     }
 
     if (activePanel === 'calendar') {
       return (
-        <>
-          <div className="dashboard-section-head calendar-section-head">
-            <div>
-              <p className="eyebrow">Operations Calendar</p>
-              <h2>Attendance Calendar</h2>
-              <p className="calendar-head-copy">
-                Monthly operational view with daily attendance volume, leave overlap, and exception signals.
-              </p>
-            </div>
-            <div className="calendar-head-actions">
-              <button
-                className="ghost dashboard-button"
-                type="button"
-                onClick={() =>
-                  setCalendarMonthView(
-                    (current) => new Date(current.getFullYear(), current.getMonth() - 1, 1)
-                  )
-                }
-              >
-                Previous
-              </button>
-              <button
-                className="ghost dashboard-button"
-                type="button"
-                onClick={() => setCalendarMonthView(parseDateInputValue(toDateInputValue(new Date())))}
-              >
-                Today
-              </button>
-              <button
-                className="ghost dashboard-button"
-                type="button"
-                onClick={() =>
-                  setCalendarMonthView(
-                    (current) => new Date(current.getFullYear(), current.getMonth() + 1, 1)
-                  )
-                }
-              >
-                Next
-              </button>
-            </div>
-          </div>
-
-          <div className="metric-row">
-            <div className="metric-card">
-              <span>Month</span>
-              <strong>{calendarMonthLabel}</strong>
-              <small>Professional daily operations view</small>
-            </div>
-            <div className="metric-card">
-              <span>Peak Attendance</span>
-              <strong>{maxCalendarAttendance}</strong>
-              <small>Highest attendance records in a single day</small>
-            </div>
-            <div className="metric-card">
-              <span>Tracked Exceptions</span>
-              <strong>{Object.values(exceptionCountByDate).reduce((sum, count) => sum + count, 0)}</strong>
-              <small>Late arrivals and early leaves across loaded data</small>
-            </div>
-          </div>
-
-          <div className="calendar-shell">
-            <div className="calendar-card">
-              <div className="calendar-card-head">
-                <div>
-                  <span>Monthly View</span>
-                  <strong>{calendarMonthLabel}</strong>
-                </div>
-                <div className="calendar-legend">
-                  <span><i className="calendar-dot attendance" /> Attendance</span>
-                  <span><i className="calendar-dot leave" /> Leave</span>
-                  <span><i className="calendar-dot exception" /> Exceptions</span>
-                </div>
-              </div>
-
-              <div className="calendar-weekdays">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                  <span key={day}>{day}</span>
-                ))}
-              </div>
-
-              <div className="calendar-grid-page">
-                {calendarDays.map((day) => {
-                  const dayValue = toDateInputValue(day)
-                  const attendanceCount = attendanceCountByDate[dayValue] || 0
-                  const leaveCount = leaveCountByDate[dayValue] || 0
-                  const exceptionCount = exceptionCountByDate[dayValue] || 0
-                  const isCurrentMonth = day.getMonth() === calendarMonthView.getMonth()
-                  const isToday = dayValue === toDateInputValue(new Date())
-                  const heatLevel =
-                    attendanceCount > 0
-                      ? Math.min(1, attendanceCount / maxCalendarAttendance)
-                      : 0
-
-                  return (
-                    <button
-                      key={dayValue}
-                      className={`calendar-day-card ${isCurrentMonth ? '' : 'outside'} ${isToday ? 'today' : ''}`}
-                      type="button"
-                      onClick={() => setAttendanceDateFilter(dayValue)}
-                    >
-                      <div className="calendar-day-top">
-                        <span className="calendar-day-number">{day.getDate()}</span>
-                        {isToday ? <span className="calendar-day-badge">Today</span> : null}
-                      </div>
-                      <div
-                        className="calendar-day-heat"
-                        style={{
-                          opacity: Math.max(0.12, heatLevel),
-                          background: `linear-gradient(135deg, rgba(17, 44, 50, ${0.08 + heatLevel * 0.22}), rgba(17, 44, 50, ${0.18 + heatLevel * 0.3}))`
-                        }}
-                      />
-                      <div className="calendar-day-stats">
-                        <span>{attendanceCount} attendance</span>
-                        <span>{leaveCount} leave</span>
-                        <span>{exceptionCount} exceptions</span>
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        </>
+        <AdminCalendarPage
+          attendanceCountByDate={attendanceCountByDate}
+          calendarDays={calendarDays}
+          calendarMonthLabel={calendarMonthLabel}
+          calendarMonthView={calendarMonthView}
+          exceptionCountByDate={exceptionCountByDate}
+          leaveCountByDate={leaveCountByDate}
+          maxCalendarAttendance={maxCalendarAttendance}
+          setAttendanceDateFilter={setAttendanceDateFilter}
+          setCalendarMonthView={setCalendarMonthView}
+          toDateInputValue={toDateInputValue}
+        />
       )
     }
 
     if (activePanel === 'reports') {
       return (
-        <>
-          <div className="dashboard-section-head">
-            <div>
-              <p className="eyebrow">Insights</p>
-              <h2>Reports & Analytics</h2>
-            </div>
-            <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-              Refresh
-            </button>
-          </div>
-
-          <div className="reports-main">
-              <div className="report-toolbar">
-                <div className="attendance-filter attendance-filter-date">
-                  <label htmlFor="reports-date">Reference Date</label>
-                  <input
-                    className="modern-date-input"
-                    id="reports-date"
-                    type="date"
-                    value={attendanceDateFilter}
-                    onChange={(event) => setAttendanceDateFilter(event.target.value)}
-                  />
-                </div>
-                <div className="attendance-filter attendance-filter-compact">
-                  <label htmlFor="attendance-month">Month</label>
-                  <select
-                    id="attendance-month"
-                    value={attendanceReportMonth}
-                    onChange={(event) => setAttendanceReportMonth(event.target.value)}
-                  >
-                    {[
-                      '01',
-                      '02',
-                      '03',
-                      '04',
-                      '05',
-                      '06',
-                      '07',
-                      '08',
-                      '09',
-                      '10',
-                      '11',
-                      '12'
-                    ].map((month, index) => (
-                      <option key={month} value={index + 1}>
-                        {month}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="attendance-filter attendance-filter-compact">
-                  <label htmlFor="attendance-year">Year</label>
-                  <select
-                    id="attendance-year"
-                    value={attendanceReportYear}
-                    onChange={(event) => setAttendanceReportYear(event.target.value)}
-                  >
-                    {Array.from({ length: 6 }, (_, index) => {
-                      const year = new Date().getFullYear() - index
-                      return (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
-                      )
-                    })}
-                  </select>
-                </div>
-                <div className="attendance-filter attendance-filter-compact">
-                  <label htmlFor="attendance-format">Format</label>
-                  <select
-                    id="attendance-format"
-                    value={attendanceReportFormat}
-                    onChange={(event) => setAttendanceReportFormat(event.target.value as 'csv' | 'pdf' | 'xlsx')}
-                  >
-                    <option value="csv">CSV</option>
-                    <option value="pdf">PDF</option>
-                    <option value="xlsx">XLSX</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="report-actions-card">
-                <div>
-                  <strong>Download Reports</strong>
-                  <span>Export daily attendance by date and monthly attendance summaries.</span>
-                </div>
-                <div className="report-actions">
-                  <button className="cta dashboard-button" onClick={downloadDailyAttendanceReport}>
-                    Daily Attendance
-                  </button>
-                  <button className="ghost dashboard-button" onClick={downloadMonthlyAttendanceReport}>
-                    Monthly Summary
-                  </button>
-                </div>
-                {attendanceReportStatus ? <span className="report-status attendance-report-status">{attendanceReportStatus}</span> : null}
-              </div>
-
-              <div className="chart-card">
-                <div className="chart-card-head">
-                  <div>
-                    <strong>Weekly Attendance Trend</strong>
-                    <span>Unique employee clock-ins across the last 7 days.</span>
-                  </div>
-                </div>
-                <div className="line-chart-shell">
-                  <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="line-chart">
-                    <polyline
-                      fill="none"
-                      stroke="#1fa7a4"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      points={weeklyTrendPoints}
-                    />
-                    {weeklyAttendanceTrend.map((item, index) => {
-                      const x = weeklyAttendanceTrend.length > 1 ? (index / (weeklyAttendanceTrend.length - 1)) * 100 : 50
-                      const y = 100 - (item.count / maxWeeklyAttendance) * 100
-                      return <circle key={item.dateKey} cx={x} cy={y} r="2.5" fill="#112c32" />
-                    })}
-                  </svg>
-                  <div className="line-chart-labels">
-                    {weeklyAttendanceTrend.map((item) => (
-                      <div key={item.dateKey} className="chart-label-block">
-                        <strong>{item.count}</strong>
-                        <span>{item.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="chart-card">
-                <div className="chart-card-head">
-                  <div>
-                    <strong>Attendance Efficiency Score</strong>
-                    <span>Employee presence score across the same 7-day window.</span>
-                  </div>
-                </div>
-                <div className="efficiency-list">
-                  {attendanceEfficiencyScores.length ? (
-                    attendanceEfficiencyScores.map((item) => (
-                      <div key={item.empCode || item.name} className="efficiency-row">
-                        <div className="efficiency-meta">
-                          <strong>{item.name}</strong>
-                          <span>{item.presentDays} / 7 days present</span>
-                        </div>
-                        <div className="efficiency-bar-track">
-                          <div className="efficiency-bar-fill" style={{ width: `${item.score}%` }} />
-                        </div>
-                        <strong className="efficiency-score">{item.score}%</strong>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="empty-state">No attendance data available for analytics yet.</div>
-                  )}
-                </div>
-              </div>
-          </div>
-        </>
+        <AdminReportsPage
+          attendanceDateFilter={attendanceDateFilter}
+          attendanceEfficiencyScores={attendanceEfficiencyScores}
+          attendanceReportFormat={attendanceReportFormat}
+          attendanceReportMonth={attendanceReportMonth}
+          attendanceReportStatus={attendanceReportStatus}
+          attendanceReportYear={attendanceReportYear}
+          downloadDailyAttendanceReport={downloadDailyAttendanceReport}
+          downloadMonthlyAttendanceReport={downloadMonthlyAttendanceReport}
+          loadDashboard={() => loadDashboard(accessToken)}
+          maxWeeklyAttendance={maxWeeklyAttendance}
+          setAttendanceDateFilter={setAttendanceDateFilter}
+          setAttendanceReportFormat={setAttendanceReportFormat}
+          setAttendanceReportMonth={setAttendanceReportMonth}
+          setAttendanceReportYear={setAttendanceReportYear}
+          weeklyAttendanceTrend={weeklyAttendanceTrend}
+          weeklyTrendPoints={weeklyTrendPoints}
+        />
       )
     }
 
     if (activePanel === 'leaves') {
       return (
-        <>
-          <div className="dashboard-section-head">
-            <div>
-              <p className="eyebrow">Approvals</p>
-              <h2>Leaves</h2>
-            </div>
-            <button
-              className="ghost dashboard-button"
-              onClick={() => void refreshLeaves(leaveFilters, true)}
-              disabled={leaveFilterLoading}
-              type="button"
-            >
-              {leaveFilterLoading ? 'Loading...' : 'Refresh'}
-            </button>
-          </div>
-          <form
-            className="leave-filter-card"
-            onSubmit={(event) => {
-              event.preventDefault()
-              void refreshLeaves(leaveFilters, true)
-            }}
-          >
-            <div className="leave-filter-head">
-              <div>
-                <strong>Search Leave Records</strong>
-                <span>Filter by employee, leave details, date range, or status.</span>
-              </div>
-              <span className="leave-filter-count">{leaveRows.length} result{leaveRows.length === 1 ? '' : 's'}</span>
-            </div>
-            <div className="leave-filter-grid">
-              <label className="leave-filter-field">
-                <span>Employee Name</span>
-                <input
-                  type="search"
-                  list="leave-employee-name-options"
-                  value={leaveFilters.employeeName}
-                  onChange={(event) => updateLeaveFilter('employeeName', event.target.value)}
-                  placeholder="Search employee name"
-                />
-                <datalist id="leave-employee-name-options">
-                  {leaveEmployeeNameOptions.map((name) => <option key={name} value={name} />)}
-                </datalist>
-              </label>
-              <label className="leave-filter-field">
-                <span>Employee ID</span>
-                <input
-                  type="search"
-                  list="leave-employee-id-options"
-                  value={leaveFilters.employeeId}
-                  onChange={(event) => updateLeaveFilter('employeeId', event.target.value)}
-                  placeholder="Search employee ID"
-                />
-                <datalist id="leave-employee-id-options">
-                  {leaveEmployeeIdOptions.map((employeeId) => <option key={employeeId} value={employeeId} />)}
-                </datalist>
-              </label>
-              <label className="leave-filter-field">
-                <span>Leave Type</span>
-                <input
-                  type="search"
-                  list="leave-type-options"
-                  value={leaveFilters.leaveType}
-                  onChange={(event) => updateLeaveFilter('leaveType', event.target.value)}
-                  placeholder="Search leave type"
-                />
-                <datalist id="leave-type-options">
-                  {LEAVE_TYPE_FILTER_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </datalist>
-              </label>
-              <label className="leave-filter-field">
-                <span>From Date</span>
-                <input
-                  type="date"
-                  value={leaveFilters.fromDate}
-                  onChange={(event) => updateLeaveFilter('fromDate', event.target.value)}
-                />
-              </label>
-              <label className="leave-filter-field">
-                <span>To Date</span>
-                <input
-                  type="date"
-                  value={leaveFilters.toDate}
-                  onChange={(event) => updateLeaveFilter('toDate', event.target.value)}
-                />
-              </label>
-              <label className="leave-filter-field">
-                <span>Leave Status</span>
-                <input
-                  type="search"
-                  list="leave-status-options"
-                  value={leaveFilters.status}
-                  onChange={(event) => updateLeaveFilter('status', event.target.value)}
-                  placeholder="Search leave status"
-                />
-                <datalist id="leave-status-options">
-                  {LEAVE_STATUS_FILTER_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </datalist>
-              </label>
-            </div>
-            <div className="leave-filter-actions">
-              {leaveFilterStatus ? <span className="leave-filter-status">{leaveFilterStatus}</span> : <span />}
-              <button className="ghost" type="button" onClick={() => void clearLeaveFilters()} disabled={leaveFilterLoading}>
-                Clear Filters
-              </button>
-              <button className="cta" type="submit" disabled={leaveFilterLoading}>
-                {leaveFilterLoading ? 'Applying...' : 'Apply Filters'}
-              </button>
-            </div>
-          </form>
-          <div className="table-card">
-            {leaveRows.length ? (
-              <div className="table-scroll">
-                <table className="dashboard-table leave-table">
-                  <thead>
-                    <tr>
-                      <th>Employee</th>
-                      <th>Leave Type</th>
-                      <th>Dates</th>
-                      <th>Approver</th>
-                      <th>Reason</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {leaveRows.map((row, index) => (
-                      <tr key={`${row.id || row.emp_code || index}`}>
-                        <td>
-                          <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
-                          <span className="table-meta">{row.emp_code || 'Employee ID unavailable'}</span>
-                        </td>
-                        <td>{formatLeaveTypeLabel(row)}</td>
-                        <td>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</td>
-                        <td>{getLeaveApproverLabel(row, employees)}</td>
-                        <td>{getLeaveReasonLabel(row)}</td>
-                        <td>
-                          <span className="table-pill">{row.status || 'Unknown'}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="empty-state">No leave requests match the current filters.</div>
-            )}
-          </div>
-        </>
+        <AdminLeavesPage
+          clearLeaveFilters={() => clearLeaveFilters()}
+          employees={employees}
+          formatDate={formatDate}
+          formatLeaveTypeLabel={formatLeaveTypeLabel}
+          getLeaveApproverLabel={getLeaveApproverLabel}
+          getLeaveReasonLabel={getLeaveReasonLabel}
+          leaveEmployeeIdOptions={leaveEmployeeIdOptions}
+          leaveEmployeeNameOptions={leaveEmployeeNameOptions}
+          leaveFilterLoading={leaveFilterLoading}
+          leaveFilters={leaveFilters}
+          leaveFilterStatus={leaveFilterStatus}
+          leaveRows={leaveRows}
+          leaveStatusOptions={LEAVE_STATUS_FILTER_OPTIONS}
+          leaveTypeOptions={LEAVE_TYPE_FILTER_OPTIONS}
+          refreshLeaves={refreshLeaves}
+          updateLeaveFilter={updateLeaveFilter}
+        />
       )
     }
 
     if (activePanel === 'activities') {
       return (
-        <>
-          <div className="dashboard-section-head">
-            <div>
-              <p className="eyebrow">Live Work</p>
-              <h2>Activities</h2>
-            </div>
-            <div className="employee-actions">
-              <button
-                className="ghost dashboard-button"
-                onClick={() => setShowTodayActivities((current) => !current)}
-              >
-                {showTodayActivities ? "Show All" : "Show Today"}
-              </button>
-              <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-                Refresh
-              </button>
-            </div>
-          </div>
-          <div className="table-card">
-            {filteredActivities.length ? (
-              <div className="table-scroll">
-                <table className="dashboard-table activity-table">
-                  <thead>
-                    <tr>
-                      <th>Employee</th>
-                      <th>Activity</th>
-                      <th>Started</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredActivities.map((row, index) => (
-                      <tr key={`${row.id || row.employee_email || index}`}>
-                        <td>
-                          <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
-                        </td>
-                        <td>{row.activity_type || 'Activity'}</td>
-                        <td>{formatDateTime(row.start_time)}</td>
-                        <td>
-                          <span className="table-pill accent">{row.status || 'Unknown'}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="empty-state">
-                {showTodayActivities ? "No activities found for today." : "No activities found."}
-              </div>
-            )}
-          </div>
-        </>
+        <AdminActivitiesPage
+          filteredActivities={filteredActivities}
+          formatDateTime={formatDateTime}
+          loadDashboard={() => loadDashboard(accessToken)}
+          setShowTodayActivities={setShowTodayActivities}
+          showTodayActivities={showTodayActivities}
+        />
       )
     }
 
     return (
-      <>
-        <div className="dashboard-section-head">
-          <div>
-            <p className="eyebrow">Movement</p>
-            <h2>Field Visits</h2>
-          </div>
-          <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
-            Refresh
-          </button>
-        </div>
-        <div className="table-card">
-          {fieldVisitRows.length ? (
-            <div className="table-scroll">
-                <table className="dashboard-table field-visit-table">
-                  <thead>
-                    <tr>
-                      <th>Employee</th>
-                      <th>Date</th>
-                      <th>Visit Type</th>
-                      <th>Destination Location</th>
-                      <th>Destination Visited</th>
-                      <th>Visited Flag</th>
-                      <th>Start Location</th>
-                      <th>End Location</th>
-                      <th>Hours There</th>
-                      <th>Distance</th>
-                      <th>Status</th>
-                      <th>Map</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {fieldVisitRows.map((row) => {
-                      const showRouteDetails = row.isCompleted
-                      const durationMinutes = resolveVisitDurationMinutes(
-                        row.durationMinutes,
-                        row.visitStartTime || row.visitDate,
-                        row.visitEndTime,
-                        row.isCompleted,
-                        fieldVisitDurationTick
-                      )
-                      return (
-                        <tr
-                          key={row.activityId}
-                          className="table-clickable-row"
-                          onClick={() => void openFieldVisitPanel(row)}
-                        >
-                          <td>
-                            <strong>{row.employee}</strong>
-                          </td>
-                          <td>{formatDateTime(row.visitDate)}</td>
-                          <td>{row.visitType}</td>
-                          <td>{row.destinationLocation || '--'}</td>
-                          <td>
-                            {row.destinationVisited === null ? (
-                              '--'
-                            ) : (
-                              <span
-                                className={`table-pill ${
-                                  row.destinationVisited
-                                    ? 'active'
-                                    : (row.destinationVisitedCount || 0) > 0
-                                      ? 'accent'
-                                      : 'inactive'
-                                }`}
-                              >
-                                {row.destinationVisited
-                                  ? 'Completed'
-                                  : (row.destinationVisitedCount || 0) > 0
-                                    ? `Partial (${row.destinationVisitedCount}/${row.destinationTotalCount || 0})`
-                                    : 'Pending'}
-                              </span>
-                            )}
-                          </td>
-                          <td>
-                            {row.destinationVisitFlag === null ? (
-                              '--'
-                            ) : (
-                              <span className={`table-pill ${row.destinationVisitFlag ? 'active' : 'inactive'}`}>
-                                {row.destinationVisitFlag ? 'True' : 'False'}
-                              </span>
-                            )}
-                          </td>
-                          <td>
-                            <strong>{row.startName || 'Start location unavailable'}</strong>
-                            <span className="table-meta">{row.startAddress || row.location || '--'}</span>
-                          </td>
-                          <td>
-                            <strong>{showRouteDetails ? row.endName || 'End location unavailable' : '--'}</strong>
-                            <span className="table-meta">{showRouteDetails ? row.endAddress || '--' : 'Visit in progress'}</span>
-                          </td>
-                          <td>{formatVisitDuration(durationMinutes)}</td>
-                          <td>{showRouteDetails ? formatDistanceKm(row.distanceKm) : '--'}</td>
-                          <td>
-                            <span className="table-pill accent">{row.status}</span>
-                          </td>
-                          <td>
-                            <button
-                              className="map-button"
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                void openMapForFieldVisit(row)
-                              }}
-                              aria-label="Open map"
-                              title="Open map"
-                              type="button"
-                            >
-                              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                                <path d="M12 2c-3.6 0-6.5 2.9-6.5 6.5 0 4.7 6.5 12 6.5 12s6.5-7.3 6.5-12C18.5 4.9 15.6 2 12 2zm0 9.2c-1.5 0-2.7-1.2-2.7-2.7S10.5 5.8 12 5.8s2.7 1.2 2.7 2.7S13.5 11.2 12 11.2z" />
-                              </svg>
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-            </div>
-          ) : (
-            <div className="empty-state">No field visits found in the latest activity feed.</div>
-          )}
-        </div>
-      </>
+      <AdminFieldVisitsPage
+        fieldVisitDurationTick={fieldVisitDurationTick}
+        fieldVisitRows={fieldVisitRows}
+        formatDateTime={formatDateTime}
+        formatDistanceKm={formatDistanceKm}
+        formatVisitDuration={formatVisitDuration}
+        loadDashboard={() => loadDashboard(accessToken)}
+        openFieldVisitPanel={openFieldVisitPanel}
+        openMapForFieldVisit={openMapForFieldVisit}
+        resolveVisitDurationMinutes={resolveVisitDurationMinutes}
+      />
     )
   }
 
@@ -4575,92 +2879,23 @@ function FawnixApp() {
             </div>
           ) : null}
           {showAdminLogin ? (
-            <section className={`login-stage login-stage-${loginSceneMode}`}>
-              <div className="login-stage-wallpaper" aria-hidden="true">
-                <div className="login-stage-grid" />
-                <div className="login-stage-glow login-stage-glow-one" />
-                <div className="login-stage-glow login-stage-glow-two" />
-                <div className="login-stage-glow login-stage-glow-three" />
-              </div>
-
-              <div className="login-stage-topbar">
-                <button
-                  className="ghost login-stage-back"
-                  onClick={() => setShowDashboard(false)}
-                  type="button"
-                  aria-label="Back to landing"
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path
-                      d="M14.75 5.75L8.5 12l6.25 6.25"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
-
-                <div className="login-stage-meta">
-                  <div className="login-stage-chip">
-                    <span>Local time</span>
-                    <strong>{loginTimeLabel}</strong>
-                    <small>{loginDateLabel}</small>
-                  </div>
-                  <div className="login-stage-chip login-stage-chip-location">
-                    <span>{formatTimeZoneLabel(loginTimeZone)}</span>
-                    <strong>Device location</strong>
-                    <small>{loginLocationDetails}</small>
-                  </div>
-                </div>
-              </div>
-
-              <div className="login-stage-center">
-                <div className="login-stage-panel">
-                  <div className="login-stage-panel-head">
-                    <div className="login-stage-brand">
-                      <img className="login-stage-brand-image" src={fawnixBg} alt="Fawnix" />
-                      <div>
-                        <p className="eyebrow">Fawnix Admin Login</p>
-                        <h2>Secure Sign in</h2>
-                      </div>
-                    </div>
-                    <p className="login-stage-support">
-                      Access with Employee ID & OTP
-                    </p>
-                  </div>
-
-                  <div className="login-card login-stage-card">
-                    <label htmlFor="admin-emp-code">Employee ID</label>
-                    <input
-                      id="admin-emp-code"
-                      type="text"
-                      value={adminEmpCode}
-                      onChange={(event) => setAdminEmpCode(event.target.value)}
-                      placeholder="Enter employee code"
-                    />
-                    <label htmlFor="admin-otp">OTP</label>
-                    <input
-                      id="admin-otp"
-                      type="text"
-                      value={adminOtp}
-                      onChange={(event) => setAdminOtp(event.target.value)}
-                      placeholder="Enter OTP sent to your whatsapp"
-                    />
-                    <div className="login-actions">
-                      <button className="ghost" onClick={handleAdminRequestOtp} disabled={authLoading}>
-                        Request OTP
-                      </button>
-                      <button className="cta" onClick={handleAdminLogin} disabled={authLoading}>
-                        Login
-                      </button>
-                    </div>
-                    {authStatus ? <p className="delete-note">{authStatus}</p> : null}
-                  </div>
-                </div>
-              </div>
-            </section>
+            <AdminLoginPage
+              adminEmpCode={adminEmpCode}
+              adminOtp={adminOtp}
+              authLoading={authLoading}
+              authStatus={authStatus}
+              loginDateLabel={loginDateLabel}
+              loginLocationDetails={loginLocationDetails}
+              loginSceneMode={loginSceneMode}
+              loginTimeLabel={loginTimeLabel}
+              loginTimeZone={loginTimeZone}
+              onAdminEmpCodeChange={setAdminEmpCode}
+              onAdminOtpChange={setAdminOtp}
+              onBack={() => navigate(appRoutes.home)}
+              onLogin={() => void handleAdminLogin()}
+              onRequestOtp={() => void handleAdminRequestOtp()}
+              timeZoneLabel={formatTimeZoneLabel(loginTimeZone)}
+            />
           ) : (
             <>
           <section className="dashboard-hero">

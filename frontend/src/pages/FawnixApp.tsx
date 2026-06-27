@@ -1912,8 +1912,6 @@ function FawnixApp() {
     return accumulator
   }, {})
   const maxCalendarAttendance = Math.max(...Object.values(attendanceCountByDate), 1)
-  const lateLogins = selectedDateLateArrivals.length
-  const onTimeLogins = Math.max(firstClockInRows.length - lateLogins, 0)
   const selectedDateLeaves = leaveRows
     .filter((row) => {
       const status = (row.status || '').toLowerCase()
@@ -2505,28 +2503,10 @@ function FawnixApp() {
               timeZoneLabel={formatTimeZoneLabel(loginTimeZone)}
             />
           ) : (
-            <>
-          <section className="dashboard-hero">
-            <div>
-              <p className="eyebrow">Admin dashboard</p>
-              <h1>Keep teams visible, accountable, and moving.</h1>
-              <p className="dashboard-copy">
-                Live data from admin APIs for employees, attendance, leave approvals,
-                activities, and field movement.
-              </p>
+            <section className="dashboard-panel">
               {refreshNotice ? <div className="refresh-toast">{refreshNotice}</div> : null}
-            </div>
-            <div className="dashboard-highlight">
-              <span>Shift Compliance</span>
-              <strong>{lateLogins + onTimeLogins}</strong>
-              <p>{`Late logins: ${lateLogins} · On-time logins: ${onTimeLogins}`}</p>
-            </div>
-          </section>
-
-          <section className="dashboard-panel">
-            {renderDashboardPanel()}
-          </section>
-            </>
+              {renderDashboardPanel()}
+            </section>
           )}
 
           {employeePanelMode ? (

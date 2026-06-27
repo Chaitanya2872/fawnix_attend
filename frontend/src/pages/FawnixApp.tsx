@@ -2069,6 +2069,8 @@ function FawnixApp() {
       return (
         <AdminOverviewPage
           attendanceDateFilter={attendanceDateFilter}
+          attendanceCountByDate={attendanceCountByDate}
+          exceptionCountByDate={exceptionCountByDate}
           employees={employees}
           fieldVisitRows={fieldVisitRows}
           firstClockInRows={firstClockInRows}

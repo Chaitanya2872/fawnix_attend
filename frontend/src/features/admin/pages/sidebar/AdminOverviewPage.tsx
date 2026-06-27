@@ -6,6 +6,62 @@ function toMonthKey(value?: string) {
   return (value || '').slice(0, 7)
 }
 
+function getPrevMonthKey(mk: string) {
+  const [y, m] = mk.split('-').map(Number)
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
+}
+
+function getPrevMonthLabel(mk: string) {
+  const prev = getPrevMonthKey(mk)
+  return new Date(`${prev}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+}
+
+function getMonthAvgRate(
+  countByDate: Record<string, number>,
+  monthKey: string,
+  totalEmployees: number
+): number | null {
+  const dates = Object.keys(countByDate).filter((d) => d.startsWith(monthKey))
+  if (!dates.length) return null
+  const total = dates.reduce((sum, d) => sum + (countByDate[d] || 0), 0)
+  return Math.round((total / dates.length / Math.max(totalEmployees, 1)) * 100)
+}
+
+function getMonthExceptionCount(
+  exceptionCountByDate: Record<string, number>,
+  monthKey: string
+): number {
+  return Object.keys(exceptionCountByDate)
+    .filter((d) => d.startsWith(monthKey))
+    .reduce((sum, d) => sum + (exceptionCountByDate[d] || 0), 0)
+}
+
+function DeltaBadge({
+  delta,
+  label,
+  good = 'up',
+}: {
+  delta: number | null
+  label: string
+  good?: 'up' | 'down'
+}) {
+  if (delta === null) return null
+  const isFlat = delta === 0
+  const isUp = delta > 0
+  const isGood = isFlat ? null : (good === 'up' ? isUp : !isUp)
+  const arrow = isFlat ? '→' : isUp ? '↑' : '↓'
+  const cls = isFlat ? 'flat' : isGood ? 'good' : 'bad'
+  return (
+    <div className={`ov2-delta ${cls}`}>
+      <span className="ov2-delta-arrow">{arrow}</span>
+      <span className="ov2-delta-num">
+        {isFlat ? 'No change' : `${delta > 0 ? '+' : ''}${delta}`}
+      </span>
+      <span className="ov2-delta-label">{label}</span>
+    </div>
+  )
+}
+
 function getWeekRangeLabel(value: string) {
   const base = new Date(`${value}T00:00:00`)
   if (Number.isNaN(base.getTime())) return 'This week'
@@ -25,6 +81,8 @@ function getGreeting() {
 
 export default function AdminOverviewPage({
   attendanceDateFilter,
+  attendanceCountByDate = {},
+  exceptionCountByDate = {},
   employees,
   fieldVisitRows,
   firstClockInRows,
@@ -93,6 +151,51 @@ export default function AdminOverviewPage({
         )
       )
     : 0
+
+  // ── Month-over-month deltas ─────────────────────────
+  const prevMonthKey = getPrevMonthKey(monthKey)
+  const prevMonthLabel = getPrevMonthLabel(monthKey)
+
+  // Attendance rate: avg daily present % for each month
+  const thisMonthAttRate = getMonthAvgRate(attendanceCountByDate, monthKey, totalEmployees)
+  const prevMonthAttRate = getMonthAvgRate(attendanceCountByDate, prevMonthKey, totalEmployees)
+  const attendanceDelta =
+    thisMonthAttRate !== null && prevMonthAttRate !== null
+      ? thisMonthAttRate - prevMonthAttRate
+      : null
+
+  // On-time rate: derive from (attendance - exceptions) / attendance per month
+  const thisMonthExcCount = getMonthExceptionCount(exceptionCountByDate, monthKey)
+  const prevMonthExcCount = getMonthExceptionCount(exceptionCountByDate, prevMonthKey)
+  const thisMonthAttDates = Object.keys(attendanceCountByDate).filter((d) => d.startsWith(monthKey))
+  const prevMonthAttDates = Object.keys(attendanceCountByDate).filter((d) => d.startsWith(prevMonthKey))
+  const thisMonthTotalAtt = thisMonthAttDates.reduce((s, d) => s + (attendanceCountByDate[d] || 0), 0)
+  const prevMonthTotalAtt = prevMonthAttDates.reduce((s, d) => s + (attendanceCountByDate[d] || 0), 0)
+  const thisOnTimeRate =
+    thisMonthTotalAtt > 0
+      ? Math.round(((thisMonthTotalAtt - thisMonthExcCount) / thisMonthTotalAtt) * 100)
+      : null
+  const prevOnTimeRate =
+    prevMonthTotalAtt > 0
+      ? Math.round(((prevMonthTotalAtt - prevMonthExcCount) / prevMonthTotalAtt) * 100)
+      : null
+  const onTimeDelta =
+    thisOnTimeRate !== null && prevOnTimeRate !== null ? thisOnTimeRate - prevOnTimeRate : null
+
+  // Leave requests: real count per month from leaveRows
+  const prevMonthLeavesCount = leaveRows.filter(
+    (r: any) => toMonthKey(r.from_date || r.to_date || '') === prevMonthKey
+  ).length
+  const leavesDelta = prevMonthLeavesCount > 0 || monthlyLeaveApprovals > 0
+    ? monthlyLeaveApprovals - prevMonthLeavesCount
+    : null
+
+  // Exceptions: sum of daily exception counts per month
+  const exceptionsDelta =
+    thisMonthExcCount > 0 || prevMonthExcCount > 0
+      ? thisMonthExcCount - prevMonthExcCount
+      : null
+  // ────────────────────────────────────────────────────
 
   const normalizedSearch = searchTerm.trim().toLowerCase()
   const greeting = getGreeting()
@@ -197,7 +300,7 @@ export default function AdminOverviewPage({
       {/* ── Sticky Topbar ── */}
       <div className="ov2-topbar">
         <div className="ov2-search">
-          <svg className="ov2-search-icon" viewBox="0 0 20 20" fill="none">
+          <svg className="ov2-search-icon" viewBox="0 0 20 20" fill="none" width="16" height="16">
             <circle cx="9" cy="9" r="5.5" stroke="#9aa39d" strokeWidth="1.5" />
             <path d="M13.5 13.5L17 17" stroke="#9aa39d" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
@@ -304,6 +407,7 @@ export default function AdminOverviewPage({
             <div className="ov2-kpi-sub">
               {presentToday} / {totalEmployees} present today
             </div>
+            <DeltaBadge delta={attendanceDelta} label={`vs ${prevMonthLabel}`} good="up" />
             <div className="ov2-sparkline">
               {weeklyAttendanceTrend.slice(-7).map((item: any, i: number) => (
                 <div
@@ -341,6 +445,7 @@ export default function AdminOverviewPage({
             <div className="ov2-kpi-sub">
               {lateExceptionsToday} late exception{lateExceptionsToday === 1 ? '' : 's'}
             </div>
+            <DeltaBadge delta={onTimeDelta} label={`vs ${prevMonthLabel}`} good="up" />
             <div className="ov2-sparkline">
               {weeklyAttendanceTrend.slice(-7).map((item: any, i: number) => (
                 <div
@@ -373,6 +478,7 @@ export default function AdminOverviewPage({
             <div className="ov2-kpi-sub">
               {pendingLeaveRows.length} pending approval{pendingLeaveRows.length === 1 ? '' : 's'}
             </div>
+            <DeltaBadge delta={leavesDelta} label={`vs ${prevMonthLabel}`} good="down" />
             <div className="ov2-kpi-progress-wrap">
               <div
                 className="ov2-kpi-progress amber"
@@ -416,6 +522,7 @@ export default function AdminOverviewPage({
             <div className="ov2-kpi-sub">
               {selectedDateLeaves.length} on leave · {fieldActive} field agents
             </div>
+            <DeltaBadge delta={exceptionsDelta} label={`vs ${prevMonthLabel}`} good="down" />
             {weeklyExceptionCount > 0 && (
               <div className="ov2-exc-mini-list">
                 {filteredExceptions.slice(0, 3).map((r: any, i: number) => (

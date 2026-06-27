@@ -1,14 +1,15 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
 
 :root {
   color-scheme: light;
-  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', system-ui, sans-serif;
   line-height: 1.5;
   font-weight: 400;
   background: #f7f4ef;
   color: #1f2a2e;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 * {
@@ -181,7 +182,7 @@ a {
   background: rgba(222, 166, 98, 0.2);
   color: #f2c58e;
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
 }
 
@@ -278,7 +279,7 @@ a {
   background: rgba(31, 167, 164, 0.18);
   color: #a8f0e2;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   flex-shrink: 0;
@@ -304,33 +305,11 @@ a {
   color: #f2c58e;
 }
 
-.sidebar-foot {
-  margin-top: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding-top: 14px;
-}
-
-.sidebar-profile {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.sidebar-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #d79a55 0%, #b86f36 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: 700;
-  color: #fff;
-  flex-shrink: 0;
+.sidebar-link.logout-link {
+  background: #f6c17a;
+  color: #2b160b;
+  border: none;
+  font-weight: 600;
 }
 
 .sidebar-profile-info {
@@ -515,7 +494,7 @@ a {
 .dashboard-user-card span {
   color: #668085;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -564,7 +543,7 @@ a {
   background: transparent;
   color: #b12c3b;
   text-align: left;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .dashboard-profile-dropdown button:hover {
@@ -583,7 +562,7 @@ a {
   text-transform: uppercase;
   letter-spacing: 1.5px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .dashboard-highlight strong {
@@ -800,13 +779,18 @@ a {
   margin-top: 13px;
   color: #8e88aa;
   font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(236, 247, 245, 0.72);
 }
 
-.login-reference-disclaimer {
-  margin: 0;
-  color: #918aaf;
-  font-size: 13px;
-  line-height: 1.65;
+.login-stage-chip strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.login-stage-chip small {
+  color: rgba(236, 247, 245, 0.76);
 }
 
 .login-reference-form-panel {
@@ -846,7 +830,7 @@ a {
 .login-reference-form label {
   color: #292242;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .login-reference-form > input {
@@ -1066,7 +1050,7 @@ a {
   padding: 10px 16px;
   border-radius: 999px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   cursor: pointer;
@@ -1101,7 +1085,7 @@ a {
   padding: 3px 9px;
   border-radius: 999px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.2;
   text-align: center;
 }
@@ -1176,7 +1160,7 @@ a {
   background: rgba(17, 44, 50, 0.07);
   color: #315158;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .leave-filter-grid {
@@ -1194,7 +1178,7 @@ a {
   padding-left: 3px;
   color: #53666b;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
@@ -1298,7 +1282,7 @@ a {
 .attendance-filter label {
   padding-left: 4px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #607277;
@@ -1475,7 +1459,7 @@ a {
 .attendance-date-weekdays span {
   text-align: center;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: #95a2a6;
   padding: 8px 0;
 }
@@ -1537,7 +1521,7 @@ a {
   border: none;
   background: transparent;
   color: #1f88ee;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   padding: 6px 4px;
 }
@@ -1761,7 +1745,7 @@ a {
 
 .calendar-day-number {
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 600;
   color: #112c32;
 }
 
@@ -1839,7 +1823,7 @@ a {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: #1fa7a4;
 }
 
@@ -1907,7 +1891,7 @@ a {
 
 .employee-search-copy label {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #4b5c61;
@@ -1975,7 +1959,7 @@ a {
   border-radius: 999px;
   padding: 9px 14px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -1997,7 +1981,7 @@ a {
   background: rgba(17, 44, 50, 0.08);
   color: #204047;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -2009,7 +1993,7 @@ a {
 
 .employee-blood-filter label {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #4b5c61;
@@ -2782,7 +2766,7 @@ a {
   padding: 14px 18px;
   text-align: left;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: #58686d;
@@ -3450,7 +3434,7 @@ a {
   background: #e9f4ee;
   color: #26553c;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .table-pill.accent {
@@ -3515,11 +3499,9 @@ a {
 }
 
 .brand-name {
-  font-size: 16px;
-  font-weight: 700;
-  color: #17221d;
-  letter-spacing: 0.01em;
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 600;
+  font-size: 20px;
+  letter-spacing: 0.5px;
 }
 
 .brand-tag {
@@ -3623,7 +3605,7 @@ a {
 }
 
 .hero-stats span {
-  font-weight: 700;
+  font-weight: 600;
   display: block;
 }
 
@@ -4033,7 +4015,7 @@ a {
   border-radius: 8px;
   font-size: 14px;
   color: #112c32;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', system-ui, sans-serif;
   transition: all 0.2s ease;
 }
 
@@ -4080,7 +4062,7 @@ a {
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', system-ui, sans-serif;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -4315,7 +4297,7 @@ a {
 
 .calendar-kicker {
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: #5d7b78;
@@ -4350,7 +4332,7 @@ a {
   align-items: center;
   gap: 6px;
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: #4d5e63;
@@ -4416,7 +4398,7 @@ a {
 
 .calendar-insight-card span {
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #6b7f84;
@@ -4462,7 +4444,7 @@ a {
 
 .admin-calendar-weekday {
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #5a6b70;
@@ -4557,7 +4539,7 @@ a {
 
 .calendar-day-number {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: #10282d;
 }
 
@@ -4572,7 +4554,7 @@ a {
 .calendar-day-type {
   margin-top: 5px;
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.05em;
   color: #718287;
   text-transform: uppercase;
@@ -4596,7 +4578,7 @@ a {
   border-radius: 999px;
   padding: 2px 6px;
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.02em;
 }
 
@@ -4705,19 +4687,19 @@ a {
 .calendar-holiday-icon.attendance {
   background: rgba(31, 167, 164, 0.14);
   color: #0b5a58;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .calendar-holiday-icon.leave {
   background: rgba(216, 135, 45, 0.16);
   color: #7d4b10;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .calendar-holiday-icon.birthday {
   background: rgba(155, 89, 182, 0.18);
   color: #5f2a75;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .calendar-holiday-copy {
@@ -4763,7 +4745,7 @@ a {
 .holiday-description-label {
   display: block;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #607277;
@@ -5244,7 +5226,7 @@ a {
 
 .kpi-value {
   font-size: 26px;
-  font-weight: 700;
+  font-weight: 600;
   color: #0F2147;
   line-height: 1.1;
   font-family: 'IBM Plex Sans', sans-serif;
@@ -5789,7 +5771,7 @@ textarea:focus,
 .employee-overview-kpi span {
   color: var(--theme-muted);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -5865,7 +5847,7 @@ textarea:focus,
 .department-treemap-item span {
   overflow: hidden;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -6410,7 +6392,7 @@ textarea:focus,
   overflow: hidden;
   color: #718078;
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   text-overflow: ellipsis;

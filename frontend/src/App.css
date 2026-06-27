@@ -143,7 +143,7 @@ a {
   position: sticky;
   top: 0;
   overflow-y: auto;
-  font-family: 'IBM Plex Sans', 'Space Grotesk', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', system-ui, sans-serif;
 }
 
 .sidebar-brand {
@@ -163,11 +163,10 @@ a {
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 600;
   color: #fff;
   flex-shrink: 0;
   box-shadow: 0 4px 14px rgba(184, 111, 54, 0.35);
-  font-family: 'IBM Plex Sans', sans-serif;
 }
 
 .sidebar-brand-text {
@@ -182,8 +181,7 @@ a {
   background: rgba(222, 166, 98, 0.2);
   color: #f2c58e;
   font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-weight: 500;
 }
 
 .brand-mark-image {
@@ -273,15 +271,13 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 42px;
-  padding: 4px 8px;
-  border-radius: 999px;
+  min-width: 36px;
+  padding: 3px 7px;
+  border-radius: 6px;
   background: rgba(31, 167, 164, 0.18);
   color: #a8f0e2;
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 500;
   flex-shrink: 0;
 }
 
@@ -481,7 +477,7 @@ a {
   border-radius: 14px;
   background: linear-gradient(135deg, #58c6b5, #2d8e8b);
   font-size: 19px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .dashboard-user-copy {
@@ -493,10 +489,8 @@ a {
 
 .dashboard-user-card span {
   color: #668085;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 400;
 }
 
 .dashboard-user-card strong {
@@ -722,8 +716,8 @@ a {
 .login-reference-message > span {
   color: #efbd83;
   font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.2em;
+  font-weight: 500;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -886,7 +880,7 @@ a {
   color: #17122f;
   text-align: center;
   font-size: 24px;
-  font-weight: 800;
+  font-weight: 600;
   outline: none;
 }
 
@@ -904,7 +898,7 @@ a {
   background: linear-gradient(135deg, #5f8c73, #3f6b58);
   color: #fff;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 600;
   box-shadow: 0 12px 25px rgba(63, 107, 88, 0.25);
 }
 
@@ -1047,12 +1041,10 @@ a {
   border: 1px solid rgba(17, 44, 50, 0.12);
   background: rgba(255, 255, 255, 0.9);
   color: #24343a;
-  padding: 10px 16px;
-  border-radius: 999px;
+  padding: 8px 14px;
+  border-radius: 8px;
   font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+  font-weight: 500;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -1085,7 +1077,7 @@ a {
   padding: 3px 9px;
   border-radius: 999px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.2;
   text-align: center;
 }
@@ -1177,10 +1169,8 @@ a {
 .leave-filter-field > span {
   padding-left: 3px;
   color: #53666b;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .leave-filter-field input {
@@ -1281,10 +1271,8 @@ a {
 
 .attendance-filter label {
   padding-left: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
   color: #607277;
 }
 
@@ -1820,10 +1808,8 @@ a {
 
 .exception-card-kicker {
   margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   color: #1fa7a4;
 }
 
@@ -1850,8 +1836,7 @@ a {
 .exception-card-stat span {
   display: block;
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-weight: 400;
   color: #6b7b80;
 }
 
@@ -1872,8 +1857,7 @@ a {
 
 .exception-card-reason span {
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-weight: 400;
   color: #6b7b80;
 }
 
@@ -1891,9 +1875,7 @@ a {
 
 .employee-search-copy label {
   font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 500;
   color: #4b5c61;
 }
 
@@ -1975,15 +1957,13 @@ a {
 .employee-filter-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 42px;
-  padding: 0 16px;
-  border-radius: 999px;
-  background: rgba(17, 44, 50, 0.08);
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: rgba(17, 44, 50, 0.07);
   color: #204047;
   font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-weight: 500;
 }
 
 .employee-blood-filter {
@@ -1992,10 +1972,8 @@ a {
 }
 
 .employee-blood-filter label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
   color: #4b5c61;
 }
 
@@ -2246,7 +2224,7 @@ a {
 
 .weekly-attendance-column > span.current {
   color: #13294c;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .weekly-attendance-metrics {
@@ -2565,8 +2543,7 @@ a {
 
 .alert-trigger-message small {
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-weight: 400;
   color: #607076;
 }
 
@@ -2859,9 +2836,8 @@ a {
 
 .location-label {
   display: block;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 400;
   color: #7a8b90;
   margin-bottom: 2px;
 }
@@ -2969,8 +2945,7 @@ a {
 .field-visit-panel-card span {
   display: block;
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-weight: 400;
   color: #607076;
 }
 
@@ -4296,10 +4271,8 @@ a {
 }
 
 .calendar-kicker {
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 500;
   color: #5d7b78;
 }
 
@@ -4397,10 +4370,8 @@ a {
 }
 
 .calendar-insight-card span {
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 400;
   color: #6b7f84;
 }
 
@@ -4545,7 +4516,7 @@ a {
 
 .calendar-day-icon {
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.04em;
   color: #6b7f84;
   line-height: 1;
@@ -4744,10 +4715,8 @@ a {
 
 .holiday-description-label {
   display: block;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
   color: #607277;
   margin: 12px 2px 8px;
 }
@@ -5229,7 +5198,7 @@ a {
   font-weight: 600;
   color: #0F2147;
   line-height: 1.1;
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: inherit;
 }
 
 .kpi-sub {
@@ -5770,10 +5739,8 @@ textarea:focus,
 
 .employee-overview-kpi span {
   color: var(--theme-muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .employee-overview-kpi strong {
@@ -6391,10 +6358,8 @@ textarea:focus,
 .dashboard-profile-summary span {
   overflow: hidden;
   color: #718078;
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

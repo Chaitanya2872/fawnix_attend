@@ -5028,7 +5028,7 @@ function FawnixApp() {
                   </div>
                 </div>
                 <div className="panel-note">
-                  Admin dashboard now supports OTP login and live admin API data.
+                  {/* Admin dashboard now supports OTP login and live admin API data. */}
                 </div>
               </div>
             </div>

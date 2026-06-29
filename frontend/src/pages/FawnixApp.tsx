@@ -2502,7 +2502,11 @@ function FawnixApp() {
               timeZoneLabel={formatTimeZoneLabel(loginTimeZone)}
             />
           ) : (
-            <section className="dashboard-panel">
+            <section
+              className={`dashboard-panel${
+                activePanel === 'dashboard' ? ' dashboard-panel--flat' : ''
+              }`}
+            >
               {refreshNotice ? <div className="refresh-toast">{refreshNotice}</div> : null}
               {renderDashboardPanel()}
             </section>

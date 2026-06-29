@@ -109,10 +109,6 @@ export default function AdminWorkspacePage({
           <div>
             <p className="eyebrow">Admin dashboard</p>
             <h1>Keep teams visible, accountable, and moving.</h1>
-            <p className="dashboard-copy">
-              Live data from admin APIs for employees, attendance, leave approvals,
-              activities, and field movement.
-            </p>
             {refreshNotice ? <div className="refresh-toast">{refreshNotice}</div> : null}
           </div>
           {heroContent}

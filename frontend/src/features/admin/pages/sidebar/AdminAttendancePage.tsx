@@ -162,7 +162,7 @@ export default function AdminAttendancePage(props: Props) {
                     <th>Employee</th>
                     <th>Leave Type</th>
                     <th>Dates</th>
-                    <th>Applied Date</th>
+                    <th>Applied At</th>
                     <th>Status</th>
                   </tr>
                 </thead>

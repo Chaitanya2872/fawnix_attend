@@ -219,7 +219,7 @@ export default function AdminLeavesPage({
                   <th>Employee</th>
                   <th>Leave Type</th>
                   <th>Dates</th>
-                  <th>Applied Date</th>
+                  <th>Applied At</th>
                   <th>Approver</th>
                   <th>Reason</th>
                   <th>Status</th>

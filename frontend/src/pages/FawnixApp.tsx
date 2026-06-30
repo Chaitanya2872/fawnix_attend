@@ -2504,7 +2504,9 @@ function FawnixApp() {
           ) : (
             <section
               className={`dashboard-panel${
-                activePanel === 'dashboard' ? ' dashboard-panel--flat' : ''
+                activePanel === 'dashboard' || activePanel === 'attendance'
+                  ? ' dashboard-panel--flat'
+                  : ''
               }`}
             >
               {refreshNotice ? <div className="refresh-toast">{refreshNotice}</div> : null}

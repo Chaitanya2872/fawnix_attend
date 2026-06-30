@@ -137,16 +137,32 @@ export default function AdminOverviewPage({
   // ── Department entries ─────────────────────────────
   const deptEntries = useMemo(() => {
     const map: Record<string, { head: number; present: number }> = {}
+    const employeeByEmail = new Map<string, any>(
+      employees
+        .filter((e: any) => e.emp_email)
+        .map((e: any) => [String(e.emp_email).toLowerCase(), e])
+    )
+
     employees.forEach((e: any) => {
       const dept = (e.emp_department || 'Unassigned').trim()
       if (!map[dept]) map[dept] = { head: 0, present: 0 }
       map[dept].head += 1
     })
+
     firstClockInRows.forEach((r: any) => {
-      const dept = (r.emp_department || r.emp_designation || 'Unassigned').trim()
+      const employee =
+        r.employee_email ? employeeByEmail.get(String(r.employee_email).toLowerCase()) : undefined
+      const dept = (
+        r.emp_department ||
+        employee?.emp_department ||
+        r.emp_designation ||
+        employee?.emp_designation ||
+        'Unassigned'
+      ).trim()
       if (!map[dept]) map[dept] = { head: 0, present: 0 }
       map[dept].present += 1
     })
+
     return Object.entries(map)
       .sort((a, b) => b[1].head - a[1].head)
       .slice(0, 6)

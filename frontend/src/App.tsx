@@ -287,6 +287,7 @@ type LeaveRow = {
   remarks?: string
   from_date?: string
   to_date?: string
+  applied_at?: string
   status?: string
 }
 
@@ -575,6 +576,26 @@ function formatDate(value?: string) {
     month: 'short',
     year: 'numeric'
   })
+}
+
+function formatDateOnly(value?: string) {
+  const rawValue = (value || '').trim()
+  if (!rawValue) {
+    return '--'
+  }
+
+  const dateMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (dateMatch) {
+    const [, year, month, day] = dateMatch
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day))
+    return parsed.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    })
+  }
+
+  return formatDate(rawValue)
 }
 
 function formatEmployeeGrade(value?: string) {
@@ -4893,6 +4914,7 @@ function App() {
                         <th>Employee</th>
                         <th>Leave Type</th>
                         <th>Dates</th>
+                        <th>Applied Date</th>
                         <th>Status</th>
                       </tr>
                     </thead>
@@ -4905,6 +4927,7 @@ function App() {
                           </td>
                           <td>{formatLeaveTypeLabel(row)}</td>
                           <td>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</td>
+                          <td>{formatDateOnly(row.applied_at)}</td>
                           <td>
                             <span className="table-pill">{row.status || 'Unknown'}</span>
                           </td>
@@ -5406,6 +5429,7 @@ function App() {
                       <th>Employee</th>
                       <th>Leave Type</th>
                       <th>Dates</th>
+                      <th>Applied Date</th>
                       <th>Approver</th>
                       <th>Reason</th>
                       <th>Status</th>
@@ -5420,6 +5444,7 @@ function App() {
                         </td>
                         <td>{formatLeaveTypeLabel(row)}</td>
                         <td>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</td>
+                        <td>{formatDateOnly(row.applied_at)}</td>
                         <td>{getLeaveApproverLabel(row, employees)}</td>
                         <td>{getLeaveReasonLabel(row)}</td>
                         <td>

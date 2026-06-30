@@ -13,6 +13,7 @@ import {
 } from '../services/adminStorage'
 import {
   formatDate,
+  formatDateOnly,
   formatDateTime,
   getCalendarDays,
   getCalendarMonthLabel,
@@ -3341,6 +3342,7 @@ function FawnixApp() {
                         <th>Employee</th>
                         <th>Leave Type</th>
                         <th>Dates</th>
+                        <th>Applied Date</th>
                         <th>Status</th>
                       </tr>
                     </thead>
@@ -3353,6 +3355,7 @@ function FawnixApp() {
                           </td>
                           <td>{formatLeaveTypeLabel(row)}</td>
                           <td>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</td>
+                          <td>{formatDateOnly(row.applied_at)}</td>
                           <td>
                             <span className="table-pill">{row.status || 'Unknown'}</span>
                           </td>
@@ -3976,6 +3979,7 @@ function FawnixApp() {
                       <th>Employee</th>
                       <th>Leave Type</th>
                       <th>Dates</th>
+                      <th>Applied Date</th>
                       <th>Approver</th>
                       <th>Reason</th>
                       <th>Status</th>
@@ -3990,6 +3994,7 @@ function FawnixApp() {
                         </td>
                         <td>{formatLeaveTypeLabel(row)}</td>
                         <td>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</td>
+                        <td>{formatDateOnly(row.applied_at)}</td>
                         <td>{getLeaveApproverLabel(row, employees)}</td>
                         <td>{getLeaveReasonLabel(row)}</td>
                         <td>

@@ -100,6 +100,39 @@ def _public_url(bucket_name: str, object_name: str) -> str:
     return f"https://{bucket_name}.s3.{region}.amazonaws.com/{object_name}"
 
 
+def _external_object_url(bucket_name: str, object_name: str, *, download_filename: str | None = None) -> str:
+    if Config.MEETING_NOTES_S3_PUBLIC_READ:
+        return _public_url(bucket_name, object_name)
+    return generate_presigned_download_url(
+        bucket_name,
+        object_name,
+        download_filename=download_filename,
+    )
+
+
+def generate_presigned_download_url(
+    bucket_name: str,
+    object_name: str,
+    *,
+    download_filename: str | None = None,
+    expires_in: int | None = None,
+) -> str:
+    """Generate a temporary S3 download URL for a private object."""
+    config_error = get_s3_configuration_error()
+    if config_error:
+        raise RuntimeError(config_error)
+
+    client = _build_s3_client()
+    params: Dict[str, Any] = {"Bucket": bucket_name, "Key": object_name}
+    if download_filename:
+        params["ResponseContentDisposition"] = f'attachment; filename="{download_filename}"'
+    return client.generate_presigned_url(
+        "get_object",
+        Params=params,
+        ExpiresIn=expires_in or Config.MEETING_NOTES_S3_PRESIGNED_URL_TTL_SECONDS,
+    )
+
+
 def _escape_text(value: Any) -> str:
     text = str(value or "").strip()
     return (
@@ -244,7 +277,10 @@ def upload_meeting_audio(
         Fileobj=BytesIO(audio_bytes),
         Bucket=bucket_name,
         Key=object_name,
-        ExtraArgs={"ContentType": content_type or "application/octet-stream"},
+        ExtraArgs={
+            **({"ACL": "public-read"} if Config.MEETING_NOTES_S3_PUBLIC_READ else {}),
+            "ContentType": content_type or "application/octet-stream",
+        },
     )
 
     return {
@@ -253,7 +289,12 @@ def upload_meeting_audio(
         "file_name": (filename or "").strip() or "meeting-audio",
         "content_type": content_type or "application/octet-stream",
         "size_bytes": len(audio_bytes),
-        "url": _public_url(bucket_name, object_name),
+        "url": _external_object_url(
+            bucket_name,
+            object_name,
+            download_filename=(filename or "").strip() or "meeting-audio",
+        ),
+        "object_url": _public_url(bucket_name, object_name),
         "folder": Config.MEETING_NOTES_S3_AUDIO_PREFIX,
         "provider": "s3",
     }
@@ -286,6 +327,7 @@ def upload_meeting_report(
         Bucket=bucket_name,
         Key=object_name,
         ExtraArgs={
+            **({"ACL": "public-read"} if Config.MEETING_NOTES_S3_PUBLIC_READ else {}),
             "ContentType": "application/pdf",
             "ContentDisposition": f'attachment; filename="{report_filename}"',
         },
@@ -297,10 +339,19 @@ def upload_meeting_report(
         "file_name": report_filename,
         "content_type": "application/pdf",
         "size_bytes": len(report_bytes),
-        "url": _public_url(bucket_name, object_name),
+        "url": _external_object_url(
+            bucket_name,
+            object_name,
+            download_filename=report_filename,
+        ),
+        "object_url": _public_url(bucket_name, object_name),
         "folder": Config.MEETING_NOTES_S3_REPORT_PREFIX,
         "provider": "s3",
-        "download_url": _public_url(bucket_name, object_name),
+        "download_url": _external_object_url(
+            bucket_name,
+            object_name,
+            download_filename=report_filename,
+        ),
     }
 
 

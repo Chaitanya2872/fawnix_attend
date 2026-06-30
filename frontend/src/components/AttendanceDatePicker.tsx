@@ -6,7 +6,7 @@ import {
   getCalendarMonthLabel,
   parseDateInputValue,
   toDateInputValue
-} from '../services/dateUtils'
+} from '../utils/date/dateUtils'
 
 type AttendanceDatePickerProps = {
   id?: string

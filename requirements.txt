@@ -28,4 +28,6 @@ APScheduler==3.10.4
 reportlab==4.2.2
 openpyxl==3.1.5
 boto3==1.35.36
+faster-whisper==1.1.1
+pyannote.audio==3.3.2
  

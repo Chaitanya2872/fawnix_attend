@@ -1,0 +1,312 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import AttendanceDatePicker from '../../../../components/AttendanceDatePicker'
+
+type Props = any
+
+export default function AdminAttendancePage(props: Props) {
+  const {
+    actionableMissedLoginEmployeeCodes,
+    alertCandidatesLoading,
+    alertSentEmpCodes,
+    alertSendCounts,
+    alertTriggerLoading,
+    alertTriggerStatus,
+    allMissedLoginsSelected,
+    attendanceDateFilter,
+    attendanceSearch,
+    attendanceView,
+    exceptionRows,
+    filteredAttendanceRows,
+    formatDate,
+    formatDateOnly,
+    formatDateTime,
+    formatLeaveTypeLabel,
+    formatWorkingHours,
+    loadDashboard,
+    missedLoginEmpCodes,
+    missedLoginEmployees,
+    reminderPreviewBody,
+    reminderPreviewTitle,
+    reminderTargetDate,
+    selectedAttendanceDate,
+    selectedDateEarlyLeaves,
+    selectedDateLateArrivals,
+    selectedDateLeaves,
+    selectedMissedLoginCount,
+    selectedMissedLoginEmpCodes,
+    setAlertTriggerStatus,
+    setAttendanceDateFilter,
+    setAttendanceSearch,
+    setAttendanceView,
+    setSelectedMissedLoginEmpCodes,
+    setShowAlertComposer,
+    showAlertComposer,
+    triggerAttendanceReminder
+  } = props
+
+  const attendanceTabCount = props.attendancePageRows.length
+  const lateArrivalCount = selectedDateLateArrivals.length
+  const earlyLeaveCount = selectedDateEarlyLeaves.length
+  const leaveCount = selectedDateLeaves.length
+  const missedLoginCount = missedLoginEmpCodes.length
+
+  return (
+    <>
+      <div className="dashboard-section-head attendance-section-head">
+        <div>
+          <p className="eyebrow">Operations</p>
+          <h2>Todays Activity</h2>
+          <div className="attendance-tabs">
+            <button className={`attendance-tab ${attendanceView === 'attendance' ? 'active' : ''}`} type="button" onClick={() => setAttendanceView('attendance')}>
+              First Clock-Ins
+              <span>{attendanceTabCount}</span>
+            </button>
+            <button className={`attendance-tab ${attendanceView === 'late-arrivals' ? 'active' : ''}`} type="button" onClick={() => setAttendanceView('late-arrivals')}>
+              Late Arrivals
+              <span>{lateArrivalCount}</span>
+            </button>
+            <button className={`attendance-tab ${attendanceView === 'early-leaves' ? 'active' : ''}`} type="button" onClick={() => setAttendanceView('early-leaves')}>
+              Early Leaves
+              <span>{earlyLeaveCount}</span>
+            </button>
+            <button className={`attendance-tab ${attendanceView === 'leaves' ? 'active' : ''}`} type="button" onClick={() => setAttendanceView('leaves')}>
+              Leaves
+              <span>{leaveCount}</span>
+            </button>
+            <button className={`attendance-tab ${attendanceView === 'missed-logins' ? 'active' : ''}`} type="button" onClick={() => setAttendanceView('missed-logins')}>
+              Missed Logins
+              <span>{missedLoginCount}</span>
+            </button>
+          </div>
+        </div>
+        {attendanceView === 'attendance' ? (
+          <div className="attendance-head-actions">
+            <div className="attendance-controls attendance-controls-inline">
+              <AttendanceDatePicker value={attendanceDateFilter} onChange={setAttendanceDateFilter} />
+              <div className="attendance-filter attendance-filter-search">
+                <label htmlFor="attendance-search">Search</label>
+                <div className="attendance-input-shell attendance-search-shell">
+                  <input
+                    id="attendance-search"
+                    type="text"
+                    value={attendanceSearch}
+                    onChange={(event) => setAttendanceSearch(event.target.value)}
+                    placeholder="Search name, email, type, or location"
+                  />
+                </div>
+              </div>
+              <button className="ghost dashboard-button" onClick={() => void loadDashboard()} type="button">
+                Refresh
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button className="ghost dashboard-button" onClick={() => void loadDashboard()} type="button">
+            Refresh
+          </button>
+        )}
+      </div>
+      {attendanceView === 'attendance' ? (
+        <div className="table-card">
+          {filteredAttendanceRows.length ? (
+            <div className="table-scroll">
+              <table className="dashboard-table attendance-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Clock In</th>
+                    <th>Clock Out</th>
+                    <th>Working Hours</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAttendanceRows.map((row: any, index: number) => (
+                    <tr key={`${row.id || row.employee_email || index}`}>
+                      <td>
+                        <strong>{row.employee_name || row.employee_email || 'Unknown employee'}</strong>
+                        <span className="table-meta">{row.emp_designation || row.employee_email || '--'}</span>
+                      </td>
+                      <td>
+                        <strong>{formatDateTime(row.login_time)}</strong>
+                        <span className="table-meta">{row.login_location || 'Login location unavailable'}</span>
+                        <span className="table-meta">{row.login_address || 'Login address unavailable'}</span>
+                      </td>
+                      <td>
+                        <strong>{formatDateTime(row.logout_time)}</strong>
+                        <span className="table-meta">{row.logout_location || 'Logout location unavailable'}</span>
+                        <span className="table-meta">{row.logout_address || 'Logout address unavailable'}</span>
+                      </td>
+                      <td>{formatWorkingHours(row.working_hours)}</td>
+                      <td>{row.attendance_type || 'office'}</td>
+                      <td><span className="table-pill accent">{row.status || 'Unknown'}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty-state">
+              {attendanceSearch.trim() ? 'No attendance records match this search.' : 'No first clock-in records found for the selected date.'}
+            </div>
+          )}
+        </div>
+      ) : attendanceView === 'leaves' ? (
+        <div className="table-card">
+          {selectedDateLeaves.length ? (
+            <div className="table-scroll">
+              <table className="dashboard-table leave-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Leave Type</th>
+                    <th>Dates</th>
+                    <th>Applied Date</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedDateLeaves.map((row: any, index: number) => (
+                    <tr key={`${row.id || row.emp_code || index}`}>
+                      <td>
+                        <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
+                        <span className="table-meta">{row.emp_designation || formatLeaveTypeLabel(row) || 'Leave Request'}</span>
+                      </td>
+                      <td>{formatLeaveTypeLabel(row)}</td>
+                      <td>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</td>
+                      <td>{formatDateOnly(row.applied_at)}</td>
+                      <td><span className="table-pill">{row.status || 'Unknown'}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty-state">No leaves found for the selected date.</div>
+          )}
+        </div>
+      ) : attendanceView === 'missed-logins' ? (
+        <div className="alert-side-card">
+          <div className="chart-card-head">
+            <div>
+              <strong>Missed Logins</strong>
+              <span>Employees who have not logged in and are not on leave for {selectedAttendanceDate}.</span>
+            </div>
+          </div>
+          <div className="alert-side-count">
+            <strong>{missedLoginEmployees.length}</strong>
+            <span>{alertCandidatesLoading ? 'Refreshing alerts...' : 'Need attention'}</span>
+          </div>
+          <div className="missed-logins-toolbar">
+            <button className="ghost dashboard-button" type="button" onClick={() => { setSelectedMissedLoginEmpCodes(actionableMissedLoginEmployeeCodes); setAlertTriggerStatus('') }} disabled={!actionableMissedLoginEmployeeCodes.length || allMissedLoginsSelected}>Select All</button>
+            <button className="ghost dashboard-button" type="button" onClick={() => { setSelectedMissedLoginEmpCodes([]); setAlertTriggerStatus('') }} disabled={!selectedMissedLoginEmpCodes.length}>Clear</button>
+          </div>
+          <div className="missed-logins-actions">
+            <span className="missed-logins-selected">Selected: {selectedMissedLoginCount}</span>
+            <div className={`alert-trigger-wrap${showAlertComposer ? ' open' : ''}`}>
+              <button className="cta dashboard-button alert-trigger-button" type="button" onClick={() => { setShowAlertComposer((current: boolean) => !current); setAlertTriggerStatus('') }} disabled={alertCandidatesLoading || !selectedMissedLoginCount}>
+                {alertTriggerLoading ? 'Triggering...' : 'Trigger Alert'}
+              </button>
+              <div className={`alert-trigger-dropdown${showAlertComposer ? ' open' : ''}`}>
+                <div className="alert-trigger-dropdown-head">
+                  <strong>Reminder options</strong>
+                  <span>{selectedMissedLoginCount} employee{selectedMissedLoginCount === 1 ? '' : 's'} selected for {reminderTargetDate}</span>
+                </div>
+                <div className="alert-trigger-message">
+                  <small>Message sending</small>
+                  <strong>{reminderPreviewTitle}</strong>
+                  <p>{reminderPreviewBody}</p>
+                </div>
+                <div className="alert-trigger-recipient-list">
+                  {selectedMissedLoginEmpCodes
+                    .map((empCode: string) => missedLoginEmployees.find((employee: any) => employee.emp_code === empCode))
+                    .filter(Boolean)
+                    .slice(0, 4)
+                    .map((employee: any) => (
+                      <span key={employee.emp_code} className="alert-trigger-recipient-pill">
+                        {employee.emp_full_name || employee.emp_code}
+                      </span>
+                    ))}
+                  {selectedMissedLoginCount > 4 ? <span className="alert-trigger-recipient-pill">+{selectedMissedLoginCount - 4} more</span> : null}
+                </div>
+                <div className="alert-trigger-dropdown-actions">
+                  <button className="ghost dashboard-button" type="button" onClick={() => setShowAlertComposer(false)} disabled={alertTriggerLoading}>Cancel</button>
+                  <button className="cta dashboard-button" type="button" onClick={() => void triggerAttendanceReminder()} disabled={alertTriggerLoading || !selectedMissedLoginCount}>
+                    {alertTriggerLoading ? 'Sending...' : 'Send Reminder'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="alert-side-list">
+            {missedLoginEmployees.length ? (
+              missedLoginEmployees.map((employee: any) => {
+                const isAlertSent = alertSentEmpCodes.includes(employee.emp_code)
+                const alertSendCount = Number(alertSendCounts[employee.emp_code] || 0)
+                return (
+                  <label key={employee.emp_code} className={`alert-side-item missed-login-item${isAlertSent ? ' sent' : ''}`}>
+                    <input
+                      className="missed-login-checkbox"
+                      type="checkbox"
+                      checked={selectedMissedLoginEmpCodes.includes(employee.emp_code)}
+                      onChange={(event) => {
+                        const checked = event.target.checked
+                        setSelectedMissedLoginEmpCodes((previousCodes: string[]) => checked
+                          ? previousCodes.includes(employee.emp_code) ? previousCodes : [...previousCodes, employee.emp_code]
+                          : previousCodes.filter((empCode) => empCode !== employee.emp_code))
+                      }}
+                    />
+                    <div className="missed-login-item-copy">
+                      <strong>{employee.emp_full_name || employee.emp_code}</strong>
+                      <span>{employee.emp_designation || employee.emp_department || employee.emp_email || '--'}</span>
+                      <small className={isAlertSent ? 'missed-login-alert-sent' : 'missed-login-alert-not-sent'}>
+                        {isAlertSent ? `Sent ${alertSendCount} time${alertSendCount === 1 ? '' : 's'}` : 'Not Sent'}
+                      </small>
+                    </div>
+                  </label>
+                )
+              })
+            ) : (
+              <div className="empty-state">No missed logins for this date.</div>
+            )}
+          </div>
+          {alertTriggerStatus ? <span className="report-status">{alertTriggerStatus}</span> : null}
+        </div>
+      ) : (
+        <div className="table-card">
+          {exceptionRows.length ? (
+            <div className="table-scroll">
+              <table className="dashboard-table exception-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>{attendanceView === 'late-arrivals' ? 'Late By' : 'Early By'}</th>
+                    <th>{attendanceView === 'late-arrivals' ? 'Login Time' : 'Leave Time'}</th>
+                    <th>{attendanceView === 'late-arrivals' ? 'Informed' : 'Status'}</th>
+                    <th>Reason</th>
+                    <th>Requested</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {exceptionRows.map((row: any, index: number) => (
+                    <tr key={`${row.id || row.emp_code || index}`}>
+                      <td><strong>{row.emp_name || row.emp_code || 'Unknown employee'}</strong></td>
+                      <td>{attendanceView === 'late-arrivals' ? `${row.late_by_minutes ?? '--'} min` : `${row.early_by_minutes ?? '--'} min`}</td>
+                      <td>{attendanceView === 'late-arrivals' ? row.exception_time || row.actual_login_time || '--' : row.planned_leave_time || row.actual_logout_time || '--'}</td>
+                      <td>{attendanceView === 'late-arrivals' ? <span className={`table-pill ${(row.status || '').toLowerCase() === 'not_informed' ? '' : 'accent'}`}>{(row.status || '').toLowerCase() === 'not_informed' ? 'Not informed' : 'Informed'}</span> : <span className="table-pill">{row.status || 'Pending'}</span>}</td>
+                      <td>{row.reason || 'No reason provided'}</td>
+                      <td>{formatDateTime(row.requested_at || row.exception_date)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty-state">No {attendanceView === 'late-arrivals' ? 'late arrival' : 'early leave'} requests found for the selected date.</div>
+          )}
+        </div>
+      )}
+    </>
+  )
+}

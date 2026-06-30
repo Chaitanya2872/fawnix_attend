@@ -150,11 +150,53 @@ class Config:
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '').strip()
     GEMINI_BASE_URL = os.getenv('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta').rstrip('/')
     GEMINI_MEETING_NOTES_MODEL = os.getenv('GEMINI_MEETING_NOTES_MODEL', 'gemini-1.5-flash').strip()
+    GEMINI_MEETING_NOTES_MAX_RETRIES = int(os.getenv('GEMINI_MEETING_NOTES_MAX_RETRIES', 3))
+    GEMINI_MEETING_NOTES_RETRY_DELAY_SECONDS = float(os.getenv('GEMINI_MEETING_NOTES_RETRY_DELAY_SECONDS', 5))
+    MEETING_NOTES_USE_LOCAL_TRANSCRIPTION = os.getenv(
+        'MEETING_NOTES_USE_LOCAL_TRANSCRIPTION',
+        'False'
+    ).lower() == 'true'
+    MEETING_NOTES_ENABLE_DIARIZATION = os.getenv(
+        'MEETING_NOTES_ENABLE_DIARIZATION',
+        'False'
+    ).lower() == 'true'
+    MEETING_NOTES_FASTER_WHISPER_MODEL = os.getenv(
+        'MEETING_NOTES_FASTER_WHISPER_MODEL',
+        'small'
+    ).strip()
+    MEETING_NOTES_FASTER_WHISPER_DEVICE = os.getenv(
+        'MEETING_NOTES_FASTER_WHISPER_DEVICE',
+        'cpu'
+    ).strip()
+    MEETING_NOTES_FASTER_WHISPER_COMPUTE_TYPE = os.getenv(
+        'MEETING_NOTES_FASTER_WHISPER_COMPUTE_TYPE',
+        'int8'
+    ).strip()
+    MEETING_NOTES_DIARIZATION_MODEL = os.getenv(
+        'MEETING_NOTES_DIARIZATION_MODEL',
+        'pyannote/speaker-diarization-3.1'
+    ).strip()
+    HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACE_TOKEN', '').strip()
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '').strip()
     OPENAI_BASE_URL = os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1').rstrip('/')
     MEETING_NOTES_TRANSCRIPTION_MODEL = os.getenv('MEETING_NOTES_TRANSCRIPTION_MODEL', 'whisper-1').strip()
     MEETING_NOTES_COMPLETION_MODEL = os.getenv('MEETING_NOTES_COMPLETION_MODEL', 'gpt-4o-mini').strip()
     MEETING_NOTES_REQUEST_TIMEOUT = int(os.getenv('MEETING_NOTES_REQUEST_TIMEOUT', 300))
+    MEETING_NOTES_PROCESSING_STALE_MINUTES = int(
+        os.getenv('MEETING_NOTES_PROCESSING_STALE_MINUTES', 15)
+    )
+    MEETING_NOTES_QUEUE_POLL_SECONDS = float(
+        os.getenv('MEETING_NOTES_QUEUE_POLL_SECONDS', 5)
+    )
+    MEETING_NOTES_QUEUE_MAX_RETRIES = int(
+        os.getenv('MEETING_NOTES_QUEUE_MAX_RETRIES', 3)
+    )
+    MEETING_NOTES_QUEUE_RETRY_DELAY_SECONDS = float(
+        os.getenv('MEETING_NOTES_QUEUE_RETRY_DELAY_SECONDS', 30)
+    )
+    MEETING_NOTES_QUEUE_STALE_MINUTES = int(
+        os.getenv('MEETING_NOTES_QUEUE_STALE_MINUTES', 20)
+    )
     MEETING_NOTES_MAX_UPLOAD_MB = int(os.getenv('MEETING_NOTES_MAX_UPLOAD_MB', 100))
 
     # CRM Lead Service
@@ -198,6 +240,13 @@ class Config:
         'MEETING_NOTES_S3_REPORT_PREFIX',
         'meeting-notes/generated-reports'
     ).strip().strip('/')
+    MEETING_NOTES_S3_PUBLIC_READ = os.getenv(
+        'MEETING_NOTES_S3_PUBLIC_READ',
+        'False'
+    ).lower() == 'true'
+    MEETING_NOTES_S3_PRESIGNED_URL_TTL_SECONDS = int(
+        os.getenv('MEETING_NOTES_S3_PRESIGNED_URL_TTL_SECONDS', 3600)
+    )
     MAX_CONTENT_LENGTH = max(MAX_CONTENT_LENGTH_MB, MEETING_NOTES_MAX_UPLOAD_MB) * 1024 * 1024
     
     @classmethod

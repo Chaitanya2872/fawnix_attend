@@ -5,6 +5,7 @@ export type PrivacySection = {
 }
 
 export type SidebarId =
+  | 'dashboard'
   | 'employees'
   | 'attendance'
   | 'exceptions'

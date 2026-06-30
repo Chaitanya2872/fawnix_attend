@@ -1,4 +1,4 @@
-import type { AdminProfile } from '../types/admin'
+import type { AdminProfile } from '../../types/admin'
 
 export const ACCESS_TOKEN_KEY = 'fawnix_admin_access_token'
 export const REFRESH_TOKEN_KEY = 'fawnix_admin_refresh_token'

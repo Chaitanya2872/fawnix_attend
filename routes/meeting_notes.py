@@ -63,6 +63,11 @@ def generate(current_user):
     """
     Generate meeting outputs from uploaded audio.
 
+    JSON body for saved uploads:
+    - meeting_note_id: required saved meeting note id
+    - wait: optional boolean; when true, process synchronously in-request
+    - force: optional boolean; when true, supersede an active queued job
+
     Form fields:
     - audio: required audio file
     - meeting_title: optional title
@@ -81,6 +86,7 @@ def generate(current_user):
         if not meeting_note_id:
             return jsonify({"success": False, "message": "meeting_note_id is required"}), 400
         wait_for_completion = bool(payload.get("wait"))
+        force_restart = bool(payload.get("force"))
 
         if wait_for_completion:
             response_body, status_code = generate_meeting_notes_from_saved(
@@ -91,6 +97,7 @@ def generate(current_user):
             response_body, status_code = queue_meeting_notes_generation_from_saved(
                 meeting_note_id,
                 emp_code=current_user.get("emp_code"),
+                force=force_restart,
             )
     else:
         audio_file = request.files.get("audio")

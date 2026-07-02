@@ -33,6 +33,26 @@ export function formatDate(value?: string) {
   })
 }
 
+export function formatDateOnly(value?: string) {
+  const rawValue = (value || '').trim()
+  if (!rawValue) {
+    return '--'
+  }
+
+  const dateMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (dateMatch) {
+    const [, year, month, day] = dateMatch
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day))
+    return parsed.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    })
+  }
+
+  return formatDate(rawValue)
+}
+
 export function toDateInputValue(value: Date) {
   const offsetValue = value.getTimezoneOffset() * 60000
   return new Date(value.getTime() - offsetValue).toISOString().slice(0, 10)

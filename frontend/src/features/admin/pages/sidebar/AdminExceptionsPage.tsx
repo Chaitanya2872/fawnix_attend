@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import AttendanceDatePicker from '../../../../components/AttendanceDatePicker'
 
 type Props = any

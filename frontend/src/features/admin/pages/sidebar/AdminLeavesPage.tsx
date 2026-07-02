@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useMemo, useState } from 'react'
 
 type Props = any
@@ -6,6 +7,7 @@ export default function AdminLeavesPage({
   clearLeaveFilters,
   employees,
   formatDate,
+  formatDateOnly,
   formatLeaveTypeLabel,
   getLeaveApproverLabel,
   getLeaveReasonLabel,
@@ -217,6 +219,7 @@ export default function AdminLeavesPage({
                   <th>Employee</th>
                   <th>Leave Type</th>
                   <th>Dates</th>
+                  <th>Applied At</th>
                   <th>Approver</th>
                   <th>Reason</th>
                   <th>Status</th>
@@ -235,6 +238,7 @@ export default function AdminLeavesPage({
                       </td>
                       <td>{formatLeaveTypeLabel(row)}</td>
                       <td>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</td>
+                      <td>{formatDateOnly(row.applied_at)}</td>
                       <td>{getLeaveApproverLabel(row, employees)}</td>
                       <td>{getLeaveReasonLabel(row)}</td>
                       <td>

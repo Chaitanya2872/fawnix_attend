@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 type Props = any
 
 export default function AdminReportsPage(props: Props) {

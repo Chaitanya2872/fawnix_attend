@@ -7,13 +7,13 @@ function formatCoordinate(value: number, positive: string, negative: string) {
 export function useAdminLoginExperience(enabled: boolean) {
   const [loginSceneTime, setLoginSceneTime] = useState(() => new Date())
   const [loginLocationDetails, setLoginLocationDetails] = useState('Waiting for device location')
+  const canUseGeolocation = 'geolocation' in navigator
 
   useEffect(() => {
     if (!enabled) {
       return
     }
 
-    setLoginSceneTime(new Date())
     const intervalId = window.setInterval(() => setLoginSceneTime(new Date()), 60000)
 
     return () => window.clearInterval(intervalId)
@@ -24,13 +24,16 @@ export function useAdminLoginExperience(enabled: boolean) {
       return
     }
 
-    if (!('geolocation' in navigator)) {
-      setLoginLocationDetails('Location unavailable in this browser')
+    if (!canUseGeolocation) {
       return
     }
 
     let cancelled = false
-    setLoginLocationDetails('Locating device')
+    const locatingTimerId = window.setTimeout(() => {
+      if (!cancelled) {
+        setLoginLocationDetails('Locating device')
+      }
+    }, 0)
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -57,11 +60,14 @@ export function useAdminLoginExperience(enabled: boolean) {
 
     return () => {
       cancelled = true
+      window.clearTimeout(locatingTimerId)
     }
-  }, [enabled])
+  }, [enabled, canUseGeolocation])
 
   return {
     loginSceneTime,
-    loginLocationDetails
+    loginLocationDetails: enabled && !canUseGeolocation
+      ? 'Location unavailable in this browser'
+      : loginLocationDetails
   }
 }

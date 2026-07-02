@@ -1,4 +1,5 @@
 import { useState } from 'react'
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import AttendanceDatePicker from '../../../../components/AttendanceDatePicker'
 
 type Props = any
@@ -18,6 +19,7 @@ export default function AdminAttendancePage(props: Props) {
     exceptionRows,
     filteredAttendanceRows,
     formatDate,
+    formatDateOnly,
     formatDateTime,
     formatLeaveTypeLabel,
     formatWorkingHours,
@@ -116,10 +118,13 @@ export default function AdminAttendancePage(props: Props) {
   return (
     <div className="attendance-dashboard">
       <section className="attendance-toolbar">
-        <div className="dashboard-section-head attendance-section-head">
+        <div className="attendance-title-block">
+          <p className="eyebrow">Operations</p>
+          <h2>Todays Activity</h2>
+        </div>
+
+        <div className="attendance-toolbar-row">
           <div>
-            <p className="eyebrow">Operations</p>
-            <h2>Todays Activity</h2>
             <div className="attendance-tabs">
               <button className={`attendance-tab ${activeAttendanceView === 'attendance' ? 'active' : ''}`} type="button" onClick={() => setAttendanceView('attendance')}>
                 First Clock-Ins
@@ -245,6 +250,7 @@ export default function AdminAttendancePage(props: Props) {
                     <th>Employee</th>
                     <th>Leave Type</th>
                     <th>Dates</th>
+                    <th>Applied At</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -257,6 +263,7 @@ export default function AdminAttendancePage(props: Props) {
                       </td>
                       <td>{formatLeaveTypeLabel(row)}</td>
                       <td>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</td>
+                      <td>{formatDateOnly(row.applied_at)}</td>
                       <td><span className="table-pill">{row.status || 'Unknown'}</span></td>
                     </tr>
                   ))}

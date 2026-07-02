@@ -236,7 +236,12 @@ export default function AdminLoginPage({
 
   // Reset digits when parent clears adminOtp (e.g. after failed verify)
   useEffect(() => {
-    if (!adminOtp) setDigits(Array(OTP_LEN).fill(''))
+    if (adminOtp) {
+      return
+    }
+
+    const resetTimerId = window.setTimeout(() => setDigits(Array(OTP_LEN).fill('')), 0)
+    return () => window.clearTimeout(resetTimerId)
   }, [adminOtp])
 
   const updateDigit = (index: number, value: string) => {

@@ -95,6 +95,7 @@ export type LeaveRow = {
   remarks?: string
   from_date?: string
   to_date?: string
+  applied_at?: string
   status?: string
 }
 

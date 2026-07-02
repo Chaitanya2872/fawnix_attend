@@ -56,6 +56,7 @@ import { features, useCases, workflowSteps as steps } from '../features/public/c
 import { useClickOutside } from '../hooks/useClickOutside'
 import {
   formatDate,
+  formatDateOnly,
   formatDateTime,
   getCalendarDays,
   getCalendarMonthLabel,
@@ -2150,6 +2151,7 @@ function FawnixApp() {
           exceptionRows={exceptionRows}
           filteredAttendanceRows={filteredAttendanceRows}
           formatDate={formatDate}
+          formatDateOnly={formatDateOnly}
           formatDateTime={formatDateTime}
           formatLeaveTypeLabel={formatLeaveTypeLabel}
           formatWorkingHours={formatWorkingHours}
@@ -2223,6 +2225,7 @@ function FawnixApp() {
           clearLeaveFilters={() => clearLeaveFilters()}
           employees={employees}
           formatDate={formatDate}
+          formatDateOnly={formatDateOnly}
           formatLeaveTypeLabel={formatLeaveTypeLabel}
           getLeaveApproverLabel={getLeaveApproverLabel}
           getLeaveReasonLabel={getLeaveReasonLabel}

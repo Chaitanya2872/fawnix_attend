@@ -1038,6 +1038,25 @@ a {
 .attendance-toolbar {
   display: flex;
   flex-direction: column;
+  gap: 18px;
+}
+
+.attendance-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.attendance-title-block h2 {
+  margin: 0;
+}
+
+.attendance-toolbar-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
 }
 
 .attendance-section-head {
@@ -5049,6 +5068,10 @@ a {
   .attendance-head-actions {
     justify-content: flex-start;
     flex-basis: 100%;
+  }
+
+  .attendance-toolbar-row {
+    align-items: stretch;
   }
 
   .attendance-controls-inline {

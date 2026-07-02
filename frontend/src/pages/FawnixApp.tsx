@@ -2176,11 +2176,11 @@ function FawnixApp() {
           showAlertComposer={showAlertComposer}
           triggerAttendanceReminder={triggerAttendanceReminder}
         />
-      )
-    }
+        )
+      }
 
-    if (activePanel === 'calendar') {
-      return (
+      if (activePanel === 'calendar') {
+        return (
         <AdminCalendarPage
           attendanceCountByDate={attendanceCountByDate}
           calendarDays={calendarDays}

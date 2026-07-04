@@ -94,10 +94,18 @@ def _validate_audio_file(audio_file) -> Tuple[bool, str | None]:
 
 
 def _read_audio_bytes(audio_file) -> bytes:
+    """
+    Read uploaded audio safely.
+
+    Note:
+    This still loads the file into memory, so for very large files,
+    prefer /upload + queued processing instead of /generate.
+    """
     audio_file.stream.seek(0)
-    audio_bytes = audio_file.stream.read()
-    audio_file.stream.seek(0)
-    return audio_bytes
+    try:
+        return audio_file.stream.read()
+    finally:
+        audio_file.stream.seek(0)
 
 
 def _normalize_content(content: Any) -> str:
@@ -116,9 +124,36 @@ def _normalize_content(content: Any) -> str:
     return str(content or "")
 
 
+def _extract_json_object_text(content: str) -> str:
+    cleaned = (content or "").strip()
+    if not cleaned:
+        return cleaned
+
+    if cleaned.startswith("```"):
+        fence_lines = cleaned.splitlines()
+        if fence_lines:
+            fence_lines = fence_lines[1:]
+        if fence_lines and fence_lines[-1].strip().startswith("```"):
+            fence_lines = fence_lines[:-1]
+        cleaned = "\n".join(fence_lines).strip()
+
+    decoder = json.JSONDecoder()
+    for index, char in enumerate(cleaned):
+        if char != "{":
+            continue
+        try:
+            _, end_index = decoder.raw_decode(cleaned[index:])
+            return cleaned[index:index + end_index]
+        except json.JSONDecodeError:
+            continue
+
+    return cleaned
+
+
 def _parse_structured_notes(content: str) -> Dict[str, Any]:
+    json_text = _extract_json_object_text(content)
     try:
-        parsed = json.loads(content)
+        parsed = json.loads(json_text)
     except json.JSONDecodeError as exc:
         raise RuntimeError("Meeting notes generation did not return valid JSON") from exc
 
@@ -161,6 +196,62 @@ def _meeting_prompt_from_transcript(
         "Return valid JSON only with this exact shape:\n"
         "{\n"
         '  "transcript": "cleaned speaker-tagged transcript",\n'
+        '  "summary": "5-10 bullet executive summary in markdown",\n'
+        '  "minutes_of_meeting": "full markdown document using the required structure",\n'
+        '  "important_points": ["short point 1", "short point 2", "short point 3"]\n'
+        "}\n\n"
+        "The `minutes_of_meeting` field must contain a markdown document with exactly these sections:\n"
+        "# Minutes of Meeting\n"
+        "## Meeting Summary\n"
+        "## Key Discussion Points\n"
+        "## Decisions Made\n"
+        "## Action Items\n"
+        "## Open Questions\n"
+        "## Risks and Dependencies\n"
+        "## Next Steps\n"
+        "## Participants\n"
+        "## Transcript Confidence Notes\n\n"
+        "Action Items must include a markdown table with columns:\n"
+        "Action Item | Owner | Due Date | Priority\n"
+        'Use "Not Specified" when data is missing. Infer priority only when clearly justified.\n\n'
+        f"Meeting title: {title_text}\n"
+        f"Preferred language handling: {language_text}\n\n"
+        f"Transcript:\n{transcript}"
+    )
+
+
+def _mom_only_prompt_from_transcript(
+    transcript: str,
+    *,
+    meeting_title: str | None = None,
+    language: str | None = None,
+) -> str:
+    """
+    Same MoM instructions as _meeting_prompt_from_transcript, but does NOT ask
+    the model to reproduce the transcript field. The caller already has a
+    verbatim transcript (from audio transcription) and just stitches it into
+    the result — asking the model to additionally regurgitate a potentially
+    very long transcript inside the JSON response risks hitting the output
+    token limit on long recordings for no benefit.
+    """
+    title_text = (meeting_title or "").strip() or "Not Specified"
+    language_text = (language or "").strip() or "Not Specified"
+    return (
+        "You are an expert Business Analyst and Meeting Secretary.\n\n"
+        "Your task is to generate professional Minutes of Meeting (MoM) from the provided meeting transcript.\n\n"
+        "Instructions:\n"
+        "1. Use ONLY the information present in the transcript.\n"
+        "2. Do NOT invent attendees, decisions, deadlines, action items, or technical details.\n"
+        '3. If information is unclear or missing, explicitly mention "Not Specified".\n'
+        "4. Remove filler words, repeated statements, interruptions, and casual conversation.\n"
+        "5. Consolidate duplicate discussion points.\n"
+        "6. Preserve all important business, technical, product, project, architectural, operational, and management decisions.\n"
+        "7. Extract action items even if they are mentioned indirectly.\n"
+        "8. Associate action items with the responsible person whenever possible.\n"
+        "9. If speaker names are available, use them. Otherwise use Speaker 1, Speaker 2, etc.\n"
+        "10. Format the response in Markdown.\n\n"
+        "Return valid JSON only with this exact shape (do NOT include a transcript field):\n"
+        "{\n"
         '  "summary": "5-10 bullet executive summary in markdown",\n'
         '  "minutes_of_meeting": "full markdown document using the required structure",\n'
         '  "important_points": ["short point 1", "short point 2", "short point 3"]\n'
@@ -327,6 +418,12 @@ def _generate_transcript(audio_file, language: str | None = None) -> str:
     return _generate_transcript_with_openai(audio_file, language=language)
 
 
+def _generate_local_transcript(audio_file, language: str | None = None) -> str:
+    if not Config.MEETING_NOTES_USE_LOCAL_TRANSCRIPTION:
+        raise RuntimeError("Local transcription is disabled.")
+    return _transcribe_audio_locally(audio_file, language=language)
+
+
 def _generate_transcript_with_openai(audio_file, language: str | None = None) -> str:
     transcription_url = f"{Config.OPENAI_BASE_URL}/audio/transcriptions"
     form_data = {"model": Config.MEETING_NOTES_TRANSCRIPTION_MODEL}
@@ -356,6 +453,57 @@ def _generate_transcript_with_openai(audio_file, language: str | None = None) ->
     if not transcript:
         raise RuntimeError("Transcription completed but no transcript was returned")
     return transcript
+
+
+# Gemini's media pipeline only reliably decodes these MIME types. Raw elementary
+# streams (mp3/wav/aac/ogg/flac/aiff) are declared as audio/*. MP4-container audio
+# (mp4/m4a) must be declared as "audio/mp4", NOT "video/mp4" — verified directly
+# against the File API: audio-only content declared as video/mp4 is routed to
+# Gemini's video pipeline, which expects an actual video track and marks the file
+# FAILED; declaring the same bytes as audio/aac (a raw elementary-stream type)
+# uploads fine but silently produces empty/"Not Specified" output because the
+# container framing isn't a bare AAC stream. "audio/mp4" is the container-aware
+# audio type and is what actually reaches ACTIVE and transcribes correctly.
+_GEMINI_SUPPORTED_AUDIO_MIME_TYPES = {
+    "audio/wav", "audio/mp3", "audio/mpeg", "audio/aiff", "audio/aac", "audio/ogg", "audio/flac",
+    "audio/mp4", "video/webm", "video/mpeg",
+}
+
+# Client-supplied Content-Type headers are often wrong or too generic (e.g.
+# application/octet-stream, or video/mp4 for an audio-only .mp4), which causes
+# the uploaded Gemini File API file to end up FAILED instead of ACTIVE. Prefer a
+# MIME type derived from the file extension.
+_GEMINI_AUDIO_MIME_BY_EXTENSION = {
+    "mp3": "audio/mp3",
+    "mpga": "audio/mp3",
+    "wav": "audio/wav",
+    "aac": "audio/aac",
+    "ogg": "audio/ogg",
+    "flac": "audio/flac",
+    "aiff": "audio/aiff",
+    "m4a": "audio/mp4",
+    "mp4": "audio/mp4",
+    "webm": "video/webm",
+    "mpeg": "video/mpeg",
+}
+
+
+def _resolve_gemini_audio_mime_type(filename: str, client_mime_type: str | None) -> str:
+    resolved = _GEMINI_AUDIO_MIME_BY_EXTENSION.get(_get_audio_extension(filename))
+    if resolved:
+        return resolved
+
+    normalized_client_mime_type = (client_mime_type or "").lower()
+    if normalized_client_mime_type in _GEMINI_SUPPORTED_AUDIO_MIME_TYPES:
+        return normalized_client_mime_type
+
+    logger.warning(
+        "Unrecognized audio extension for Gemini upload: filename=%s client_mime_type=%s; "
+        "sending as-is, which may fail Gemini File API processing",
+        filename,
+        client_mime_type,
+    )
+    return client_mime_type or "application/octet-stream"
 
 
 def _upload_to_gemini_file_api(audio_bytes: bytes, mime_type: str, filename: str) -> str:
@@ -407,21 +555,254 @@ def _upload_to_gemini_file_api(audio_bytes: bytes, mime_type: str, filename: str
     file_name = file_data.get("name")
     if not file_uri:
         raise RuntimeError("Gemini File API upload completed but returned no file URI")
-    logger.info("Gemini File API upload completed file_uri=%s", file_uri)
 
-    # Poll until ACTIVE (audio files transition quickly, but large files may take a moment)
+    reported_size = file_data.get("sizeBytes")
+    if reported_size is not None and int(reported_size) != len(audio_bytes):
+        logger.warning(
+            "Gemini File API reported size mismatch for %s: sent=%d reported=%s (possible truncated upload)",
+            file_name,
+            len(audio_bytes),
+            reported_size,
+        )
+    logger.info(
+        "Gemini File API upload completed file_uri=%s mime_type=%s size_bytes=%d",
+        file_uri,
+        mime_type,
+        len(audio_bytes),
+    )
+
+    # Poll until ACTIVE; audio files transition quickly but larger ones can take longer,
+    # so raise instead of silently returning a file the API will reject as non-ACTIVE.
     if file_name:
-        for _ in range(10):
+        max_poll_attempts = 30
+        poll_interval_seconds = 2
+        for _ in range(max_poll_attempts):
             state_resp = requests.get(
                 f"https://generativelanguage.googleapis.com/v1beta/{file_name}"
                 f"?key={Config.GEMINI_API_KEY}",
                 timeout=30,
             )
-            if state_resp.ok and state_resp.json().get("state") == "ACTIVE":
+            state_json = state_resp.json() if state_resp.ok else {}
+            state = state_json.get("state")
+            if state == "ACTIVE":
                 break
-            time.sleep(2)
+            if state == "FAILED":
+                failure_detail = state_json.get("error") or {}
+                raise RuntimeError(
+                    f"Gemini File API failed to process uploaded file {file_name} "
+                    f"(mime_type={mime_type}): {failure_detail.get('message') or failure_detail or 'no detail returned'}"
+                )
+            time.sleep(poll_interval_seconds)
+        else:
+            raise RuntimeError(
+                f"Gemini File API file {file_name} did not become ACTIVE within "
+                f"{max_poll_attempts * poll_interval_seconds} seconds"
+            )
 
     return file_uri
+
+
+_GEMINI_TRANSCRIPTION_MAX_OUTPUT_TOKENS = 65536
+_GEMINI_TRANSCRIPTION_MAX_CONTINUATIONS = 12
+
+# gemini-3.5-flash spends output-token budget on invisible "thinking" tokens
+# before writing the visible response unless explicitly disabled. Confirmed via
+# usageMetadata: with thinking enabled, a call can burn its entire
+# maxOutputTokens budget on thoughtsTokenCount and return almost no visible
+# text (finishReason STOP, 1 character of actual output). Disabling it routes
+# the full budget to the actual transcript/JSON content instead.
+_GEMINI_DISABLE_THINKING_CONFIG = {"thinkingBudget": 0}
+
+
+def _post_gemini_generate_content_with_retry(url: str, payload: Dict[str, Any], *, error_context: str) -> "requests.Response":
+    """POST to Gemini's generateContent with retry/backoff on transient failures.
+    5xx/429 are the documented retryable statuses; 400 is included too since
+    Gemini's API has been observed to return a spurious INVALID_ARGUMENT for an
+    otherwise-valid request that succeeds unchanged on immediate retry."""
+    response = None
+    max_attempts = max(1, int(Config.GEMINI_MEETING_NOTES_MAX_RETRIES))
+    retry_delay_seconds = max(0.0, float(Config.GEMINI_MEETING_NOTES_RETRY_DELAY_SECONDS))
+
+    for attempt in range(1, max_attempts + 1):
+        response = requests.post(
+            url,
+            headers={"Content-Type": "application/json"},
+            json=payload,
+            timeout=Config.MEETING_NOTES_REQUEST_TIMEOUT,
+        )
+
+        if response.ok:
+            return response
+
+        is_retryable = response.status_code in {400, 429, 500, 502, 503, 504}
+        if not is_retryable or attempt == max_attempts:
+            raise RuntimeError(
+                f"{error_context} failed with status {response.status_code}: {response.text}"
+            )
+
+        sleep_seconds = retry_delay_seconds * attempt
+        logger.warning(
+            "%s request failed with status %s on attempt %s/%s; retrying in %.1f seconds",
+            error_context,
+            response.status_code,
+            attempt,
+            max_attempts,
+            sleep_seconds,
+        )
+        time.sleep(sleep_seconds)
+
+    return response
+
+
+def _transcribe_audio_part_with_gemini(audio_part: Dict[str, Any], *, language: str | None = None) -> str:
+    """
+    Transcribe audio as its own standalone task, separate from summarization/formatting.
+    Asking Gemini to simultaneously transcribe long audio verbatim AND produce a
+    structured JSON MoM in a single call causes the output to degenerate into a
+    repeated token (or a repeating short cycle of lines) partway through long
+    recordings and get cut off before the JSON closes. A minimal, plain-text-only
+    transcription call is far less prone to this than a long structured-JSON
+    generation.
+
+    Even with degeneration avoided, a single call can still hit the model's
+    output token ceiling partway through a long recording (finishReason
+    MAX_TOKENS) without finishing. When that happens, continue the transcription
+    in the same multi-turn request by feeding back what was generated so far and
+    asking the model to pick up exactly where it left off, until it reports
+    finishReason STOP or a generous continuation cap is hit.
+    """
+    url = (
+        f"{Config.GEMINI_BASE_URL}/models/{Config.GEMINI_MEETING_NOTES_MODEL}:generateContent"
+        f"?key={Config.GEMINI_API_KEY}"
+    )
+    language_text = (language or "").strip() or "auto-detect"
+    contents = [
+        {
+            "role": "user",
+            "parts": [
+                {
+                    "text": (
+                        "Transcribe this meeting audio verbatim. Label speakers as "
+                        "Speaker 1, Speaker 2, etc. if distinguishable. Output plain "
+                        "text only — no JSON, no commentary, no markdown formatting.\n"
+                        f"Language: {language_text}"
+                    )
+                },
+                audio_part,
+            ],
+        }
+    ]
+
+    transcript_chunks = []
+    for _ in range(_GEMINI_TRANSCRIPTION_MAX_CONTINUATIONS + 1):
+        payload = {
+            "generationConfig": {
+                "temperature": 0.1,
+                "maxOutputTokens": _GEMINI_TRANSCRIPTION_MAX_OUTPUT_TOKENS,
+                "thinkingConfig": _GEMINI_DISABLE_THINKING_CONFIG,
+            },
+            "contents": contents,
+        }
+        response = _post_gemini_generate_content_with_retry(
+            url, payload, error_context="Gemini audio transcription"
+        )
+
+        result = response.json()
+        candidates = result.get("candidates") or []
+        if not candidates:
+            raise RuntimeError("Gemini audio transcription returned no candidates")
+
+        candidate = candidates[0]
+        parts = (candidate.get("content") or {}).get("parts") or []
+        chunk_text = "".join(str(part.get("text") or "") for part in parts)
+        transcript_chunks.append(chunk_text)
+
+        if candidate.get("finishReason") != "MAX_TOKENS":
+            break
+
+        logger.info("Gemini audio transcription hit MAX_TOKENS; continuing from where it left off")
+        contents.append({"role": "model", "parts": [{"text": chunk_text}]})
+        contents.append(
+            {
+                "role": "user",
+                "parts": [
+                    {
+                        "text": (
+                            "Continue the transcription exactly where you left off. "
+                            "Do not repeat any earlier text and do not summarize — "
+                            "continue verbatim."
+                        )
+                    }
+                ],
+            }
+        )
+    else:
+        logger.warning(
+            "Gemini audio transcription hit the %d-round continuation cap; transcript may be incomplete",
+            _GEMINI_TRANSCRIPTION_MAX_CONTINUATIONS,
+        )
+
+    transcript = "".join(transcript_chunks).strip()
+    if not transcript:
+        raise RuntimeError("Gemini audio transcription returned empty content")
+    return transcript
+
+
+def _generate_notes_from_audio_part_single_shot_with_gemini(
+    audio_part: Dict[str, Any],
+    *,
+    meeting_title: str | None = None,
+    language: str | None = None,
+) -> Dict[str, Any]:
+    """Legacy single-call path: ask Gemini to transcribe and structure the notes at
+    once. Kept only as a last-resort fallback if the two-step transcription call
+    itself fails outright, since this path is the one known to degenerate on long
+    recordings (see _transcribe_audio_part_with_gemini)."""
+    url = (
+        f"{Config.GEMINI_BASE_URL}/models/{Config.GEMINI_MEETING_NOTES_MODEL}:generateContent"
+        f"?key={Config.GEMINI_API_KEY}"
+    )
+    payload = {
+        "generationConfig": {
+            "temperature": 0.2,
+            "responseMimeType": "application/json",
+            "maxOutputTokens": _GEMINI_TRANSCRIPTION_MAX_OUTPUT_TOKENS,
+            "thinkingConfig": _GEMINI_DISABLE_THINKING_CONFIG,
+        },
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": (
+                            "Listen to the uploaded meeting audio and return valid JSON with keys "
+                            "`transcript`, `summary`, `minutes_of_meeting`, and `important_points` only.\n"
+                            "Use the transcript content only. If anything is unclear, say Not Specified.\n"
+                            f"Meeting title: {(meeting_title or '').strip() or 'Not Specified'}\n"
+                            f"Preferred language handling: {(language or '').strip() or 'Not Specified'}"
+                        )
+                    },
+                    audio_part,
+                ]
+            }
+        ],
+    }
+
+    response = _post_gemini_generate_content_with_retry(
+        url, payload, error_context="Gemini meeting notes generation"
+    )
+
+    result = response.json()
+    candidates = result.get("candidates") or []
+    if not candidates:
+        raise RuntimeError("Gemini meeting notes generation returned no candidates")
+
+    content = candidates[0].get("content") or {}
+    parts = content.get("parts") or []
+    raw_text = "".join(str(part.get("text") or "") for part in parts).strip()
+    if not raw_text:
+        raise RuntimeError("Gemini meeting notes generation returned empty content")
+
+    return _parse_structured_notes(raw_text)
 
 
 def _generate_notes_with_gemini_from_audio(
@@ -431,8 +812,8 @@ def _generate_notes_with_gemini_from_audio(
     language: str | None = None,
 ) -> Dict[str, Any]:
     audio_bytes = _read_audio_bytes(audio_file)
-    mime_type = audio_file.mimetype or "application/octet-stream"
     filename = (audio_file.filename or "meeting-audio")
+    mime_type = _resolve_gemini_audio_mime_type(filename, audio_file.mimetype)
 
     if len(audio_bytes) > _GEMINI_INLINE_MAX_BYTES:
         logger.info(
@@ -455,6 +836,39 @@ def _generate_notes_with_gemini_from_audio(
             }
         }
 
+    try:
+        transcript = _transcribe_audio_part_with_gemini(audio_part, language=language)
+    except Exception as exc:
+        logger.warning(
+            "Gemini two-step audio transcription failed; falling back to single-shot audio JSON generation: %s",
+            exc,
+        )
+        return _generate_notes_from_audio_part_single_shot_with_gemini(
+            audio_part,
+            meeting_title=meeting_title,
+            language=language,
+        )
+
+    return _generate_mom_fields_from_transcript_with_gemini(
+        transcript,
+        meeting_title=meeting_title,
+        language=language,
+    )
+
+
+def _generate_mom_fields_from_transcript_with_gemini(
+    transcript: str,
+    *,
+    meeting_title: str | None = None,
+    language: str | None = None,
+) -> Dict[str, Any]:
+    """
+    Derive summary/minutes_of_meeting/important_points from an already-known
+    verbatim transcript, without asking the model to reproduce the transcript
+    itself. Reproducing a long transcript a second time (once during audio
+    transcription, again inside this JSON response) roughly doubles the output
+    length needed for long recordings for no benefit, since we already have it.
+    """
     url = (
         f"{Config.GEMINI_BASE_URL}/models/{Config.GEMINI_MEETING_NOTES_MODEL}:generateContent"
         f"?key={Config.GEMINI_API_KEY}"
@@ -463,35 +877,27 @@ def _generate_notes_with_gemini_from_audio(
         "generationConfig": {
             "temperature": 0.2,
             "responseMimeType": "application/json",
+            "maxOutputTokens": _GEMINI_TRANSCRIPTION_MAX_OUTPUT_TOKENS,
+            "thinkingConfig": _GEMINI_DISABLE_THINKING_CONFIG,
         },
         "contents": [
             {
                 "parts": [
                     {
-                        "text": (
-                            "Listen to the uploaded meeting audio and return valid JSON with keys "
-                            "`transcript`, `summary`, `minutes_of_meeting`, and `important_points` only.\n"
-                            "Use the transcript content only. If anything is unclear, say Not Specified.\n"
-                            f"Meeting title: {(meeting_title or '').strip() or 'Not Specified'}\n"
-                            f"Preferred language handling: {(language or '').strip() or 'Not Specified'}"
+                        "text": _mom_only_prompt_from_transcript(
+                            transcript,
+                            meeting_title=meeting_title,
+                            language=language,
                         )
                     },
-                    audio_part,
                 ]
             }
         ],
     }
 
-    response = requests.post(
-        url,
-        headers={"Content-Type": "application/json"},
-        json=payload,
-        timeout=Config.MEETING_NOTES_REQUEST_TIMEOUT,
+    response = _post_gemini_generate_content_with_retry(
+        url, payload, error_context="Gemini meeting notes generation"
     )
-    if not response.ok:
-        raise RuntimeError(
-            f"Gemini meeting notes generation failed with status {response.status_code}: {response.text}"
-        )
 
     result = response.json()
     candidates = result.get("candidates") or []
@@ -504,7 +910,9 @@ def _generate_notes_with_gemini_from_audio(
     if not raw_text:
         raise RuntimeError("Gemini meeting notes generation returned empty content")
 
-    return _parse_structured_notes(raw_text)
+    structured = _parse_structured_notes(raw_text)
+    structured["transcript"] = transcript
+    return structured
 
 
 def _generate_notes_with_openai(audio_file, meeting_title: str | None = None, language: str | None = None) -> Dict[str, Any]:
@@ -555,17 +963,12 @@ def _generate_notes_with_openai(audio_file, meeting_title: str | None = None, la
     return structured
 
 
-def _generate_notes_with_gemini(audio_file, meeting_title: str | None = None, language: str | None = None) -> Dict[str, Any]:
-    try:
-        transcript = _generate_transcript(audio_file, language=language)
-    except Exception as exc:
-        logger.warning("Transcript-first Gemini flow failed; using direct-audio Gemini fallback: %s", exc)
-        return _generate_notes_with_gemini_from_audio(
-            audio_file,
-            meeting_title=meeting_title,
-            language=language,
-        )
-
+def _generate_structured_notes_from_transcript_with_gemini(
+    transcript: str,
+    *,
+    meeting_title: str | None = None,
+    language: str | None = None,
+) -> Dict[str, Any]:
     url = (
         f"{Config.GEMINI_BASE_URL}/models/{Config.GEMINI_MEETING_NOTES_MODEL}:generateContent"
         f"?key={Config.GEMINI_API_KEY}"
@@ -574,6 +977,8 @@ def _generate_notes_with_gemini(audio_file, meeting_title: str | None = None, la
         "generationConfig": {
             "temperature": 0.2,
             "responseMimeType": "application/json",
+            "maxOutputTokens": _GEMINI_TRANSCRIPTION_MAX_OUTPUT_TOKENS,
+            "thinkingConfig": _GEMINI_DISABLE_THINKING_CONFIG,
         },
         "contents": [
             {
@@ -590,39 +995,12 @@ def _generate_notes_with_gemini(audio_file, meeting_title: str | None = None, la
         ],
     }
 
-    response = None
-    max_attempts = max(1, int(Config.GEMINI_MEETING_NOTES_MAX_RETRIES))
-    retry_delay_seconds = max(0.0, float(Config.GEMINI_MEETING_NOTES_RETRY_DELAY_SECONDS))
+    response = _post_gemini_generate_content_with_retry(
+        url, payload, error_context="Gemini meeting notes generation"
+    )
 
-    for attempt in range(1, max_attempts + 1):
-        response = requests.post(
-            url,
-            headers={"Content-Type": "application/json"},
-            json=payload,
-            timeout=Config.MEETING_NOTES_REQUEST_TIMEOUT,
-        )
-
-        if response.ok:
-            break
-
-        is_retryable = response.status_code in {429, 500, 502, 503, 504}
-        if not is_retryable or attempt == max_attempts:
-            raise RuntimeError(
-                f"Gemini meeting notes generation failed with status {response.status_code}: {response.text}"
-            )
-
-        sleep_seconds = retry_delay_seconds * attempt
-        logger.warning(
-            "Gemini meeting notes request failed with status %s on attempt %s/%s; retrying in %.1f seconds",
-            response.status_code,
-            attempt,
-            max_attempts,
-            sleep_seconds,
-        )
-        time.sleep(sleep_seconds)
-
-    payload = response.json()
-    candidates = payload.get("candidates") or []
+    result = response.json()
+    candidates = result.get("candidates") or []
     if not candidates:
         raise RuntimeError("Gemini meeting notes generation returned no candidates")
 
@@ -636,6 +1014,24 @@ def _generate_notes_with_gemini(audio_file, meeting_title: str | None = None, la
     if not structured["transcript"]:
         structured["transcript"] = transcript
     return structured
+
+
+def _generate_notes_with_gemini(audio_file, meeting_title: str | None = None, language: str | None = None) -> Dict[str, Any]:
+    try:
+        transcript = _generate_local_transcript(audio_file, language=language)
+    except Exception as exc:
+        logger.info("Gemini transcript shortcut unavailable; using direct-audio Gemini flow: %s", exc)
+        return _generate_notes_with_gemini_from_audio(
+            audio_file,
+            meeting_title=meeting_title,
+            language=language,
+        )
+
+    return _generate_structured_notes_from_transcript_with_gemini(
+        transcript,
+        meeting_title=meeting_title,
+        language=language,
+    )
 
 
 def _configured_provider() -> str | None:

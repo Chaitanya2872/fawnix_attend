@@ -127,10 +127,16 @@ def _ensure_schema_migrations_table(cursor):
 
 
 def _normalize_migration_sql(sql_text: str) -> str:
+    """Strip top-level transaction control statements from migration SQL.
+
+    Only matches the semicolon-terminated forms (e.g. "BEGIN;") so that bare
+    "BEGIN"/"END" keywords inside PL/pgSQL blocks (DO $$ BEGIN ... END $$;)
+    are left untouched.
+    """
     normalized_lines = []
     for line in sql_text.splitlines():
-        stripped = line.strip().rstrip(";").upper()
-        if stripped in {"BEGIN", "COMMIT", "ROLLBACK"}:
+        stripped = line.strip().upper()
+        if stripped in {"BEGIN;", "COMMIT;", "ROLLBACK;"}:
             continue
         normalized_lines.append(line)
     return "\n".join(normalized_lines).strip()

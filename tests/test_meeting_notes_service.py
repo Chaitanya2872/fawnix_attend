@@ -20,13 +20,9 @@ def test_generate_meeting_notes_success(monkeypatch):
     monkeypatch.setattr(meeting_notes_service.Config, "FEATURE_MEETING_NOTES", True)
     monkeypatch.setattr(meeting_notes_service.Config, "GEMINI_API_KEY", "gemini-test-key")
     monkeypatch.setattr(meeting_notes_service.Config, "OPENAI_API_KEY", "")
+    monkeypatch.setattr(meeting_notes_service.Config, "MEETING_NOTES_USE_LOCAL_TRANSCRIPTION", False)
     monkeypatch.setattr(meeting_notes_service.Config, "MEETING_NOTES_ALLOWED_EXTENSIONS", ["mp3"])
     monkeypatch.setattr(meeting_notes_service, "is_s3_configured", lambda: True)
-    monkeypatch.setattr(
-        meeting_notes_service,
-        "_generate_transcript",
-        lambda audio_file, language=None: "[Speaker 1]: Alice reviewed the roadmap.\n[Speaker 2]: Alice will share notes.",
-    )
 
     calls = []
     uploads = []
@@ -44,6 +40,28 @@ def test_generate_meeting_notes_success(monkeypatch):
             }
         )
         if ":generateContent?key=gemini-test-key" in url:
+            parts = json["contents"][0]["parts"]
+            if len(parts) == 2:
+                return FakeResponse(
+                    {
+                        "candidates": [
+                            {
+                                "content": {
+                                    "parts": [
+                                        {
+                                            "text": (
+                                                '{"transcript":"Alice reviewed the roadmap and assigned follow-ups.",'
+                                                '"summary":"Roadmap review completed.",'
+                                                '"minutes_of_meeting":"Agenda: roadmap\\nDecision: proceed\\nAction items: Alice to share notes.",'
+                                                '"important_points":["Roadmap reviewed","Action item assigned"]}'
+                                            )
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                )
             return FakeResponse(
                 {
                     "candidates": [
@@ -131,7 +149,8 @@ def test_generate_meeting_notes_success(monkeypatch):
     assert response["data"]["report_storage"]["bucket"] == "test-bucket"
     assert response["data"]["report_storage"]["content_type"] == "application/pdf"
     assert ":generateContent?key=gemini-test-key" in calls[0]["url"]
-    assert "Transcript:\n[Speaker 1]: Alice reviewed the roadmap." in calls[0]["json"]["contents"][0]["parts"][0]["text"]
+    assert "Listen to the uploaded meeting audio" in calls[0]["json"]["contents"][0]["parts"][0]["text"]
+    assert calls[0]["json"]["contents"][0]["parts"][1]["inline_data"]["mime_type"] == "audio/mp3"
     assert uploads[0]["filename"] == "meeting.mp3"
     assert uploads[0]["emp_code"] == "EMP001"
     assert report_uploads[0]["emp_code"] == "EMP001"
@@ -159,11 +178,7 @@ def test_generate_notes_with_gemini_retries_temporary_unavailable(monkeypatch):
     monkeypatch.setattr(meeting_notes_service.Config, "GEMINI_API_KEY", "gemini-test-key")
     monkeypatch.setattr(meeting_notes_service.Config, "GEMINI_MEETING_NOTES_MAX_RETRIES", 3)
     monkeypatch.setattr(meeting_notes_service.Config, "GEMINI_MEETING_NOTES_RETRY_DELAY_SECONDS", 0)
-    monkeypatch.setattr(
-        meeting_notes_service,
-        "_generate_transcript",
-        lambda audio_file, language=None: "[Speaker 1]: Transcript",
-    )
+    monkeypatch.setattr(meeting_notes_service.Config, "MEETING_NOTES_USE_LOCAL_TRANSCRIPTION", False)
 
     responses = [
         FakeResponse(
@@ -282,11 +297,12 @@ def test_generate_transcript_falls_back_to_openai_when_local_pipeline_fails(monk
     assert transcript == "Fallback transcript"
 
 
-def test_generate_notes_with_gemini_falls_back_to_direct_audio_when_transcript_fails(monkeypatch):
+def test_generate_notes_with_gemini_falls_back_to_direct_audio_when_local_transcript_fails(monkeypatch):
     monkeypatch.setattr(meeting_notes_service.Config, "GEMINI_API_KEY", "gemini-test-key")
+    monkeypatch.setattr(meeting_notes_service.Config, "MEETING_NOTES_USE_LOCAL_TRANSCRIPTION", True)
     monkeypatch.setattr(
         meeting_notes_service,
-        "_generate_transcript",
+        "_generate_local_transcript",
         lambda audio_file, language=None: (_ for _ in ()).throw(RuntimeError("transcript failed")),
     )
     monkeypatch.setattr(
@@ -309,6 +325,68 @@ def test_generate_notes_with_gemini_falls_back_to_direct_audio_when_transcript_f
     structured = meeting_notes_service._generate_notes_with_gemini(audio_file, meeting_title="Retry Test")
 
     assert structured["summary"] == "Fallback summary"
+
+
+def test_generate_notes_with_gemini_uses_local_transcript_when_enabled(monkeypatch):
+    monkeypatch.setattr(meeting_notes_service.Config, "GEMINI_API_KEY", "gemini-test-key")
+    monkeypatch.setattr(meeting_notes_service.Config, "MEETING_NOTES_USE_LOCAL_TRANSCRIPTION", True)
+    monkeypatch.setattr(
+        meeting_notes_service,
+        "_generate_local_transcript",
+        lambda audio_file, language=None: "[Speaker 1]: Transcript",
+    )
+
+    calls = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        calls.append({"url": url, "json": json})
+        return FakeResponse(
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "text": (
+                                        '{"transcript":"Transcript",'
+                                        '"summary":"Summary",'
+                                        '"minutes_of_meeting":"Minutes",'
+                                        '"important_points":["Point 1"]}'
+                                    )
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr(meeting_notes_service.requests, "post", fake_post)
+
+    audio_file = FileStorage(
+        stream=BytesIO(b"fake-audio"),
+        filename="meeting.mp3",
+        content_type="audio/mpeg",
+    )
+
+    structured = meeting_notes_service._generate_notes_with_gemini(audio_file, meeting_title="Retry Test")
+
+    assert structured["summary"] == "Summary"
+    assert "Transcript:\n[Speaker 1]: Transcript" in calls[0]["json"]["contents"][0]["parts"][0]["text"]
+
+
+def test_parse_structured_notes_extracts_json_from_fenced_output():
+    content = """```json
+Here is the structured result:
+{"transcript":"Transcript","summary":"Summary","minutes_of_meeting":"Minutes","important_points":["Point 1"]}
+```"""
+
+    structured = meeting_notes_service._parse_structured_notes(content)
+
+    assert structured["transcript"] == "Transcript"
+    assert structured["summary"] == "Summary"
+    assert structured["minutes_of_meeting"] == "Minutes"
+    assert structured["important_points"] == ["Point 1"]
 
 
 def test_upload_meeting_report_returns_public_url_when_enabled(monkeypatch):

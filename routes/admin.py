@@ -26,7 +26,10 @@ from services.notification_service import (
     send_push_notification_to_employee,
     trigger_scheduled_notification,
 )
-from services.attendance_exceptions_service import get_team_exceptions
+from services.attendance_exceptions_service import (
+    get_admin_attendance_exceptions,
+    get_team_exceptions,
+)
 from services.leaves_import_service import import_leave_rows, import_leaves_from_csv
 
 from database.connection import get_db_connection, return_connection
@@ -1426,5 +1429,70 @@ def admin_early_leaves(current_user):
         'early_leave',
         include_all=True
     )
+    return jsonify(result[0]), result[1]
+
+
+@admin_bp.route('/attendance-exceptions', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def admin_attendance_exceptions(current_user):
+    """
+    Get attendance exception records for the admin portal.
+
+    Query params:
+    - page: page number, default 1
+    - page_size: page size, default 10, max 100
+    - search: partial employee name or code search
+    - type: late_arrival | early_leave
+    - status: pending | approved | rejected | cancelled | resolved
+    - from_date: YYYY-MM-DD
+    - to_date: YYYY-MM-DD
+    """
+    page = request.args.get('page', default=1, type=int) or 1
+    page_size = request.args.get('page_size', default=10, type=int) or 10
+    search = request.args.get('search')
+    status = request.args.get('status')
+    exception_type = request.args.get('type')
+    from_date_str = request.args.get('from_date')
+    to_date_str = request.args.get('to_date')
+
+    from_date = None
+    to_date = None
+
+    if from_date_str:
+        try:
+            from_date = datetime.strptime(from_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid from_date format. Use YYYY-MM-DD"
+            }), 400
+
+    if to_date_str:
+        try:
+            to_date = datetime.strptime(to_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid to_date format. Use YYYY-MM-DD"
+            }), 400
+
+    if from_date and to_date and from_date > to_date:
+        return jsonify({
+            "success": False,
+            "message": "from_date must be on or before to_date"
+        }), 400
+
+    result = get_admin_attendance_exceptions(
+        current_user['emp_code'],
+        search=search,
+        status=status,
+        exception_type=exception_type,
+        from_date=from_date,
+        to_date=to_date,
+        page=page,
+        page_size=page_size,
+    )
+
     return jsonify(result[0]), result[1]
 

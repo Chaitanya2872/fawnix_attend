@@ -15,7 +15,7 @@ export function AppRouter() {
     <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path={appRoutes.home} element={<HomePage />} />
-        <Route path={appRoutes.admin} element={<AdminDashboardPage />} />
+        <Route path={`${appRoutes.admin}/*`} element={<AdminDashboardPage />} />
         <Route path={appRoutes.privacy} element={<PrivacyPolicyPage />} />
         <Route path={appRoutes.privacyAlias} element={<Navigate replace to={appRoutes.privacy} />} />
       </Routes>

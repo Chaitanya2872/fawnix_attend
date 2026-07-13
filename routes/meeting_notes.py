@@ -72,6 +72,10 @@ def generate(current_user):
     - audio: required audio file
     - meeting_title: optional title
     - language: optional language hint for transcription
+    - wait: optional boolean; when true, process synchronously in-request
+      (defaults to false — uploads the audio, queues a background job, and
+      returns immediately with a meeting_note_id to poll, since generation
+      for a long recording can take several minutes)
     """
     logger.info(
         "Meeting notes upload request received content_type=%s files=%s form=%s",
@@ -103,13 +107,30 @@ def generate(current_user):
         audio_file = request.files.get("audio")
         meeting_title = (request.form.get("meeting_title") or "").strip() or None
         language = (request.form.get("language") or "").strip() or None
+        wait_for_completion = (request.form.get("wait") or "").strip().lower() in {"true", "1", "yes"}
 
-        response_body, status_code = generate_meeting_notes(
-            audio_file,
-            meeting_title=meeting_title,
-            language=language,
-            emp_code=current_user.get("emp_code"),
-        )
+        if wait_for_completion:
+            response_body, status_code = generate_meeting_notes(
+                audio_file,
+                meeting_title=meeting_title,
+                language=language,
+                emp_code=current_user.get("emp_code"),
+            )
+        else:
+            upload_response_body, upload_status_code = upload_meeting_note_audio(
+                audio_file,
+                meeting_title=meeting_title,
+                language=language,
+                emp_code=current_user.get("emp_code"),
+            )
+            if not upload_response_body.get("success"):
+                return jsonify(upload_response_body), upload_status_code
+
+            meeting_note_id = upload_response_body.get("data", {}).get("meeting_note_id")
+            response_body, status_code = queue_meeting_notes_generation_from_saved(
+                meeting_note_id,
+                emp_code=current_user.get("emp_code"),
+            )
 
     if response_body.get("success"):
         logger.info(

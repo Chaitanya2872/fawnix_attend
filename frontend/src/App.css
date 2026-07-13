@@ -1376,6 +1376,52 @@ a {
   font-size: 12px;
 }
 
+.attendance-exception-filter-card {
+  margin-bottom: 0;
+}
+
+.attendance-exception-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) repeat(2, minmax(180px, 0.7fr)) repeat(2, minmax(220px, 1fr));
+  gap: 14px;
+  align-items: end;
+}
+
+.attendance-exception-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attendance-exception-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 0 0;
+  flex-wrap: wrap;
+}
+
+.attendance-exception-pagination-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.attendance-exception-pagination-copy strong {
+  color: #112c32;
+}
+
+.attendance-exception-pagination-copy span {
+  color: #607076;
+  font-size: 12px;
+}
+
+.attendance-exception-pagination-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .attendance-filter {
   display: grid;
   gap: 8px;
@@ -5105,6 +5151,10 @@ a {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .attendance-exception-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .exception-card-grid {
     grid-template-columns: 1fr;
   }
@@ -6130,6 +6180,10 @@ textarea:focus,
 
   .department-treemap-item {
     flex-basis: calc(50% - 7px) !important;
+  }
+
+  .attendance-exception-filter-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { appRoutes } from '../app/config/routes'
 import '../App.css'
 import {
@@ -16,6 +16,7 @@ import { useAdminSession } from '../features/admin/hooks/useAdminSession'
 import AdminLoginPage from '../features/admin/pages/AdminLoginPage'
 import AdminActivitiesPage from '../features/admin/pages/sidebar/AdminActivitiesPage'
 import AdminAttendancePage from '../features/admin/pages/sidebar/AdminAttendancePage'
+import AdminAttendanceExceptionsPage from '../features/admin/pages/sidebar/AdminAttendanceExceptionsPage'
 import AdminCalendarPage from '../features/admin/pages/sidebar/AdminCalendarPage'
 import AdminEmployeesPage from '../features/admin/pages/sidebar/AdminEmployeesPage'
 import AdminExceptionsPage from '../features/admin/pages/sidebar/AdminExceptionsPage'
@@ -66,6 +67,9 @@ import {
 } from '../utils/date/dateUtils'
 import type {
   ActivityRow,
+  AdminAttendanceExceptionFilterState,
+  AdminAttendanceExceptionPagination,
+  AdminAttendanceExceptionRecord,
   AdminProfile,
   AttendanceExceptionRow,
   AttendanceRow,
@@ -79,6 +83,54 @@ import type {
 } from '../types/admin'
 
 const sidebarItems = sidebarItemDefinitions
+const EMPTY_ATTENDANCE_EXCEPTION_FILTERS: AdminAttendanceExceptionFilterState = {
+  search: '',
+  exceptionType: '',
+  status: '',
+  fromDate: '',
+  toDate: '',
+}
+const EMPTY_ATTENDANCE_EXCEPTION_PAGINATION: AdminAttendanceExceptionPagination = {
+  page: 1,
+  page_size: 10,
+  total_records: 0,
+  total_pages: 0,
+  has_next: false,
+  has_previous: false,
+}
+const adminPanelPathMap: Record<SidebarId, string> = {
+  dashboard: '',
+  employees: 'employees',
+  attendance: 'attendance',
+  exceptions: 'exceptions',
+  'attendance-exceptions': 'attendance-exceptions',
+  calendar: 'calendar',
+  reports: 'reports',
+  leaves: 'leaves',
+  activities: 'activities',
+  'field-visits': 'field-visits',
+}
+
+function getAdminPanelPath(panel: SidebarId) {
+  const slug = adminPanelPathMap[panel]
+  return slug ? `${appRoutes.admin}/${slug}` : appRoutes.admin
+}
+
+function getAdminPanelFromPath(pathname: string): SidebarId {
+  const normalizedPath = pathname.replace(/\/+$/, '')
+  if (normalizedPath === appRoutes.admin) {
+    return 'dashboard'
+  }
+
+  const prefix = `${appRoutes.admin}/`
+  if (!normalizedPath.startsWith(prefix)) {
+    return 'dashboard'
+  }
+
+  const slug = normalizedPath.slice(prefix.length)
+  const matched = Object.entries(adminPanelPathMap).find(([, value]) => value === slug)
+  return (matched?.[0] as SidebarId | undefined) || 'dashboard'
+}
 
 function getExceptionDateValue(row: AttendanceExceptionRow) {
   return row.exception_date || row.requested_at
@@ -338,13 +390,14 @@ function SidebarIcon({ name }: { name: 'home' | 'users' | 'pulse' | 'alert' | 'c
 }
 
 function FawnixApp() {
+  const location = useLocation()
   const navigate = useNavigate()
   const [empCode, setEmpCode] = useState('')
   const [otp, setOtp] = useState('')
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(false)
   const [showDashboard, setShowDashboard] = useState(true)
-  const [activePanel, setActivePanel] = useState<SidebarId>('dashboard')
+  const [activePanel, setActivePanel] = useState<SidebarId>(() => getAdminPanelFromPath(window.location.pathname))
   const [showAdminLogin, setShowAdminLogin] = useState(true)
   const [authLoading, setAuthLoading] = useState(false)
   const [authStatus, setAuthStatus] = useState('')
@@ -388,6 +441,19 @@ function FawnixApp() {
   const [leaveFilters, setLeaveFilters] = useState<LeaveFilterState>({ ...EMPTY_LEAVE_FILTERS })
   const [leaveFilterLoading, setLeaveFilterLoading] = useState(false)
   const [leaveFilterStatus, setLeaveFilterStatus] = useState('')
+  const [attendanceExceptionFilters, setAttendanceExceptionFilters] = useState<AdminAttendanceExceptionFilterState>({
+    ...EMPTY_ATTENDANCE_EXCEPTION_FILTERS
+  })
+  const [appliedAttendanceExceptionFilters, setAppliedAttendanceExceptionFilters] =
+    useState<AdminAttendanceExceptionFilterState>({
+      ...EMPTY_ATTENDANCE_EXCEPTION_FILTERS
+    })
+  const [attendanceExceptionRows, setAttendanceExceptionRows] = useState<AdminAttendanceExceptionRecord[]>([])
+  const [attendanceExceptionLoading, setAttendanceExceptionLoading] = useState(false)
+  const [attendanceExceptionError, setAttendanceExceptionError] = useState('')
+  const [attendanceExceptionPage, setAttendanceExceptionPage] = useState(1)
+  const [attendanceExceptionPagination, setAttendanceExceptionPagination] =
+    useState<AdminAttendanceExceptionPagination>({ ...EMPTY_ATTENDANCE_EXCEPTION_PAGINATION })
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
   const [fieldVisitDurationTick, setFieldVisitDurationTick] = useState(() => Date.now())
@@ -458,6 +524,12 @@ function FawnixApp() {
     setLeaveRows([])
     setLeaveFilters({ ...EMPTY_LEAVE_FILTERS })
     setLeaveFilterStatus('')
+    setAttendanceExceptionFilters({ ...EMPTY_ATTENDANCE_EXCEPTION_FILTERS })
+    setAppliedAttendanceExceptionFilters({ ...EMPTY_ATTENDANCE_EXCEPTION_FILTERS })
+    setAttendanceExceptionRows([])
+    setAttendanceExceptionError('')
+    setAttendanceExceptionPage(1)
+    setAttendanceExceptionPagination({ ...EMPTY_ATTENDANCE_EXCEPTION_PAGINATION })
     setActivityRows([])
     setFieldVisitRows([])
     setMissedLoginEmpCodes([])
@@ -492,6 +564,11 @@ function FawnixApp() {
   }, [hasStoredSession])
 
   useEffect(() => {
+    const nextPanel = getAdminPanelFromPath(location.pathname)
+    setActivePanel((currentPanel) => (currentPanel === nextPanel ? currentPanel : nextPanel))
+  }, [location.pathname])
+
+  useEffect(() => {
     setCalendarMonthView(parseDateInputValue(attendanceDateFilter || toDateInputValue(new Date())))
   }, [attendanceDateFilter])
 
@@ -523,6 +600,20 @@ function FawnixApp() {
 
     void loadDashboard(accessToken)
   }, [accessToken, showAdminLogin])
+
+  useEffect(() => {
+    if (!accessToken || showAdminLogin || activePanel !== 'attendance-exceptions') {
+      return
+    }
+
+    void loadAttendanceExceptions(accessToken, attendanceExceptionPage, appliedAttendanceExceptionFilters)
+  }, [
+    accessToken,
+    showAdminLogin,
+    activePanel,
+    attendanceExceptionPage,
+    appliedAttendanceExceptionFilters,
+  ])
 
   useEffect(() => {
     if (!accessToken || showAdminLogin || activePanel !== 'attendance') {
@@ -781,6 +872,92 @@ function FawnixApp() {
       setAlertTriggerStatus(error instanceof Error ? error.message : 'Failed to trigger attendance reminders')
     } finally {
       setAlertTriggerLoading(false)
+    }
+  }
+
+  const updateAttendanceExceptionFilter = <K extends keyof AdminAttendanceExceptionFilterState>(
+    key: K,
+    value: AdminAttendanceExceptionFilterState[K]
+  ) => {
+    setAttendanceExceptionFilters((currentFilters) => ({
+      ...currentFilters,
+      [key]: value,
+    }))
+  }
+
+  const applyAttendanceExceptionFilters = () => {
+    setAttendanceExceptionPage(1)
+    setAttendanceExceptionError('')
+    setAppliedAttendanceExceptionFilters({ ...attendanceExceptionFilters })
+  }
+
+  const clearAttendanceExceptionFilters = () => {
+    setAttendanceExceptionFilters({ ...EMPTY_ATTENDANCE_EXCEPTION_FILTERS })
+    setAppliedAttendanceExceptionFilters({ ...EMPTY_ATTENDANCE_EXCEPTION_FILTERS })
+    setAttendanceExceptionPage(1)
+    setAttendanceExceptionError('')
+  }
+
+  const loadAttendanceExceptions = async (
+    token: string,
+    page = attendanceExceptionPage,
+    filters = appliedAttendanceExceptionFilters
+  ) => {
+    setAttendanceExceptionLoading(true)
+    setAttendanceExceptionError('')
+
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(attendanceExceptionPagination.page_size || 10),
+      })
+
+      if (filters.search.trim()) {
+        params.set('search', filters.search.trim())
+      }
+      if (filters.exceptionType) {
+        params.set('type', filters.exceptionType)
+      }
+      if (filters.status) {
+        params.set('status', filters.status)
+      }
+      if (filters.fromDate) {
+        params.set('from_date', filters.fromDate)
+      }
+      if (filters.toDate) {
+        params.set('to_date', filters.toDate)
+      }
+
+      const response = await apiRequest(`/api/admin/attendance-exceptions?${params.toString()}`, {}, token)
+      const records = Array.isArray(response?.data?.records)
+        ? response.data.records as AdminAttendanceExceptionRecord[]
+        : []
+      const pagination = response?.data?.pagination || {}
+
+      setAttendanceExceptionRows(records)
+      setAttendanceExceptionPagination({
+        page: Number(pagination.page || page || 1),
+        page_size: Number(pagination.page_size || attendanceExceptionPagination.page_size || 10),
+        total_records: Number(pagination.total_records || 0),
+        total_pages: Number(pagination.total_pages || 0),
+        has_next: Boolean(pagination.has_next),
+        has_previous: Boolean(pagination.has_previous),
+      })
+    } catch (error) {
+      setAttendanceExceptionRows([])
+      setAttendanceExceptionPagination((currentPagination) => ({
+        ...currentPagination,
+        page,
+        total_records: 0,
+        total_pages: 0,
+        has_next: false,
+        has_previous: page > 1,
+      }))
+      setAttendanceExceptionError(
+        error instanceof Error ? error.message : 'Failed to load attendance exception records'
+      )
+    } finally {
+      setAttendanceExceptionLoading(false)
     }
   }
 
@@ -2109,6 +2286,25 @@ function FawnixApp() {
       )
     }
 
+    if (activePanel === 'attendance-exceptions') {
+      return (
+        <AdminAttendanceExceptionsPage
+          error={attendanceExceptionError}
+          filters={attendanceExceptionFilters}
+          formatDate={formatDate}
+          formatDateTime={formatDateTime}
+          loading={attendanceExceptionLoading}
+          onApplyFilters={applyAttendanceExceptionFilters}
+          onChangePage={setAttendanceExceptionPage}
+          onClearFilters={clearAttendanceExceptionFilters}
+          onRefresh={() => void loadAttendanceExceptions(accessToken)}
+          pagination={attendanceExceptionPagination}
+          records={attendanceExceptionRows}
+          updateFilter={updateAttendanceExceptionFilter}
+        />
+      )
+    }
+
     if (activePanel === 'exceptions') {
       return (
         <AdminExceptionsPage
@@ -2322,7 +2518,10 @@ function FawnixApp() {
               <button
                 key={item.id}
                 className={`sidebar-link ${activePanel === item.id ? 'active' : ''}`}
-                onClick={() => setActivePanel(item.id)}
+                onClick={() => {
+                  setActivePanel(item.id)
+                  navigate(getAdminPanelPath(item.id))
+                }}
               >
                 <span className="sidebar-link-main">
                   <span className="sidebar-link-icon">

@@ -9,6 +9,7 @@ export type SidebarId =
   | 'employees'
   | 'attendance'
   | 'exceptions'
+  | 'attendance-exceptions'
   | 'calendar'
   | 'reports'
   | 'leaves'
@@ -114,6 +115,45 @@ export type AttendanceExceptionRow = {
   requested_at?: string
   actual_login_time?: string
   actual_logout_time?: string
+}
+
+export type AttendanceExceptionStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'cancelled'
+  | 'resolved'
+
+export type AdminAttendanceExceptionFilterState = {
+  search: string
+  exceptionType: string
+  status: string
+  fromDate: string
+  toDate: string
+}
+
+export type AdminAttendanceExceptionRecord = {
+  id?: number
+  employee_name?: string
+  employee_code?: string
+  department?: string
+  exception_type?: string
+  attendance_date?: string
+  login_time?: string
+  logout_time?: string
+  reason?: string
+  status?: string
+  created_date?: string
+  available_actions?: string[]
+}
+
+export type AdminAttendanceExceptionPagination = {
+  page: number
+  page_size: number
+  total_records: number
+  total_pages: number
+  has_next: boolean
+  has_previous: boolean
 }
 
 export type FieldVisitTrackingPoint = {

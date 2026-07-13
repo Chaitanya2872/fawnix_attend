@@ -1702,6 +1702,140 @@ def get_team_exceptions(
         conn.close()
 
 
+def _build_admin_exception_actions(status: Optional[str]) -> List[str]:
+    normalized = (status or '').strip().lower()
+    if normalized == 'pending':
+        return ['review']
+    if normalized in {'approved', 'resolved'}:
+        return ['view']
+    if normalized in {'rejected', 'cancelled'}:
+        return ['view']
+    return []
+
+
+def get_admin_attendance_exceptions(
+    manager_code: str,
+    *,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    exception_type: Optional[str] = None,
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    page: int = 1,
+    page_size: int = 10,
+) -> Tuple[Dict, int]:
+    """Get admin attendance exceptions directly from exception records with server-side filters."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        exception_columns = _get_table_columns(cursor, 'attendance_exceptions')
+        select_clause = _build_exception_select(
+            exception_columns,
+            include_employee_fields=True,
+            table_alias='ae'
+        )
+        normalized_page = max(int(page or 1), 1)
+        normalized_page_size = min(max(int(page_size or 10), 1), 100)
+        offset = (normalized_page - 1) * normalized_page_size
+
+        employee_join = """
+            LEFT JOIN employees e
+                ON (
+                    (ae.emp_code IS NOT NULL AND e.emp_code = ae.emp_code)
+                    OR (
+                        ae.emp_code IS NULL
+                        AND e.emp_email = COALESCE(ae.emp_email, a.employee_email)
+                    )
+                )
+        """
+
+        base_query = f"""
+            FROM attendance_exceptions ae
+            LEFT JOIN attendance a ON ae.attendance_id = a.id
+            {employee_join}
+            WHERE 1=1
+        """
+        params: List[object] = []
+
+        normalized_search = (search or '').strip()
+        if normalized_search:
+            like_value = f"%{normalized_search}%"
+            base_query += """
+                AND (
+                    COALESCE(NULLIF(TRIM(ae.emp_name), ''), NULLIF(TRIM(e.emp_full_name), ''), NULLIF(TRIM(a.employee_name), '')) ILIKE %s
+                    OR COALESCE(NULLIF(TRIM(ae.emp_code), ''), NULLIF(TRIM(e.emp_code), '')) ILIKE %s
+                )
+            """
+            params.extend([like_value, like_value])
+
+        normalized_status = (status or '').strip().lower()
+        if normalized_status:
+            base_query += " AND LOWER(COALESCE(ae.status, '')) = %s"
+            params.append(normalized_status)
+
+        normalized_type = (exception_type or '').strip().lower()
+        if normalized_type:
+            base_query += " AND LOWER(COALESCE(ae.exception_type, '')) = %s"
+            params.append(normalized_type)
+
+        if from_date:
+            base_query += " AND COALESCE(ae.exception_date, a.date) >= %s"
+            params.append(from_date)
+
+        if to_date:
+            base_query += " AND COALESCE(ae.exception_date, a.date) <= %s"
+            params.append(to_date)
+
+        cursor.execute(f"SELECT COUNT(*) AS total_records {base_query}", params)
+        total_records = int(cursor.fetchone().get('total_records') or 0)
+
+        query = f"""
+            SELECT
+                {select_clause},
+                COALESCE(NULLIF(TRIM(ae.emp_name), ''), NULLIF(TRIM(e.emp_full_name), ''), NULLIF(TRIM(a.employee_name), '')) AS employee_name,
+                COALESCE(NULLIF(TRIM(ae.emp_code), ''), NULLIF(TRIM(e.emp_code), '')) AS employee_code,
+                NULLIF(TRIM(COALESCE(e.emp_department, '')), '') AS department,
+                COALESCE(ae.exception_date, a.date) AS attendance_date,
+                COALESCE(a.login_time, ae.exception_time) AS login_time,
+                a.logout_time AS logout_time,
+                ae.requested_at AS created_date
+            {base_query}
+            ORDER BY
+                COALESCE(ae.exception_date, a.date) DESC NULLS LAST,
+                ae.requested_at DESC NULLS LAST,
+                ae.id DESC
+            LIMIT %s OFFSET %s
+        """
+        cursor.execute(query, [*params, normalized_page_size, offset])
+        rows = cursor.fetchall()
+        rows = _serialize_exception_rows(rows)
+
+        for row in rows:
+            row['available_actions'] = _build_admin_exception_actions(row.get('status'))
+
+        total_pages = (total_records + normalized_page_size - 1) // normalized_page_size if total_records else 0
+
+        return ({
+            "success": True,
+            "data": {
+                "records": rows,
+                "pagination": {
+                    "page": normalized_page,
+                    "page_size": normalized_page_size,
+                    "total_records": total_records,
+                    "total_pages": total_pages,
+                    "has_next": normalized_page < total_pages,
+                    "has_previous": normalized_page > 1 and total_pages > 0,
+                }
+            }
+        }, 200)
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def get_my_late_arrival_records(emp_code: str, status: str = None) -> Tuple[Dict, int]:
     """Get self late-arrival records from attendance with linked exception status."""
     conn = get_db_connection()

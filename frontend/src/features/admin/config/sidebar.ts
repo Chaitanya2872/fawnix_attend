@@ -8,7 +8,6 @@ export const sidebarItems: SidebarItemDefinition[] = [
   { id: 'activities', label: 'Activities', icon: 'activity' },
   { id: 'field-visits', label: 'Field Visits', icon: 'pin' },
   { id: 'calendar', label: 'Calendar View', icon: 'calendar' },
-  { id: 'exceptions', label: 'Exceptions', icon: 'alert' },
   { id: 'attendance-exceptions', label: 'Attendance Exceptions', icon: 'alert' },
   { id: 'reports', label: 'Reports & Analytics', icon: 'chart' }
 ]

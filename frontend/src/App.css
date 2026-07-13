@@ -466,8 +466,7 @@ a {
   box-shadow: 0 6px 16px rgba(17, 44, 50, 0.08);
 }
 
-.dashboard-highlight,
-.dashboard-panel {
+.dashboard-highlight {
   background: rgba(255, 255, 255, 0.74);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(17, 44, 50, 0.08);
@@ -607,16 +606,6 @@ a {
 .dashboard-highlight p {
   margin: 0;
   color: #45565c;
-}
-
-.dashboard-panel {
-  border-radius: 30px;
-  padding: 28px;
-}
-
-.dashboard-panel--flat {
-  border-radius: 0;
-  padding: 0;
 }
 
 .login-card {
@@ -5676,7 +5665,6 @@ body,
   color: var(--theme-evergreen);
 }
 
-.dashboard-panel,
 .dashboard-highlight,
 .dashboard-analytics-card,
 .chart-card,
@@ -6078,37 +6066,6 @@ textarea:focus,
   color: var(--theme-evergreen);
 }
 
-.dashboard-panel {
-  position: relative;
-  overflow: hidden;
-  background:
-    linear-gradient(180deg, rgba(239, 255, 201, 0.25), rgba(255, 255, 255, 0) 180px),
-    #fff;
-  border-color: #dce5da;
-}
-
-.dashboard-panel--flat {
-  overflow: visible;
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-}
-
-.dashboard-panel::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 170px;
-  height: 5px;
-  border-radius: 0 999px 999px 0;
-  background: linear-gradient(90deg, var(--theme-evergreen), var(--theme-lime));
-}
-
-.dashboard-panel--flat::before {
-  content: none;
-}
-
 .dashboard-section-head {
   position: relative;
   z-index: 1;
@@ -6168,10 +6125,6 @@ textarea:focus,
 
   .dashboard-hero h1 {
     font-size: 30px;
-  }
-
-  .dashboard-panel {
-    padding: 20px;
   }
 
   .employee-overview-kpis {

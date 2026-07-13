@@ -114,7 +114,7 @@ export default function AdminWorkspacePage({
           {heroContent}
         </section>
 
-        <section className="dashboard-panel">{children}</section>
+        {children}
       </main>
     </div>
   )

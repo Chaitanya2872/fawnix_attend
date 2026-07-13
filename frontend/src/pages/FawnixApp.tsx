@@ -19,7 +19,6 @@ import AdminAttendancePage from '../features/admin/pages/sidebar/AdminAttendance
 import AdminAttendanceExceptionsPage from '../features/admin/pages/sidebar/AdminAttendanceExceptionsPage'
 import AdminCalendarPage from '../features/admin/pages/sidebar/AdminCalendarPage'
 import AdminEmployeesPage from '../features/admin/pages/sidebar/AdminEmployeesPage'
-import AdminExceptionsPage from '../features/admin/pages/sidebar/AdminExceptionsPage'
 import AdminFieldVisitsPage from '../features/admin/pages/sidebar/AdminFieldVisitsPage'
 import AdminLeavesPage from '../features/admin/pages/sidebar/AdminLeavesPage'
 import AdminOverviewPage from '../features/admin/pages/sidebar/AdminOverviewPage'
@@ -102,7 +101,6 @@ const adminPanelPathMap: Record<SidebarId, string> = {
   dashboard: '',
   employees: 'employees',
   attendance: 'attendance',
-  exceptions: 'exceptions',
   'attendance-exceptions': 'attendance-exceptions',
   calendar: 'calendar',
   reports: 'reports',
@@ -460,7 +458,6 @@ function FawnixApp() {
   const [attendanceDateFilter, setAttendanceDateFilter] = useState(() => toDateInputValue(new Date()))
   const [calendarMonthView, setCalendarMonthView] = useState(() => parseDateInputValue(toDateInputValue(new Date())))
   const [attendanceSearch, setAttendanceSearch] = useState('')
-  const [exceptionSearch, setExceptionSearch] = useState('')
   const [attendanceReportMonth, setAttendanceReportMonth] = useState(() => String(new Date().getMonth() + 1))
   const [attendanceReportYear, setAttendanceReportYear] = useState(() => String(new Date().getFullYear()))
   const [attendanceReportFormat, setAttendanceReportFormat] = useState<'csv' | 'pdf' | 'xlsx'>('csv')
@@ -2165,21 +2162,6 @@ function FawnixApp() {
           return haystack.includes(normalizedAttendanceSearch)
         })
       : attendancePageRows
-    const normalizedExceptionSearch = exceptionSearch.trim().toLowerCase()
-    const filteredExceptionRows = normalizedExceptionSearch
-      ? selectedDateExceptions.filter((row) => {
-          const haystack = [
-            row.emp_name || '',
-            row.emp_code || '',
-            row.reason || '',
-            row.status || '',
-            row.exceptionKind === 'late_arrival' ? 'late arrival' : 'early leave'
-          ]
-            .join(' ')
-            .toLowerCase()
-          return haystack.includes(normalizedExceptionSearch)
-        })
-      : selectedDateExceptions
     const normalizedEmployeeSearch = employeeSearch.trim().toLowerCase()
     const filteredEmployees = employees
       .filter((employee) => {
@@ -2301,24 +2283,6 @@ function FawnixApp() {
           pagination={attendanceExceptionPagination}
           records={attendanceExceptionRows}
           updateFilter={updateAttendanceExceptionFilter}
-        />
-      )
-    }
-
-    if (activePanel === 'exceptions') {
-      return (
-        <AdminExceptionsPage
-          attendanceDateFilter={attendanceDateFilter}
-          exceptionSearch={exceptionSearch}
-          filteredExceptionRows={filteredExceptionRows}
-          formatDate={formatDate}
-          formatDateTime={formatDateTime}
-          loadDashboard={() => loadDashboard(accessToken)}
-          selectedDateEarlyLeaves={selectedDateEarlyLeaves}
-          selectedDateExceptions={selectedDateExceptions}
-          selectedDateLateArrivals={selectedDateLateArrivals}
-          setAttendanceDateFilter={setAttendanceDateFilter}
-          setExceptionSearch={setExceptionSearch}
         />
       )
     }
@@ -2704,16 +2668,10 @@ function FawnixApp() {
               timeZoneLabel={formatTimeZoneLabel(loginTimeZone)}
             />
           ) : (
-            <section
-              className={`dashboard-panel${
-                activePanel === 'dashboard' || activePanel === 'attendance'
-                  ? ' dashboard-panel--flat'
-                  : ''
-              }`}
-            >
+            <>
               {refreshNotice ? <div className="refresh-toast">{refreshNotice}</div> : null}
               {renderDashboardPanel()}
-            </section>
+            </>
           )}
 
           {employeePanelMode ? (

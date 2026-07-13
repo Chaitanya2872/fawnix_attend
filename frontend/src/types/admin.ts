@@ -8,7 +8,6 @@ export type SidebarId =
   | 'dashboard'
   | 'employees'
   | 'attendance'
-  | 'exceptions'
   | 'attendance-exceptions'
   | 'calendar'
   | 'reports'

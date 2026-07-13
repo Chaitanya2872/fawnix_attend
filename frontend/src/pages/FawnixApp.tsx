@@ -13,6 +13,7 @@ import {
 } from '../features/admin/config/sidebar'
 import { useAdminLoginExperience } from '../features/admin/hooks/useAdminLoginExperience'
 import { useAdminSession } from '../features/admin/hooks/useAdminSession'
+import AdminApiTelemetryPanel from '../features/admin/components/AdminApiTelemetryPanel'
 import AdminLoginPage from '../features/admin/pages/AdminLoginPage'
 import AdminActivitiesPage from '../features/admin/pages/sidebar/AdminActivitiesPage'
 import AdminAttendancePage from '../features/admin/pages/sidebar/AdminAttendancePage'
@@ -397,6 +398,7 @@ function FawnixApp() {
   const [showDashboard, setShowDashboard] = useState(true)
   const [activePanel, setActivePanel] = useState<SidebarId>(() => getAdminPanelFromPath(window.location.pathname))
   const [showAdminLogin, setShowAdminLogin] = useState(true)
+  const [telemetryPanelOpen, setTelemetryPanelOpen] = useState(false)
   const [authLoading, setAuthLoading] = useState(false)
   const [authStatus, setAuthStatus] = useState('')
   const [adminEmpCode, setAdminEmpCode] = useState('')
@@ -534,6 +536,7 @@ function FawnixApp() {
     setAlertSentEmpCodes([])
     setAlertSendCounts({})
     setSelectedMissedLoginEmpCodes([])
+    setTelemetryPanelOpen(false)
   }
   const {
     accessToken,
@@ -541,6 +544,8 @@ function FawnixApp() {
     refreshToken,
     profile,
     refreshNotice,
+    telemetryEntries,
+    clearTelemetryEntries,
     persistSession,
     clearSession,
     refreshAccessToken,
@@ -2931,6 +2936,14 @@ function FawnixApp() {
                 </div>
               </div>
             </div>
+          ) : null}
+          {!showAdminLogin ? (
+            <AdminApiTelemetryPanel
+              entries={telemetryEntries}
+              isOpen={telemetryPanelOpen}
+              onClear={clearTelemetryEntries}
+              onToggle={() => setTelemetryPanelOpen((current) => !current)}
+            />
           ) : null}
         </main>
       </div>

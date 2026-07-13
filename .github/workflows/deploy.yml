@@ -1,22 +1,33 @@
 name: Deploy Fawnix Backend
- 
+
 on:
   push:
     branches:
       - main
- 
+
+  # Allows you to run deployment manually from GitHub Actions
+  workflow_dispatch:
+
+concurrency:
+  group: fawnix-production-deployment
+  cancel-in-progress: false
+
 jobs:
   deploy:
+    name: Deploy to Production
     runs-on: ubuntu-latest
- 
+    timeout-minutes: 30
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
- 
+
       - name: Install SSH deployment tools
-        run: sudo apt-get update && sudo apt-get install -y sshpass netcat-openbsd
- 
-      - name: Deploy to production server
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass netcat-openbsd
+
+      - name: Deploy application
         env:
           SERVER_IP: ${{ secrets.SERVER_IP }}
           SERVER_PORT: ${{ secrets.SERVER_PORT }}
@@ -40,28 +51,38 @@ jobs:
           sshpass -p "$SERVER_PASSWORD" ssh \
             -p "$SERVER_PORT" \
             -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=30 \
             -o ConnectTimeout=30 \
             "$SERVER_USER@$SERVER_IP" << 'EOF'
-            set -e
- 
-            cd /root/backend/fawnix_attend
+          set -e
 
-            git fetch origin main
+          echo "Starting deployment..."
 
-            if ! git diff --quiet || ! git diff --cached --quiet; then
-              echo "Stashing local tracked changes before deploy..."
-              git stash push -m "github-actions-predeploy-$(date +%Y%m%d-%H%M%S)"
-            fi
+          cd /root/fawnix_attend
 
-            git pull --ff-only origin main
+          echo "Current directory:"
+          pwd
 
-            cd ..
+          echo "Fetching latest code..."
+          git fetch origin main
 
-            echo "Building containers (includes frontend build in Dockerfile)..."
-            docker compose build --no-cache
- 
-            docker compose down
- 
-            docker compose up -d
- 
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            echo "Stashing local tracked changes..."
+            git stash push -m "github-actions-predeploy-$(date +%Y%m%d-%H%M%S)"
+          fi
+
+          echo "Pulling latest code..."
+          git checkout main
+          git pull --ff-only origin main
+
+          echo "Building Docker containers..."
+          docker compose build --no-cache
+
+          echo "Starting Docker containers..."
+          docker compose up -d --remove-orphans
+
+          echo "Container status:"
+          docker compose ps
+
+          echo "Deployment completed successfully."
           EOF

@@ -155,6 +155,21 @@ export type AdminAttendanceExceptionPagination = {
   has_previous: boolean
 }
 
+export type AdminApiTelemetryEntry = {
+  id: string
+  startedAt: string
+  completedAt?: string
+  method: string
+  path: string
+  status: 'pending' | 'success' | 'error'
+  httpStatus?: number
+  durationMs?: number
+  summary: string
+  detail: string
+  requestPayload?: unknown
+  responsePayload?: unknown
+}
+
 export type FieldVisitTrackingPoint = {
   latitude?: number | string
   longitude?: number | string

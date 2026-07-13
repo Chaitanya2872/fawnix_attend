@@ -13,16 +13,35 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
  
-      - name: Install sshpass
-        run: sudo apt-get update && sudo apt-get install -y sshpass
+      - name: Install SSH deployment tools
+        run: sudo apt-get update && sudo apt-get install -y sshpass netcat-openbsd
  
       - name: Deploy to production server
         env:
           SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_PASSWORD: ${{ secrets.SERVER_PASSWORD }}
         run: |
-          sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP << 'EOF'
+          set -e
+
+          : "${SERVER_IP:?SERVER_IP secret is required}"
+          : "${SERVER_USER:?SERVER_USER secret is required}"
+          : "${SERVER_PASSWORD:?SERVER_PASSWORD secret is required}"
+          SERVER_PORT="${SERVER_PORT:-22}"
+
+          echo "Checking SSH reachability on ${SERVER_IP}:${SERVER_PORT}..."
+          if ! nc -zvw20 "$SERVER_IP" "$SERVER_PORT"; then
+            echo "Unable to reach ${SERVER_IP}:${SERVER_PORT} from the GitHub Actions runner."
+            echo "Check SERVER_IP/SERVER_PORT, server firewall/security group, SSH daemon, and whether the server allows GitHub-hosted runners."
+            exit 255
+          fi
+
+          sshpass -p "$SERVER_PASSWORD" ssh \
+            -p "$SERVER_PORT" \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=30 \
+            "$SERVER_USER@$SERVER_IP" << 'EOF'
             set -e
  
             cd /root/backend/fawnix_attend

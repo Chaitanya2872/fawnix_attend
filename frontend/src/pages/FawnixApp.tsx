@@ -13,9 +13,9 @@ import {
 } from '../features/admin/config/sidebar'
 import { useAdminLoginExperience } from '../features/admin/hooks/useAdminLoginExperience'
 import { useAdminSession } from '../features/admin/hooks/useAdminSession'
-import AdminApiTelemetryPanel from '../features/admin/components/AdminApiTelemetryPanel'
 import AdminLoginPage from '../features/admin/pages/AdminLoginPage'
 import AdminActivitiesPage from '../features/admin/pages/sidebar/AdminActivitiesPage'
+import AdminApiTelemetryPage from '../features/admin/pages/sidebar/AdminApiTelemetryPage'
 import AdminAttendancePage from '../features/admin/pages/sidebar/AdminAttendancePage'
 import AdminAttendanceExceptionsPage from '../features/admin/pages/sidebar/AdminAttendanceExceptionsPage'
 import AdminCalendarPage from '../features/admin/pages/sidebar/AdminCalendarPage'
@@ -83,6 +83,7 @@ import type {
 } from '../types/admin'
 
 const sidebarItems = sidebarItemDefinitions
+const API_TELEMETRY_EMP_CODE = '8888'
 const EMPTY_ATTENDANCE_EXCEPTION_FILTERS: AdminAttendanceExceptionFilterState = {
   search: '',
   exceptionType: '',
@@ -108,6 +109,7 @@ const adminPanelPathMap: Record<SidebarId, string> = {
   leaves: 'leaves',
   activities: 'activities',
   'field-visits': 'field-visits',
+  'api-telemetry': 'api-telemetry',
 }
 
 function getAdminPanelPath(panel: SidebarId) {
@@ -287,8 +289,18 @@ function formatTimeZoneLabel(timeZone: string) {
   return parts[parts.length - 1].replace(/_/g, ' ')
 }
 
-function SidebarIcon({ name }: { name: 'home' | 'users' | 'pulse' | 'alert' | 'calendar' | 'chart' | 'leaf' | 'activity' | 'pin' }) {
+function SidebarIcon({ name }: { name: 'home' | 'users' | 'pulse' | 'alert' | 'calendar' | 'chart' | 'leaf' | 'activity' | 'pin' | 'bug' }) {
   const paths = {
+    bug: (
+      <path
+        d="M8 10h8M8 14h5m-7 6 2.2-3H18a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    ),
     users: (
       <path
         d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9.5 11a4 4 0 1 0 0-8a4 4 0 0 0 0 8m8.5 10v-2a4 4 0 0 0-3-3.87M14 3.13a4 4 0 0 1 0 7.75"
@@ -398,7 +410,6 @@ function FawnixApp() {
   const [showDashboard, setShowDashboard] = useState(true)
   const [activePanel, setActivePanel] = useState<SidebarId>(() => getAdminPanelFromPath(window.location.pathname))
   const [showAdminLogin, setShowAdminLogin] = useState(true)
-  const [telemetryPanelOpen, setTelemetryPanelOpen] = useState(false)
   const [authLoading, setAuthLoading] = useState(false)
   const [authStatus, setAuthStatus] = useState('')
   const [adminEmpCode, setAdminEmpCode] = useState('')
@@ -536,7 +547,6 @@ function FawnixApp() {
     setAlertSentEmpCodes([])
     setAlertSendCounts({})
     setSelectedMissedLoginEmpCodes([])
-    setTelemetryPanelOpen(false)
   }
   const {
     accessToken,
@@ -2421,6 +2431,10 @@ function FawnixApp() {
       )
     }
 
+    if (activePanel === 'api-telemetry' && profile?.emp_code === API_TELEMETRY_EMP_CODE) {
+      return <AdminApiTelemetryPage entries={telemetryEntries} onClear={clearTelemetryEntries} />
+    }
+
     return (
       <AdminFieldVisitsPage
         fieldVisitDurationTick={fieldVisitDurationTick}
@@ -2483,7 +2497,9 @@ function FawnixApp() {
           </div>
 
           <div className="sidebar-group">
-            {sidebarItems.map((item) => (
+            {sidebarItems
+              .filter((item) => item.id !== 'api-telemetry' || profile?.emp_code === API_TELEMETRY_EMP_CODE)
+              .map((item) => (
               <button
                 key={item.id}
                 className={`sidebar-link ${activePanel === item.id ? 'active' : ''}`}
@@ -2936,14 +2952,6 @@ function FawnixApp() {
                 </div>
               </div>
             </div>
-          ) : null}
-          {!showAdminLogin ? (
-            <AdminApiTelemetryPanel
-              entries={telemetryEntries}
-              isOpen={telemetryPanelOpen}
-              onClear={clearTelemetryEntries}
-              onToggle={() => setTelemetryPanelOpen((current) => !current)}
-            />
           ) : null}
         </main>
       </div>

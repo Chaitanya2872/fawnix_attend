@@ -14,6 +14,7 @@ export type SidebarId =
   | 'leaves'
   | 'activities'
   | 'field-visits'
+  | 'api-telemetry'
 
 export type AdminProfile = {
   emp_code: string

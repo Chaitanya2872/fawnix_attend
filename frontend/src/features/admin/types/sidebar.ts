@@ -10,6 +10,7 @@ export type SidebarIconName =
   | 'leaf'
   | 'activity'
   | 'pin'
+  | 'bug'
 
 export type SidebarItemDefinition = {
   id: SidebarId

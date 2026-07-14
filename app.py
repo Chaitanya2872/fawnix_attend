@@ -10,7 +10,7 @@ from config import Config
 from database.connection import init_database, run_migrations, get_db_connection, return_connection
 from middleware.auth_middleware import setup_auth_middleware
 from middleware.error_handler import register_error_handlers
-from middleware.logging_middleware import setup_logging
+from middleware.logging_middleware import setup_logging, setup_api_log_capture
 import atexit
 import logging
 import os
@@ -51,6 +51,7 @@ CORS(app, resources={
 
 # Setup logging
 setup_logging(app)
+setup_api_log_capture(app)
 logger = logging.getLogger(__name__)
 scheduler_instance = None
 scheduler_lock_handle = None

@@ -67,6 +67,9 @@ import {
 } from '../utils/date/dateUtils'
 import type {
   ActivityRow,
+  AdminApiLogFilterState,
+  AdminApiLogPagination,
+  AdminApiLogRecord,
   AdminAttendanceExceptionFilterState,
   AdminAttendanceExceptionPagination,
   AdminAttendanceExceptionRecord,
@@ -94,6 +97,21 @@ const EMPTY_ATTENDANCE_EXCEPTION_FILTERS: AdminAttendanceExceptionFilterState = 
 const EMPTY_ATTENDANCE_EXCEPTION_PAGINATION: AdminAttendanceExceptionPagination = {
   page: 1,
   page_size: 10,
+  total_records: 0,
+  total_pages: 0,
+  has_next: false,
+  has_previous: false,
+}
+const EMPTY_API_LOG_FILTERS: AdminApiLogFilterState = {
+  method: '',
+  status: '',
+  search: '',
+  fromDate: '',
+  toDate: '',
+}
+const EMPTY_API_LOG_PAGINATION: AdminApiLogPagination = {
+  page: 1,
+  page_size: 25,
   total_records: 0,
   total_pages: 0,
   has_next: false,
@@ -465,6 +483,15 @@ function FawnixApp() {
   const [attendanceExceptionPage, setAttendanceExceptionPage] = useState(1)
   const [attendanceExceptionPagination, setAttendanceExceptionPagination] =
     useState<AdminAttendanceExceptionPagination>({ ...EMPTY_ATTENDANCE_EXCEPTION_PAGINATION })
+  const [apiLogFilters, setApiLogFilters] = useState<AdminApiLogFilterState>({ ...EMPTY_API_LOG_FILTERS })
+  const [appliedApiLogFilters, setAppliedApiLogFilters] = useState<AdminApiLogFilterState>({
+    ...EMPTY_API_LOG_FILTERS
+  })
+  const [apiLogRows, setApiLogRows] = useState<AdminApiLogRecord[]>([])
+  const [apiLogLoading, setApiLogLoading] = useState(false)
+  const [apiLogError, setApiLogError] = useState('')
+  const [apiLogPage, setApiLogPage] = useState(1)
+  const [apiLogPagination, setApiLogPagination] = useState<AdminApiLogPagination>({ ...EMPTY_API_LOG_PAGINATION })
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
   const [fieldVisitDurationTick, setFieldVisitDurationTick] = useState(() => Date.now())
@@ -540,6 +567,12 @@ function FawnixApp() {
     setAttendanceExceptionError('')
     setAttendanceExceptionPage(1)
     setAttendanceExceptionPagination({ ...EMPTY_ATTENDANCE_EXCEPTION_PAGINATION })
+    setApiLogFilters({ ...EMPTY_API_LOG_FILTERS })
+    setAppliedApiLogFilters({ ...EMPTY_API_LOG_FILTERS })
+    setApiLogRows([])
+    setApiLogError('')
+    setApiLogPage(1)
+    setApiLogPagination({ ...EMPTY_API_LOG_PAGINATION })
     setActivityRows([])
     setFieldVisitRows([])
     setMissedLoginEmpCodes([])
@@ -625,6 +658,26 @@ function FawnixApp() {
     activePanel,
     attendanceExceptionPage,
     appliedAttendanceExceptionFilters,
+  ])
+
+  useEffect(() => {
+    if (
+      !accessToken ||
+      showAdminLogin ||
+      activePanel !== 'api-telemetry' ||
+      profile?.emp_code !== API_TELEMETRY_EMP_CODE
+    ) {
+      return
+    }
+
+    void loadApiLogs(accessToken, apiLogPage, appliedApiLogFilters)
+  }, [
+    accessToken,
+    showAdminLogin,
+    activePanel,
+    profile,
+    apiLogPage,
+    appliedApiLogFilters,
   ])
 
   useEffect(() => {
@@ -970,6 +1023,90 @@ function FawnixApp() {
       )
     } finally {
       setAttendanceExceptionLoading(false)
+    }
+  }
+
+  const updateApiLogFilter = <K extends keyof AdminApiLogFilterState>(
+    key: K,
+    value: AdminApiLogFilterState[K]
+  ) => {
+    setApiLogFilters((currentFilters) => ({
+      ...currentFilters,
+      [key]: value,
+    }))
+  }
+
+  const applyApiLogFilters = () => {
+    setApiLogPage(1)
+    setApiLogError('')
+    setAppliedApiLogFilters({ ...apiLogFilters })
+  }
+
+  const clearApiLogFilters = () => {
+    setApiLogFilters({ ...EMPTY_API_LOG_FILTERS })
+    setAppliedApiLogFilters({ ...EMPTY_API_LOG_FILTERS })
+    setApiLogPage(1)
+    setApiLogError('')
+  }
+
+  const loadApiLogs = async (
+    token: string,
+    page = apiLogPage,
+    filters = appliedApiLogFilters
+  ) => {
+    setApiLogLoading(true)
+    setApiLogError('')
+
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(apiLogPagination.page_size || 25),
+      })
+
+      if (filters.method) {
+        params.set('method', filters.method)
+      }
+      if (filters.status) {
+        params.set('status', filters.status)
+      }
+      if (filters.search.trim()) {
+        params.set('search', filters.search.trim())
+      }
+      if (filters.fromDate) {
+        params.set('from_date', filters.fromDate)
+      }
+      if (filters.toDate) {
+        params.set('to_date', filters.toDate)
+      }
+
+      const response = await apiRequest(`/api/admin/api-logs?${params.toString()}`, {}, token)
+      const records = Array.isArray(response?.data?.records)
+        ? response.data.records as AdminApiLogRecord[]
+        : []
+      const pagination = response?.data?.pagination || {}
+
+      setApiLogRows(records)
+      setApiLogPagination({
+        page: Number(pagination.page || page || 1),
+        page_size: Number(pagination.page_size || apiLogPagination.page_size || 25),
+        total_records: Number(pagination.total_records || 0),
+        total_pages: Number(pagination.total_pages || 0),
+        has_next: Boolean(pagination.has_next),
+        has_previous: Boolean(pagination.has_previous),
+      })
+    } catch (error) {
+      setApiLogRows([])
+      setApiLogPagination((currentPagination) => ({
+        ...currentPagination,
+        page,
+        total_records: 0,
+        total_pages: 0,
+        has_next: false,
+        has_previous: page > 1,
+      }))
+      setApiLogError(error instanceof Error ? error.message : 'Failed to load API logs')
+    } finally {
+      setApiLogLoading(false)
     }
   }
 
@@ -2432,7 +2569,22 @@ function FawnixApp() {
     }
 
     if (activePanel === 'api-telemetry' && profile?.emp_code === API_TELEMETRY_EMP_CODE) {
-      return <AdminApiTelemetryPage entries={telemetryEntries} onClear={clearTelemetryEntries} />
+      return (
+        <AdminApiTelemetryPage
+          clientEntries={telemetryEntries}
+          onClearClientEntries={clearTelemetryEntries}
+          serverError={apiLogError}
+          serverFilters={apiLogFilters}
+          serverLoading={apiLogLoading}
+          serverPagination={apiLogPagination}
+          serverRecords={apiLogRows}
+          onApplyServerFilters={applyApiLogFilters}
+          onChangeServerPage={setApiLogPage}
+          onClearServerFilters={clearApiLogFilters}
+          onRefreshServerLogs={() => void loadApiLogs(accessToken)}
+          updateServerFilter={updateApiLogFilter}
+        />
+      )
     }
 
     return (

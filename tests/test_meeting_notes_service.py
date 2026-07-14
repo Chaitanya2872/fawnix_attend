@@ -389,6 +389,44 @@ Here is the structured result:
     assert structured["important_points"] == ["Point 1"]
 
 
+def test_parse_structured_notes_repairs_trailing_comma_json():
+    content = """
+    {
+      "transcript": "Transcript",
+      "summary": "Summary",
+      "minutes_of_meeting": "Minutes",
+      "important_points": ["Point 1",],
+    }
+    """
+
+    structured = meeting_notes_service._parse_structured_notes(content)
+
+    assert structured["transcript"] == "Transcript"
+    assert structured["summary"] == "Summary"
+    assert structured["minutes_of_meeting"] == "Minutes"
+    assert structured["important_points"] == ["Point 1"]
+
+
+def test_parse_structured_notes_falls_back_to_markdown_payload():
+    content = """# Minutes of Meeting
+## Meeting Summary
+- Roadmap reviewed
+- Action items assigned
+
+## Action Items
+| Action Item | Owner | Due Date | Priority |
+| --- | --- | --- | --- |
+| Share notes | Alice | Not Specified | Medium |
+"""
+
+    structured = meeting_notes_service._parse_structured_notes(content)
+
+    assert structured["transcript"] == ""
+    assert "Roadmap reviewed" in structured["summary"]
+    assert structured["minutes_of_meeting"] == content
+    assert structured["important_points"] == ["Roadmap reviewed", "Action items assigned"]
+
+
 def test_upload_meeting_report_returns_public_url_when_enabled(monkeypatch):
     monkeypatch.setattr(s3_storage_service.Config, "MEETING_NOTES_S3_BUCKET", "test-bucket")
     monkeypatch.setattr(s3_storage_service.Config, "MEETING_NOTES_S3_REGION", "ap-south-1")

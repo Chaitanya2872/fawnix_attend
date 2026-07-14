@@ -2327,6 +2327,12 @@ a {
   white-space: nowrap;
 }
 
+.dashboard-button.ghost.active {
+  background: #112c32;
+  color: #fff;
+  border-color: #112c32;
+}
+
 .metric-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

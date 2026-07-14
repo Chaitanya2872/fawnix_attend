@@ -5,7 +5,7 @@ Administrative endpoints
 
 from flask import Blueprint, jsonify, Response, send_file
 from middleware.auth_middleware import token_required
-from middleware.admin_middleware import hr_or_devtester_required
+from middleware.admin_middleware import hr_or_devtester_required, api_log_viewer_required
 from services import admin_service
 from services import field_visit_service
 import csv
@@ -31,6 +31,7 @@ from services.attendance_exceptions_service import (
     get_team_exceptions,
 )
 from services.leaves_import_service import import_leave_rows, import_leaves_from_csv
+from services.api_log_service import get_api_logs
 
 from database.connection import get_db_connection, return_connection
 from datetime import datetime, date, time
@@ -1495,4 +1496,68 @@ def admin_attendance_exceptions(current_user):
     )
 
     return jsonify(result[0]), result[1]
+
+
+@admin_bp.route('/api-logs', methods=['GET'])
+@token_required
+@api_log_viewer_required
+def admin_api_logs(current_user):
+    """
+    Get sanitized server-side API request/response logs.
+
+    Query params:
+    - page: page number, default 1
+    - page_size: page size, default 25, max 200
+    - method: GET | POST | PUT | DELETE | PATCH
+    - status: success | error
+    - search: partial match against path or emp_code
+    - from_date: YYYY-MM-DD
+    - to_date: YYYY-MM-DD
+    """
+    page = request.args.get('page', default=1, type=int) or 1
+    page_size = request.args.get('page_size', default=25, type=int) or 25
+    method = request.args.get('method')
+    status = request.args.get('status')
+    search = request.args.get('search')
+    from_date_str = request.args.get('from_date')
+    to_date_str = request.args.get('to_date')
+
+    from_date = None
+    to_date = None
+
+    if from_date_str:
+        try:
+            from_date = datetime.strptime(from_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid from_date format. Use YYYY-MM-DD"
+            }), 400
+
+    if to_date_str:
+        try:
+            to_date = datetime.strptime(to_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid to_date format. Use YYYY-MM-DD"
+            }), 400
+
+    if from_date and to_date and from_date > to_date:
+        return jsonify({
+            "success": False,
+            "message": "from_date must be on or before to_date"
+        }), 400
+
+    data = get_api_logs(
+        page=page,
+        page_size=page_size,
+        method=method,
+        status=status,
+        search=search,
+        from_date=from_date,
+        to_date=to_date,
+    )
+
+    return jsonify({"success": True, "data": data}), 200
 

@@ -321,6 +321,65 @@ def test_generate_meeting_notes_route_from_saved_record_waits_when_requested(mon
     assert captured["emp_code"] == "E001"
 
 
+def test_generate_meeting_notes_route_uploads_without_ai_configuration(monkeypatch):
+    app = create_test_app()
+    client = app.test_client()
+
+    authenticate_request(
+        monkeypatch,
+        {
+            "id": 7,
+            "emp_code": "E001",
+            "role": "employee",
+            "is_active": True,
+        },
+    )
+
+    captured = {"queued": False}
+
+    def fake_upload_meeting_note_audio(audio_file, meeting_title=None, language=None, emp_code=None):
+        captured["upload_emp_code"] = emp_code
+        captured["upload_title"] = meeting_title
+        captured["upload_language"] = language
+        return (
+            {
+                "success": True,
+                "message": "Audio uploaded successfully",
+                "data": {
+                    "meeting_note_id": "mn_upload_only_001",
+                    "status": "uploaded",
+                },
+            },
+            201,
+        )
+
+    def fake_queue_meeting_notes_generation_from_saved(*args, **kwargs):
+        captured["queued"] = True
+        return ({"success": True}, 202)
+
+    monkeypatch.setattr(meeting_notes_routes, "upload_meeting_note_audio", fake_upload_meeting_note_audio)
+    monkeypatch.setattr(meeting_notes_routes, "queue_meeting_notes_generation_from_saved", fake_queue_meeting_notes_generation_from_saved)
+    monkeypatch.setattr(meeting_notes_routes, "is_meeting_notes_ai_configured", lambda: False)
+
+    response = client.post(
+        "/api/meeting-notes/generate",
+        headers={"Authorization": "Bearer test-token"},
+        data={
+            "meeting_title": "Weekly Sync",
+            "language": "en",
+            "audio": (BytesIO(b"fake-audio"), "meeting.mp3"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 201
+    assert response.get_json()["success"] is True
+    assert response.get_json()["data"]["meeting_note_id"] == "mn_upload_only_001"
+    assert response.get_json()["message"] == "Audio uploaded successfully. Meeting notes generation is not configured yet."
+    assert captured["queued"] is False
+    assert captured["upload_emp_code"] == "E001"
+
+
 def test_list_meeting_notes_route(monkeypatch):
     app = create_test_app()
     client = app.test_client()

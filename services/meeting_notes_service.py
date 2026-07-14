@@ -7,6 +7,7 @@ OpenAI-compatible fallback when OPENAI_API_KEY is configured instead.
 
 from __future__ import annotations
 
+import ast
 import base64
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
@@ -14,6 +15,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import tempfile
 import time
 import uuid
@@ -152,10 +154,64 @@ def _extract_json_object_text(content: str) -> str:
 
 def _parse_structured_notes(content: str) -> Dict[str, Any]:
     json_text = _extract_json_object_text(content)
+    parsed = None
+    parse_errors = []
+
     try:
         parsed = json.loads(json_text)
     except json.JSONDecodeError as exc:
-        raise RuntimeError("Meeting notes generation did not return valid JSON") from exc
+        parse_errors.append(exc)
+
+    if parsed is None:
+        repaired_json_text = re.sub(r",(\s*[}\]])", r"\1", json_text)
+        if repaired_json_text != json_text:
+            try:
+                parsed = json.loads(repaired_json_text)
+            except json.JSONDecodeError as exc:
+                parse_errors.append(exc)
+
+    if parsed is None:
+        try:
+            literal_value = ast.literal_eval(json_text)
+            if isinstance(literal_value, dict):
+                parsed = literal_value
+        except (ValueError, SyntaxError) as exc:
+            parse_errors.append(exc)
+
+    if not isinstance(parsed, dict):
+        fallback_minutes = (content or '').strip()
+        if not fallback_minutes:
+            raise RuntimeError("Meeting notes generation did not return valid JSON") from (
+                parse_errors[-1] if parse_errors else None
+            )
+
+        bullet_points = []
+        for line in fallback_minutes.splitlines():
+            cleaned_line = line.strip()
+            if cleaned_line.startswith(("- ", "* ", "• ")):
+                bullet_value = cleaned_line[2:].strip()
+                if bullet_value:
+                    bullet_points.append(bullet_value)
+
+        summary_match = re.search(
+            r"##?\s*Meeting Summary\s*(.*?)(?=\n##?\s|\Z)",
+            fallback_minutes,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        summary_text = summary_match.group(1).strip() if summary_match else ""
+
+        if not summary_text:
+            summary_text = "\n".join(
+                point if point.startswith("-") else f"- {point}"
+                for point in bullet_points[:5]
+            ).strip()
+
+        parsed = {
+            "transcript": "",
+            "summary": summary_text,
+            "minutes_of_meeting": fallback_minutes,
+            "important_points": bullet_points[:10],
+        }
 
     important_points = parsed.get("important_points")
     if isinstance(important_points, list):
@@ -1040,6 +1096,10 @@ def _configured_provider() -> str | None:
     if Config.OPENAI_API_KEY:
         return "openai"
     return None
+
+
+def is_meeting_notes_ai_configured() -> bool:
+    return _configured_provider() is not None
 
 
 def _generate_meeting_note_id() -> str:

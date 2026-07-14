@@ -11,6 +11,7 @@ from services.meeting_notes_service import (
     generate_meeting_notes,
     generate_meeting_notes_from_saved,
     get_meeting_note_record,
+    is_meeting_notes_ai_configured,
     list_meeting_note_records,
     queue_meeting_notes_generation_from_saved,
     upload_meeting_note_audio,
@@ -124,6 +125,12 @@ def generate(current_user):
                 emp_code=current_user.get("emp_code"),
             )
             if not upload_response_body.get("success"):
+                return jsonify(upload_response_body), upload_status_code
+
+            if not is_meeting_notes_ai_configured():
+                upload_response_body["message"] = (
+                    "Audio uploaded successfully. Meeting notes generation is not configured yet."
+                )
                 return jsonify(upload_response_body), upload_status_code
 
             meeting_note_id = upload_response_body.get("data", {}).get("meeting_note_id")

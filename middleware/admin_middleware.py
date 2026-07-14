@@ -21,6 +21,24 @@ def _has_admin_access(current_user, require_write=False):
     return bool(current_user.get("can_read") or current_user.get("can_write"))
 
 
+API_LOG_VIEWER_EMP_CODE = "8888"
+
+
+def api_log_viewer_required(f):
+    @wraps(f)
+    def decorated_function(current_user, *args, **kwargs):
+        emp_code = (current_user.get("emp_code") or "").strip()
+        if emp_code != API_LOG_VIEWER_EMP_CODE:
+            return jsonify({
+                "success": False,
+                "message": "Access denied"
+            }), 403
+
+        return f(current_user, *args, **kwargs)
+
+    return decorated_function
+
+
 def hr_or_devtester_required(f):
     @wraps(f)
     def decorated_function(current_user, *args, **kwargs):

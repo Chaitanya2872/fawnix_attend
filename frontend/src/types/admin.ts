@@ -171,6 +171,36 @@ export type AdminApiTelemetryEntry = {
   responsePayload?: unknown
 }
 
+export type AdminApiLogRecord = {
+  id: number
+  method: string
+  path: string
+  status_code?: number
+  duration_ms?: number
+  emp_code?: string
+  remote_addr?: string
+  request_payload?: unknown
+  response_payload?: unknown
+  created_at: string
+}
+
+export type AdminApiLogFilterState = {
+  method: string
+  status: string
+  search: string
+  fromDate: string
+  toDate: string
+}
+
+export type AdminApiLogPagination = {
+  page: number
+  page_size: number
+  total_records: number
+  total_pages: number
+  has_next: boolean
+  has_previous: boolean
+}
+
 export type FieldVisitTrackingPoint = {
   latitude?: number | string
   longitude?: number | string

@@ -1,0 +1,325 @@
+/* ============================================================
+   Operations Calendar — instrument-panel design
+   Palette: deep teal ink / soft paper / teal · gold · rust signals
+   Type: Space Grotesk (display) · Inter (body) · IBM Plex Mono (data)
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+.ops-cal {
+  --ink: #101e22;
+  --ink-soft: #5b6b6e;
+  --paper: #f6f4ee;
+  --panel: #ffffff;
+  --line: #e4e0d6;
+  --teal: #2e6e74;
+  --teal-soft: #dcebe9;
+  --gold: #c39a3c;
+  --gold-soft: #f3e7c9;
+  --rust: #c1503d;
+  --rust-soft: #f5ddd6;
+
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+  padding: 2rem;
+  border-radius: 20px;
+}
+
+/* ---------- header ---------- */
+
+.ops-cal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.75rem;
+}
+
+.ops-cal-eyebrow {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin: 0 0 0.4rem;
+}
+
+.ops-cal-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 0.35rem;
+  letter-spacing: -0.01em;
+}
+
+.ops-cal-copy {
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+  max-width: 46ch;
+  margin: 0;
+}
+
+.ops-cal-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.3rem;
+}
+
+.ops-cal-nav-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.ops-cal-nav-btn:hover { background: var(--teal-soft); }
+.ops-cal-nav-btn:focus-visible,
+.ops-cal-nav-today:focus-visible,
+.ops-day:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.ops-cal-nav-today {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: none;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.ops-cal-nav-today:hover { opacity: 0.85; }
+
+/* ---------- metric row ---------- */
+
+.ops-cal-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.ops-metric {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1.1rem 1.25rem;
+  border-top: 3px solid var(--ink);
+}
+
+.ops-metric-teal { border-top-color: var(--teal); }
+.ops-metric-rust { border-top-color: var(--rust); }
+
+.ops-metric-label {
+  display: block;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.ops-metric-value {
+  display: block;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.7rem;
+  font-weight: 700;
+  margin: 0.3rem 0 0.2rem;
+}
+
+.ops-metric-caption {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+/* ---------- calendar panel ---------- */
+
+.ops-cal-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1.5rem;
+}
+
+.ops-cal-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.1rem;
+}
+
+.ops-cal-panel-title {
+  display: block;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-top: 0.2rem;
+}
+
+.ops-cal-legend {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.ops-cal-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ops-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.ops-dot-teal { background: var(--teal); }
+.ops-dot-gold { background: var(--gold); }
+.ops-dot-rust { background: var(--rust); }
+
+.ops-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  padding: 0 0.15rem 0.5rem;
+}
+
+.ops-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.4rem;
+}
+
+/* ---------- day cell ---------- */
+
+.ops-day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  aspect-ratio: 1 / 1.05;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.5rem 0.55rem 0.4rem;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, transform 0.1s ease;
+}
+
+.ops-day:hover {
+  border-color: var(--teal);
+  transform: translateY(-1px);
+}
+
+.ops-day-outside {
+  opacity: 0.4;
+}
+
+.ops-day-today {
+  border-color: var(--ink);
+  border-width: 1.5px;
+}
+
+.ops-day-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.ops-day-number {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.ops-day-badge {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--teal);
+  background: var(--teal-soft);
+  border-radius: 999px;
+  padding: 0.12rem 0.4rem;
+}
+
+/* signal bars: three-tone micro readout, height encodes volume
+   relative to that category's peak for the visible month */
+.ops-day-signal {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 22px;
+  margin: 0.35rem 0 0.3rem;
+}
+
+.ops-signal-bar {
+  flex: 1;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+  transition: height 0.2s ease;
+}
+
+.ops-signal-teal { background: var(--teal); }
+.ops-signal-gold { background: var(--gold); }
+.ops-signal-rust { background: var(--rust); }
+
+.ops-day-stats {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.ops-day-stats span:nth-child(1) { color: var(--teal); }
+.ops-day-stats span:nth-child(2) { color: var(--gold); }
+.ops-day-stats span:nth-child(3) { color: var(--rust); }
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 720px) {
+  .ops-cal { padding: 1.25rem; }
+  .ops-cal-metrics { grid-template-columns: 1fr; }
+  .ops-cal-grid { gap: 0.25rem; }
+  .ops-day { padding: 0.35rem 0.4rem 0.3rem; }
+  .ops-day-stats { font-size: 0.56rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-day, .ops-signal-bar, .ops-cal-nav-btn, .ops-cal-nav-today {
+    transition: none;
+  }
+}

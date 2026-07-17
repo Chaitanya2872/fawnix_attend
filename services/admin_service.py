@@ -5,10 +5,13 @@ Business logic for admin-only operations
 
 from database.connection import get_db_connection
 from datetime import date, datetime, time, timedelta
-from config import Config
 import calendar
 from collections import OrderedDict
 from services.attendance_constants import ATTENDANCE_STATUS_LOGGED_IN
+from services.attendance_exceptions_service import (
+    _fetch_exception_rows_by_attendance_ids,
+    get_late_login_cutoff_time,
+)
 from services.CompLeaveService import (
     attach_attendance_context_to_overtime_records,
     serialize_temporal_values,
@@ -277,6 +280,34 @@ def _format_time_as_12h(timestamp_value):
     if not isinstance(timestamp_value, datetime):
         return "Incomplete"
     return timestamp_value.strftime("%I:%M %p")
+
+
+def _coerce_time_value(value):
+    if isinstance(value, datetime):
+        return value.time()
+    if isinstance(value, time):
+        return value
+    if isinstance(value, str):
+        raw_value = value.strip()
+        if not raw_value:
+            return None
+        for fmt in ("%H:%M:%S", "%H:%M"):
+            try:
+                return datetime.strptime(raw_value, fmt).time()
+            except ValueError:
+                continue
+    return None
+
+
+def _format_time_value(value):
+    normalized_time = _coerce_time_value(value)
+    return normalized_time.strftime("%H:%M") if normalized_time else None
+
+
+def _format_datetime_value(value):
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    return value
 
 
 def _format_minutes_as_hours_and_minutes(total_minutes):
@@ -662,6 +693,7 @@ def get_all_attendance_history(limit: int = None, target_date: date = None,
         base_query = """
             FROM attendance a
             LEFT JOIN employees e ON a.employee_email = e.emp_email
+            LEFT JOIN shifts s ON e.emp_shift_id = s.shift_id
         """
         params = []
 
@@ -672,7 +704,7 @@ def get_all_attendance_history(limit: int = None, target_date: date = None,
         cursor.execute(f"SELECT COUNT(*) AS total_records {base_query}", params)
         total_records = cursor.fetchone()['total_records']
 
-        late_cutoff = datetime.strptime(Config.LATE_LOGIN_CUTOFF, "%H:%M").time()
+        late_cutoff = get_late_login_cutoff_time()
         cursor.execute(
             f"""
                 SELECT
@@ -724,7 +756,10 @@ def get_all_attendance_history(limit: int = None, target_date: date = None,
         query = f"""
             SELECT
                 a.*,
-                e.emp_designation
+                e.emp_code,
+                e.emp_designation,
+                s.shift_start_time,
+                s.shift_end_time
             {base_query}
             ORDER BY login_time DESC
         """
@@ -742,11 +777,110 @@ def get_all_attendance_history(limit: int = None, target_date: date = None,
 
         records = cursor.fetchall()
 
+        attendance_ids = [record['id'] for record in records if record.get('id') is not None]
+        late_exceptions = _fetch_exception_rows_by_attendance_ids(
+            cursor,
+            attendance_ids,
+            'late_arrival'
+        )
+        early_exceptions = _fetch_exception_rows_by_attendance_ids(
+            cursor,
+            attendance_ids,
+            'early_leave'
+        )
+        late_cutoff = get_late_login_cutoff_time()
+
         for record in records:
+            attendance_id = record.get('id')
+            login_time_value = record.get('login_time')
+            logout_time_value = record.get('logout_time')
+            login_time_only = _coerce_time_value(login_time_value)
+            logout_time_only = _coerce_time_value(logout_time_value)
+            shift_start = _coerce_time_value(record.get('shift_start_time'))
+            shift_end = _coerce_time_value(record.get('shift_end_time'))
+            is_compoff_session = bool(record.get('is_compoff_session') or record.get('is_compoff'))
+            late_exception = late_exceptions.get(attendance_id)
+            early_exception = early_exceptions.get(attendance_id)
+
+            is_late_arrival = bool(
+                not is_compoff_session and
+                login_time_only and
+                login_time_only > late_cutoff
+            )
+            late_informed = bool(late_exception)
+            is_early_departure = bool(
+                not is_compoff_session and
+                shift_end and
+                logout_time_only and
+                logout_time_only < shift_end
+            )
+            early_leave_requested = bool(early_exception)
+
+            late_by_minutes = late_exception.get('late_by_minutes') if late_exception else None
+            if late_by_minutes is None and is_late_arrival:
+                late_by_minutes = int((
+                    datetime.combine(datetime.today(), login_time_only) -
+                    datetime.combine(datetime.today(), late_cutoff)
+                ).total_seconds() / 60)
+
+            early_by_minutes = early_exception.get('early_by_minutes') if early_exception else None
+            if early_by_minutes is None and is_early_departure:
+                early_by_minutes = int((
+                    datetime.combine(datetime.today(), shift_end) -
+                    datetime.combine(datetime.today(), logout_time_only)
+                ).total_seconds() / 60)
+
             for key, value in record.items():
                 if isinstance(value, datetime):
                     record[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+                elif isinstance(value, time):
+                    record[key] = value.strftime('%H:%M')
             record['working_hours'] = float(record.get('working_hours') or 0)
+            record['shift_start_time'] = _format_time_value(shift_start)
+            record['shift_end_time'] = _format_time_value(shift_end)
+
+            if is_compoff_session:
+                record['late_arrival'] = None
+                record['early_leave'] = None
+            else:
+                record['late_arrival'] = {
+                    "is_late": is_late_arrival,
+                    "informed": late_informed,
+                    "status": late_exception.get('status') if late_exception else (
+                        'not_informed' if is_late_arrival else None
+                    ),
+                    "planned_arrival_time": _format_time_value(
+                        late_exception.get('planned_arrival_time') if late_exception else late_cutoff
+                    ) if (is_late_arrival or late_informed) else None,
+                    "actual_login_time": _format_time_value(login_time_only),
+                    "late_by_minutes": late_by_minutes,
+                    "reason": late_exception.get('reason') if late_exception else None,
+                    "requested_at": (
+                        _format_datetime_value(late_exception.get('requested_at')) if late_exception else None
+                    ),
+                    "reviewed_at": (
+                        _format_datetime_value(late_exception.get('reviewed_at')) if late_exception else None
+                    ),
+                }
+                record['early_leave'] = {
+                    "is_early_departure": is_early_departure,
+                    "requested": early_leave_requested,
+                    "status": early_exception.get('status') if early_exception else (
+                        'not_requested' if is_early_departure else None
+                    ),
+                    "planned_leave_time": (
+                        _format_time_value(early_exception.get('planned_leave_time')) if early_exception else None
+                    ),
+                    "actual_logout_time": _format_time_value(logout_time_only),
+                    "early_by_minutes": early_by_minutes,
+                    "reason": early_exception.get('reason') if early_exception else None,
+                    "requested_at": (
+                        _format_datetime_value(early_exception.get('requested_at')) if early_exception else None
+                    ),
+                    "reviewed_at": (
+                        _format_datetime_value(early_exception.get('reviewed_at')) if early_exception else None
+                    ),
+                }
 
         total_hours = sum(float(r['working_hours'] or 0) for r in records)
         completed_days = len([r for r in records if r['status'] == 'logged_out'])

@@ -106,6 +106,7 @@ export type AttendanceExceptionRow = {
   emp_name?: string
   exception_type?: string
   exception_date?: string
+  attendance_date?: string
   exception_time?: string
   planned_leave_time?: string
   late_by_minutes?: number

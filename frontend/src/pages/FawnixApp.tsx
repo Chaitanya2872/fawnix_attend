@@ -644,7 +644,7 @@ function FawnixApp() {
     }
 
     void loadDashboard(accessToken)
-  }, [accessToken, showAdminLogin])
+  }, [accessToken, showAdminLogin, attendanceDateFilter])
 
   useEffect(() => {
     if (!accessToken || showAdminLogin || activePanel !== 'attendance-exceptions') {
@@ -1118,10 +1118,15 @@ function FawnixApp() {
       const attendanceParams = new URLSearchParams()
       attendanceParams.set('page_size', String(attendancePageSize))
       const attendancePath = `/api/admin/attendance/history?${attendanceParams.toString()}`
+      const selectedAttendanceParams = new URLSearchParams()
+      selectedAttendanceParams.set('page_size', String(attendancePageSize))
+      selectedAttendanceParams.set('date', attendanceDateFilter || toDateInputValue(new Date()))
+      const selectedAttendancePath = `/api/admin/attendance/history?${selectedAttendanceParams.toString()}`
 
       const [
         employeesResponse,
         attendanceResponse,
+        selectedAttendanceResponse,
         leavesResponse,
         activitiesResponse,
         lateArrivalsResponse,
@@ -1129,6 +1134,7 @@ function FawnixApp() {
       ] = await Promise.all([
         apiRequest('/api/admin/employees', {}, token),
         apiRequest(attendancePath, {}, token),
+        apiRequest(selectedAttendancePath, {}, token),
         apiRequest('/api/admin/leaves?limit=500', {}, token),
         apiRequest('/api/admin/activities?limit=30&include_tracking=true&include_activity_tracking=true', {}, token),
         apiRequest('/api/admin/late-arrivals', {}, token).catch(() => null),
@@ -1138,6 +1144,9 @@ function FawnixApp() {
       const employeesData = Array.isArray(employeesResponse?.data) ? employeesResponse.data : []
       const attendanceData: AttendanceRow[] = Array.isArray(attendanceResponse?.data?.records)
         ? attendanceResponse.data.records
+        : []
+      const selectedAttendanceData: AttendanceRow[] = Array.isArray(selectedAttendanceResponse?.data?.records)
+        ? selectedAttendanceResponse.data.records
         : []
       const attendanceCount =
         typeof attendanceResponse?.data?.total_records === 'number'
@@ -1166,7 +1175,7 @@ function FawnixApp() {
 
       setEmployees(employeesData)
       const attendanceDeduped = Array.from(
-        attendanceData.reduce((map, row) => {
+        [...attendanceData, ...selectedAttendanceData].reduce((map, row) => {
           const key =
             row.id?.toString() ||
             `${row.employee_email || 'unknown'}-${row.login_time || row.logout_time || 'time'}`.toLowerCase()

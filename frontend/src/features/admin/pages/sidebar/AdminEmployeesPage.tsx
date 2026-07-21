@@ -4,6 +4,9 @@ type Props = any
 export default function AdminEmployeesPage(props: Props) {
   const {
     canWriteAdminData,
+    downloadEmployeesReport,
+    employeeExportFormat,
+    employeeExportStatus,
     employeeSearch,
     employeeStatusFilter,
     employeeStatusMenuOpen,
@@ -15,6 +18,7 @@ export default function AdminEmployeesPage(props: Props) {
     loadDashboard,
     openAddEmployeePanel,
     requestDeleteEmployee,
+    setEmployeeExportFormat,
     setEmployeeSearch,
     setEmployeeStatusFilter,
     setEmployeeStatusMenuOpen
@@ -33,10 +37,24 @@ export default function AdminEmployeesPage(props: Props) {
               Add Employee
             </button>
           ) : null}
+          <select
+            className="employee-export-format"
+            aria-label="Export format"
+            value={employeeExportFormat}
+            onChange={(event) => setEmployeeExportFormat(event.target.value)}
+          >
+            <option value="csv">CSV</option>
+            <option value="pdf">PDF</option>
+            <option value="xlsx">XLSX</option>
+          </select>
+          <button className="cta dashboard-button" onClick={downloadEmployeesReport} type="button">
+            Export
+          </button>
           <button className="ghost dashboard-button" onClick={() => void loadDashboard()} type="button">
             Refresh
           </button>
         </div>
+        {employeeExportStatus ? <span className="report-status employee-export-status">{employeeExportStatus}</span> : null}
       </div>
       <div className="employee-search-card">
         <div className="employee-search-copy">

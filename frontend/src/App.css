@@ -1288,6 +1288,22 @@ a {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.employee-export-format {
+  border-radius: 18px;
+  border: 1px solid rgba(17, 44, 50, 0.12);
+  padding: 13px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.92);
+  color: #112c32;
+}
+
+.employee-export-status {
+  display: block;
+  margin-top: 8px;
 }
 
 .leave-filter-card {

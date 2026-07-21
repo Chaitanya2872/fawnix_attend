@@ -443,6 +443,8 @@ function FawnixApp() {
   const [employeeSearch, setEmployeeSearch] = useState('')
   const [employeeStatusFilter, setEmployeeStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
   const [employeeStatusMenuOpen, setEmployeeStatusMenuOpen] = useState(false)
+  const [employeeExportFormat, setEmployeeExportFormat] = useState<'csv' | 'pdf' | 'xlsx'>('csv')
+  const [employeeExportStatus, setEmployeeExportStatus] = useState('')
   const [employeePanelMode, setEmployeePanelMode] = useState<'add' | 'edit' | null>(null)
   const [deleteEmployeeTarget, setDeleteEmployeeTarget] = useState<EmployeeRow | null>(null)
   const [deleteEmployeeLoading, setDeleteEmployeeLoading] = useState(false)
@@ -863,6 +865,49 @@ function FawnixApp() {
       window.setTimeout(() => setAttendanceReportStatus(''), 2500)
     } catch (error) {
       setAttendanceReportStatus(error instanceof Error ? error.message : 'Failed to download monthly report')
+    }
+  }
+
+  const downloadEmployeesReport = async () => {
+    try {
+      setEmployeeExportStatus('Preparing export...')
+      const params = new URLSearchParams({ format: employeeExportFormat })
+
+      const makeRequest = async (token: string) =>
+        fetch(`/api/admin/employees/report?${params.toString()}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        })
+
+      let response = await makeRequest(accessToken)
+      if (response.status === 401) {
+        const nextAccessToken = await refreshAccessToken()
+        response = await makeRequest(nextAccessToken)
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || 'Failed to export employees')
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = resolveDownloadFilename(
+        response,
+        `employees_${toDateInputValue(new Date())}.${employeeExportFormat}`
+      )
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      setEmployeeExportStatus('Employees exported.')
+      window.setTimeout(() => setEmployeeExportStatus(''), 2500)
+    } catch (error) {
+      setEmployeeExportStatus(error instanceof Error ? error.message : 'Failed to export employees')
     }
   }
 
@@ -2402,6 +2447,9 @@ function FawnixApp() {
       return (
         <AdminEmployeesPage
           canWriteAdminData={canWriteAdminData}
+          downloadEmployeesReport={downloadEmployeesReport}
+          employeeExportFormat={employeeExportFormat}
+          employeeExportStatus={employeeExportStatus}
           employeeSearch={employeeSearch}
           employeeStatusFilter={employeeStatusFilter}
           employeeStatusMenuOpen={employeeStatusMenuOpen}
@@ -2413,6 +2461,7 @@ function FawnixApp() {
           loadDashboard={() => loadDashboard(accessToken)}
           openAddEmployeePanel={openAddEmployeePanel}
           requestDeleteEmployee={requestDeleteEmployee}
+          setEmployeeExportFormat={setEmployeeExportFormat}
           setEmployeeSearch={setEmployeeSearch}
           setEmployeeStatusFilter={setEmployeeStatusFilter}
           setEmployeeStatusMenuOpen={setEmployeeStatusMenuOpen}

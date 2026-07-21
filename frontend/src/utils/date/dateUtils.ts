@@ -105,6 +105,11 @@ export function isSameDate(value: string | undefined, targetDate: string) {
     return false
   }
 
+  const dateOnlyMatch = value.match(/^(\d{4}-\d{2}-\d{2})(?:$|\s)/)
+  if (dateOnlyMatch) {
+    return dateOnlyMatch[1] === targetDate
+  }
+
   const parsed = new Date(value)
   if (!Number.isNaN(parsed.getTime())) {
     return toDateInputValue(parsed) === targetDate

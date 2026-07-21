@@ -102,11 +102,14 @@ export type LeaveRow = {
 
 export type AttendanceExceptionRow = {
   id?: number
+  attendance_id?: number | null
   emp_code?: string
   emp_name?: string
   exception_type?: string
   exception_date?: string
+  attendance_date?: string
   exception_time?: string
+  planned_arrival_time?: string
   planned_leave_time?: string
   late_by_minutes?: number
   early_by_minutes?: number
@@ -134,15 +137,27 @@ export type AdminAttendanceExceptionFilterState = {
 
 export type AdminAttendanceExceptionRecord = {
   id?: number
+  attendance_id?: number | null
+  emp_code?: string
+  emp_name?: string
+  emp_email?: string
   employee_name?: string
   employee_code?: string
   department?: string
   exception_type?: string
+  exception_date?: string
+  exception_time?: string
   attendance_date?: string
   login_time?: string
   logout_time?: string
+  planned_arrival_time?: string
+  planned_leave_time?: string
+  late_by_minutes?: number
+  early_by_minutes?: number
   reason?: string
+  notes?: string
   status?: string
+  requested_at?: string
   created_date?: string
   available_actions?: string[]
 }

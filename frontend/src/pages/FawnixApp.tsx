@@ -152,7 +152,7 @@ function getAdminPanelFromPath(pathname: string): SidebarId {
 }
 
 function getExceptionDateValue(row: AttendanceExceptionRow) {
-  return row.exception_date || row.requested_at
+  return row.exception_date || row.attendance_date || row.requested_at
 }
 
 function getSortTime(row: AttendanceExceptionRow): number {
@@ -166,6 +166,55 @@ function getSortTime(row: AttendanceExceptionRow): number {
   
   const earliest = times.map(time => new Date(time).getTime()).reduce((a, b) => Math.min(a, b))
   return earliest
+}
+
+function mapAdminExceptionToAttendanceException(
+  row: AdminAttendanceExceptionRecord
+): AttendanceExceptionRow {
+  return {
+    id: row.id,
+    attendance_id: row.attendance_id,
+    emp_code: row.emp_code || row.employee_code,
+    emp_name: row.emp_name || row.employee_name,
+    exception_type: row.exception_type,
+    exception_date: row.exception_date || row.attendance_date || row.created_date,
+    attendance_date: row.attendance_date || row.exception_date,
+    exception_time: row.exception_time || row.planned_arrival_time,
+    planned_arrival_time: row.planned_arrival_time,
+    planned_leave_time: row.planned_leave_time,
+    late_by_minutes: row.late_by_minutes,
+    early_by_minutes: row.early_by_minutes,
+    reason: row.reason || row.notes,
+    status: row.status,
+    requested_at: row.requested_at || row.created_date,
+    actual_login_time: row.login_time,
+    actual_logout_time: row.logout_time
+  }
+}
+
+function dedupeAttendanceExceptions(rows: AttendanceExceptionRow[]) {
+  return Array.from(
+    rows.reduce((map, row) => {
+      const key = row.id
+        ? `${row.exception_type || 'exception'}-${row.id}`
+        : [
+            row.exception_type,
+            row.emp_code || row.emp_name,
+            row.exception_date || row.attendance_date,
+            row.requested_at || row.exception_time || row.actual_login_time || row.actual_logout_time
+          ]
+            .filter(Boolean)
+            .join('|')
+            .toLowerCase()
+
+      if (key) {
+        map.set(key, row)
+      }
+
+      return map
+    }, new Map<string, AttendanceExceptionRow>())
+      .values()
+  )
 }
 
 function isDateWithinRange(
@@ -646,7 +695,7 @@ function FawnixApp() {
     }
 
     void loadDashboard(accessToken)
-  }, [accessToken, showAdminLogin])
+  }, [accessToken, showAdminLogin, attendanceDateFilter])
 
   useEffect(() => {
     if (!accessToken || showAdminLogin || activePanel !== 'attendance-exceptions') {
@@ -1160,26 +1209,46 @@ function FawnixApp() {
     setDashboardError('')
 
     try {
+      const selectedDateValue = attendanceDateFilter || toDateInputValue(new Date())
       const attendanceParams = new URLSearchParams()
       attendanceParams.set('page_size', String(attendancePageSize))
       const attendancePath = `/api/admin/attendance/history?${attendanceParams.toString()}`
+      const selectedAttendanceParams = new URLSearchParams()
+      selectedAttendanceParams.set('page_size', String(attendancePageSize))
+      selectedAttendanceParams.set('date', selectedDateValue)
+      const selectedAttendancePath = `/api/admin/attendance/history?${selectedAttendanceParams.toString()}`
+      const selectedExceptionParams = new URLSearchParams()
+      selectedExceptionParams.set('page_size', '100')
+      selectedExceptionParams.set('from_date', selectedDateValue)
+      selectedExceptionParams.set('to_date', selectedDateValue)
+      const selectedExceptionsPath = `/api/admin/attendance-exceptions?${selectedExceptionParams.toString()}`
 
-      const [employeesResponse, attendanceResponse, leavesResponse, activitiesResponse] = await Promise.all([
+      const [
+        employeesResponse,
+        attendanceResponse,
+        selectedAttendanceResponse,
+        leavesResponse,
+        activitiesResponse,
+        lateArrivalsResponse,
+        earlyLeavesResponse,
+        selectedExceptionsResponse,
+      ] = await Promise.all([
         apiRequest('/api/admin/employees', {}, token),
         apiRequest(attendancePath, {}, token),
+        apiRequest(selectedAttendancePath, {}, token),
         apiRequest('/api/admin/leaves?limit=500', {}, token),
-        apiRequest('/api/admin/activities?limit=30&include_tracking=true&include_activity_tracking=true', {}, token)
+        apiRequest('/api/admin/activities?limit=30&include_tracking=true&include_activity_tracking=true', {}, token),
+        apiRequest('/api/admin/late-arrivals', {}, token).catch(() => null),
+        apiRequest('/api/admin/early-leaves', {}, token).catch(() => null),
+        apiRequest(selectedExceptionsPath, {}, token),
       ])
-      let exceptionsResponse: any = null
-      try {
-        exceptionsResponse = await apiRequest('/api/attendance-exceptions/team-exceptions', {}, token)
-      } catch {
-        exceptionsResponse = null
-      }
 
       const employeesData = Array.isArray(employeesResponse?.data) ? employeesResponse.data : []
       const attendanceData: AttendanceRow[] = Array.isArray(attendanceResponse?.data?.records)
         ? attendanceResponse.data.records
+        : []
+      const selectedAttendanceData: AttendanceRow[] = Array.isArray(selectedAttendanceResponse?.data?.records)
+        ? selectedAttendanceResponse.data.records
         : []
       const attendanceCount =
         typeof attendanceResponse?.data?.total_records === 'number'
@@ -1189,13 +1258,41 @@ function FawnixApp() {
       const nextSummary = attendanceResponse?.data?.attendance_summary || {}
       const leavesData = Array.isArray(leavesResponse?.data?.leaves) ? leavesResponse.data.leaves : []
       const activitiesData = Array.isArray(activitiesResponse?.data?.activities) ? activitiesResponse.data.activities : []
-      const exceptionsData: AttendanceExceptionRow[] = Array.isArray(exceptionsResponse?.data?.exceptions)
-        ? exceptionsResponse.data.exceptions
+      const selectedExceptionData: AttendanceExceptionRow[] = Array.isArray(selectedExceptionsResponse?.data?.records)
+        ? (selectedExceptionsResponse.data.records as AdminAttendanceExceptionRecord[])
+            .map(mapAdminExceptionToAttendanceException)
         : []
+      const selectedLateArrivalsData = selectedExceptionData.filter((row) => row.exception_type === 'late_arrival')
+      const selectedEarlyLeavesData = selectedExceptionData.filter((row) => row.exception_type === 'early_leave')
+      const legacyLateArrivalsData: AttendanceExceptionRow[] = Array.isArray(lateArrivalsResponse?.data?.exceptions)
+        ? lateArrivalsResponse.data.exceptions.map((row: AttendanceExceptionRow) => ({
+            ...row,
+            exception_type: row.exception_type || 'late_arrival'
+          }))
+        : []
+      const legacyEarlyLeavesData: AttendanceExceptionRow[] = Array.isArray(earlyLeavesResponse?.data?.exceptions)
+        ? earlyLeavesResponse.data.exceptions.map((row: AttendanceExceptionRow) => ({
+            ...row,
+            exception_type: row.exception_type || 'early_leave'
+          }))
+        : []
+      const lateArrivalsData = dedupeAttendanceExceptions([
+        ...legacyLateArrivalsData,
+        ...selectedLateArrivalsData
+      ])
+      const earlyLeavesData = dedupeAttendanceExceptions([
+        ...legacyEarlyLeavesData,
+        ...selectedEarlyLeavesData
+      ])
+      const exceptionsData: AttendanceExceptionRow[] = dedupeAttendanceExceptions([
+        ...lateArrivalsData,
+        ...earlyLeavesData,
+        ...selectedExceptionData
+      ])
 
       setEmployees(employeesData)
       const attendanceDeduped = Array.from(
-        attendanceData.reduce((map, row) => {
+        [...attendanceData, ...selectedAttendanceData].reduce((map, row) => {
           const key =
             row.id?.toString() ||
             `${row.employee_email || 'unknown'}-${row.login_time || row.logout_time || 'time'}`.toLowerCase()

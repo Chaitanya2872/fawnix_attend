@@ -1797,7 +1797,13 @@ def get_admin_attendance_exceptions(
                 COALESCE(NULLIF(TRIM(ae.emp_code), ''), NULLIF(TRIM(e.emp_code), '')) AS employee_code,
                 NULLIF(TRIM(COALESCE(e.emp_department, '')), '') AS department,
                 COALESCE(ae.exception_date, a.date) AS attendance_date,
-                COALESCE(a.login_time, ae.exception_time) AS login_time,
+                -- login_time is a timestamp, while exception_time is stored as a
+                -- time.  Construct a timestamp for pre-clock-in exceptions before
+                -- using it as the fallback value.
+                COALESCE(
+                    a.login_time,
+                    COALESCE(ae.exception_date, a.date) + ae.exception_time
+                ) AS login_time,
                 a.logout_time AS logout_time,
                 ae.requested_at AS created_date
             {base_query}

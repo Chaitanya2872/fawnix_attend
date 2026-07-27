@@ -166,7 +166,7 @@ def get_lead(lead_id, current_user):
 
 def update_lead(lead_id, current_user, payload):
     lead_identifier = parse_lead_identifier(lead_id)
-    return _request(current_user, "PUT", f"/api/leads/{lead_identifier}", payload=payload)
+    return _request(current_user, "PATCH", f"/api/leads/{lead_identifier}", payload=payload)
 
 
 def link_lead_field_visit(lead_id, field_visit_id, current_user):

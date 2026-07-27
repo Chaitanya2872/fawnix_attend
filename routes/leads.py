@@ -43,7 +43,7 @@ def get_one(current_user, lead_id):
     return jsonify(result), status
 
 
-@leads_bp.route("/<string:lead_id>", methods=["PUT"])
+@leads_bp.route("/<string:lead_id>", methods=["PATCH"])
 @token_required_allow_verse
 def update(current_user, lead_id):
     """Update lead."""

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useMemo, useState } from 'react'
+import './AdminLeavesPage.css'
 
 type Props = any
 

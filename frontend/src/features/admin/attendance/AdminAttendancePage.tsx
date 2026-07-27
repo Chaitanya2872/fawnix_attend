@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import './AdminAttendancePage.css'
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import AttendanceDatePicker from '../../../../components/AttendanceDatePicker'
+import AttendanceDatePicker from '../../../components/AttendanceDatePicker'
 
 type Props = any
 

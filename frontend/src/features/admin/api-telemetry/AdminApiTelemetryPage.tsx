@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import AttendanceDatePicker from '../../../../components/AttendanceDatePicker'
+import AttendanceDatePicker from '../../../components/AttendanceDatePicker'
 import type {
   AdminApiLogFilterState,
   AdminApiLogPagination,
   AdminApiLogRecord,
   AdminApiTelemetryEntry
-} from '../../../../types/admin'
+} from '../../../types/admin'
 
 type Props = {
   clientEntries: AdminApiTelemetryEntry[]

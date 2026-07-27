@@ -586,7 +586,7 @@ def api_docs():
                 'POST /api/leads': 'Create a lead',
                 'GET /api/leads': 'List leads (supports filters)',
                 'GET /api/leads/{id}': 'Get lead details',
-                'PUT /api/leads/{id}': 'Update lead',
+                'PATCH /api/leads/{id}': 'Partially update lead',
                 'POST /api/leads/{id}/link-field-visit': 'Link lead with a field visit'
             },
             'admin': {
@@ -699,7 +699,7 @@ def features():
                     'endpoints': [
                         'POST /api/leads',
                         'GET /api/leads',
-                        'PUT /api/leads/{id}',
+                        'PATCH /api/leads/{id}',
                         'POST /api/leads/{id}/link-field-visit'
                     ]
                 },

@@ -1,9 +1,10 @@
-import AttendanceDatePicker from '../../../../components/AttendanceDatePicker'
+import AttendanceDatePicker from '../../../components/AttendanceDatePicker'
+import './AdminAttendanceExceptionsPage.css'
 import type {
   AdminAttendanceExceptionFilterState,
   AdminAttendanceExceptionPagination,
   AdminAttendanceExceptionRecord,
-} from '../../../../types/admin'
+} from '../../../types/admin'
 
 type Props = {
   error: string

@@ -1,0 +1,101 @@
+/* Attendance console: preserve a clear control rail and stable record columns. */
+.attendance-dashboard .attendance-controls-inline > .dashboard-button,
+.attendance-dashboard .attendance-quick-trigger {
+  min-height: 52px;
+  white-space: nowrap;
+}
+
+.attendance-dashboard .attendance-table {
+  min-width: 980px;
+  table-layout: fixed;
+}
+
+.attendance-dashboard .attendance-table th:nth-child(1),
+.attendance-dashboard .attendance-table td:nth-child(1) {
+  width: 26%;
+}
+
+.attendance-dashboard .attendance-table th:nth-child(2),
+.attendance-dashboard .attendance-table td:nth-child(2),
+.attendance-dashboard .attendance-table th:nth-child(3),
+.attendance-dashboard .attendance-table td:nth-child(3) {
+  width: 23%;
+}
+
+.attendance-dashboard .attendance-table th:nth-child(4),
+.attendance-dashboard .attendance-table td:nth-child(4) {
+  width: 13%;
+  white-space: nowrap;
+}
+
+.attendance-dashboard .attendance-table th:nth-child(5),
+.attendance-dashboard .attendance-table td:nth-child(5) {
+  width: 8%;
+  white-space: nowrap;
+}
+
+.attendance-dashboard .attendance-table th:nth-child(6),
+.attendance-dashboard .attendance-table td:nth-child(6) {
+  width: 7%;
+  white-space: nowrap;
+}
+
+.attendance-dashboard .attendance-table tbody td {
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+
+.attendance-dashboard .attendance-table .table-meta {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 880px) {
+  .attendance-dashboard .attendance-head-actions,
+  .attendance-dashboard .attendance-controls-inline {
+    justify-content: flex-start;
+  }
+
+  .attendance-dashboard .attendance-filter-search {
+    max-width: none;
+    flex: 1 1 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .attendance-dashboard {
+    gap: 18px;
+  }
+
+  .attendance-toolbar {
+    gap: 16px;
+  }
+
+  .attendance-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .attendance-tab {
+    justify-content: space-between;
+    padding-inline: 12px;
+  }
+
+  .attendance-dashboard .attendance-filter-date,
+  .attendance-dashboard .attendance-filter-search {
+    min-width: 100%;
+    flex-basis: 100%;
+  }
+
+  .attendance-dashboard .attendance-controls-inline > .dashboard-button,
+  .attendance-dashboard .attendance-quick-actions {
+    flex: 1 1 auto;
+  }
+
+  .attendance-dashboard .attendance-controls-inline > .dashboard-button,
+  .attendance-dashboard .attendance-quick-trigger {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+

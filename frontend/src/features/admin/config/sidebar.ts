@@ -1,5 +1,7 @@
 import type { SidebarItemDefinition, LeaveFilterState } from '../types/sidebar'
 
+export const API_TELEMETRY_EMP_CODE = '8888'
+
 export const sidebarItems: SidebarItemDefinition[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'home' },
   { id: 'employees', label: 'Employees List', icon: 'users' },

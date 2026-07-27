@@ -1,4 +1,4 @@
-import FawnixApp from '../../../pages/FawnixApp'
+import FawnixApp from './FawnixApp'
 
 export default function AdminDashboardPage() {
   return <FawnixApp />

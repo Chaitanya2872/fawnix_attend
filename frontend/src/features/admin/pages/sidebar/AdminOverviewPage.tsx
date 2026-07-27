@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useMemo } from 'react'
+import './AdminOverviewPage.css'
 import {
   toMonthKey,
   getPrevMonthKey,

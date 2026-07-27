@@ -85,6 +85,31 @@ def test_list_leads_forwards_query_params(monkeypatch):
     assert captured["headers"]["Authorization"] == "Bearer verse-token"
 
 
+def test_update_lead_uses_crm_patch_method(monkeypatch):
+    captured = {}
+
+    def fake_request(method, url, headers=None, params=None, json=None, timeout=None):
+        captured.update({"method": method, "url": url, "json": json})
+        return DummyResponse(payload={"id": "lead-123", "status": "CONTACTED"})
+
+    monkeypatch.setattr(lead_service.requests, "request", fake_request)
+    monkeypatch.setattr(lead_service, "CRM_SERVICE_TOKEN", "service-token")
+
+    response, status_code = lead_service.update_lead(
+        "lead-123",
+        {"emp_email": "john@example.com"},
+        {"status": "CONTACTED"},
+    )
+
+    assert status_code == 200
+    assert response["status"] == "CONTACTED"
+    assert captured == {
+        "method": "PATCH",
+        "url": f"{lead_service.CRM_BASE_URL}/api/leads/lead-123",
+        "json": {"status": "CONTACTED"},
+    }
+
+
 def test_list_leads_surfaces_upstream_error_details(monkeypatch):
     def fake_post(url, headers=None, timeout=None):
         return DummyResponse(payload={"accessToken": "verse-token"})

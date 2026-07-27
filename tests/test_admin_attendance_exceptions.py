@@ -46,5 +46,5 @@ def test_admin_exceptions_builds_timestamp_from_exception_date_and_time(monkeypa
     assert status == 200
     assert result["success"] is True
     listing_sql = connection.cursor_obj.executed[1][0]
-    assert "COALESCE(ae.exception_date, a.date) + ae.exception_time" in listing_sql
+    assert "COALESCE(ae.exception_date, a.date) + ae.exception_time::time" in listing_sql
     assert "COALESCE(a.login_time, ae.exception_time)" not in listing_sql

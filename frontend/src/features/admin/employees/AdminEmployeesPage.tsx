@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import './AdminEmployeesPage.css'
+import { useRef } from 'react'
 
 type Props = any
 
@@ -21,6 +22,7 @@ function getAvatarRole(name: string): string {
 }
 
 export default function AdminEmployeesPage(props: Props) {
+  const importInputRef = useRef<HTMLInputElement>(null)
   const {
     canWriteAdminData,
     downloadEmployeesReport,
@@ -28,6 +30,7 @@ export default function AdminEmployeesPage(props: Props) {
     employeeExportStatus,
     employeeSearch,
     employeeStatusFilter,
+    employeeKpiFilter,
     employees,
     filteredEmployees,
     formatEmployeeGrade,
@@ -37,7 +40,12 @@ export default function AdminEmployeesPage(props: Props) {
     requestDeleteEmployee,
     setEmployeeExportFormat,
     setEmployeeSearch,
-    setEmployeeStatusFilter,
+    applyEmployeeKpiFilter,
+    openEmployeeView,
+    employeeImportStatus,
+    employeeImportLoading,
+    importEmployees,
+    downloadEmployeesTemplate,
   } = props
 
   const activeCount = (employees as any[]).filter((e) => e.is_active).length
@@ -47,6 +55,11 @@ export default function AdminEmployeesPage(props: Props) {
       (e.emp_designation || '').toLowerCase().includes(k)
     )
   ).length
+  const birthdays = (employees as any[]).map((employee) => {
+    const raw = employee.emp_date_of_birth || employee.date_of_birth || employee.birth_date || employee.birthday
+    const date = raw ? new Date(raw) : null
+    return date && !Number.isNaN(date.getTime()) ? { employee, date } : null
+  }).filter(Boolean).filter((item: any) => item.date.getMonth() === new Date().getMonth()) as { employee: any; date: Date }[]
 
   return (
     <div className="adm-page">
@@ -60,11 +73,10 @@ export default function AdminEmployeesPage(props: Props) {
 
         <div className="adm-header__actions">
           {canWriteAdminData && (
-            <button
-              className="adm-btn adm-btn--ghost"
-              onClick={openAddEmployeePanel}
-              type="button"
-            >
+            <><button className="adm-btn adm-btn--ghost" onClick={() => importInputRef.current?.click()} type="button" disabled={employeeImportLoading}>Import employees</button>
+            <button className="adm-btn adm-btn--ghost" onClick={downloadEmployeesTemplate} type="button">Download template</button>
+            <input ref={importInputRef} className="adm-visually-hidden" type="file" accept=".csv,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importEmployees(file); event.currentTarget.value = '' }} />
+            <button className="adm-btn adm-btn--ghost" onClick={openAddEmployeePanel} type="button">
               <svg className="adm-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path
                   d="M12 5v14M5 12h14"
@@ -74,7 +86,7 @@ export default function AdminEmployeesPage(props: Props) {
                 />
               </svg>
               Add employee
-            </button>
+            </button></>
           )}
 
           <div className="adm-split-btn">
@@ -119,26 +131,38 @@ export default function AdminEmployeesPage(props: Props) {
 
       {/* ── Metrics ───────────────────────────────────────── */}
       <div className="adm-metrics">
-        <div className="adm-metric-card">
+        <button className={`adm-metric-card${employeeKpiFilter === 'all' ? ' adm-metric-card--selected' : ''}`} onClick={() => applyEmployeeKpiFilter('all')} type="button">
           <p className="adm-metric-card__label">Total employees</p>
           <p className="adm-metric-card__value">{employees.length}</p>
-        </div>
-        <div className="adm-metric-card">
+        </button>
+        <button className={`adm-metric-card${employeeKpiFilter === 'active' ? ' adm-metric-card--selected' : ''}`} onClick={() => applyEmployeeKpiFilter('active')} type="button">
           <p className="adm-metric-card__label">Active</p>
           <p className="adm-metric-card__value adm-metric-card__value--success">
             {activeCount}
           </p>
-        </div>
-        <div className="adm-metric-card">
+        </button>
+        <button className={`adm-metric-card${employeeKpiFilter === 'inactive' ? ' adm-metric-card--selected' : ''}`} onClick={() => applyEmployeeKpiFilter('inactive')} type="button">
           <p className="adm-metric-card__label">Inactive</p>
           <p className="adm-metric-card__value adm-metric-card__value--muted">
             {inactiveCount}
           </p>
-        </div>
-        <div className="adm-metric-card">
+        </button>
+        <button className={`adm-metric-card${employeeKpiFilter === 'hr_admin' ? ' adm-metric-card--selected' : ''}`} onClick={() => applyEmployeeKpiFilter('hr_admin')} type="button">
           <p className="adm-metric-card__label">HR / Admin</p>
           <p className="adm-metric-card__value">{hrCount}</p>
-        </div>
+        </button>
+        {birthdays.length > 0 ? (
+          <button
+            type="button"
+            className={`adm-birthday-card${employeeKpiFilter === 'birthdays' ? ' adm-birthday-card--selected' : ''}`}
+            onClick={() => applyEmployeeKpiFilter('birthdays')}
+            aria-pressed={employeeKpiFilter === 'birthdays'}
+          >
+            <span>Birthdays this month</span>
+            <strong>{birthdays.length}</strong>
+            <small>{birthdays.slice(0, 2).map(({ employee }) => employee.emp_full_name || employee.emp_code).join(' · ')}</small>
+          </button>
+        ) : null}
       </div>
 
       {/* ── Search & filter ───────────────────────────────── */}
@@ -158,7 +182,7 @@ export default function AdminEmployeesPage(props: Props) {
                 key={opt.id}
                 type="button"
                 className={`adm-chip${employeeStatusFilter === opt.id ? ' adm-chip--on' : ''}`}
-                onClick={() => setEmployeeStatusFilter(opt.id)}
+                onClick={() => applyEmployeeKpiFilter(opt.id)}
               >
                 {opt.label}
               </button>
@@ -206,6 +230,7 @@ export default function AdminEmployeesPage(props: Props) {
       {employeeExportStatus && (
         <p className="adm-export-status">{employeeExportStatus}</p>
       )}
+      {employeeImportStatus && <p className="adm-import-status" role="status">{employeeImportStatus}</p>}
 
       {/* ── Table ─────────────────────────────────────────── */}
       <div className="adm-table-card">
@@ -309,6 +334,7 @@ export default function AdminEmployeesPage(props: Props) {
                       <td>
                         {canWriteAdminData ? (
                           <div className="adm-actions">
+                            <button className="adm-action-btn adm-action-btn--view" onClick={() => openEmployeeView(employee)} title="View employee" type="button" aria-label={`View ${displayName}`}>View</button>
                             <button
                               className="adm-action-btn"
                               onClick={() => handleEditEmployee(employee)}
@@ -355,7 +381,7 @@ export default function AdminEmployeesPage(props: Props) {
                             </button>
                           </div>
                         ) : (
-                          <span className="adm-cell-meta">Read only</span>
+                          <button className="adm-action-btn adm-action-btn--view" onClick={() => openEmployeeView(employee)} type="button">View</button>
                         )}
                       </td>
                     </tr>

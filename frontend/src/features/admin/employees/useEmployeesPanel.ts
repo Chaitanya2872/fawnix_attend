@@ -40,6 +40,20 @@ type UseEmployeesPanelOptions = {
   resolveDownloadFilename: (response: Response, fallbackFilename: string) => string
 }
 
+type EmployeeKpiFilter = 'all' | 'active' | 'inactive' | 'hr_admin' | 'birthdays'
+
+const hasHrAdminRole = (employee: EmployeeRow) => {
+  const values = [employee.emp_designation, (employee as EmployeeRow & { role?: string }).role]
+  return values.some((value) => /\b(hr|cmd|admin)\b/i.test(value || ''))
+}
+
+const hasBirthdayThisMonth = (employee: EmployeeRow) => {
+  const record = employee as EmployeeRow & { emp_date_of_birth?: string; date_of_birth?: string; birth_date?: string; birthday?: string }
+  const rawDate = record.emp_date_of_birth || record.date_of_birth || record.birth_date || record.birthday
+  const date = rawDate ? new Date(rawDate) : null
+  return Boolean(date && !Number.isNaN(date.getTime()) && date.getMonth() === new Date().getMonth())
+}
+
 export function useEmployeesPanel({
   employees,
   canWriteAdminData,
@@ -51,6 +65,7 @@ export function useEmployeesPanel({
 }: UseEmployeesPanelOptions) {
   const [employeeSearch, setEmployeeSearch] = useState('')
   const [employeeStatusFilter, setEmployeeStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [employeeKpiFilter, setEmployeeKpiFilter] = useState<EmployeeKpiFilter>('all')
   const [employeeStatusMenuOpen, setEmployeeStatusMenuOpen] = useState(false)
   const [employeeExportFormat, setEmployeeExportFormat] = useState<'csv' | 'pdf' | 'xlsx'>('csv')
   const [employeeExportStatus, setEmployeeExportStatus] = useState('')
@@ -59,6 +74,9 @@ export function useEmployeesPanel({
   const [editLoading, setEditLoading] = useState(false)
   const [editStatus, setEditStatus] = useState('')
   const [employeePanelMode, setEmployeePanelMode] = useState<'add' | 'edit' | null>(null)
+  const [viewingEmployee, setViewingEmployee] = useState<EmployeeRow | null>(null)
+  const [employeeImportStatus, setEmployeeImportStatus] = useState('')
+  const [employeeImportLoading, setEmployeeImportLoading] = useState(false)
   const [deleteEmployeeTarget, setDeleteEmployeeTarget] = useState<EmployeeRow | null>(null)
   const [deleteEmployeeLoading, setDeleteEmployeeLoading] = useState(false)
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
@@ -73,14 +91,17 @@ export function useEmployeesPanel({
   const normalizedEmployeeSearch = employeeSearch.trim().toLowerCase()
   const filteredEmployees = employees
     .filter((employee) => {
-      if (employeeStatusFilter === 'active') {
+      if (employeeKpiFilter === 'active') {
         return Boolean(employee.is_active)
       }
-      if (employeeStatusFilter === 'inactive') {
+      if (employeeKpiFilter === 'inactive') {
         return !employee.is_active
       }
+      if (employeeKpiFilter === 'hr_admin') return hasHrAdminRole(employee)
+      if (employeeKpiFilter === 'birthdays') return hasBirthdayThisMonth(employee)
       return true
     })
+
     .filter((employee) => {
       if (!normalizedEmployeeSearch) {
         return true
@@ -108,6 +129,12 @@ export function useEmployeesPanel({
       }
       return leftCode.localeCompare(rightCode, undefined, { numeric: true, sensitivity: 'base' })
     })
+
+  const applyEmployeeKpiFilter = (filter: EmployeeKpiFilter) => {
+    setEmployeeKpiFilter(filter)
+    setEmployeeStatusFilter(filter === 'active' || filter === 'inactive' ? filter : 'all')
+    setEmployeeSearch('')
+  }
 
   const updateNewEmployee = (field: keyof NewEmployeeForm, value: string) => {
     setNewEmployee((current) => ({
@@ -181,6 +208,52 @@ export function useEmployeesPanel({
     setEditFormData({ ...employee })
     setEmployeePanelMode('edit')
     setEditStatus('')
+  }
+
+  const openEmployeeView = (employee: EmployeeRow) => setViewingEmployee(employee)
+  const closeEmployeeView = () => setViewingEmployee(null)
+
+  const downloadEmployeesTemplate = () => {
+    const columns = ['emp_code', 'emp_full_name', 'emp_email', 'emp_contact', 'emp_grade', 'emp_designation', 'emp_department', 'emp_manager', 'role']
+    const blob = new Blob([`${columns.join(',')}\nEMP001,Jane Doe,jane@example.com,9876543210,F,HR Executive,Human Resources,EMP001,employee\n`], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'fawnix_employees_template.csv'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const importEmployees = async (file: File) => {
+    if (!canWriteAdminData) return
+    setEmployeeImportLoading(true)
+    setEmployeeImportStatus('Importing employees…')
+    try {
+      const text = await file.text()
+      const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean)
+      if (lines.length < 2) throw new Error('The CSV needs a header and at least one employee row.')
+      const parse = (line: string) => line.match(/(?:[^,"]+|"(?:[^"]|"")*")+/g)?.map((value) => value.trim().replace(/^"|"$/g, '').replace(/""/g, '"')) || []
+      const headers = parse(lines[0]).map((header) => header.trim())
+      const required = ['emp_code', 'emp_full_name', 'emp_email']
+      const missing = required.filter((field) => !headers.includes(field))
+      if (missing.length) throw new Error(`Template is missing: ${missing.join(', ')}.`)
+      let created = 0
+      const failed: string[] = []
+      for (const [index, line] of lines.slice(1).entries()) {
+        const values = parse(line)
+        const row = Object.fromEntries(headers.map((header, i) => [header, (values[i] || '').trim()])) as Record<string, string>
+        if (!row.emp_code && !row.emp_full_name && !row.emp_email) continue
+        if (required.some((field) => !row[field])) { failed.push(`row ${index + 2}`); continue }
+        try {
+          await apiRequest('/api/users', { method: 'POST', body: JSON.stringify(Object.fromEntries(Object.entries(row).filter(([, value]) => value))) })
+          created += 1
+        } catch { failed.push(`row ${index + 2}`) }
+      }
+      setEmployeeImportStatus(`Imported ${created} employee${created === 1 ? '' : 's'}${failed.length ? `; ${failed.length} row${failed.length === 1 ? '' : 's'} could not be imported.` : '.'}`)
+      await loadDashboard(accessToken)
+    } catch (error) {
+      setEmployeeImportStatus(error instanceof Error ? error.message : 'Could not import this file.')
+    } finally { setEmployeeImportLoading(false) }
   }
 
   const handleSaveEmployee = async () => {
@@ -324,6 +397,8 @@ export function useEmployeesPanel({
     setEmployeeSearch,
     employeeStatusFilter,
     setEmployeeStatusFilter,
+    employeeKpiFilter,
+    applyEmployeeKpiFilter,
     employeeStatusMenuOpen,
     setEmployeeStatusMenuOpen,
     employeeExportFormat,
@@ -337,6 +412,13 @@ export function useEmployeesPanel({
     editLoading,
     editStatus,
     employeePanelMode,
+    viewingEmployee,
+    openEmployeeView,
+    closeEmployeeView,
+    employeeImportStatus,
+    employeeImportLoading,
+    importEmployees,
+    downloadEmployeesTemplate,
     deleteEmployeeTarget,
     setDeleteEmployeeTarget,
     deleteEmployeeLoading,

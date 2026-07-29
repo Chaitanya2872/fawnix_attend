@@ -20,6 +20,45 @@
   font: inherit;
 }
 
+.adm-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; clip-path: inset(50%); }
+.adm-metric-card { text-align: left; font: inherit; }
+button.adm-metric-card { cursor: pointer; }
+button.adm-metric-card:hover, button.adm-metric-card:focus-visible, .adm-metric-card--selected { border-color: #0d5a43; background: #f4fbdf; transform: translateY(-2px); box-shadow: 0 10px 22px rgba(14, 77, 57, .1); }
+.adm-metric-card, .adm-row { transition: background .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.adm-birthday-card { min-width: 174px; padding: 13px 15px; border: 1px solid #dceeb6; border-radius: 12px; background: #f8ffe8; display: grid; gap: 2px; font: inherit; text-align: left; cursor: pointer; transition: background .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.adm-birthday-card:hover, .adm-birthday-card:focus-visible, .adm-birthday-card--selected { border-color: #0d5a43; background: #f4fbdf; transform: translateY(-2px); box-shadow: 0 10px 22px rgba(14, 77, 57, .1); }
+.adm-birthday-card span { font-size: 11px; color: #49623d; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.adm-birthday-card strong { font-size: 21px; color: #124d3d; }
+.adm-birthday-card small { color: #4c6357; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.adm-import-status { margin: 10px 0 0; color: #165641; font-size: 13px; font-weight: 500; }
+.adm-action-btn--view { width: auto; padding: 0 8px; font-size: 12px; color: #155944; }
+.adm-row:hover td { background: #fbfdf9; }
+.adm-row:focus-within td { background: #f4f9eb; }
+
+/* Employee panels deliberately override the generic field-visit drawer. */
+.employee-form-panel, .employee-view-panel { width: clamp(520px, 50vw, 760px); max-width: 50vw; padding: 0; display: flex; flex-direction: column; gap: 0; overflow: hidden; }
+.employee-form-panel .employee-panel-head, .employee-view-panel .employee-view-head { padding: 24px 26px 16px; flex: 0 0 auto; border-bottom: 1px solid rgba(17, 44, 50, .09); }
+.employee-form-panel .employee-panel-summary { padding: 16px 26px 0; flex: 0 0 auto; }
+.employee-form-panel .employee-form-card { margin: 16px 26px 0; overflow-y: auto; min-height: 0; border-radius: 16px; }
+.employee-form-panel .employee-panel-actions { position: sticky; bottom: 0; padding: 14px 0 2px; background: #fff; }
+.employee-form-grid { gap: 14px; }
+.employee-form-grid > div { min-width: 0; }
+.employee-view-head p { margin: 5px 0 0; font-size: 13px; color: #607076; }
+.employee-view-grid { padding: 22px 26px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; overflow-y: auto; }
+.employee-view-item { padding: 13px 14px; border: 1px solid rgba(17,44,50,.09); border-radius: 12px; background: #fbfcfa; min-width: 0; }
+.employee-view-item span { display: block; margin-bottom: 5px; font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: #687a75; }
+.employee-view-item strong { display: block; color: #152f2b; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.employee-view-actions { padding: 16px 26px 24px; margin-top: auto; border-top: 1px solid rgba(17,44,50,.09); }
+
+@media (max-width: 760px) {
+  .employee-form-panel, .employee-view-panel { width: 100vw; max-width: 100vw; }
+  .employee-view-grid { grid-template-columns: 1fr; padding: 18px; }
+  .employee-form-panel .employee-panel-head, .employee-view-panel .employee-view-head { padding: 19px 18px 14px; }
+  .employee-form-panel .employee-panel-summary { padding: 14px 18px 0; }
+  .employee-form-panel .employee-form-card { margin: 14px 18px 0; }
+  .employee-view-actions { padding: 14px 18px 20px; }
+}
+
 /* ── Header ─────────────────────────────────────────────── */
 
 .adm-header {

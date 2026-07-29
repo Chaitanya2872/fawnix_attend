@@ -1,12 +1,11 @@
 /* eslint-disable react-hooks/static-components */
 /* eslint-disable react-hooks/preserve-manual-memoization */
 import { useState, useMemo } from 'react'
+import AttendanceDatePicker from './AttendanceDatePicker'
 import './AdminAttendancePage.css'
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import AttendanceDatePicker from '../../../components/AttendanceDatePicker'
 
 type Props = any
-
 type SortDir = 'asc' | 'desc' | null
 type SortConfig = { col: string; dir: SortDir }
 
@@ -32,6 +31,65 @@ function useSortedRows<T>(rows: T[], sort: SortConfig, getVal: (row: T, col: str
     })
   }, [rows, sort, getVal])
 }
+
+function getAttendanceStatusPillClass(status?: string): string {
+  const normalized = (status || '').toLowerCase()
+  if (normalized.includes('absent') || normalized.includes('reject') || normalized.includes('missed')) {
+    return 'table-pill danger'
+  }
+  if (normalized.includes('late') || normalized.includes('early')) {
+    return 'table-pill warning'
+  }
+  if (normalized.includes('present') || normalized.includes('office') || normalized.includes('remote') || normalized.includes('approved') || normalized.includes('on_time') || normalized.includes('on time')) {
+    return 'table-pill success'
+  }
+  return 'table-pill accent'
+}
+
+const KPI_VIEWS = [
+  {
+    view: 'attendance',
+    label: 'First Clock-Ins',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="8" r="4"/>
+        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+      </svg>
+    ),
+  },
+  {
+    view: 'late-arrivals',
+    label: 'Late Arrivals',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9"/>
+        <polyline points="12 7 12 12 15 15"/>
+      </svg>
+    ),
+  },
+  {
+    view: 'early-leaves',
+    label: 'Early Leaves',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 18l6-6-6-6"/>
+        <path d="M3 12h12"/>
+      </svg>
+    ),
+  },
+  {
+    view: 'leaves',
+    label: 'On Leave',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+    ),
+  },
+]
 
 export default function AdminAttendancePage(props: Props) {
   const {
@@ -81,15 +139,17 @@ export default function AdminAttendancePage(props: Props) {
   const [exceptionSort, setExceptionSort] = useState<SortConfig>({ col: '', dir: null })
   const [deptFilter, setDeptFilter] = useState<string>('all')
 
-  const attendanceTabCount = props.attendancePageRows.length
-  const lateArrivalCount = selectedDateLateArrivals.length
-  const earlyLeaveCount = selectedDateEarlyLeaves.length
-  const leaveCount = selectedDateLeaves.length
+  const kpiCounts: Record<string, number> = {
+    attendance: props.attendancePageRows.length,
+    'late-arrivals': selectedDateLateArrivals.length,
+    'early-leaves': selectedDateEarlyLeaves.length,
+    leaves: selectedDateLeaves.length,
+  }
+
   const missedLoginCount = missedLoginEmpCodes.length
   const activeAttendanceView = attendanceView === 'missed-logins' ? 'attendance' : attendanceView
   const normalizedSearch = attendanceSearch.trim().toLowerCase()
 
-  // Derive unique departments from all available data
   const allDepts = useMemo(() => {
     const depts = new Set<string>()
     filteredAttendanceRows.forEach((r: any) => { if (r.emp_department) depts.add(r.emp_department) })
@@ -99,26 +159,24 @@ export default function AdminAttendancePage(props: Props) {
   }, [filteredAttendanceRows, selectedDateLeaves, exceptionRows])
 
   const hasDepts = allDepts.length > 0
-
-  // Department-filtered base rows
-  const deptFilterFn = (row: any) => deptFilter === 'all' || !hasDepts || row.emp_department === deptFilter
+  const deptMatch = (row: any) => deptFilter === 'all' || !hasDepts || row.emp_department === deptFilter
 
   const filteredLeaves = useMemo(() => {
     const base = normalizedSearch
-      ? selectedDateLeaves.filter((row: any) =>
-          [row.emp_full_name, row.emp_code, row.emp_designation, row.leave_type, row.status]
+      ? selectedDateLeaves.filter((r: any) =>
+          [r.emp_full_name, r.emp_code, r.emp_designation, r.leave_type, r.status]
             .filter(Boolean).join(' ').toLowerCase().includes(normalizedSearch))
       : selectedDateLeaves
-    return base.filter(deptFilterFn)
+    return base.filter(deptMatch)
   }, [selectedDateLeaves, normalizedSearch, deptFilter])
 
   const filteredExceptionRows = useMemo(() => {
     const base = normalizedSearch
-      ? exceptionRows.filter((row: any) =>
-          [row.emp_name, row.emp_code, row.reason, row.status, row.exception_time, row.actual_login_time, row.planned_leave_time, row.actual_logout_time]
+      ? exceptionRows.filter((r: any) =>
+          [r.emp_name, r.emp_code, r.reason, r.status, r.exception_time, r.actual_login_time, r.planned_leave_time, r.actual_logout_time]
             .filter(Boolean).join(' ').toLowerCase().includes(normalizedSearch))
       : exceptionRows
-    return base.filter(deptFilterFn)
+    return base.filter(deptMatch)
   }, [exceptionRows, normalizedSearch, deptFilter])
 
   const filteredMissedLoginEmployees = useMemo(() => {
@@ -127,17 +185,14 @@ export default function AdminAttendancePage(props: Props) {
           [e.emp_full_name, e.emp_code, e.emp_designation, e.emp_department, e.emp_email]
             .filter(Boolean).join(' ').toLowerCase().includes(normalizedSearch))
       : missedLoginEmployees
-    return deptFilter === 'all' || !hasDepts
-      ? base
-      : base.filter((e: any) => e.emp_department === deptFilter)
+    return deptFilter === 'all' || !hasDepts ? base : base.filter((e: any) => e.emp_department === deptFilter)
   }, [missedLoginEmployees, normalizedSearch, deptFilter])
 
-  const deptFilteredAttendanceRows = useMemo(() =>
-    filteredAttendanceRows.filter(deptFilterFn),
+  const deptFilteredAttendanceRows = useMemo(
+    () => filteredAttendanceRows.filter(deptMatch),
     [filteredAttendanceRows, deptFilter]
   )
 
-  // Sorting helpers
   function cycleSort(current: SortConfig, col: string, set: (s: SortConfig) => void) {
     if (current.col !== col) { set({ col, dir: 'asc' }); return }
     if (current.dir === 'asc') { set({ col, dir: 'desc' }); return }
@@ -173,10 +228,7 @@ export default function AdminAttendancePage(props: Props) {
     return ''
   })
 
-  const openMissedLoginsPanel = () => {
-    setQuickActionsOpen(false)
-    setMissedLoginsPanelOpen(true)
-  }
+  const openMissedLoginsPanel = () => { setQuickActionsOpen(false); setMissedLoginsPanelOpen(true) }
   const handleTriggerAllMissedLogins = () => {
     setSelectedMissedLoginEmpCodes(actionableMissedLoginEmployeeCodes)
     setAlertTriggerStatus('')
@@ -185,7 +237,7 @@ export default function AdminAttendancePage(props: Props) {
     setMissedLoginsPanelOpen(true)
   }
 
-  const ThSortable = ({ col, sort, onSort, children }: any) => (
+  const ThS = ({ col, sort, onSort, children }: any) => (
     <th
       className={`th-sortable${sort.col === col ? ' th-sort-active' : ''}`}
       onClick={() => onSort(col)}
@@ -193,107 +245,113 @@ export default function AdminAttendancePage(props: Props) {
       tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && onSort(col)}
     >
-      {children}
-      <SortIcon col={col} sort={sort} />
+      {children}<SortIcon col={col} sort={sort} />
     </th>
   )
 
   return (
     <div className="attendance-dashboard">
       <section className="attendance-toolbar">
-        <div className="attendance-title-row">
-          <div className="attendance-title-block">
-            <p className="eyebrow">Operations</p>
-            <h2>Today's Activity</h2>
+        {/* Title */}
+        <div className="attendance-title-block">
+          <p className="eyebrow">Operations</p>
+          <h2>Today's Activity</h2>
+        </div>
+
+        {/* Controls row */}
+        <div className="attendance-controls-row">
+          <AttendanceDatePicker value={attendanceDateFilter} onChange={setAttendanceDateFilter} />
+
+          <div className="attendance-search-shell">
+            <span className="search-prefix-icon" aria-hidden="true">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </span>
+            <input
+              id="attendance-search"
+              type="text"
+              value={attendanceSearch}
+              onChange={(e) => setAttendanceSearch(e.target.value)}
+              placeholder="Search employee, type, status…"
+            />
           </div>
-          <div className="attendance-head-actions">
-            <AttendanceDatePicker value={attendanceDateFilter} onChange={setAttendanceDateFilter} />
-            <div className="attendance-filter attendance-filter-search">
-              <div className="attendance-input-shell attendance-search-shell">
-                <span className="search-icon" aria-hidden="true">⌕</span>
-                <input
-                  id="attendance-search"
-                  type="text"
-                  value={attendanceSearch}
-                  onChange={(e) => setAttendanceSearch(e.target.value)}
-                  placeholder="Search employee, type, status…"
-                />
-              </div>
-            </div>
-            <button className="ghost dashboard-button" onClick={() => void loadDashboard()} type="button">
-              Refresh
+
+          <button
+            className="icon-btn"
+            type="button"
+            title="Refresh"
+            onClick={() => void loadDashboard()}
+            aria-label="Refresh"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+          </button>
+
+          <div className={`attendance-quick-actions${quickActionsOpen ? ' open' : ''}`}>
+            <button
+              className="attendance-quick-trigger"
+              type="button"
+              onClick={() => setQuickActionsOpen((c) => !c)}
+              aria-label="Quick actions"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              </svg>
+              Quick Actions
+              {missedLoginCount > 0 && <span className="quick-badge">{missedLoginCount}</span>}
             </button>
-            <div className={`attendance-quick-actions${quickActionsOpen ? ' open' : ''}`}>
+            <div className={`attendance-quick-menu${quickActionsOpen ? ' open' : ''}`}>
               <button
-                className="ghost dashboard-button attendance-quick-trigger"
+                className="attendance-quick-item"
                 type="button"
-                onClick={() => setQuickActionsOpen((c) => !c)}
+                onClick={handleTriggerAllMissedLogins}
+                disabled={!actionableMissedLoginEmployeeCodes.length || alertCandidatesLoading}
               >
-                Quick Actions
-                {missedLoginCount > 0 && <span className="badge-count">{missedLoginCount}</span>}
+                Trigger alert to all missed logins
               </button>
-              <div className={`attendance-quick-menu${quickActionsOpen ? ' open' : ''}`}>
-                <button
-                  className="attendance-quick-item"
-                  type="button"
-                  onClick={handleTriggerAllMissedLogins}
-                  disabled={!actionableMissedLoginEmployeeCodes.length || alertCandidatesLoading}
-                >
-                  Trigger alert to all missed logins
-                </button>
-                <button className="attendance-quick-item" type="button" onClick={openMissedLoginsPanel}>
-                  View missed logins
-                </button>
-              </div>
+              <button className="attendance-quick-item" type="button" onClick={openMissedLoginsPanel}>
+                View missed logins
+              </button>
             </div>
           </div>
         </div>
 
-        <div className="attendance-filter-bar">
-          <div className="attendance-tabs">
-            {[
-              { view: 'attendance', label: 'First Clock-Ins', count: attendanceTabCount },
-              { view: 'late-arrivals', label: 'Late Arrivals', count: lateArrivalCount },
-              { view: 'early-leaves', label: 'Early Leaves', count: earlyLeaveCount },
-              { view: 'leaves', label: 'Leaves', count: leaveCount }
-            ].map(({ view, label, count }) => (
-              <button
-                key={view}
-                className={`attendance-tab${activeAttendanceView === view ? ' active' : ''}`}
-                type="button"
-                onClick={() => setAttendanceView(view)}
-              >
-                {label}
-                <span className="tab-count">{count}</span>
+        {/* KPI cards */}
+        <div className="kpi-cards">
+          {KPI_VIEWS.map(({ view, label, icon }) => (
+            <button
+              key={view}
+              className={`kpi-card${activeAttendanceView === view ? ' active' : ''}`}
+              type="button"
+              onClick={() => setAttendanceView(view)}
+            >
+              <div className="kpi-icon-wrap">{icon}</div>
+              <div className="kpi-body">
+                <span className="kpi-count">{kpiCounts[view]}</span>
+                <span className="kpi-label">{label}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Dept filter */}
+        {hasDepts && (
+          <div className="dept-filter-row" role="group" aria-label="Filter by department">
+            <span className="dept-filter-label">Dept</span>
+            <button className={`dept-pill${deptFilter === 'all' ? ' active' : ''}`} type="button" onClick={() => setDeptFilter('all')}>All</button>
+            {allDepts.map((dept) => (
+              <button key={dept} className={`dept-pill${deptFilter === dept ? ' active' : ''}`} type="button" onClick={() => setDeptFilter(dept)}>
+                {dept}
               </button>
             ))}
           </div>
-
-          {hasDepts && (
-            <div className="dept-filter" role="group" aria-label="Filter by department">
-              <span className="dept-filter-label">Dept</span>
-              <button
-                className={`dept-pill${deptFilter === 'all' ? ' active' : ''}`}
-                type="button"
-                onClick={() => setDeptFilter('all')}
-              >
-                All
-              </button>
-              {allDepts.map((dept) => (
-                <button
-                  key={dept}
-                  className={`dept-pill${deptFilter === dept ? ' active' : ''}`}
-                  type="button"
-                  onClick={() => setDeptFilter(dept)}
-                >
-                  {dept}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        )}
       </section>
 
+      {/* Tables */}
       {activeAttendanceView === 'attendance' ? (
         <div className="table-card attendance-content-card">
           {sortedAttendanceRows.length ? (
@@ -301,12 +359,12 @@ export default function AdminAttendancePage(props: Props) {
               <table className="dashboard-table attendance-table">
                 <thead>
                   <tr>
-                    <ThSortable col="employee" sort={attendanceSort} onSort={(c: string) => cycleSort(attendanceSort, c, setAttendanceSort)}>Employee</ThSortable>
-                    <ThSortable col="clockin" sort={attendanceSort} onSort={(c: string) => cycleSort(attendanceSort, c, setAttendanceSort)}>Clock In</ThSortable>
-                    <ThSortable col="clockout" sort={attendanceSort} onSort={(c: string) => cycleSort(attendanceSort, c, setAttendanceSort)}>Clock Out</ThSortable>
-                    <ThSortable col="hours" sort={attendanceSort} onSort={(c: string) => cycleSort(attendanceSort, c, setAttendanceSort)}>Working Hours</ThSortable>
-                    <ThSortable col="type" sort={attendanceSort} onSort={(c: string) => cycleSort(attendanceSort, c, setAttendanceSort)}>Type</ThSortable>
-                    <ThSortable col="status" sort={attendanceSort} onSort={(c: string) => cycleSort(attendanceSort, c, setAttendanceSort)}>Status</ThSortable>
+                    <ThS col="employee" sort={attendanceSort} onSort={(c: string) => cycleSort(attendanceSort, c, setAttendanceSort)}>Employee</ThS>
+                    <ThS col="clockin" sort={attendanceSort} onSort={(c: string) => cycleSort(attendanceSort, c, setAttendanceSort)}>Clock In</ThS>
+                    <ThS col="clockout" sort={attendanceSort} onSort={(c: string) => cycleSort(attendanceSort, c, setAttendanceSort)}>Clock Out</ThS>
+                    <ThS col="hours" sort={attendanceSort} onSort={(c: string) => cycleSort(attendanceSort, c, setAttendanceSort)}>Working Hours</ThS>
+                    <ThS col="type" sort={attendanceSort} onSort={(c: string) => cycleSort(attendanceSort, c, setAttendanceSort)}>Type</ThS>
+                    <ThS col="status" sort={attendanceSort} onSort={(c: string) => cycleSort(attendanceSort, c, setAttendanceSort)}>Status</ThS>
                   </tr>
                 </thead>
                 <tbody>
@@ -326,7 +384,12 @@ export default function AdminAttendancePage(props: Props) {
                       </td>
                       <td className="col-numeric">{formatWorkingHours(row.working_hours)}</td>
                       <td><span className="type-badge">{row.attendance_type || 'office'}</span></td>
-                      <td><span className="table-pill accent">{row.status || 'Unknown'}</span></td>
+                      <td>
+                        <span className={getAttendanceStatusPillClass(row.status)}>
+                          <span className="table-pill-dot" aria-hidden="true" />
+                          {row.status || 'Unknown'}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -346,11 +409,11 @@ export default function AdminAttendancePage(props: Props) {
               <table className="dashboard-table leave-table">
                 <thead>
                   <tr>
-                    <ThSortable col="employee" sort={leavesSort} onSort={(c: string) => cycleSort(leavesSort, c, setLeavesSort)}>Employee</ThSortable>
-                    <ThSortable col="type" sort={leavesSort} onSort={(c: string) => cycleSort(leavesSort, c, setLeavesSort)}>Leave Type</ThSortable>
-                    <ThSortable col="from" sort={leavesSort} onSort={(c: string) => cycleSort(leavesSort, c, setLeavesSort)}>Dates</ThSortable>
-                    <ThSortable col="applied" sort={leavesSort} onSort={(c: string) => cycleSort(leavesSort, c, setLeavesSort)}>Applied At</ThSortable>
-                    <ThSortable col="status" sort={leavesSort} onSort={(c: string) => cycleSort(leavesSort, c, setLeavesSort)}>Status</ThSortable>
+                    <ThS col="employee" sort={leavesSort} onSort={(c: string) => cycleSort(leavesSort, c, setLeavesSort)}>Employee</ThS>
+                    <ThS col="type" sort={leavesSort} onSort={(c: string) => cycleSort(leavesSort, c, setLeavesSort)}>Leave Type</ThS>
+                    <ThS col="from" sort={leavesSort} onSort={(c: string) => cycleSort(leavesSort, c, setLeavesSort)}>Dates</ThS>
+                    <ThS col="applied" sort={leavesSort} onSort={(c: string) => cycleSort(leavesSort, c, setLeavesSort)}>Applied At</ThS>
+                    <ThS col="status" sort={leavesSort} onSort={(c: string) => cycleSort(leavesSort, c, setLeavesSort)}>Status</ThS>
                   </tr>
                 </thead>
                 <tbody>
@@ -383,18 +446,18 @@ export default function AdminAttendancePage(props: Props) {
               <table className="dashboard-table exception-table">
                 <thead>
                   <tr>
-                    <ThSortable col="employee" sort={exceptionSort} onSort={(c: string) => cycleSort(exceptionSort, c, setExceptionSort)}>Employee</ThSortable>
-                    <ThSortable col="minutes" sort={exceptionSort} onSort={(c: string) => cycleSort(exceptionSort, c, setExceptionSort)}>
+                    <ThS col="employee" sort={exceptionSort} onSort={(c: string) => cycleSort(exceptionSort, c, setExceptionSort)}>Employee</ThS>
+                    <ThS col="minutes" sort={exceptionSort} onSort={(c: string) => cycleSort(exceptionSort, c, setExceptionSort)}>
                       {attendanceView === 'late-arrivals' ? 'Late By' : 'Early By'}
-                    </ThSortable>
-                    <ThSortable col="time" sort={exceptionSort} onSort={(c: string) => cycleSort(exceptionSort, c, setExceptionSort)}>
+                    </ThS>
+                    <ThS col="time" sort={exceptionSort} onSort={(c: string) => cycleSort(exceptionSort, c, setExceptionSort)}>
                       {attendanceView === 'late-arrivals' ? 'Login Time' : 'Leave Time'}
-                    </ThSortable>
-                    <ThSortable col="status" sort={exceptionSort} onSort={(c: string) => cycleSort(exceptionSort, c, setExceptionSort)}>
+                    </ThS>
+                    <ThS col="status" sort={exceptionSort} onSort={(c: string) => cycleSort(exceptionSort, c, setExceptionSort)}>
                       {attendanceView === 'late-arrivals' ? 'Informed' : 'Status'}
-                    </ThSortable>
-                    <ThSortable col="reason" sort={exceptionSort} onSort={(c: string) => cycleSort(exceptionSort, c, setExceptionSort)}>Reason</ThSortable>
-                    <ThSortable col="requested" sort={exceptionSort} onSort={(c: string) => cycleSort(exceptionSort, c, setExceptionSort)}>Requested</ThSortable>
+                    </ThS>
+                    <ThS col="reason" sort={exceptionSort} onSort={(c: string) => cycleSort(exceptionSort, c, setExceptionSort)}>Reason</ThS>
+                    <ThS col="requested" sort={exceptionSort} onSort={(c: string) => cycleSort(exceptionSort, c, setExceptionSort)}>Requested</ThS>
                   </tr>
                 </thead>
                 <tbody>
@@ -402,13 +465,12 @@ export default function AdminAttendancePage(props: Props) {
                     <tr key={`${row.id || row.emp_code || index}`}>
                       <td><strong>{row.emp_name || row.emp_code || 'Unknown employee'}</strong></td>
                       <td className="col-numeric exception-minutes">
-                        {activeAttendanceView === 'late-arrivals'
-                          ? `${row.late_by_minutes ?? '—'} min`
-                          : `${row.early_by_minutes ?? '—'} min`}
+                        {activeAttendanceView === 'late-arrivals' ? `${row.late_by_minutes ?? '—'} min` : `${row.early_by_minutes ?? '—'} min`}
                       </td>
-                      <td>{activeAttendanceView === 'late-arrivals'
-                        ? row.exception_time || row.actual_login_time || '—'
-                        : row.planned_leave_time || row.actual_logout_time || '—'}
+                      <td>
+                        {activeAttendanceView === 'late-arrivals'
+                          ? row.exception_time || row.actual_login_time || '—'
+                          : row.planned_leave_time || row.actual_logout_time || '—'}
                       </td>
                       <td>
                         {activeAttendanceView === 'late-arrivals'
@@ -436,59 +498,34 @@ export default function AdminAttendancePage(props: Props) {
 
       {missedLoginsPanelOpen ? (
         <>
-          <button
-            className="side-panel-scrim"
-            type="button"
-            aria-label="Close missed logins panel"
-            onClick={() => setMissedLoginsPanelOpen(false)}
-          />
+          <button className="side-panel-scrim" type="button" aria-label="Close missed logins panel" onClick={() => setMissedLoginsPanelOpen(false)} />
           <aside className="field-visit-panel attendance-missed-panel" aria-label="Missed logins panel">
             <div className="field-visit-panel-head">
               <div>
                 <p className="eyebrow">Quick Actions</p>
                 <h3>Missed Logins</h3>
-                <span>
-                  Employees who haven't logged in and aren't on leave for {selectedAttendanceDate}.
-                </span>
+                <span>Employees who haven't logged in and aren't on leave for {selectedAttendanceDate}.</span>
               </div>
-              <button className="field-visit-panel-close" type="button" onClick={() => setMissedLoginsPanelOpen(false)}>
-                Close
-              </button>
+              <button className="field-visit-panel-close" type="button" onClick={() => setMissedLoginsPanelOpen(false)}>Close</button>
             </div>
-
             <div className="alert-side-count">
               <strong>{filteredMissedLoginEmployees.length}</strong>
               <span>{alertCandidatesLoading ? 'Refreshing…' : 'Need attention'}</span>
             </div>
-
             <div className="missed-logins-toolbar">
-              <button
-                className="ghost dashboard-button"
-                type="button"
+              <button className="ghost dashboard-button" type="button"
                 onClick={() => { setSelectedMissedLoginEmpCodes(actionableMissedLoginEmployeeCodes); setAlertTriggerStatus('') }}
-                disabled={!actionableMissedLoginEmployeeCodes.length || allMissedLoginsSelected}
-              >
-                Select All
-              </button>
-              <button
-                className="ghost dashboard-button"
-                type="button"
+                disabled={!actionableMissedLoginEmployeeCodes.length || allMissedLoginsSelected}>Select All</button>
+              <button className="ghost dashboard-button" type="button"
                 onClick={() => { setSelectedMissedLoginEmpCodes([]); setAlertTriggerStatus('') }}
-                disabled={!selectedMissedLoginEmpCodes.length}
-              >
-                Clear
-              </button>
+                disabled={!selectedMissedLoginEmpCodes.length}>Clear</button>
             </div>
-
             <div className="missed-logins-actions">
               <span className="missed-logins-selected">Selected: {selectedMissedLoginCount}</span>
               <div className={`alert-trigger-wrap${showAlertComposer ? ' open' : ''}`}>
-                <button
-                  className="cta dashboard-button alert-trigger-button"
-                  type="button"
+                <button className="cta dashboard-button alert-trigger-button" type="button"
                   onClick={() => { setShowAlertComposer((c: boolean) => !c); setAlertTriggerStatus('') }}
-                  disabled={alertCandidatesLoading || !selectedMissedLoginCount}
-                >
+                  disabled={alertCandidatesLoading || !selectedMissedLoginCount}>
                   {alertTriggerLoading ? 'Triggering…' : 'Trigger Alert'}
                 </button>
                 <div className={`alert-trigger-dropdown${showAlertComposer ? ' open' : ''}`}>
@@ -504,21 +541,16 @@ export default function AdminAttendancePage(props: Props) {
                   <div className="alert-trigger-recipient-list">
                     {selectedMissedLoginEmpCodes
                       .map((empCode: string) => missedLoginEmployees.find((e: any) => e.emp_code === empCode))
-                      .filter(Boolean)
-                      .slice(0, 4)
+                      .filter(Boolean).slice(0, 4)
                       .map((employee: any) => (
                         <span key={employee.emp_code} className="alert-trigger-recipient-pill">
                           {employee.emp_full_name || employee.emp_code}
                         </span>
                       ))}
-                    {selectedMissedLoginCount > 4 && (
-                      <span className="alert-trigger-recipient-pill">+{selectedMissedLoginCount - 4} more</span>
-                    )}
+                    {selectedMissedLoginCount > 4 && <span className="alert-trigger-recipient-pill">+{selectedMissedLoginCount - 4} more</span>}
                   </div>
                   <div className="alert-trigger-dropdown-actions">
-                    <button className="ghost dashboard-button" type="button" onClick={() => setShowAlertComposer(false)} disabled={alertTriggerLoading}>
-                      Cancel
-                    </button>
+                    <button className="ghost dashboard-button" type="button" onClick={() => setShowAlertComposer(false)} disabled={alertTriggerLoading}>Cancel</button>
                     <button className="cta dashboard-button" type="button" onClick={() => void triggerAttendanceReminder()} disabled={alertTriggerLoading || !selectedMissedLoginCount}>
                       {alertTriggerLoading ? 'Sending…' : 'Send Reminder'}
                     </button>
@@ -526,7 +558,6 @@ export default function AdminAttendancePage(props: Props) {
                 </div>
               </div>
             </div>
-
             <div className="alert-side-list">
               {filteredMissedLoginEmployees.length ? (
                 filteredMissedLoginEmployees.map((employee: any) => {
@@ -534,9 +565,7 @@ export default function AdminAttendancePage(props: Props) {
                   const alertSendCount = Number(alertSendCounts[employee.emp_code] || 0)
                   return (
                     <label key={employee.emp_code} className={`alert-side-item missed-login-item${isAlertSent ? ' sent' : ''}`}>
-                      <input
-                        className="missed-login-checkbox"
-                        type="checkbox"
+                      <input className="missed-login-checkbox" type="checkbox"
                         checked={selectedMissedLoginEmpCodes.includes(employee.emp_code)}
                         onChange={(e) => {
                           const checked = e.target.checked
@@ -563,7 +592,6 @@ export default function AdminAttendancePage(props: Props) {
                 </div>
               )}
             </div>
-
             {alertTriggerStatus ? <span className="report-status">{alertTriggerStatus}</span> : null}
           </aside>
         </>

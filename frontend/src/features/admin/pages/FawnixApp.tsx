@@ -23,6 +23,7 @@ import AdminLoginPage from './AdminLoginPage'
 import AdminSidebar from '../components/AdminSidebar'
 import DeleteEmployeeModal from '../employees/DeleteEmployeeModal'
 import EmployeeFormDrawer from '../employees/EmployeeFormDrawer'
+import EmployeeViewDrawer from '../employees/EmployeeViewDrawer'
 import FieldVisitDetailDrawer from '../field-visits/FieldVisitDetailDrawer'
 import MapDialog from '../field-visits/MapDialog'
 import AdminActivitiesPage from '../activities/AdminActivitiesPage'
@@ -341,6 +342,13 @@ function FawnixApp() {
     editLoading,
     editStatus,
     employeePanelMode,
+    viewingEmployee,
+    openEmployeeView,
+    closeEmployeeView,
+    employeeImportStatus,
+    employeeImportLoading,
+    importEmployees,
+    downloadEmployeesTemplate,
     deleteEmployeeTarget,
     setDeleteEmployeeTarget,
     deleteEmployeeLoading,
@@ -831,6 +839,11 @@ function FawnixApp() {
           filteredEmployees={filteredEmployees}
           formatEmployeeGrade={formatEmployeeGrade}
           handleEditEmployee={handleEditEmployee}
+          openEmployeeView={openEmployeeView}
+          employeeImportStatus={employeeImportStatus}
+          employeeImportLoading={employeeImportLoading}
+          importEmployees={importEmployees}
+          downloadEmployeesTemplate={downloadEmployeesTemplate}
           loadDashboard={() => loadDashboard(accessToken)}
           openAddEmployeePanel={openAddEmployeePanel}
           requestDeleteEmployee={requestDeleteEmployee}
@@ -1113,6 +1126,9 @@ function FawnixApp() {
               onSaveEmployee={handleSaveEmployee}
               onClose={closeEmployeePanel}
             />
+          ) : null}
+          {viewingEmployee ? (
+            <EmployeeViewDrawer employee={viewingEmployee} onClose={closeEmployeeView} onEdit={canWriteAdminData ? () => { closeEmployeeView(); handleEditEmployee(viewingEmployee) } : undefined} />
           ) : null}
           {deleteEmployeeTarget ? (
             <DeleteEmployeeModal

@@ -6,6 +6,7 @@ export const sidebarItems: SidebarItemDefinition[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'home' },
   { id: 'employees', label: 'Employees List', icon: 'users' },
   { id: 'attendance', label: "Today's Activities", icon: 'pulse' },
+  { id: 'attendance-records', label: 'Attendance Records', icon: 'list' },
   { id: 'leaves', label: 'Leaves', icon: 'leaf' },
   { id: 'activities', label: 'Activities', icon: 'activity' },
   { id: 'field-visits', label: 'Field Visits', icon: 'pin' },

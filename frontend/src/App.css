@@ -5334,6 +5334,15 @@ body,
   color: var(--theme-text);
 }
 
+.admin-shell,
+.dashboard-main {
+  min-width: 0;
+}
+
+.dashboard-main:not(.dashboard-main-login) {
+  overflow-x: clip;
+}
+
 .sidebar {
   background: #fbfcf8;
   color: var(--theme-text);
@@ -6982,5 +6991,673 @@ textarea:focus,
 
   .pending-approval-meta {
     justify-items: start;
+  }
+}
+
+/* Admin secondary pages aligned to Today's Activity */
+.admin-aligned-page,
+.adm-page.admin-aligned-page,
+.ops-cal.admin-aligned-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.dashboard-main > .admin-aligned-page,
+.admin-aligned-page > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.admin-aligned-page .dashboard-section-head,
+.admin-aligned-page .adm-header,
+.admin-aligned-page .ops-cal-head {
+  margin: 0;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.admin-aligned-page .dashboard-section-head > div:first-child,
+.admin-aligned-page .adm-header__title {
+  min-width: 0;
+}
+
+.admin-aligned-page .dashboard-section-head h2,
+.admin-aligned-page .adm-heading,
+.admin-aligned-page .ops-cal-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.admin-aligned-page .eyebrow,
+.admin-aligned-page .adm-eyebrow,
+.admin-aligned-page .ops-cal-eyebrow {
+  margin: 0 0 2px;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.admin-aligned-page .exception-head-copy,
+.admin-aligned-page .ops-cal-copy {
+  max-width: 680px;
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-aligned-page .employee-actions,
+.admin-aligned-page .adm-header__actions,
+.admin-aligned-page .attendance-controls-row,
+.admin-aligned-page .calendar-head-actions,
+.admin-aligned-page .report-actions,
+.admin-aligned-page .ops-cal-nav,
+.admin-aligned-page .api-telemetry-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-aligned-page .dashboard-button,
+.admin-aligned-page .ghost,
+.admin-aligned-page .cta,
+.admin-aligned-page .adm-btn,
+.admin-aligned-page .adm-action-btn,
+.admin-aligned-page .adm-split-btn__select,
+.admin-aligned-page .adm-split-btn__action,
+.admin-aligned-page .ops-cal-nav-btn,
+.admin-aligned-page .ops-cal-nav-today {
+  min-height: 34px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.admin-aligned-page .adm-btn,
+.admin-aligned-page .adm-action-btn,
+.admin-aligned-page .ops-cal-nav-btn,
+.admin-aligned-page .ops-cal-nav-today {
+  border: 0.5px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.admin-aligned-page .adm-btn:hover,
+.admin-aligned-page .adm-action-btn:hover,
+.admin-aligned-page .ops-cal-nav-btn:hover,
+.admin-aligned-page .ops-cal-nav-today:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+
+.admin-aligned-page .adm-btn--icon,
+.admin-aligned-page .ops-cal-nav-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  justify-content: center;
+}
+
+.admin-aligned-page .adm-split-btn {
+  height: 34px;
+  border-color: var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.admin-aligned-page .adm-split-btn__select,
+.admin-aligned-page .adm-split-btn__action {
+  height: 34px;
+  border-radius: 0;
+}
+
+.admin-aligned-page .table-card,
+.admin-aligned-page .adm-table-card,
+.admin-aligned-page .leave-filter-card,
+.admin-aligned-page .adm-search-card,
+.admin-aligned-page .report-toolbar,
+.admin-aligned-page .report-actions-card,
+.admin-aligned-page .chart-card,
+.admin-aligned-page .ops-cal-panel,
+.admin-aligned-page .pending-approvals-card {
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.admin-aligned-page .table-card,
+.admin-aligned-page .adm-table-card,
+.admin-aligned-page .ops-cal-panel {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.admin-aligned-page .table-scroll,
+.admin-aligned-page .adm-table-scroll {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-aligned-page .leave-filter-card,
+.admin-aligned-page .adm-search-card,
+.admin-aligned-page .report-toolbar,
+.admin-aligned-page .report-actions-card,
+.admin-aligned-page .chart-card {
+  margin: 0;
+  padding: 14px 16px;
+}
+
+.admin-aligned-page .report-actions-card {
+  gap: 12px;
+}
+
+.admin-aligned-page .report-actions-card > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.admin-aligned-page .kpi-cards,
+.admin-aligned-page .adm-metrics,
+.admin-aligned-page .ops-cal-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.admin-aligned-page--calendar .ops-cal-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-aligned-page .kpi-card,
+.admin-aligned-page .adm-metric-card,
+.admin-aligned-page .adm-birthday-card,
+.admin-aligned-page .ops-metric {
+  min-height: 72px;
+  padding: 14px 16px;
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: none;
+  transform: none;
+}
+
+.admin-aligned-page .admin-kpi-card-static {
+  cursor: default;
+}
+
+.admin-aligned-page button.adm-metric-card:hover,
+.admin-aligned-page button.adm-metric-card:focus-visible,
+.admin-aligned-page .adm-metric-card--selected,
+.admin-aligned-page .adm-birthday-card:hover,
+.admin-aligned-page .adm-birthday-card:focus-visible,
+.admin-aligned-page .adm-birthday-card--selected {
+  border-color: var(--border-strong);
+  background: var(--surface-1);
+  box-shadow: none;
+  transform: none;
+}
+
+.admin-aligned-page .adm-metric-card__label,
+.admin-aligned-page .adm-birthday-card span,
+.admin-aligned-page .ops-metric-label {
+  margin: 0;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.admin-aligned-page .adm-metric-card__value,
+.admin-aligned-page .adm-birthday-card strong,
+.admin-aligned-page .ops-metric-value,
+.admin-aligned-page .kpi-count {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-aligned-page .adm-metric-card__value--success,
+.admin-aligned-page .adm-metric-card__value--muted {
+  color: var(--text-primary);
+}
+
+.admin-aligned-page .adm-birthday-card small,
+.admin-aligned-page .ops-metric-caption,
+.admin-aligned-page .kpi-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.admin-aligned-page .leave-filter-head {
+  gap: 12px;
+}
+
+.admin-aligned-page .leave-filter-head strong,
+.admin-aligned-page .chart-card-head strong,
+.admin-aligned-page .report-actions-card strong,
+.admin-aligned-page .pending-approvals-toggle strong,
+.admin-aligned-page .ops-cal-panel-title {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.admin-aligned-page .leave-filter-head div > span,
+.admin-aligned-page .chart-card-head span,
+.admin-aligned-page .report-actions-card span,
+.admin-aligned-page .pending-approvals-toggle span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.admin-aligned-page .leave-filter-count,
+.admin-aligned-page .pending-approvals-pill {
+  padding: 5px 10px;
+  border: 0.5px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.admin-aligned-page .leave-filter-grid,
+.admin-aligned-page .attendance-exception-filter-grid {
+  gap: 10px;
+}
+
+.admin-aligned-page .attendance-exception-filter-grid {
+  grid-template-columns: minmax(220px, 1.5fr) repeat(4, minmax(140px, 0.75fr));
+}
+
+.admin-aligned-page .leave-filter-field {
+  gap: 5px;
+}
+
+.admin-aligned-page .leave-filter-field > span,
+.admin-aligned-page .attendance-filter label,
+.admin-aligned-page .attendance-filter > span {
+  padding-left: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.admin-aligned-page .leave-filter-field input,
+.admin-aligned-page .attendance-filter input,
+.admin-aligned-page .attendance-filter select,
+.admin-aligned-page .attendance-input-shell,
+.admin-aligned-page .adm-search-wrap__input,
+.admin-aligned-page .modern-date-input {
+  width: 100%;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  box-shadow: none;
+  transform: none;
+}
+
+.admin-aligned-page .attendance-input-shell {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+}
+
+.admin-aligned-page .attendance-input-shell input {
+  height: 32px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+}
+
+.admin-aligned-page .leave-filter-field input:hover,
+.admin-aligned-page .attendance-filter input:hover,
+.admin-aligned-page .attendance-filter select:hover,
+.admin-aligned-page .attendance-input-shell:hover,
+.admin-aligned-page .adm-search-wrap__input:hover {
+  border-color: var(--border-accent);
+  box-shadow: none;
+  transform: none;
+}
+
+.admin-aligned-page .leave-filter-field input:focus,
+.admin-aligned-page .attendance-filter input:focus,
+.admin-aligned-page .attendance-filter select:focus,
+.admin-aligned-page .attendance-input-shell:focus-within,
+.admin-aligned-page .adm-search-wrap__input:focus {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 2px var(--bg-accent);
+  transform: none;
+}
+
+.admin-aligned-page .leave-filter-actions {
+  gap: 8px;
+}
+
+.admin-aligned-page .dashboard-table,
+.admin-aligned-page .adm-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.admin-aligned-page .field-visit-table {
+  min-width: 1320px;
+}
+
+.admin-aligned-page .attendance-exception-table {
+  min-width: 1180px;
+}
+
+.admin-aligned-page--api-telemetry .dashboard-table {
+  min-width: 1040px;
+}
+
+.admin-aligned-page .dashboard-table thead th,
+.admin-aligned-page .adm-table th {
+  padding: 12px 14px;
+  border-bottom: 0.5px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.admin-aligned-page .dashboard-table tbody td,
+.admin-aligned-page .adm-table td {
+  padding: 14px;
+  border-bottom: 0.5px solid var(--border);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+  vertical-align: top;
+}
+
+.admin-aligned-page .dashboard-table tbody tr:last-child td,
+.admin-aligned-page .adm-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-aligned-page .dashboard-table strong,
+.admin-aligned-page .adm-table strong,
+.admin-aligned-page .adm-employee-cell__name,
+.admin-aligned-page .adm-cell-primary {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.admin-aligned-page .table-meta,
+.admin-aligned-page .adm-code,
+.admin-aligned-page .adm-cell-meta,
+.admin-aligned-page .adm-cell-secondary {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.admin-aligned-page .adm-cell-email {
+  color: var(--text-accent);
+  font-size: 12px;
+}
+
+.admin-aligned-page .table-pill,
+.admin-aligned-page .adm-pill {
+  min-height: 24px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.admin-aligned-page .empty-state,
+.admin-aligned-page .adm-empty {
+  margin: 0;
+  padding: 48px 24px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.admin-aligned-page .map-button {
+  width: 32px;
+  height: 32px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-1);
+  color: var(--text-accent);
+}
+
+.admin-aligned-page .pending-approvals-card {
+  padding: 0;
+}
+
+.admin-aligned-page .pending-approvals-toggle {
+  background: var(--surface-2);
+  padding: 14px 16px;
+}
+
+.admin-aligned-page .pending-approvals-list {
+  padding: 14px 16px 16px;
+  gap: 10px;
+}
+
+.admin-aligned-page .pending-approval-row {
+  border-radius: 8px;
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+.admin-aligned-page .report-toolbar {
+  justify-content: flex-end;
+}
+
+.admin-aligned-page .attendance-filter-date,
+.admin-aligned-page .attendance-filter-search,
+.admin-aligned-page .attendance-filter-compact {
+  min-width: 0;
+}
+
+.admin-aligned-page .attendance-filter-date {
+  flex-basis: 178px;
+}
+
+.admin-aligned-page .attendance-filter-search {
+  max-width: none;
+}
+
+.admin-aligned-page .line-chart {
+  height: 180px;
+}
+
+.admin-aligned-page .efficiency-row {
+  gap: 12px;
+}
+
+.admin-aligned-page.ops-cal .ops-cal-nav {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.admin-aligned-page .ops-cal-panel {
+  padding: 16px;
+  overflow-x: auto;
+}
+
+.admin-aligned-page .ops-cal-panel-head {
+  margin-bottom: 12px;
+}
+
+.admin-aligned-page .ops-cal-legend {
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.admin-aligned-page .ops-cal-weekdays,
+.admin-aligned-page .ops-cal-grid {
+  min-width: 760px;
+}
+
+.admin-aligned-page .ops-cal-weekdays {
+  padding: 0 0 8px;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.admin-aligned-page .ops-cal-grid {
+  gap: 6px;
+}
+
+.admin-aligned-page .ops-day {
+  min-height: 92px;
+  aspect-ratio: auto;
+  padding: 8px;
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+  box-shadow: none;
+  transform: none;
+}
+
+.admin-aligned-page .ops-day:hover {
+  border-color: var(--border-accent);
+  background: var(--surface-1);
+  transform: none;
+}
+
+.admin-aligned-page .ops-day-today {
+  border-color: var(--border-accent);
+  box-shadow: inset 0 0 0 1px var(--border-accent);
+}
+
+.admin-aligned-page .ops-day-number {
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.admin-aligned-page .ops-day-badge {
+  border-radius: 6px;
+  background: var(--bg-accent);
+  color: var(--text-accent);
+  font-family: inherit;
+  font-size: 10px;
+}
+
+.admin-aligned-page .ops-day-stats {
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.admin-aligned-page .admin-kpi-card-static:hover {
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+@media (max-width: 1180px) {
+  .admin-aligned-page .attendance-exception-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .admin-aligned-page .kpi-cards,
+  .admin-aligned-page .adm-metrics,
+  .admin-aligned-page .ops-cal-metrics,
+  .admin-aligned-page--calendar .ops-cal-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-aligned-page .attendance-exception-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-aligned-page {
+    gap: 16px;
+  }
+
+  .admin-aligned-page .dashboard-section-head,
+  .admin-aligned-page .adm-header,
+  .admin-aligned-page .ops-cal-head {
+    align-items: stretch;
+  }
+
+  .admin-aligned-page .employee-actions,
+  .admin-aligned-page .adm-header__actions,
+  .admin-aligned-page .attendance-controls-row,
+  .admin-aligned-page .calendar-head-actions,
+  .admin-aligned-page .report-actions,
+  .admin-aligned-page .ops-cal-nav,
+  .admin-aligned-page .api-telemetry-tabs {
+    justify-content: flex-start;
+  }
+
+  .admin-aligned-page .kpi-cards,
+  .admin-aligned-page .adm-metrics,
+  .admin-aligned-page .ops-cal-metrics,
+  .admin-aligned-page--calendar .ops-cal-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-aligned-page .leave-filter-grid,
+  .admin-aligned-page .attendance-exception-filter-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-aligned-page .leave-filter-actions {
+    align-items: stretch;
   }
 }

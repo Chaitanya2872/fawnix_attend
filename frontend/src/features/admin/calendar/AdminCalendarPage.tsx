@@ -34,10 +34,10 @@ export default function AdminCalendarPage({
   )
 
   return (
-    <div className="ops-cal">
-      <div className="ops-cal-head">
+    <div className="ops-cal admin-aligned-page admin-aligned-page--calendar">
+      <div className="ops-cal-head dashboard-section-head">
         <div>
-          <p className="ops-cal-eyebrow">Operations Calendar</p>
+          <p className="ops-cal-eyebrow eyebrow">Operations Calendar</p>
           <h2 className="ops-cal-title">Attendance Calendar</h2>
           <p className="ops-cal-copy">
             Monthly operational view with daily attendance volume, leave overlap, and exception signals.
@@ -74,25 +74,25 @@ export default function AdminCalendarPage({
         </div>
       </div>
 
-      <div className="ops-cal-metrics">
-        <div className="ops-metric ops-metric-ink">
+      <div className="ops-cal-metrics kpi-cards admin-kpi-cards">
+        <div className="ops-metric ops-metric-ink kpi-card admin-kpi-card-static">
           <span className="ops-metric-label">Month</span>
           <strong className="ops-metric-value">{calendarMonthLabel}</strong>
           <small className="ops-metric-caption">Current operations window</small>
         </div>
-        <div className="ops-metric ops-metric-teal">
+        <div className="ops-metric ops-metric-teal kpi-card admin-kpi-card-static">
           <span className="ops-metric-label">Peak attendance</span>
           <strong className="ops-metric-value">{maxCalendarAttendance}</strong>
           <small className="ops-metric-caption">Highest single-day count</small>
         </div>
-        <div className="ops-metric ops-metric-rust">
+        <div className="ops-metric ops-metric-rust kpi-card admin-kpi-card-static">
           <span className="ops-metric-label">Tracked exceptions</span>
           <strong className="ops-metric-value">{totalExceptions}</strong>
           <small className="ops-metric-caption">Late arrivals + early leaves</small>
         </div>
       </div>
 
-      <div className="ops-cal-panel">
+      <div className="ops-cal-panel table-card">
         <div className="ops-cal-panel-head">
           <div>
             <span className="ops-metric-label">Monthly view</span>

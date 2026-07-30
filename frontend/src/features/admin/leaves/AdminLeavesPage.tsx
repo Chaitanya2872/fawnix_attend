@@ -4,6 +4,17 @@ import './AdminLeavesPage.css'
 
 type Props = any
 
+function getOptionLabel(options: any[], value: string) {
+  const normalizedValue = value.trim().toLowerCase()
+  const matchedOption = options.find((option: any) => {
+    const optionValue = String(option.value || '').trim().toLowerCase()
+    const optionLabel = String(option.label || '').trim().toLowerCase()
+    return optionValue === normalizedValue || optionLabel === normalizedValue
+  })
+
+  return matchedOption?.label || value
+}
+
 export default function AdminLeavesPage({
   clearLeaveFilters,
   employees,
@@ -27,11 +38,35 @@ export default function AdminLeavesPage({
   const [pendingExpanded, setPendingExpanded] = useState(true)
   const [alertLoadingKey, setAlertLoadingKey] = useState('')
   const [alertStatus, setAlertStatus] = useState('')
+  const normalizedLeaveStatus = (leaveFilters.status || '').trim().toLowerCase()
 
   const pendingLeaveRows = useMemo(
     () => leaveRows.filter((row: any) => (row.status || '').trim().toLowerCase() === 'pending'),
     [leaveRows]
   )
+  const activeLeaveFilters = useMemo(() => {
+    const filterRows = [
+      { key: 'employeeName', label: 'Name', value: leaveFilters.employeeName },
+      { key: 'employeeId', label: 'ID', value: leaveFilters.employeeId },
+      {
+        key: 'leaveType',
+        label: 'Type',
+        value: getOptionLabel(leaveTypeOptions, leaveFilters.leaveType || '')
+      },
+      { key: 'fromDate', label: 'From', value: leaveFilters.fromDate },
+      { key: 'toDate', label: 'To', value: leaveFilters.toDate },
+      {
+        key: 'status',
+        label: 'Status',
+        value: getOptionLabel(leaveStatusOptions, leaveFilters.status || '')
+      }
+    ]
+
+    return filterRows
+      .map((filter) => ({ ...filter, value: String(filter.value || '').trim() }))
+      .filter((filter) => filter.value)
+  }, [leaveFilters, leaveStatusOptions, leaveTypeOptions])
+  const activeLeaveFilterCount = activeLeaveFilters.length
 
   const handleAlertManager = async (row: any, fallbackKey: string) => {
     setAlertLoadingKey(fallbackKey)
@@ -47,7 +82,7 @@ export default function AdminLeavesPage({
   }
 
   return (
-    <>
+    <div className="admin-aligned-page admin-aligned-page--leaves">
       <div className="dashboard-section-head">
         <div>
           <p className="eyebrow">Approvals</p>
@@ -123,8 +158,57 @@ export default function AdminLeavesPage({
           <div>
             <strong>Search Leave Records</strong>
             <span>Filter by employee, leave details, date range, or status.</span>
+            <div className="leave-active-filter-list" aria-live="polite">
+              {activeLeaveFilters.length ? (
+                activeLeaveFilters.map((filter) => (
+                  <span key={filter.key} className="leave-active-filter-pill">
+                    <strong>{filter.label}</strong>
+                    {filter.value}
+                  </span>
+                ))
+              ) : (
+                <span className="leave-filter-muted">No filters selected</span>
+              )}
+            </div>
           </div>
-          <span className="leave-filter-count">{leaveRows.length} result{leaveRows.length === 1 ? '' : 's'}</span>
+          <div className="leave-filter-count-stack">
+            <span className="leave-filter-count">{leaveRows.length} result{leaveRows.length === 1 ? '' : 's'}</span>
+            {activeLeaveFilterCount ? (
+              <span className="table-pill accent">
+                {activeLeaveFilterCount} selected
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <div className="leave-status-chip-row" role="group" aria-label="Quick status filter">
+          <span className="leave-status-chip-label">Quick status</span>
+          <button
+            className={`leave-status-chip${!normalizedLeaveStatus ? ' active' : ''}`}
+            type="button"
+            onClick={() => updateLeaveFilter('status', '')}
+            disabled={leaveFilterLoading}
+          >
+            All
+          </button>
+          {leaveStatusOptions.map((option: any) => {
+            const optionValue = String(option.value || '').trim()
+            const optionLabel = String(option.label || option.value || '').trim()
+            const optionActive =
+              normalizedLeaveStatus === optionValue.toLowerCase() ||
+              normalizedLeaveStatus === optionLabel.toLowerCase()
+
+            return (
+              <button
+                key={optionValue || optionLabel}
+                className={`leave-status-chip${optionActive ? ' active' : ''}`}
+                type="button"
+                onClick={() => updateLeaveFilter('status', optionValue)}
+                disabled={leaveFilterLoading}
+              >
+                {optionLabel}
+              </button>
+            )
+          })}
         </div>
         <div className="leave-filter-grid">
           <label className="leave-filter-field">
@@ -201,7 +285,15 @@ export default function AdminLeavesPage({
           </label>
         </div>
         <div className="leave-filter-actions">
-          {leaveFilterStatus ? <span className="leave-filter-status">{leaveFilterStatus}</span> : <span />}
+          {leaveFilterStatus ? (
+            <span className="leave-filter-status">{leaveFilterStatus}</span>
+          ) : (
+            <span className="leave-filter-status">
+              {activeLeaveFilterCount
+                ? `${activeLeaveFilterCount} filter${activeLeaveFilterCount === 1 ? '' : 's'} ready to apply.`
+                : 'No filter values selected.'}
+            </span>
+          )}
           <button className="ghost" type="button" onClick={() => void clearLeaveFilters()} disabled={leaveFilterLoading}>
             Clear Filters
           </button>
@@ -212,6 +304,15 @@ export default function AdminLeavesPage({
       </form>
 
       <div className="table-card">
+        <div className="leave-table-head">
+          <div>
+            <strong>Leave Records</strong>
+            <span>
+              {leaveRows.length} record{leaveRows.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          {activeLeaveFilterCount ? <span className="table-pill accent">Filters ready</span> : null}
+        </div>
         {leaveRows.length ? (
           <div className="table-scroll">
             <table className="dashboard-table leave-table">
@@ -269,6 +370,6 @@ export default function AdminLeavesPage({
           <div className="empty-state">No leave requests match the current filters.</div>
         )}
       </div>
-    </>
+    </div>
   )
 }

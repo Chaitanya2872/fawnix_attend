@@ -131,7 +131,7 @@ export default function AdminApiTelemetryPage({
     : 'No pages yet'
 
   return (
-    <>
+    <div className="admin-aligned-page admin-aligned-page--api-telemetry">
       <div className="dashboard-section-head attendance-section-head">
         <div>
           <p className="eyebrow">Debug</p>
@@ -145,7 +145,7 @@ export default function AdminApiTelemetryPage({
 
       <div className="leave-filter-card attendance-exception-filter-card">
         <div className="leave-filter-head">
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="api-telemetry-tabs">
             <button
               className={`ghost dashboard-button${activeTab === 'server' ? ' active' : ''}`}
               type="button"
@@ -414,6 +414,6 @@ export default function AdminApiTelemetryPage({
           </div>
         )}
       </div>
-    </>
+    </div>
   )
 }

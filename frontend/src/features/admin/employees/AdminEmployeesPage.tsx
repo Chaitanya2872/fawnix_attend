@@ -62,12 +62,12 @@ export default function AdminEmployeesPage(props: Props) {
   }).filter(Boolean).filter((item: any) => item.date.getMonth() === new Date().getMonth()) as { employee: any; date: Date }[]
 
   return (
-    <div className="adm-page">
+    <div className="adm-page admin-aligned-page admin-aligned-page--employees">
 
       {/* ── Header ────────────────────────────────────────── */}
-      <div className="adm-header">
+      <div className="adm-header dashboard-section-head">
         <div className="adm-header__title">
-          <p className="adm-eyebrow">Directory</p>
+          <p className="adm-eyebrow eyebrow">Directory</p>
           <h2 className="adm-heading">Employees</h2>
         </div>
 
@@ -130,7 +130,7 @@ export default function AdminEmployeesPage(props: Props) {
       </div>
 
       {/* ── Metrics ───────────────────────────────────────── */}
-      <div className="adm-metrics">
+      <div className="adm-metrics kpi-cards">
         <button className={`adm-metric-card${employeeKpiFilter === 'all' ? ' adm-metric-card--selected' : ''}`} onClick={() => applyEmployeeKpiFilter('all')} type="button">
           <p className="adm-metric-card__label">Total employees</p>
           <p className="adm-metric-card__value">{employees.length}</p>
@@ -166,7 +166,7 @@ export default function AdminEmployeesPage(props: Props) {
       </div>
 
       {/* ── Search & filter ───────────────────────────────── */}
-      <div className="adm-search-card">
+      <div className="adm-search-card admin-filter-card">
         <div className="adm-search-card__top">
           <span className="adm-result-count">
             {filteredEmployees.length} result
@@ -233,10 +233,10 @@ export default function AdminEmployeesPage(props: Props) {
       {employeeImportStatus && <p className="adm-import-status" role="status">{employeeImportStatus}</p>}
 
       {/* ── Table ─────────────────────────────────────────── */}
-      <div className="adm-table-card">
+      <div className="adm-table-card table-card">
         {filteredEmployees.length > 0 ? (
-          <div className="adm-table-scroll">
-            <table className="adm-table">
+          <div className="adm-table-scroll table-scroll">
+            <table className="adm-table dashboard-table">
               <colgroup>
                 <col style={{ width: '210px' }} />
                 <col style={{ width: '165px' }} />
@@ -324,7 +324,7 @@ export default function AdminEmployeesPage(props: Props) {
                       {/* Status */}
                       <td>
                         <span
-                          className={`adm-pill${employee.is_active ? ' adm-pill--active' : ' adm-pill--inactive'}`}
+                          className={`adm-pill table-pill${employee.is_active ? ' active adm-pill--active' : ' inactive adm-pill--inactive'}`}
                         >
                           {employee.is_active ? 'Active' : 'Inactive'}
                         </span>
@@ -391,7 +391,7 @@ export default function AdminEmployeesPage(props: Props) {
             </table>
           </div>
         ) : (
-          <div className="adm-empty">
+          <div className="adm-empty empty-state">
             <svg viewBox="0 0 24 24" aria-hidden="true" className="adm-empty__icon">
               <path
                 d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"

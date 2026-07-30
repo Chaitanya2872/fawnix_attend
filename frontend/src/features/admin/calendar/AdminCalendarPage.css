@@ -1,10 +1,8 @@
 /* ============================================================
    Operations Calendar — instrument-panel design
    Palette: deep teal ink / soft paper / teal · gold · rust signals
-   Type: Space Grotesk (display) · Inter (body) · IBM Plex Mono (data)
+   Type: project admin typography
    ============================================================ */
-
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
 .ops-cal {
   --ink: #101e22;

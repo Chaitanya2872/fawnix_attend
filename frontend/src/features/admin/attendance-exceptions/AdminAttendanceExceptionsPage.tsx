@@ -123,7 +123,7 @@ export default function AdminAttendanceExceptionsPage({
     : 'No pages yet'
 
   return (
-    <>
+    <div className="admin-aligned-page admin-aligned-page--attendance-exceptions">
       <div className="dashboard-section-head attendance-section-head">
         <div>
           <p className="eyebrow">Attendance</p>
@@ -322,6 +322,6 @@ export default function AdminAttendanceExceptionsPage({
           </div>
         )}
       </div>
-    </>
+    </div>
   )
 }

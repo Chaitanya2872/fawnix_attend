@@ -22,7 +22,7 @@ export default function AdminReportsPage(props: Props) {
   } = props
 
   return (
-    <>
+    <div className="admin-aligned-page admin-aligned-page--reports">
       <div className="dashboard-section-head">
         <div>
           <p className="eyebrow">Insights</p>
@@ -31,7 +31,7 @@ export default function AdminReportsPage(props: Props) {
         <button className="ghost dashboard-button" onClick={() => void loadDashboard()} type="button">Refresh</button>
       </div>
       <div className="reports-main">
-        <div className="report-toolbar">
+        <div className="report-toolbar attendance-controls-row">
           <div className="attendance-filter attendance-filter-date">
             <label htmlFor="reports-date">Reference Date</label>
             <input className="modern-date-input" id="reports-date" type="date" value={attendanceDateFilter} onChange={(event) => setAttendanceDateFilter(event.target.value)} />
@@ -124,6 +124,6 @@ export default function AdminReportsPage(props: Props) {
           </div>
         </div>
       </div>
-    </>
+    </div>
   )
 }

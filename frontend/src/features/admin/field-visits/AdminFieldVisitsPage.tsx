@@ -12,8 +12,12 @@ export default function AdminFieldVisitsPage({
   openMapForFieldVisit,
   resolveVisitDurationMinutes
 }: Props) {
+  const completedVisits = fieldVisitRows.filter((row: any) => row.isCompleted).length
+  const activeVisits = fieldVisitRows.length - completedVisits
+  const destinationCompleted = fieldVisitRows.filter((row: any) => row.destinationVisited).length
+
   return (
-    <>
+    <div className="admin-aligned-page admin-aligned-page--field-visits">
       <div className="dashboard-section-head">
         <div>
           <p className="eyebrow">Movement</p>
@@ -21,6 +25,34 @@ export default function AdminFieldVisitsPage({
         </div>
         <button className="ghost dashboard-button" onClick={() => void loadDashboard()} type="button">Refresh</button>
       </div>
+
+      <div className="kpi-cards admin-kpi-cards field-visit-kpi-cards" aria-label="Field visit summary">
+        <div className="kpi-card admin-kpi-card-static">
+          <div className="kpi-body">
+            <span className="kpi-count">{fieldVisitRows.length}</span>
+            <span className="kpi-label">Total Visits</span>
+          </div>
+        </div>
+        <div className="kpi-card admin-kpi-card-static">
+          <div className="kpi-body">
+            <span className="kpi-count">{activeVisits}</span>
+            <span className="kpi-label">In Progress</span>
+          </div>
+        </div>
+        <div className="kpi-card admin-kpi-card-static">
+          <div className="kpi-body">
+            <span className="kpi-count">{completedVisits}</span>
+            <span className="kpi-label">Completed</span>
+          </div>
+        </div>
+        <div className="kpi-card admin-kpi-card-static">
+          <div className="kpi-body">
+            <span className="kpi-count">{destinationCompleted}</span>
+            <span className="kpi-label">Destination Hit</span>
+          </div>
+        </div>
+      </div>
+
       <div className="table-card">
         {fieldVisitRows.length ? (
           <div className="table-scroll">
@@ -81,6 +113,6 @@ export default function AdminFieldVisitsPage({
           <div className="empty-state">No field visits found in the latest activity feed.</div>
         )}
       </div>
-    </>
+    </div>
   )
 }

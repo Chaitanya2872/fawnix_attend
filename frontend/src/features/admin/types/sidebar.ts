@@ -4,6 +4,7 @@ export type SidebarIconName =
   | 'home'
   | 'users'
   | 'pulse'
+  | 'list'
   | 'alert'
   | 'calendar'
   | 'chart'

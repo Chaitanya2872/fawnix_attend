@@ -1,0 +1,120 @@
+.admin-aligned-page--activities {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.activity-filter-card {
+  gap: 14px;
+}
+
+.activity-filter-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.activity-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.5fr) minmax(150px, 0.75fr) minmax(150px, 0.75fr);
+  gap: 10px;
+}
+
+.activity-filter-search {
+  min-width: 0;
+}
+
+.activity-filter-card .leave-filter-field select {
+  width: 100%;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 30px 0 10px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.activity-filter-card .leave-filter-field select:hover {
+  border-color: var(--border-accent);
+}
+
+.activity-filter-card .leave-filter-field select:focus {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 2px var(--bg-accent);
+}
+
+.activity-filter-actions .dashboard-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.activity-table-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 0.5px solid var(--border);
+  background: var(--surface-2);
+}
+
+.activity-table-head > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.activity-table-head strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.activity-table-head span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.activity-table {
+  min-width: 860px;
+}
+
+.activity-table th:nth-child(1),
+.activity-table td:nth-child(1) {
+  width: 34%;
+}
+
+.activity-table th:nth-child(2),
+.activity-table td:nth-child(2) {
+  width: 24%;
+}
+
+.activity-table th:nth-child(3),
+.activity-table td:nth-child(3) {
+  width: 24%;
+}
+
+.activity-table th:nth-child(4),
+.activity-table td:nth-child(4) {
+  width: 18%;
+}
+
+@media (max-width: 760px) {
+  .activity-filter-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .activity-filter-meta,
+  .activity-table-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

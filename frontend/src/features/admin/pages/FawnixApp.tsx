@@ -29,6 +29,7 @@ import MapDialog from '../field-visits/MapDialog'
 import AdminActivitiesPage from '../activities/AdminActivitiesPage'
 import AdminApiTelemetryPage from '../api-telemetry/AdminApiTelemetryPage'
 import AdminAttendancePage from '../attendance/AdminAttendancePage'
+import AdminAttendanceRecordsPage from '../attendance/AdminAttendanceRecordsPage'
 import AdminAttendanceExceptionsPage from '../attendance-exceptions/AdminAttendanceExceptionsPage'
 import AdminCalendarPage from '../calendar/AdminCalendarPage'
 import AdminEmployeesPage from '../employees/AdminEmployeesPage'
@@ -68,6 +69,7 @@ const adminPanelPathMap: Record<SidebarId, string> = {
   dashboard: '',
   employees: 'employees',
   attendance: 'attendance',
+  'attendance-records': 'attendance-records',
   'attendance-exceptions': 'attendance-exceptions',
   calendar: 'calendar',
   reports: 'reports',
@@ -329,6 +331,8 @@ function FawnixApp() {
     setEmployeeSearch,
     employeeStatusFilter,
     setEmployeeStatusFilter,
+    employeeKpiFilter,
+    applyEmployeeKpiFilter,
     employeeStatusMenuOpen,
     setEmployeeStatusMenuOpen,
     employeeExportFormat,
@@ -831,6 +835,7 @@ function FawnixApp() {
           downloadEmployeesReport={downloadEmployeesReport}
           employeeExportFormat={employeeExportFormat}
           employeeExportStatus={employeeExportStatus}
+          employeeKpiFilter={employeeKpiFilter}
           employeeSearch={employeeSearch}
           employeeStatusFilter={employeeStatusFilter}
           employeeStatusMenuOpen={employeeStatusMenuOpen}
@@ -846,6 +851,7 @@ function FawnixApp() {
           downloadEmployeesTemplate={downloadEmployeesTemplate}
           loadDashboard={() => loadDashboard(accessToken)}
           openAddEmployeePanel={openAddEmployeePanel}
+          applyEmployeeKpiFilter={applyEmployeeKpiFilter}
           requestDeleteEmployee={requestDeleteEmployee}
           setEmployeeExportFormat={setEmployeeExportFormat}
           setEmployeeSearch={setEmployeeSearch}
@@ -918,6 +924,20 @@ function FawnixApp() {
         />
         )
       }
+
+    if (activePanel === 'attendance-records') {
+      return (
+        <AdminAttendanceRecordsPage
+          attendanceDateFilter={attendanceDateFilter}
+          attendanceRows={attendanceRows}
+          formatDateOnly={formatDateOnly}
+          formatDateTime={formatDateTime}
+          formatWorkingHours={formatWorkingHours}
+          loadDashboard={() => loadDashboard(accessToken)}
+          setAttendanceDateFilter={setAttendanceDateFilter}
+        />
+      )
+    }
 
       if (activePanel === 'calendar') {
         return (

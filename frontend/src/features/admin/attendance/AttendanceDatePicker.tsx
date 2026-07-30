@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useClickOutside } from '../../../hooks/useClickOutside'
 import {
   formatAttendanceDateLabel,
@@ -38,10 +38,13 @@ export default function AttendanceDatePicker({ value, onChange }: AttendanceDate
 
   useClickOutside(pickerRef, isOpen, () => setIsOpen(false))
 
-  useEffect(() => {
-    const nextSelected = parseDateInputValue(value)
-    setViewDate(new Date(nextSelected.getFullYear(), nextSelected.getMonth(), 1))
-  }, [value])
+  const togglePicker = () => {
+    if (!isOpen) {
+      setViewDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1))
+    }
+
+    setIsOpen((open) => !open)
+  }
 
   const selectDate = (date: Date) => {
     onChange(toDateInputValue(date))
@@ -60,7 +63,7 @@ export default function AttendanceDatePicker({ value, onChange }: AttendanceDate
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         aria-label={`Attendance date: ${formatAttendanceDateLabel(value)}`}
-        onClick={() => setIsOpen((open) => !open)}
+        onClick={togglePicker}
       >
         <svg className="attendance-date-trigger-icon" viewBox="0 0 24 24" aria-hidden="true">
           <rect x="3" y="5" width="18" height="16" rx="2" />

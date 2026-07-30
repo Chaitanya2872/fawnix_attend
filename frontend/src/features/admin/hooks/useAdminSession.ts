@@ -103,6 +103,15 @@ function toFriendlyRequestDetail(method: string, path: string, requestPayload: u
   return `${method.toUpperCase()} ${path} was sent with the sanitized payload shown below.`
 }
 
+function getResponseErrorMessage(data: unknown) {
+  if (!isPlainObject(data)) {
+    return 'Request failed'
+  }
+
+  const message = data.message || data.error || data.detail
+  return typeof message === 'string' && message.trim() ? message.trim() : 'Request failed'
+}
+
 export function useAdminSession({ onSessionCleared, onSessionExpired }: UseAdminSessionOptions) {
   const initialSession = readStoredAdminSession()
   const [accessToken, setAccessToken] = useState(initialSession.accessToken)
@@ -307,7 +316,7 @@ export function useAdminSession({ onSessionCleared, onSessionExpired }: UseAdmin
     const durationMs = Date.now() - startedTime
 
     if (!response.ok) {
-      const message = data?.message || 'Request failed'
+      const message = getResponseErrorMessage(data)
       const shouldRefresh =
         allowRetry &&
         (response.status === 401 ||

@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "dev": "node ./scripts/run-without-otel.mjs vite",
+    "build": "node ./scripts/run-without-otel.mjs tsc -b && node ./scripts/run-without-otel.mjs vite build",
+    "lint": "node ./scripts/run-without-otel.mjs eslint .",
+    "preview": "node ./scripts/run-without-otel.mjs vite preview"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

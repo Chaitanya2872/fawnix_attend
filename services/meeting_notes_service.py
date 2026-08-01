@@ -1,8 +1,8 @@
 """
 Meeting notes generation service.
 
-Supports Gemini directly via uploaded audio, while preserving the existing
-OpenAI-compatible fallback when OPENAI_API_KEY is configured instead.
+Uses Sarvam batch speech-to-text for uploaded audio while preserving the
+existing API contract used by mobile clients.
 """
 
 from __future__ import annotations
@@ -41,6 +41,149 @@ _PYANNOTE_PIPELINE = None
 
 # Gemini inline_data is capped at ~20MB; use the File API for larger files
 _GEMINI_INLINE_MAX_BYTES = 15 * 1024 * 1024  # 15 MB
+
+
+def _sarvam_language_code(language: str | None) -> str | None:
+    """Convert common client language values to Sarvam's BCP-47 language codes."""
+    value = (language or "").strip()
+    if not value:
+        return None
+    if "-" in value:
+        return value
+    return {"en": "en-IN", "hi": "hi-IN", "ta": "ta-IN", "te": "te-IN", "bn": "bn-IN", "mr": "mr-IN", "gu": "gu-IN", "kn": "kn-IN", "ml": "ml-IN", "pa": "pa-IN"}.get(value.lower(), value)
+
+
+def _build_sarvam_headers() -> Dict[str, str]:
+    return {"api-subscription-key": Config.SARVAM_API_KEY}
+
+
+def _sarvam_response_error(response: requests.Response, context: str) -> RuntimeError:
+    return RuntimeError(f"{context} failed with status {response.status_code}: {response.text}")
+
+
+def _extract_sarvam_transcript(result: Dict[str, Any]) -> str:
+    transcript = str(result.get("transcript") or "").strip()
+    entries = ((result.get("diarized_transcript") or {}).get("entries") or [])
+    if entries:
+        lines = []
+        for entry in entries:
+            text = str(entry.get("transcript") or "").strip()
+            if text:
+                lines.append(f"[Speaker {entry.get('speaker_id', '1')}]: {text}")
+        if lines:
+            return "\n".join(lines)
+    if not transcript:
+        raise RuntimeError("Sarvam transcription completed but no transcript was returned")
+    return transcript
+
+
+def _transcribe_audio_with_sarvam(audio_file, language: str | None = None) -> str:
+    """Run one uploaded recording through Sarvam's batch STT REST workflow."""
+    parameters: Dict[str, Any] = {
+        "model": Config.SARVAM_STT_MODEL,
+        "mode": Config.SARVAM_STT_MODE,
+        "with_diarization": Config.SARVAM_STT_WITH_DIARIZATION,
+    }
+    language_code = _sarvam_language_code(language)
+    if language_code:
+        parameters["language_code"] = language_code
+    if Config.SARVAM_STT_NUM_SPEAKERS:
+        parameters["num_speakers"] = Config.SARVAM_STT_NUM_SPEAKERS
+
+    base_url = f"{Config.SARVAM_BASE_URL}/speech-to-text/job/v1"
+    created = requests.post(
+        base_url,
+        headers={**_build_sarvam_headers(), "Content-Type": "application/json"},
+        json={"job_parameters": parameters},
+        timeout=Config.MEETING_NOTES_REQUEST_TIMEOUT,
+    )
+    if not created.ok:
+        raise _sarvam_response_error(created, "Sarvam batch job creation")
+    job_id = (created.json().get("job_id") or "").strip()
+    if not job_id:
+        raise RuntimeError("Sarvam batch job creation returned no job_id")
+
+    filename = audio_file.filename or "meeting-audio"
+    upload_links = requests.post(
+        f"{base_url}/upload-files",
+        headers={**_build_sarvam_headers(), "Content-Type": "application/json"},
+        json={"job_id": job_id, "files": [filename]},
+        timeout=Config.MEETING_NOTES_REQUEST_TIMEOUT,
+    )
+    if not upload_links.ok:
+        raise _sarvam_response_error(upload_links, "Sarvam upload-link request")
+    upload_url = ((upload_links.json().get("upload_urls") or {}).get(filename) or {}).get("file_url")
+    if not upload_url:
+        raise RuntimeError("Sarvam upload-link request returned no file URL")
+    audio_file.stream.seek(0)
+    upload = requests.put(
+        upload_url,
+        data=audio_file.stream,
+        headers={"Content-Type": audio_file.mimetype or "application/octet-stream"},
+        timeout=Config.MEETING_NOTES_REQUEST_TIMEOUT,
+    )
+    if not upload.ok:
+        raise _sarvam_response_error(upload, "Sarvam audio upload")
+
+    started = requests.post(
+        f"{base_url}/{job_id}/start",
+        headers=_build_sarvam_headers(),
+        timeout=Config.MEETING_NOTES_REQUEST_TIMEOUT,
+    )
+    if not started.ok:
+        raise _sarvam_response_error(started, "Sarvam batch job start")
+
+    deadline = time.monotonic() + Config.SARVAM_STT_JOB_TIMEOUT_SECONDS
+    status_payload: Dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        status = requests.get(f"{base_url}/{job_id}/status", headers=_build_sarvam_headers(), timeout=Config.MEETING_NOTES_REQUEST_TIMEOUT)
+        if not status.ok:
+            raise _sarvam_response_error(status, "Sarvam batch job status")
+        status_payload = status.json()
+        state = str(status_payload.get("job_state") or "").lower()
+        if state in {"completed", "partiallycompleted"}:
+            break
+        if state == "failed":
+            raise RuntimeError(f"Sarvam batch job failed: {status_payload.get('error_message') or 'unknown error'}")
+        time.sleep(max(0.1, Config.SARVAM_STT_POLL_INTERVAL_SECONDS))
+    else:
+        raise requests.Timeout("Sarvam batch transcription did not finish before SARVAM_STT_JOB_TIMEOUT_SECONDS")
+
+    output_files = [output.get("file_name") for detail in status_payload.get("job_details", []) for output in detail.get("outputs", []) if output.get("file_name")]
+    if not output_files:
+        raise RuntimeError("Sarvam batch job completed without an output file")
+    downloaded = requests.post(
+        f"{base_url}/download-files",
+        headers={**_build_sarvam_headers(), "Content-Type": "application/json"},
+        json={"job_id": job_id, "files": output_files},
+        timeout=Config.MEETING_NOTES_REQUEST_TIMEOUT,
+    )
+    if not downloaded.ok:
+        raise _sarvam_response_error(downloaded, "Sarvam batch result download")
+    download_urls = downloaded.json().get("download_urls") or {}
+    output_url = next(
+        (item.get("file_url") for item in download_urls.values() if isinstance(item, dict) and item.get("file_url")),
+        None,
+    )
+    if not output_url:
+        raise RuntimeError("Sarvam batch result download returned no file URL")
+    result = requests.get(output_url, timeout=Config.MEETING_NOTES_REQUEST_TIMEOUT)
+    if not result.ok:
+        raise _sarvam_response_error(result, "Sarvam transcript result download")
+    return _extract_sarvam_transcript(result.json())
+
+
+def _generate_notes_with_sarvam(audio_file, meeting_title: str | None = None, language: str | None = None) -> Dict[str, Any]:
+    transcript = _transcribe_audio_with_sarvam(audio_file, language=language)
+    # Sarvam STT intentionally supplies transcription only. Keep the established
+    # response schema without sending the transcript to another AI provider.
+    title = (meeting_title or "").strip() or "Not Specified"
+    return {
+        "transcript": transcript,
+        "summary": f"- Meeting title: {title}\n- Transcript generated with Sarvam speech-to-text.",
+        "minutes_of_meeting": "# Minutes of Meeting\n\n## Meeting Summary\nTranscript generated successfully.\n\n## Key Discussion Points\nNot Specified\n\n## Decisions Made\nNot Specified\n\n## Action Items\n\n| Action Item | Owner | Due Date | Priority |\n|---|---|---|---|\n| Not Specified | Not Specified | Not Specified | Not Specified |\n\n## Open Questions\nNot Specified\n\n## Risks and Dependencies\nNot Specified\n\n## Next Steps\nReview the transcript.\n\n## Participants\nNot Specified\n\n## Transcript Confidence Notes\nGenerated by Sarvam STT.",
+        "important_points": [],
+    }
 
 # ---------------------------------------------------------------------------
 # Startup diagnostic — logs S3 config state so misconfiguration is visible
@@ -1091,8 +1234,8 @@ def _generate_notes_with_gemini(audio_file, meeting_title: str | None = None, la
 
 
 def _configured_provider() -> str | None:
-    if Config.GEMINI_API_KEY:
-        return "gemini"
+    if Config.SARVAM_API_KEY:
+        return "sarvam"
     if Config.OPENAI_API_KEY:
         return "openai"
     return None
@@ -1147,7 +1290,7 @@ def _validate_feature_provider_and_file(audio_file):
     provider = _configured_provider()
     if provider is None:
         return None, _error(
-            "Meeting notes AI is not configured. Set GEMINI_API_KEY or OPENAI_API_KEY first.",
+            "Meeting notes AI is not configured. Set SARVAM_API_KEY or OPENAI_API_KEY first.",
             503,
         )
 
@@ -1941,8 +2084,8 @@ def generate_meeting_notes_from_saved(
             content_type=record.get("content_type") or downloaded.get("content_type") or "application/octet-stream",
         )
 
-        if provider == "gemini":
-            structured_notes = _generate_notes_with_gemini(
+        if provider == "sarvam":
+            structured_notes = _generate_notes_with_sarvam(
                 audio_file,
                 meeting_title=record.get("meeting_title"),
                 language=record.get("language"),
@@ -2023,8 +2166,8 @@ def generate_meeting_notes(
     audio_bytes = _read_audio_bytes(audio_file)
 
     try:
-        if provider == "gemini":
-            structured_notes = _generate_notes_with_gemini(
+        if provider == "sarvam":
+            structured_notes = _generate_notes_with_sarvam(
                 audio_file,
                 meeting_title=meeting_title,
                 language=language,

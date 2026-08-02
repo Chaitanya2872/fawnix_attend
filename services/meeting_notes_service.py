@@ -57,7 +57,30 @@ def _build_sarvam_headers() -> Dict[str, str]:
     return {"api-subscription-key": Config.SARVAM_API_KEY}
 
 
+def _log_sarvam(event: str, **details: Any) -> None:
+    """Log useful batch diagnostics without exposing credentials or audio data."""
+    if Config.SARVAM_LOG_REQUESTS:
+        logger.info("Sarvam STT %s: %s", event, details)
+
+
+def _log_sarvam_body(direction: str, operation: str, payload: Any, *, job_id: str | None = None) -> None:
+    """Optionally log Sarvam JSON bodies; credentials, URLs, and raw audio stay redacted."""
+    if Config.SARVAM_LOG_API_BODIES:
+        logger.info(
+            "Sarvam STT %s body: operation=%s job_id=%s payload=%s",
+            direction,
+            operation,
+            job_id or "(not-created)",
+            payload,
+        )
+
+
 def _sarvam_response_error(response: requests.Response, context: str) -> RuntimeError:
+    _log_sarvam_body(
+        "response",
+        context,
+        {"status_code": response.status_code, "body": response.text},
+    )
     return RuntimeError(f"{context} failed with status {response.status_code}: {response.text}")
 
 
@@ -91,6 +114,8 @@ def _transcribe_audio_with_sarvam(audio_file, language: str | None = None) -> st
         parameters["num_speakers"] = Config.SARVAM_STT_NUM_SPEAKERS
 
     base_url = f"{Config.SARVAM_BASE_URL}/speech-to-text/job/v1"
+    _log_sarvam("request", operation="create_job", parameters=parameters)
+    _log_sarvam_body("request", "create_job", {"job_parameters": parameters})
     created = requests.post(
         base_url,
         headers={**_build_sarvam_headers(), "Content-Type": "application/json"},
@@ -102,8 +127,12 @@ def _transcribe_audio_with_sarvam(audio_file, language: str | None = None) -> st
     job_id = (created.json().get("job_id") or "").strip()
     if not job_id:
         raise RuntimeError("Sarvam batch job creation returned no job_id")
+    _log_sarvam("response", operation="create_job", status_code=created.status_code, job_id=job_id)
+    _log_sarvam_body("response", "create_job", created.json(), job_id=job_id)
 
     filename = audio_file.filename or "meeting-audio"
+    _log_sarvam("request", operation="create_upload_link", job_id=job_id, filename=filename)
+    _log_sarvam_body("request", "create_upload_link", {"job_id": job_id, "files": [filename]}, job_id=job_id)
     upload_links = requests.post(
         f"{base_url}/upload-files",
         headers={**_build_sarvam_headers(), "Content-Type": "application/json"},
@@ -115,7 +144,16 @@ def _transcribe_audio_with_sarvam(audio_file, language: str | None = None) -> st
     upload_url = ((upload_links.json().get("upload_urls") or {}).get(filename) or {}).get("file_url")
     if not upload_url:
         raise RuntimeError("Sarvam upload-link request returned no file URL")
+    _log_sarvam("response", operation="create_upload_link", status_code=upload_links.status_code, job_id=job_id, filename=filename)
+    _log_sarvam_body(
+        "response",
+        "create_upload_link",
+        {"job_id": job_id, "job_state": upload_links.json().get("job_state"), "files": [filename], "upload_url": "[redacted]"},
+        job_id=job_id,
+    )
     audio_file.stream.seek(0)
+    _log_sarvam("request", operation="upload_audio", job_id=job_id, filename=filename)
+    _log_sarvam_body("request", "upload_audio", {"filename": filename, "content_type": audio_file.mimetype or "application/octet-stream", "audio_bytes": "[binary redacted]"}, job_id=job_id)
     upload = requests.put(
         upload_url,
         data=audio_file.stream,
@@ -124,7 +162,11 @@ def _transcribe_audio_with_sarvam(audio_file, language: str | None = None) -> st
     )
     if not upload.ok:
         raise _sarvam_response_error(upload, "Sarvam audio upload")
+    _log_sarvam("response", operation="upload_audio", status_code=upload.status_code, job_id=job_id, filename=filename)
+    _log_sarvam_body("response", "upload_audio", {"status_code": upload.status_code, "body": "[binary upload response omitted]"}, job_id=job_id)
 
+    _log_sarvam("request", operation="start_job", job_id=job_id)
+    _log_sarvam_body("request", "start_job", {}, job_id=job_id)
     started = requests.post(
         f"{base_url}/{job_id}/start",
         headers=_build_sarvam_headers(),
@@ -132,15 +174,30 @@ def _transcribe_audio_with_sarvam(audio_file, language: str | None = None) -> st
     )
     if not started.ok:
         raise _sarvam_response_error(started, "Sarvam batch job start")
+    _log_sarvam("response", operation="start_job", status_code=started.status_code, job_id=job_id)
+    _log_sarvam_body("response", "start_job", started.json(), job_id=job_id)
 
     deadline = time.monotonic() + Config.SARVAM_STT_JOB_TIMEOUT_SECONDS
     status_payload: Dict[str, Any] = {}
+    previous_state = None
     while time.monotonic() < deadline:
         status = requests.get(f"{base_url}/{job_id}/status", headers=_build_sarvam_headers(), timeout=Config.MEETING_NOTES_REQUEST_TIMEOUT)
         if not status.ok:
             raise _sarvam_response_error(status, "Sarvam batch job status")
         status_payload = status.json()
         state = str(status_payload.get("job_state") or "").lower()
+        if state != previous_state:
+            _log_sarvam(
+                "response",
+                operation="job_status",
+                status_code=status.status_code,
+                job_id=job_id,
+                job_state=state,
+                successful_files=status_payload.get("successful_files_count"),
+                failed_files=status_payload.get("failed_files_count"),
+            )
+            _log_sarvam_body("response", "job_status", status_payload, job_id=job_id)
+            previous_state = state
         if state in {"completed", "partiallycompleted"}:
             break
         if state == "failed":
@@ -152,6 +209,8 @@ def _transcribe_audio_with_sarvam(audio_file, language: str | None = None) -> st
     output_files = [output.get("file_name") for detail in status_payload.get("job_details", []) for output in detail.get("outputs", []) if output.get("file_name")]
     if not output_files:
         raise RuntimeError("Sarvam batch job completed without an output file")
+    _log_sarvam("request", operation="create_download_link", job_id=job_id, files=output_files)
+    _log_sarvam_body("request", "create_download_link", {"job_id": job_id, "files": output_files}, job_id=job_id)
     downloaded = requests.post(
         f"{base_url}/download-files",
         headers={**_build_sarvam_headers(), "Content-Type": "application/json"},
@@ -167,10 +226,30 @@ def _transcribe_audio_with_sarvam(audio_file, language: str | None = None) -> st
     )
     if not output_url:
         raise RuntimeError("Sarvam batch result download returned no file URL")
+    _log_sarvam("response", operation="create_download_link", status_code=downloaded.status_code, job_id=job_id, files=output_files)
+    _log_sarvam_body(
+        "response",
+        "create_download_link",
+        {"job_id": job_id, "job_state": downloaded.json().get("job_state"), "files": output_files, "download_url": "[redacted]"},
+        job_id=job_id,
+    )
+    _log_sarvam("request", operation="download_result", job_id=job_id, files=output_files)
+    _log_sarvam_body("request", "download_result", {"files": output_files}, job_id=job_id)
     result = requests.get(output_url, timeout=Config.MEETING_NOTES_REQUEST_TIMEOUT)
     if not result.ok:
         raise _sarvam_response_error(result, "Sarvam transcript result download")
-    return _extract_sarvam_transcript(result.json())
+    result_payload = result.json()
+    transcript = _extract_sarvam_transcript(result_payload)
+    _log_sarvam(
+        "response",
+        operation="download_result",
+        status_code=result.status_code,
+        job_id=job_id,
+        transcript_characters=len(transcript),
+        diarized_entries=len(((result_payload.get("diarized_transcript") or {}).get("entries") or [])),
+    )
+    _log_sarvam_body("response", "download_result", result_payload, job_id=job_id)
+    return transcript
 
 
 def _generate_notes_with_sarvam(audio_file, meeting_title: str | None = None, language: str | None = None) -> Dict[str, Any]:

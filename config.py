@@ -103,6 +103,9 @@ class Config:
     LOG_FILE = os.getenv('LOG_FILE', 'logs/app.log')
     LOG_MAX_BYTES = int(os.getenv('LOG_MAX_BYTES', 10485760))  # 10MB
     LOG_BACKUP_COUNT = int(os.getenv('LOG_BACKUP_COUNT', 5))
+    BACKEND_LOG_REQUEST_RESPONSE = os.getenv(
+        'BACKEND_LOG_REQUEST_RESPONSE', 'False'
+    ).lower() == 'true'
     
     # Attendance Configuration
     DEFAULT_SHIFT_START = os.getenv('DEFAULT_SHIFT_START', '09:00')
@@ -157,6 +160,8 @@ class Config:
     SARVAM_STT_NUM_SPEAKERS = int(os.getenv('SARVAM_STT_NUM_SPEAKERS', 0)) or None
     SARVAM_STT_POLL_INTERVAL_SECONDS = float(os.getenv('SARVAM_STT_POLL_INTERVAL_SECONDS', 5))
     SARVAM_STT_JOB_TIMEOUT_SECONDS = int(os.getenv('SARVAM_STT_JOB_TIMEOUT_SECONDS', 1800))
+    SARVAM_LOG_REQUESTS = os.getenv('SARVAM_LOG_REQUESTS', 'True').lower() == 'true'
+    SARVAM_LOG_API_BODIES = os.getenv('SARVAM_LOG_API_BODIES', 'False').lower() == 'true'
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '').strip()
     GEMINI_BASE_URL = os.getenv('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta').rstrip('/')
     GEMINI_MEETING_NOTES_MODEL = os.getenv('GEMINI_MEETING_NOTES_MODEL', 'gemini-1.5-flash').strip()

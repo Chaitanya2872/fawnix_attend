@@ -99,6 +99,56 @@ def _capture_response_payload(response):
     return None
 
 
+_SENSITIVE_FIELD_PARTS = ("password", "token", "secret", "authorization", "api_key", "apikey", "cookie")
+
+
+def _sanitize_for_log(value, key: str = ""):
+    """Keep useful request/response diagnostics without exposing credentials."""
+    if any(part in key.lower() for part in _SENSITIVE_FIELD_PARTS):
+        return "[redacted]"
+    if isinstance(value, dict):
+        return {str(item_key): _sanitize_for_log(item_value, str(item_key)) for item_key, item_value in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_for_log(item, key) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize_for_log(item, key) for item in value]
+    return value
+
+
+def _request_body_for_log():
+    payload = _capture_request_payload()
+    if request.files:
+        multipart_payload = {
+            "files": [
+                {
+                    "field": field_name,
+                    "filename": storage.filename,
+                    "content_type": storage.mimetype,
+                    "content": "[binary redacted]",
+                }
+                for field_name, storage in request.files.items()
+            ]
+        }
+        if payload is not None:
+            multipart_payload["form"] = _sanitize_for_log(payload)
+        return multipart_payload
+    if payload is not None:
+        return _sanitize_for_log(payload)
+    return None
+
+
+def _response_body_for_log(response):
+    payload = _capture_response_payload(response)
+    if payload is not None:
+        return _sanitize_for_log(payload)
+    content_length = response.calculate_content_length()
+    return {
+        "body": "[non-JSON response omitted]",
+        "content_type": response.mimetype,
+        "content_length": content_length,
+    }
+
+
 def setup_api_log_capture(app):
     """Persist a sanitized record of every /api/* request and response."""
 
@@ -106,10 +156,33 @@ def setup_api_log_capture(app):
     def _start_api_log_timer():
         g.api_log_start = time.time()
         g.api_log_request_payload = _capture_request_payload() if request.path.startswith('/api/') else None
+        g.backend_log_start = time.time()
+        if Config.BACKEND_LOG_REQUEST_RESPONSE:
+            logging.getLogger(__name__).info(
+                "BACKEND REQUEST method=%s path=%s query=%s headers=%s body=%s remote_addr=%s",
+                request.method,
+                request.path,
+                _sanitize_for_log(request.args.to_dict(flat=False)),
+                _sanitize_for_log(dict(request.headers)),
+                _request_body_for_log(),
+                request.remote_addr,
+            )
 
     @app.after_request
     def _finish_api_log(response):
         try:
+            if Config.BACKEND_LOG_REQUEST_RESPONSE:
+                start = getattr(g, 'backend_log_start', None)
+                duration_ms = int((time.time() - start) * 1000) if start else None
+                logging.getLogger(__name__).info(
+                    "BACKEND RESPONSE method=%s path=%s status=%s duration_ms=%s headers=%s body=%s",
+                    request.method,
+                    request.path,
+                    response.status_code,
+                    duration_ms,
+                    _sanitize_for_log(dict(response.headers)),
+                    _response_body_for_log(response),
+                )
             if not request.path.startswith('/api/'):
                 return response
 

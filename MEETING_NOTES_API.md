@@ -29,7 +29,7 @@ Example response:
       {
         "meeting_note_id": "mn_001",
         "status": "generated",
-        "provider": "gemini",
+        "provider": "sarvam",
         "file_name": "weekly-sync.mp3",
         "meeting_title": "Weekly Sync",
         "language": "en",
@@ -83,7 +83,7 @@ Example response:
   "data": {
     "meeting_note_id": "mn_detail_001",
     "status": "generated",
-    "provider": "gemini",
+    "provider": "sarvam",
     "file_name": "meeting.mp3",
     "meeting_title": "Client Call",
     "language": "en",
@@ -174,7 +174,7 @@ Example synchronous success response:
   "success": true,
   "message": "Meeting notes generated successfully",
   "data": {
-    "provider": "gemini",
+    "provider": "sarvam",
     "file_name": "meeting.mp3",
     "meeting_title": "Weekly Sync",
     "transcript": "Speaker 1: ...",
@@ -202,7 +202,7 @@ Example queued response:
   "message": "Meeting notes generation queued",
   "data": {
     "meeting_note_id": "mn_001",
-    "provider": "gemini",
+    "provider": "sarvam",
     "job_id": "job_001",
     "job_status": "queued"
   }
@@ -244,7 +244,7 @@ Example queued response:
   "data": {
     "meeting_note_id": "mn_001",
     "status": "queued",
-    "provider": "gemini",
+    "provider": "sarvam",
     "file_name": "meeting.mp3",
     "meeting_title": "Weekly Sync",
     "language": "en",
@@ -377,7 +377,7 @@ AI provider not configured:
 ```json
 {
   "success": false,
-  "message": "Meeting notes AI is not configured. Set GEMINI_API_KEY or OPENAI_API_KEY first."
+  "message": "Meeting notes AI is not configured. Set SARVAM_API_KEY or OPENAI_API_KEY first."
 }
 ```
 

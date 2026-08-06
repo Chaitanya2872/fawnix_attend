@@ -731,13 +731,6 @@ def features():
     }), 200
 
 
-@app.before_request
-def before_request():
-    """Log all incoming requests"""
-    from flask import request
-    logger.info(f"{request.method} {request.path} from {request.remote_addr}")
-
-
 @app.after_request
 def after_request(response):
     """Add custom headers to all responses"""

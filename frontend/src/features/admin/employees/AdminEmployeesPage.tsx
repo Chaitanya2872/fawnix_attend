@@ -1,10 +1,27 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import './AdminEmployeesPage.css'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 
 type Props = any
 
 const AVATAR_ROLES = ['accent', 'success', 'pro', 'warning', 'danger'] as const
+const JOIN_DATE_KEYS = [
+  'emp_joined_date',
+  'emp_joining_date',
+  'joining_date',
+  'joined_date',
+  'date_of_joining',
+  'join_date',
+  'hire_date',
+  'created_at'
+] as const
+
+const MONTH_FORMATTER = new Intl.DateTimeFormat('en-IN', { month: 'short' })
+const DATE_FORMATTER = new Intl.DateTimeFormat('en-IN', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric'
+})
 
 function getInitials(name: string): string {
   if (!name) return '?'
@@ -21,15 +38,53 @@ function getAvatarRole(name: string): string {
   return AVATAR_ROLES[code % AVATAR_ROLES.length]
 }
 
+function getJoinDate(employee: any): Date | null {
+  const rawDate = JOIN_DATE_KEYS.map((key) => employee?.[key]).find(Boolean)
+  const date = rawDate ? new Date(rawDate) : null
+  return date && !Number.isNaN(date.getTime()) ? date : null
+}
+
+function formatJoinDate(employee: any) {
+  const date = getJoinDate(employee)
+  return date ? DATE_FORMATTER.format(date) : '--'
+}
+
+function getEmployeeStatus(employee: any) {
+  const rawStatus = (
+    employee.emp_status ||
+    employee.employee_status ||
+    employee.status ||
+    ''
+  ).toString().toLowerCase()
+
+  if (rawStatus.includes('leave')) {
+    return { label: 'On Leave', tone: 'leave' }
+  }
+
+  if (employee.is_active) {
+    return { label: 'Active', tone: 'active' }
+  }
+
+  return { label: 'Inactive', tone: 'inactive' }
+}
+
+function formatTenure(value: number) {
+  return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)
+}
+
+function getSelectionKey(employee: any) {
+  return String(employee.emp_code || employee.emp_email || employee.emp_full_name || '')
+}
+
 export default function AdminEmployeesPage(props: Props) {
   const importInputRef = useRef<HTMLInputElement>(null)
+  const [selectedEmployeeKeys, setSelectedEmployeeKeys] = useState<Set<string>>(() => new Set())
   const {
     canWriteAdminData,
     downloadEmployeesReport,
     employeeExportFormat,
     employeeExportStatus,
     employeeSearch,
-    employeeStatusFilter,
     employeeKpiFilter,
     employees,
     filteredEmployees,
@@ -48,45 +103,147 @@ export default function AdminEmployeesPage(props: Props) {
     downloadEmployeesTemplate,
   } = props
 
-  const activeCount = (employees as any[]).filter((e) => e.is_active).length
-  const inactiveCount = employees.length - activeCount
-  const hrCount = (employees as any[]).filter((e) =>
-    ['hr', 'cmd', 'admin'].some((k) =>
-      (e.emp_designation || '').toLowerCase().includes(k)
+  const employeeRows = employees as any[]
+  const filteredRows = filteredEmployees as any[]
+  const now = new Date()
+  const activeCount = employeeRows.filter((employee) => employee.is_active).length
+  const inactiveCount = employeeRows.length - activeCount
+  const uniqueDepartmentNames = Array.from(
+    new Set(
+      employeeRows
+        .map((employee) => (employee.emp_department || '').trim())
+        .filter(Boolean)
     )
+  )
+  const joinDates = employeeRows.map(getJoinDate).filter(Boolean) as Date[]
+  const newHiresThisMonth = joinDates.filter(
+    (date) =>
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth()
   ).length
-  const birthdays = (employees as any[]).map((employee) => {
-    const raw = employee.emp_date_of_birth || employee.date_of_birth || employee.birth_date || employee.birthday
-    const date = raw ? new Date(raw) : null
-    return date && !Number.isNaN(date.getTime()) ? { employee, date } : null
-  }).filter(Boolean).filter((item: any) => item.date.getMonth() === new Date().getMonth()) as { employee: any; date: Date }[]
+  const averageTenure =
+    joinDates.length > 0
+      ? joinDates.reduce((total, date) => {
+          const tenureYears = Math.max(
+            0,
+            (now.getTime() - date.getTime()) / (365.2425 * 24 * 60 * 60 * 1000)
+          )
+          return total + tenureYears
+        }, 0) / joinDates.length
+      : 0
+  const birthdays = employeeRows
+    .map((employee) => {
+      const raw =
+        employee.emp_date_of_birth ||
+        employee.date_of_birth ||
+        employee.birth_date ||
+        employee.birthday
+      const date = raw ? new Date(raw) : null
+      return date && !Number.isNaN(date.getTime()) ? { employee, date } : null
+    })
+    .filter(Boolean)
+    .filter((item: any) => item.date.getMonth() === now.getMonth()) as {
+    employee: any
+    date: Date
+  }[]
+
+  const filterOptions = [
+    { id: 'all', label: 'All' },
+    { id: 'active', label: 'Active' },
+    { id: 'inactive', label: 'Inactive' },
+    { id: 'hr_admin', label: 'HR Admin' },
+  ]
+
+  if (birthdays.length > 0) {
+    filterOptions.push({ id: 'birthdays', label: 'Birthdays' })
+  }
+
+  const visibleEmployeeKeys = filteredRows.map(getSelectionKey).filter(Boolean)
+  const selectedVisibleCount = visibleEmployeeKeys.filter((key) => selectedEmployeeKeys.has(key)).length
+  const allVisibleSelected = visibleEmployeeKeys.length > 0 && selectedVisibleCount === visibleEmployeeKeys.length
+  const toggleAllVisibleEmployees = () => {
+    setSelectedEmployeeKeys((current) => {
+      const next = new Set(current)
+      if (allVisibleSelected) {
+        visibleEmployeeKeys.forEach((key) => next.delete(key))
+      } else {
+        visibleEmployeeKeys.forEach((key) => next.add(key))
+      }
+      return next
+    })
+  }
+  const toggleEmployeeSelection = (employee: any) => {
+    const key = getSelectionKey(employee)
+    if (!key) return
+    setSelectedEmployeeKeys((current) => {
+      const next = new Set(current)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      return next
+    })
+  }
 
   return (
     <div className="adm-page admin-aligned-page admin-aligned-page--employees">
-
-      {/* ── Header ────────────────────────────────────────── */}
       <div className="adm-header dashboard-section-head">
         <div className="adm-header__title">
-          <p className="adm-eyebrow eyebrow">Directory</p>
-          <h2 className="adm-heading">Employees</h2>
+          <h1 className="adm-heading">Employee List</h1>
+          <div className="adm-tabs" role="tablist" aria-label="Employee views">
+            <button className="adm-tab adm-tab--active" type="button" role="tab" aria-selected="true">
+              Employee List
+            </button>
+            <button className="adm-tab" type="button" role="tab" aria-selected="false">
+              Organization Chart
+            </button>
+            <button className="adm-tab" type="button" role="tab" aria-selected="false">
+              Employee Profiles
+            </button>
+          </div>
         </div>
 
         <div className="adm-header__actions">
           {canWriteAdminData && (
-            <><button className="adm-btn adm-btn--ghost" onClick={() => importInputRef.current?.click()} type="button" disabled={employeeImportLoading}>Import employees</button>
-            <button className="adm-btn adm-btn--ghost" onClick={downloadEmployeesTemplate} type="button">Download template</button>
-            <input ref={importInputRef} className="adm-visually-hidden" type="file" accept=".csv,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importEmployees(file); event.currentTarget.value = '' }} />
-            <button className="adm-btn adm-btn--ghost" onClick={openAddEmployeePanel} type="button">
-              <svg className="adm-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M12 5v14M5 12h14"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                />
-              </svg>
-              Add employee
-            </button></>
+            <>
+              <button
+                className="adm-btn adm-btn--ghost"
+                onClick={() => importInputRef.current?.click()}
+                type="button"
+                disabled={employeeImportLoading}
+              >
+                <svg className="adm-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    d="M12 3v11m0-11 4 4m-4-4-4 4M5 15v3a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-3"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                Bulk Import
+              </button>
+              <button
+                className="adm-btn adm-btn--ghost adm-btn--template"
+                onClick={downloadEmployeesTemplate}
+                type="button"
+              >
+                Template
+              </button>
+              <input
+                ref={importInputRef}
+                className="adm-visually-hidden"
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) void importEmployees(file)
+                  event.currentTarget.value = ''
+                }}
+              />
+            </>
           )}
 
           <div className="adm-split-btn">
@@ -105,9 +262,23 @@ export default function AdminEmployeesPage(props: Props) {
               onClick={downloadEmployeesReport}
               type="button"
             >
-              Export
+              Export Directory
             </button>
           </div>
+
+          {canWriteAdminData && (
+            <button className="adm-btn adm-btn--primary" onClick={openAddEmployeePanel} type="button">
+              <svg className="adm-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M12 5v14M5 12h14"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                />
+              </svg>
+              Add a New Employee
+            </button>
+          )}
 
           <button
             className="adm-btn adm-btn--icon"
@@ -129,145 +300,185 @@ export default function AdminEmployeesPage(props: Props) {
         </div>
       </div>
 
-      {/* ── Metrics ───────────────────────────────────────── */}
-      <div className="adm-metrics kpi-cards">
-        <button className={`adm-metric-card${employeeKpiFilter === 'all' ? ' adm-metric-card--selected' : ''}`} onClick={() => applyEmployeeKpiFilter('all')} type="button">
-          <p className="adm-metric-card__label">Total employees</p>
-          <p className="adm-metric-card__value">{employees.length}</p>
-        </button>
-        <button className={`adm-metric-card${employeeKpiFilter === 'active' ? ' adm-metric-card--selected' : ''}`} onClick={() => applyEmployeeKpiFilter('active')} type="button">
-          <p className="adm-metric-card__label">Active</p>
-          <p className="adm-metric-card__value adm-metric-card__value--success">
-            {activeCount}
-          </p>
-        </button>
-        <button className={`adm-metric-card${employeeKpiFilter === 'inactive' ? ' adm-metric-card--selected' : ''}`} onClick={() => applyEmployeeKpiFilter('inactive')} type="button">
-          <p className="adm-metric-card__label">Inactive</p>
-          <p className="adm-metric-card__value adm-metric-card__value--muted">
-            {inactiveCount}
-          </p>
-        </button>
-        <button className={`adm-metric-card${employeeKpiFilter === 'hr_admin' ? ' adm-metric-card--selected' : ''}`} onClick={() => applyEmployeeKpiFilter('hr_admin')} type="button">
-          <p className="adm-metric-card__label">HR / Admin</p>
-          <p className="adm-metric-card__value">{hrCount}</p>
-        </button>
-        {birthdays.length > 0 ? (
-          <button
-            type="button"
-            className={`adm-birthday-card${employeeKpiFilter === 'birthdays' ? ' adm-birthday-card--selected' : ''}`}
-            onClick={() => applyEmployeeKpiFilter('birthdays')}
-            aria-pressed={employeeKpiFilter === 'birthdays'}
-          >
-            <span>Birthdays this month</span>
-            <strong>{birthdays.length}</strong>
-            <small>{birthdays.slice(0, 2).map(({ employee }) => employee.emp_full_name || employee.emp_code).join(' · ')}</small>
-          </button>
-        ) : null}
-      </div>
-
-      {/* ── Search & filter ───────────────────────────────── */}
-      <div className="adm-search-card admin-filter-card">
-        <div className="adm-search-card__top">
-          <span className="adm-result-count">
-            {filteredEmployees.length} result
-            {filteredEmployees.length === 1 ? '' : 's'} of {employees.length}
+      <section className="adm-stats-strip" aria-label="Employee summary">
+        <div className="adm-stat-item">
+          <span className="adm-stat-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M4 19v-7M10 19V5M16 19v-9M22 19H2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
           </span>
-          <div className="adm-filter-chips">
-            {[
-              { id: 'all', label: 'All' },
-              { id: 'active', label: 'Active' },
-              { id: 'inactive', label: 'Inactive' },
-            ].map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                className={`adm-chip${employeeStatusFilter === opt.id ? ' adm-chip--on' : ''}`}
-                onClick={() => applyEmployeeKpiFilter(opt.id)}
+          <div>
+            <p className="adm-stat-label">Total Employees</p>
+            <strong className="adm-stat-value">{employeeRows.length}</strong>
+            <span className="adm-stat-caption">{activeCount} active, {inactiveCount} inactive</span>
+          </div>
+        </div>
+        <div className="adm-stat-item">
+          <span className="adm-stat-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 5v14M5 12h14M4 20h16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </span>
+          <div>
+            <p className="adm-stat-label">New Hires This Month</p>
+            <strong className="adm-stat-value">{newHiresThisMonth}</strong>
+            <span className="adm-stat-caption">Joined in {MONTH_FORMATTER.format(now)}</span>
+          </div>
+        </div>
+        <div className="adm-stat-item">
+          <span className="adm-stat-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 6v6l4 2M21 12a9 9 0 1 1-18 0a9 9 0 0 1 18 0Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <div>
+            <p className="adm-stat-label">Average Tenure (Years)</p>
+            <strong className="adm-stat-value">{formatTenure(averageTenure)}</strong>
+            <span className="adm-stat-caption">{joinDates.length ? 'Based on joining dates' : 'No joining dates found'}</span>
+          </div>
+        </div>
+        <div className="adm-stat-item">
+          <span className="adm-stat-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M4 20V8l8-4 8 4v12M9 20v-7h6v7M4 10h16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <div>
+            <p className="adm-stat-label">Active Departments</p>
+            <strong className="adm-stat-value">{uniqueDepartmentNames.length}</strong>
+            <span className="adm-stat-caption">
+              {uniqueDepartmentNames.slice(0, 2).join(', ') || 'No departments listed'}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {(employeeExportStatus || employeeImportStatus) && (
+        <div className="adm-status-line" role="status">
+          {employeeExportStatus || employeeImportStatus}
+        </div>
+      )}
+
+      <div className="adm-table-card table-card">
+        <div className="adm-table-toolbar">
+          <div className="adm-table-title">
+            <strong>Total Employee: {employeeRows.length} employees</strong>
+            <span>
+              Showing {filteredRows.length} {filteredRows.length === 1 ? 'result' : 'results'}
+            </span>
+          </div>
+
+          <div className="adm-table-controls">
+            <div className="adm-search-wrap">
+              <svg
+                className="adm-search-wrap__icon"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
               >
-                {opt.label}
-              </button>
-            ))}
+                <path d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.43 4.43 1.06-1.06-4.43-4.43A6.5 6.5 0 0 0 10.5 4Zm0 1.5a5 5 0 1 1 0 10a5 5 0 0 1 0-10Z" />
+              </svg>
+              <input
+                id="employee-search"
+                type="text"
+                className="adm-search-wrap__input"
+                value={employeeSearch}
+                onChange={(e) => setEmployeeSearch(e.target.value)}
+                placeholder="Search employee"
+              />
+              {employeeSearch && (
+                <button
+                  className="adm-search-wrap__clear"
+                  type="button"
+                  onClick={() => setEmployeeSearch('')}
+                  aria-label="Clear search"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true" className="adm-icon">
+                    <path
+                      d="M18 6 6 18M6 6l12 12"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            <div className="adm-filter-chips" aria-label="Employee filters">
+              {filterOptions.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`adm-chip${employeeKpiFilter === opt.id ? ' adm-chip--on' : ''}`}
+                  onClick={() => applyEmployeeKpiFilter(opt.id)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="adm-search-wrap">
-          <svg
-            className="adm-search-wrap__icon"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.43 4.43 1.06-1.06-4.43-4.43A6.5 6.5 0 0 0 10.5 4Zm0 1.5a5 5 0 1 1 0 10a5 5 0 0 1 0-10Z" />
-          </svg>
-          <input
-            id="employee-search"
-            type="text"
-            className="adm-search-wrap__input"
-            value={employeeSearch}
-            onChange={(e) => setEmployeeSearch(e.target.value)}
-            placeholder="Search by name, code, email, designation, department, or manager"
-          />
-          {employeeSearch && (
-            <button
-              className="adm-search-wrap__clear"
-              type="button"
-              onClick={() => setEmployeeSearch('')}
-              aria-label="Clear search"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true" className="adm-icon">
-                <path
-                  d="M18 6 6 18M6 6l12 12"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
+        {selectedEmployeeKeys.size > 0 && (
+          <div className="adm-selection-bar" role="status">
+            <span>
+              {selectedEmployeeKeys.size} employee{selectedEmployeeKeys.size === 1 ? '' : 's'} selected
+            </span>
+            <button type="button" onClick={() => setSelectedEmployeeKeys(new Set<string>())}>
+              Clear selection
             </button>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
 
-      {/* ── Export status ─────────────────────────────────── */}
-      {employeeExportStatus && (
-        <p className="adm-export-status">{employeeExportStatus}</p>
-      )}
-      {employeeImportStatus && <p className="adm-import-status" role="status">{employeeImportStatus}</p>}
-
-      {/* ── Table ─────────────────────────────────────────── */}
-      <div className="adm-table-card table-card">
-        {filteredEmployees.length > 0 ? (
+        {filteredRows.length > 0 ? (
           <div className="adm-table-scroll table-scroll">
             <table className="adm-table dashboard-table">
               <colgroup>
-                <col style={{ width: '210px' }} />
-                <col style={{ width: '165px' }} />
-                <col style={{ width: '135px' }} />
-                <col style={{ width: '185px' }} />
-                <col style={{ width: '160px' }} />
-                <col style={{ width: '90px' }} />
-                <col style={{ width: canWriteAdminData ? '90px' : '80px' }} />
+                <col style={{ width: '44px' }} />
+                <col style={{ width: '260px' }} />
+                <col style={{ width: '180px' }} />
+                <col style={{ width: '230px' }} />
+                <col style={{ width: '120px' }} />
+                <col style={{ width: '145px' }} />
+                <col style={{ width: canWriteAdminData ? '136px' : '76px' }} />
               </colgroup>
               <thead>
                 <tr>
-                  <th>Employee</th>
-                  <th>Role / grade</th>
+                  <th className="adm-select-cell">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all visible employees"
+                      checked={allVisibleSelected}
+                      onChange={toggleAllVisibleEmployees}
+                    />
+                  </th>
+                  <th>Name</th>
                   <th>Department</th>
-                  <th>Contact</th>
-                  <th>Manager</th>
+                  <th>Position</th>
                   <th>Status</th>
-                  <th />
+                  <th>Join Date</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {(filteredEmployees as any[]).map((employee) => {
+                {filteredRows.map((employee) => {
                   const displayName =
                     employee.emp_full_name || employee.emp_code || ''
+                  const selectionKey = getSelectionKey(employee)
                   const role = getAvatarRole(displayName)
                   const initials = getInitials(displayName)
+                  const status = getEmployeeStatus(employee)
 
                   return (
                     <tr key={employee.emp_code} className="adm-row">
-
-                      {/* Name */}
+                      <td className="adm-select-cell">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${displayName || 'employee'}`}
+                          checked={selectionKey ? selectedEmployeeKeys.has(selectionKey) : false}
+                          onChange={() => toggleEmployeeSelection(employee)}
+                        />
+                      </td>
                       <td>
                         <div className="adm-employee-cell">
                           <div className={`adm-avatar adm-avatar--${role}`}>
@@ -278,63 +489,49 @@ export default function AdminEmployeesPage(props: Props) {
                               {displayName}
                             </span>
                             <span className="adm-code">
-                              {employee.emp_code}
+                              {employee.emp_email || employee.emp_code || 'Email unavailable'}
                             </span>
                           </div>
                         </div>
                       </td>
-
-                      {/* Role / grade */}
                       <td>
                         <span className="adm-cell-primary">
-                          {employee.emp_designation || employee.role || '—'}
+                          {employee.emp_department || '--'}
+                        </span>
+                        <span className="adm-cell-meta">
+                          {employee.manager_name || employee.emp_manager || 'No manager listed'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="adm-cell-primary">
+                          {employee.emp_designation || employee.role || '--'}
                         </span>
                         <span className="adm-cell-meta">
                           Grade {formatEmployeeGrade(employee.emp_grade)}
                         </span>
                       </td>
-
-                      {/* Department */}
-                      <td className="adm-cell-secondary">
-                        {employee.emp_department || '—'}
-                      </td>
-
-                      {/* Contact */}
                       <td>
-                        <span className="adm-cell-email">
-                          {employee.emp_email || '—'}
-                        </span>
-                        <span className="adm-code">
-                          {employee.emp_contact || 'Contact unavailable'}
+                        <span className={`adm-pill table-pill adm-pill--${status.tone}`}>
+                          {status.label}
                         </span>
                       </td>
-
-                      {/* Manager */}
                       <td>
-                        <span className="adm-cell-primary">
-                          {employee.manager_name || employee.emp_manager || '—'}
-                        </span>
-                        <span className="adm-code">
-                          {employee.manager_email ||
-                            employee.manager_code ||
-                            ''}
+                        <span className="adm-cell-secondary">
+                          {formatJoinDate(employee)}
                         </span>
                       </td>
-
-                      {/* Status */}
-                      <td>
-                        <span
-                          className={`adm-pill table-pill${employee.is_active ? ' active adm-pill--active' : ' inactive adm-pill--inactive'}`}
-                        >
-                          {employee.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-
-                      {/* Actions */}
                       <td>
                         {canWriteAdminData ? (
                           <div className="adm-actions">
-                            <button className="adm-action-btn adm-action-btn--view" onClick={() => openEmployeeView(employee)} title="View employee" type="button" aria-label={`View ${displayName}`}>View</button>
+                            <button
+                              className="adm-action-btn adm-action-btn--view"
+                              onClick={() => openEmployeeView(employee)}
+                              title="View employee"
+                              type="button"
+                              aria-label={`View ${displayName}`}
+                            >
+                              View
+                            </button>
                             <button
                               className="adm-action-btn"
                               onClick={() => handleEditEmployee(employee)}
@@ -381,7 +578,13 @@ export default function AdminEmployeesPage(props: Props) {
                             </button>
                           </div>
                         ) : (
-                          <button className="adm-action-btn adm-action-btn--view" onClick={() => openEmployeeView(employee)} type="button">View</button>
+                          <button
+                            className="adm-action-btn adm-action-btn--view"
+                            onClick={() => openEmployeeView(employee)}
+                            type="button"
+                          >
+                            View
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -402,7 +605,8 @@ export default function AdminEmployeesPage(props: Props) {
                 strokeLinejoin="round"
               />
             </svg>
-            No employees match this search
+            <strong>No employees found</strong>
+            <span>Try another search term or filter.</span>
           </div>
         )}
       </div>

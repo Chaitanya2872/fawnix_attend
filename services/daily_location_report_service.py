@@ -16,7 +16,7 @@ def get_daily_location_report(emp_email: str, report_date: date = None) -> Tuple
     Get comprehensive daily location report with all coordinates
     
     Returns:
-    - Clock in/out locations
+    - Clock in/out locations    
     - All activity start/end locations
     - All field visit tracking points
     - Branch visit destinations

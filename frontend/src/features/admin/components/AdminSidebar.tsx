@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import SidebarIcon from './navigation/SidebarIcon'
-import { API_TELEMETRY_EMP_CODE, sidebarItems } from '../config/sidebar'
+import { API_TELEMETRY_EMP_CODE, sidebarSections } from '../config/sidebar'
 import type { AdminProfile, SidebarId } from '../../../types/admin'
 
 type AdminSidebarProps = {
@@ -12,10 +12,19 @@ type AdminSidebarProps = {
 
 export default function AdminSidebar({ profile, activePanel, onSelectPanel, onLogout }: AdminSidebarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const visibleItems = sidebarItems.filter(
-    (item) => item.id !== 'api-telemetry' || profile?.emp_code === API_TELEMETRY_EMP_CODE
-  )
+  const visibleSections = sidebarSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter(
+        (item) => item.id !== 'api-telemetry' || profile?.emp_code === API_TELEMETRY_EMP_CODE
+      )
+    }))
+    .filter((section) => section.items.length > 0)
+  const visibleItems = visibleSections.flatMap((section) => section.items)
   const activeItem = visibleItems.find((item) => item.id === activePanel)
+  const activeSection = visibleSections.find((section) =>
+    section.items.some((item) => item.id === activePanel)
+  )
   const handleSelectPanel = (id: SidebarId) => {
     onSelectPanel(id)
     setMobileMenuOpen(false)
@@ -37,7 +46,10 @@ export default function AdminSidebar({ profile, activePanel, onSelectPanel, onLo
         </div>
         <div className="sidebar-mobile-active">
           <span>Viewing</span>
-          <strong>{activeItem?.label || 'Dashboard'}</strong>
+          <strong>
+            {activeSection?.title ? `${activeSection.title} / ` : ''}
+            {activeItem?.label || 'Dashboard'}
+          </strong>
         </div>
         <button
           className="sidebar-mobile-toggle"
@@ -98,24 +110,30 @@ export default function AdminSidebar({ profile, activePanel, onSelectPanel, onLo
           <small>{profile?.emp_department || 'Organization directory'}</small>
         </div>
 
-        <div className="sidebar-group">
-          {visibleItems.map((item) => (
-            <button
-              key={item.id}
-              className={`sidebar-link ${activePanel === item.id ? 'active' : ''}`}
-              onClick={() => handleSelectPanel(item.id)}
-            >
-              <span className="sidebar-link-main">
-                <span className="sidebar-link-icon">
-                  <SidebarIcon name={item.icon} />
-                </span>
-                <span className="sidebar-link-label">{item.label}</span>
-              </span>
-              {item.badge ? <span className="sidebar-link-badge">{item.badge}</span> : null}
-            </button>
+        <nav className="sidebar-nav" aria-label="Admin navigation">
+          {visibleSections.map((section, index) => (
+            <div className="sidebar-section" key={section.title || `sidebar-section-${index}`}>
+              {section.title ? <div className="sidebar-section-label">{section.title}</div> : null}
+              <div className="sidebar-group">
+                {section.items.map((item) => (
+                  <button
+                    key={item.id}
+                    className={`sidebar-link ${activePanel === item.id ? 'active' : ''}`}
+                    onClick={() => handleSelectPanel(item.id)}
+                  >
+                    <span className="sidebar-link-main">
+                      <span className="sidebar-link-icon">
+                        <SidebarIcon name={item.icon} />
+                      </span>
+                      <span className="sidebar-link-label">{item.label}</span>
+                    </span>
+                    {item.badge ? <span className="sidebar-link-badge">{item.badge}</span> : null}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
-
-        </div>
+        </nav>
 
         <div className="sidebar-foot">
           <div className="sidebar-profile">

@@ -71,6 +71,8 @@ const adminPanelPathMap: Record<SidebarId, string> = {
   attendance: 'attendance',
   'attendance-records': 'attendance-records',
   'attendance-exceptions': 'attendance-exceptions',
+  'overtime-records': 'overtime-records',
+  inbox: 'inbox',
   calendar: 'calendar',
   reports: 'reports',
   leaves: 'leaves',
@@ -248,6 +250,30 @@ function formatTimeZoneLabel(timeZone: string) {
 
   const parts = timeZone.split('/')
   return parts[parts.length - 1].replace(/_/g, ' ')
+}
+
+function AdminEmptyPanel({
+  eyebrow,
+  title,
+  message
+}: {
+  eyebrow: string
+  title: string
+  message: string
+}) {
+  return (
+    <div className="admin-aligned-page">
+      <div className="dashboard-section-head">
+        <div>
+          <p className="eyebrow">{eyebrow}</p>
+          <h2>{title}</h2>
+        </div>
+      </div>
+      <div className="empty-state">
+        <strong>{message}</strong>
+      </div>
+    </div>
+  )
 }
 
 function FawnixApp() {
@@ -1004,6 +1030,16 @@ function FawnixApp() {
       )
     }
 
+    if (activePanel === 'overtime-records') {
+      return (
+        <AdminEmptyPanel
+          eyebrow="Activities"
+          title="Overtime Records"
+          message="No overtime records found."
+        />
+      )
+    }
+
     if (activePanel === 'activities') {
       return (
         <AdminActivitiesPage
@@ -1012,6 +1048,16 @@ function FawnixApp() {
           loadDashboard={() => loadDashboard(accessToken)}
           setShowTodayActivities={setShowTodayActivities}
           showTodayActivities={showTodayActivities}
+        />
+      )
+    }
+
+    if (activePanel === 'inbox') {
+      return (
+        <AdminEmptyPanel
+          eyebrow="Administration"
+          title="Inbox"
+          message="Inbox is empty."
         />
       )
     }

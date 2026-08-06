@@ -6,6 +6,8 @@ export type SidebarIconName =
   | 'pulse'
   | 'list'
   | 'alert'
+  | 'clock'
+  | 'inbox'
   | 'calendar'
   | 'chart'
   | 'leaf'
@@ -18,6 +20,11 @@ export type SidebarItemDefinition = {
   label: string
   icon: SidebarIconName
   badge?: string
+}
+
+export type SidebarSectionDefinition = {
+  title?: string
+  items: SidebarItemDefinition[]
 }
 
 export type LeaveFilterState = {

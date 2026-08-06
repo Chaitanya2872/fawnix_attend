@@ -1,19 +1,41 @@
-import type { SidebarItemDefinition, LeaveFilterState } from '../types/sidebar'
+import type { SidebarItemDefinition, SidebarSectionDefinition, LeaveFilterState } from '../types/sidebar'
 
 export const API_TELEMETRY_EMP_CODE = '8888'
 
 export const sidebarItems: SidebarItemDefinition[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'home' },
-  { id: 'employees', label: 'Employees List', icon: 'users' },
-  { id: 'attendance', label: "Today's Activities", icon: 'pulse' },
+  { id: 'attendance', label: "Today's Activity", icon: 'pulse' },
   { id: 'attendance-records', label: 'Attendance Records', icon: 'list' },
-  { id: 'leaves', label: 'Leaves', icon: 'leaf' },
-  { id: 'activities', label: 'Activities', icon: 'activity' },
-  { id: 'field-visits', label: 'Field Visits', icon: 'pin' },
-  { id: 'calendar', label: 'Calendar View', icon: 'calendar' },
   { id: 'attendance-exceptions', label: 'Attendance Exceptions', icon: 'alert' },
+  { id: 'leaves', label: 'Leaves', icon: 'leaf' },
+  { id: 'overtime-records', label: 'Overtime Records', icon: 'clock' },
+  { id: 'employees', label: 'Employee Master', icon: 'users' },
   { id: 'reports', label: 'Reports & Analytics', icon: 'chart' },
-  { id: 'api-telemetry', label: 'API Telemetry', icon: 'bug' }
+  { id: 'inbox', label: 'Inbox', icon: 'inbox' }
+]
+
+export const sidebarSections: SidebarSectionDefinition[] = [
+  {
+    items: [{ id: 'dashboard', label: 'Dashboard', icon: 'home' }]
+  },
+  {
+    title: 'Activities',
+    items: [
+      { id: 'attendance', label: "Today's Activity", icon: 'pulse' },
+      { id: 'attendance-records', label: 'Attendance Records', icon: 'list' },
+      { id: 'attendance-exceptions', label: 'Attendance Exceptions', icon: 'alert' },
+      { id: 'leaves', label: 'Leaves', icon: 'leaf' },
+      { id: 'overtime-records', label: 'Overtime Records', icon: 'clock' }
+    ]
+  },
+  {
+    title: 'Administration',
+    items: [
+      { id: 'employees', label: 'Employee Master', icon: 'users' },
+      { id: 'reports', label: 'Reports & Analytics', icon: 'chart' },
+      { id: 'inbox', label: 'Inbox', icon: 'inbox' }
+    ]
+  }
 ]
 
 export const LEAVE_TYPE_FILTER_OPTIONS = [

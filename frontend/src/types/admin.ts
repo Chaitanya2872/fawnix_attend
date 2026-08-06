@@ -10,6 +10,8 @@ export type SidebarId =
   | 'attendance'
   | 'attendance-records'
   | 'attendance-exceptions'
+  | 'overtime-records'
+  | 'inbox'
   | 'calendar'
   | 'reports'
   | 'leaves'

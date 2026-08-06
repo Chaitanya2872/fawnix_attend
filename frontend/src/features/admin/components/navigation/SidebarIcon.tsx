@@ -56,6 +56,26 @@ export default function SidebarIcon({ name }: SidebarIconProps) {
         strokeLinejoin="round"
       />
     ),
+    clock: (
+      <path
+        d="M12 6v6l4 2M21 12a9 9 0 1 1-18 0a9 9 0 0 1 18 0Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    ),
+    inbox: (
+      <path
+        d="M4 13V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v7l-3 5H7l-3-5Zm0 0h5l1.5 2h3L15 13h5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    ),
     calendar: (
       <path
         d="M7 3v3M17 3v3M4 9h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"

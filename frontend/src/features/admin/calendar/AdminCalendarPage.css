@@ -17,7 +17,7 @@
   --rust: #c1503d;
   --rust-soft: #f5ddd6;
 
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--ink);
   background: var(--paper);
   padding: 2rem;
@@ -46,7 +46,7 @@
 }
 
 .ops-cal-title {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 2rem;
   font-weight: 700;
   margin: 0 0 0.35rem;
@@ -138,7 +138,7 @@
 
 .ops-metric-value {
   display: block;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 1.7rem;
   font-weight: 700;
   margin: 0.3rem 0 0.2rem;
@@ -169,7 +169,7 @@
 
 .ops-cal-panel-title {
   display: block;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 1.2rem;
   font-weight: 600;
   margin-top: 0.2rem;
@@ -255,7 +255,7 @@
 }
 
 .ops-day-number {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-weight: 600;
   font-size: 0.9rem;
 }

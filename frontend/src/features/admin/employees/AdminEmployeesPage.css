@@ -21,7 +21,7 @@
   max-width: 100%;
   gap: 16px;
   color: var(--adm-text);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', system-ui, sans-serif;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 .admin-aligned-page--employees button,

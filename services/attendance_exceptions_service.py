@@ -3,7 +3,7 @@ Attendance Exceptions Service
 Business logic for late arrival and early leave handling
 """
 
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta
 from config import Config
 from database.connection import get_db_connection
 from services.attendance_constants import (
@@ -380,6 +380,8 @@ def _build_exception_select(
         pick('manager_email'),
         pick('requested_at'),
         pick('manager_remarks'),
+        pick('created_at'),
+        pick('updated_at'),
     ]
 
     if 'reviewed_by' in columns:
@@ -1702,6 +1704,29 @@ def get_team_exceptions(
         conn.close()
 
 
+def _build_exception_order_by(sort_by: Optional[str], sort_order: Optional[str]) -> str:
+    """Build a safe ORDER BY clause for admin exception queries."""
+    _SORT_COLUMN_MAP: Dict[str, str] = {
+        'attendance_date': "COALESCE(ae.exception_date, a.date)",
+        'exception_type': "ae.exception_type",
+        'status': "ae.status",
+        'late_by_minutes': "ae.late_by_minutes",
+        'early_by_minutes': "ae.early_by_minutes",
+        'severity': "GREATEST(COALESCE(ae.late_by_minutes, 0), COALESCE(ae.early_by_minutes, 0))",
+        'employee_name': (
+            "COALESCE(NULLIF(TRIM(ae.emp_name), ''), "
+            "NULLIF(TRIM(e.emp_full_name), ''), "
+            "NULLIF(TRIM(a.employee_name), ''))"
+        ),
+    }
+    col = _SORT_COLUMN_MAP.get((sort_by or '').strip().lower())
+    direction = 'ASC' if (sort_order or '').strip().upper() == 'ASC' else 'DESC'
+    if col:
+        return f"{col} {direction} NULLS LAST, ae.requested_at DESC NULLS LAST, ae.id DESC"
+    # Default ordering
+    return "COALESCE(ae.exception_date, a.date) DESC NULLS LAST, ae.requested_at DESC NULLS LAST, ae.id DESC"
+
+
 def _build_admin_exception_actions(status: Optional[str]) -> List[str]:
     normalized = (status or '').strip().lower()
     if normalized == 'pending':
@@ -1719,8 +1744,11 @@ def get_admin_attendance_exceptions(
     search: Optional[str] = None,
     status: Optional[str] = None,
     exception_type: Optional[str] = None,
+    department: Optional[str] = None,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = None,
     page: int = 1,
     page_size: int = 10,
 ) -> Tuple[Dict, int]:
@@ -1765,9 +1793,10 @@ def get_admin_attendance_exceptions(
                 AND (
                     COALESCE(NULLIF(TRIM(ae.emp_name), ''), NULLIF(TRIM(e.emp_full_name), ''), NULLIF(TRIM(a.employee_name), '')) ILIKE %s
                     OR COALESCE(NULLIF(TRIM(ae.emp_code), ''), NULLIF(TRIM(e.emp_code), '')) ILIKE %s
+                    OR ae.reason ILIKE %s
                 )
             """
-            params.extend([like_value, like_value])
+            params.extend([like_value, like_value, like_value])
 
         normalized_status = (status or '').strip().lower()
         if normalized_status:
@@ -1787,8 +1816,129 @@ def get_admin_attendance_exceptions(
             base_query += " AND COALESCE(ae.exception_date, a.date) <= %s"
             params.append(to_date)
 
-        cursor.execute(f"SELECT COUNT(*) AS total_records {base_query}", params)
-        total_records = int(cursor.fetchone().get('total_records') or 0)
+        normalized_department = (department or '').strip()
+        if normalized_department:
+            base_query += " AND NULLIF(TRIM(COALESCE(e.emp_department, '')), '') ILIKE %s"
+            params.append(f"%{normalized_department}%")
+
+        # --- KPI counts (same WHERE clause, one extra round trip) ---
+        cursor.execute(f"""
+            SELECT
+                COUNT(*) AS total,
+                COUNT(CASE WHEN LOWER(COALESCE(ae.status, '')) = 'pending' THEN 1 END) AS pending,
+                COUNT(CASE WHEN LOWER(COALESCE(ae.exception_type, '')) = 'early_leave' THEN 1 END) AS early_leave,
+                COUNT(CASE WHEN LOWER(COALESCE(ae.exception_type, '')) = 'late_arrival' THEN 1 END) AS late_arrival,
+                COUNT(CASE WHEN LOWER(COALESCE(ae.status, '')) = 'approved' THEN 1 END) AS approved,
+                COUNT(CASE WHEN LOWER(COALESCE(ae.status, '')) = 'rejected' THEN 1 END) AS rejected,
+                COUNT(CASE WHEN COALESCE(ae.exception_date, a.date) >= date_trunc('month', CURRENT_DATE) THEN 1 END) AS current_month_total,
+                COUNT(CASE WHEN COALESCE(ae.exception_date, a.date) >= date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
+                             AND COALESCE(ae.exception_date, a.date) < date_trunc('month', CURRENT_DATE) THEN 1 END) AS previous_month_total,
+                MIN(CASE WHEN LOWER(COALESCE(ae.status, '')) = 'pending' THEN COALESCE(ae.exception_date, a.date) END) AS oldest_pending_date
+            {base_query}
+        """, params)
+        kpi_row = cursor.fetchone() or {}
+        oldest_pending_date = kpi_row.get('oldest_pending_date')
+        if isinstance(oldest_pending_date, datetime):
+            oldest_pending_date = oldest_pending_date.date()
+        oldest_pending_days = (date.today() - oldest_pending_date).days if oldest_pending_date else None
+
+        # --- Distinct departments for the filter dropdown (independent of the current filters) ---
+        cursor.execute("""
+            SELECT DISTINCT emp_department
+            FROM employees
+            WHERE NULLIF(TRIM(COALESCE(emp_department, '')), '') IS NOT NULL
+            ORDER BY emp_department
+        """)
+        department_options = [row['emp_department'] for row in (cursor.fetchall() or []) if row.get('emp_department')]
+
+        # --- Repeat-offender aggregate: employees with 3+ exceptions in the filtered set ---
+        cursor.execute(f"""
+            SELECT
+                COUNT(*) FILTER (WHERE exception_count >= 3) AS repeat_employee_count,
+                COALESCE(SUM(exception_count) FILTER (WHERE exception_count >= 3), 0) AS repeat_exception_count
+            FROM (
+                SELECT
+                    COALESCE(NULLIF(TRIM(ae.emp_code), ''), NULLIF(TRIM(e.emp_code), '')) AS employee_code,
+                    COUNT(*) AS exception_count
+                {base_query}
+                GROUP BY 1
+            ) employee_counts
+            WHERE employee_code IS NOT NULL
+        """, params)
+        repeat_row = cursor.fetchone() or {}
+
+        # --- Top employees by total late/early minutes in the filtered set ---
+        cursor.execute(f"""
+            SELECT
+                COALESCE(NULLIF(TRIM(ae.emp_name), ''), NULLIF(TRIM(e.emp_full_name), ''), NULLIF(TRIM(a.employee_name), '')) AS employee_name,
+                COALESCE(NULLIF(TRIM(ae.emp_code), ''), NULLIF(TRIM(e.emp_code), '')) AS employee_code,
+                NULLIF(TRIM(COALESCE(e.emp_department, '')), '') AS department,
+                COUNT(*) FILTER (WHERE LOWER(COALESCE(ae.exception_type, '')) = 'late_arrival') AS late_count,
+                COUNT(*) FILTER (WHERE LOWER(COALESCE(ae.exception_type, '')) = 'early_leave') AS early_count,
+                COALESCE(SUM(COALESCE(ae.late_by_minutes, 0) + COALESCE(ae.early_by_minutes, 0)), 0) AS total_minutes
+            {base_query}
+            GROUP BY 1, 2, 3
+            HAVING COALESCE(NULLIF(TRIM(ae.emp_code), ''), NULLIF(TRIM(e.emp_code), '')) IS NOT NULL
+            ORDER BY total_minutes DESC, late_count DESC, early_count DESC
+            LIMIT 5
+        """, params)
+        top_short_hours_rows = cursor.fetchall() or []
+
+        # --- Daily exception counts for the trailing 14 days, for the KPI sparkline ---
+        cursor.execute(f"""
+            SELECT
+                COALESCE(ae.exception_date, a.date) AS day,
+                COUNT(*) AS cnt
+            {base_query}
+              AND COALESCE(ae.exception_date, a.date) >= CURRENT_DATE - INTERVAL '13 days'
+            GROUP BY day
+            ORDER BY day
+        """, params)
+        trend_rows = cursor.fetchall() or []
+        trend_by_day: Dict[date, int] = {}
+        for trend_row in trend_rows:
+            day_value = trend_row.get('day')
+            if isinstance(day_value, datetime):
+                day_value = day_value.date()
+            if day_value:
+                trend_by_day[day_value] = int(trend_row.get('cnt') or 0)
+        today = date.today()
+        daily_trend = [
+            {
+                'date': (today - timedelta(days=offset_days)).strftime('%Y-%m-%d'),
+                'count': trend_by_day.get(today - timedelta(days=offset_days), 0),
+            }
+            for offset_days in range(13, -1, -1)
+        ]
+
+        kpis = {
+            'total': int(kpi_row.get('total') or 0),
+            'pending': int(kpi_row.get('pending') or 0),
+            'early_leave': int(kpi_row.get('early_leave') or 0),
+            'late_arrival': int(kpi_row.get('late_arrival') or 0),
+            'approved': int(kpi_row.get('approved') or 0),
+            'rejected': int(kpi_row.get('rejected') or 0),
+            'current_month_total': int(kpi_row.get('current_month_total') or 0),
+            'previous_month_total': int(kpi_row.get('previous_month_total') or 0),
+            'oldest_pending_days': oldest_pending_days,
+            'daily_trend': daily_trend,
+            'repeat_offenders': {
+                'employee_count': int(repeat_row.get('repeat_employee_count') or 0),
+                'exception_count': int(repeat_row.get('repeat_exception_count') or 0),
+            },
+            'top_short_hours': [
+                {
+                    'employee_name': top_row.get('employee_name'),
+                    'employee_code': top_row.get('employee_code'),
+                    'department': top_row.get('department'),
+                    'late_count': int(top_row.get('late_count') or 0),
+                    'early_count': int(top_row.get('early_count') or 0),
+                    'total_minutes': int(top_row.get('total_minutes') or 0),
+                }
+                for top_row in top_short_hours_rows
+            ],
+        }
+        total_records = kpis['total']
 
         query = f"""
             SELECT
@@ -1805,16 +1955,29 @@ def get_admin_attendance_exceptions(
                     COALESCE(ae.exception_date, a.date) + ae.exception_time::time
                 ) AS login_time,
                 a.logout_time AS logout_time,
-                ae.requested_at AS created_date
+                ae.requested_at AS created_date,
+                COALESCE(a.working_hours, 0) AS working_hours,
+                (
+                    SELECT COUNT(*)
+                    FROM attendance_exceptions ae2
+                    WHERE ae2.emp_code = ae.emp_code
+                      AND ae2.emp_code IS NOT NULL
+                      AND ae2.id <> ae.id
+                      AND LOWER(COALESCE(ae2.status, '')) <> 'cancelled'
+                      AND COALESCE(ae2.exception_date, ae2.requested_at::date) BETWEEN
+                          COALESCE(ae.exception_date, ae.requested_at::date) - INTERVAL '90 days'
+                          AND COALESCE(ae.exception_date, ae.requested_at::date)
+                ) AS prior_exceptions_90d
             {base_query}
             ORDER BY
-                COALESCE(ae.exception_date, a.date) DESC NULLS LAST,
-                ae.requested_at DESC NULLS LAST,
-                ae.id DESC
+                {_build_exception_order_by(sort_by, sort_order)}
             LIMIT %s OFFSET %s
         """
         cursor.execute(query, [*params, normalized_page_size, offset])
         rows = cursor.fetchall()
+        for row in rows:
+            row['working_hours'] = float(row.get('working_hours') or 0)
+            row['prior_exceptions_90d'] = int(row.get('prior_exceptions_90d') or 0)
         rows = _serialize_exception_rows(rows)
 
         for row in rows:
@@ -1826,6 +1989,10 @@ def get_admin_attendance_exceptions(
             "success": True,
             "data": {
                 "records": rows,
+                "kpis": kpis,
+                "filter_options": {
+                    "departments": department_options,
+                },
                 "pagination": {
                     "page": normalized_page,
                     "page_size": normalized_page_size,

@@ -3,17 +3,16 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { appRoutes } from '../../../app/config/routes'
 import '../../../App.css'
 import {
-  API_TELEMETRY_EMP_CODE,
-  LEAVE_STATUS_FILTER_OPTIONS,
-  LEAVE_TYPE_FILTER_OPTIONS
+  API_TELEMETRY_EMP_CODE
 } from '../config/sidebar'
 import { useAdminLoginExperience } from '../hooks/useAdminLoginExperience'
 import { useAdminAuth } from '../hooks/useAdminAuth'
 import { useDashboardData } from '../hooks/useDashboardData'
 import { useEmployeesPanel } from '../employees/useEmployeesPanel'
 import { useAttendancePanel } from '../attendance/useAttendancePanel'
-import { useAttendanceExceptionsPanel } from '../attendance-exceptions/useAttendanceExceptionsPanel'
+import { useAttendanceExceptionsData } from '../attendance-exceptions/useAttendanceExceptionsData'
 import { useLeavesPanel } from '../leaves/useLeavesPanel'
+import { useAdminLeavesData } from '../leaves/useAdminLeavesData'
 import { useActivitiesPanel } from '../activities/useActivitiesPanel'
 import { useFieldVisitsPanel } from '../field-visits/useFieldVisitsPanel'
 import { useCalendarPanel } from '../calendar/useCalendarPanel'
@@ -42,8 +41,7 @@ import {
   formatEmployeeGrade,
   formatLeaveTypeLabel,
   formatWorkingHours,
-  getLeaveApproverLabel,
-  getLeaveReasonLabel
+  getLeaveApproverLabel
 } from '../utils/formatters'
 import {
   formatVisitDuration,
@@ -689,37 +687,57 @@ function FawnixApp() {
   })
 
   const {
-    attendanceExceptionFilters,
-    attendanceExceptionRows,
-    attendanceExceptionLoading,
-    attendanceExceptionError,
-    setAttendanceExceptionPage,
-    attendanceExceptionPagination,
-    updateAttendanceExceptionFilter,
-    applyAttendanceExceptionFilters,
-    clearAttendanceExceptionFilters,
-    loadAttendanceExceptions,
-    resetAttendanceExceptionsPanel
-  } = useAttendanceExceptionsPanel({
+    filters: attendanceExceptionFilters,
+    rows: attendanceExceptionRows,
+    kpis: attendanceExceptionKpis,
+    filterOptions: attendanceExceptionFilterOptions,
+    loading: attendanceExceptionLoading,
+    error: attendanceExceptionError,
+    changePage: setAttendanceExceptionPage,
+    pagination: attendanceExceptionPagination,
+    lastSyncedAt: attendanceExceptionLastSyncedAt,
+    updateFilter: updateAttendanceExceptionFilter,
+    clearFilters: clearAttendanceExceptionFilters,
+    refresh: loadAttendanceExceptions,
+    setSort: setAttendanceExceptionSort,
+    applyPreset: presetAttendanceExceptionFilter,
+    reset: resetAttendanceExceptionsPanel
+  } = useAttendanceExceptionsData({
     isActive: activePanel === 'attendance-exceptions',
     accessToken,
     apiRequest
   })
 
-  const {
-    leaveFilters,
-    leaveFilterLoading,
-    leaveFilterStatus,
-    updateLeaveFilter,
-    refreshLeaves,
-    clearLeaveFilters,
-    leaveEmployeeNameOptions,
-    leaveEmployeeIdOptions,
-    resetLeavesPanel
-  } = useLeavesPanel({
+  // Only resetLeavesPanel is consumed here (on logout) — the rest of this
+  // hook's filter/refresh surface was exclusive to the legacy Leaves admin
+  // page, now replaced by useAdminLeavesData below. leaveRows/setLeaveRows
+  // themselves come from useDashboardData and back unrelated dashboard
+  // panels, so that state is untouched.
+  const { resetLeavesPanel } = useLeavesPanel({
     employees,
     apiRequest,
     setLeaveRows
+  })
+
+  const {
+    filters: adminLeaveFilters,
+    rows: adminLeaveRows,
+    kpis: adminLeaveKpis,
+    filterOptions: adminLeaveFilterOptions,
+    loading: adminLeaveLoading,
+    error: adminLeaveError,
+    changePage: setAdminLeavePage,
+    pagination: adminLeavePagination,
+    lastSyncedAt: adminLeaveLastSyncedAt,
+    updateFilter: updateAdminLeaveFilter,
+    clearFilters: clearAdminLeaveFilters,
+    refresh: refreshAdminLeaves,
+    setSort: setAdminLeaveSort,
+    applyPreset: presetAdminLeaveFilter
+  } = useAdminLeavesData({
+    isActive: activePanel === 'leaves',
+    accessToken,
+    apiRequest
   })
 
   const { showTodayActivities, setShowTodayActivities, filteredActivities } = useActivitiesPanel({
@@ -892,16 +910,22 @@ function FawnixApp() {
         <AdminAttendanceExceptionsPage
           error={attendanceExceptionError}
           filters={attendanceExceptionFilters}
+          filterOptions={attendanceExceptionFilterOptions}
           formatDate={formatDate}
           formatDateTime={formatDateTime}
+          kpis={attendanceExceptionKpis}
           loading={attendanceExceptionLoading}
-          onApplyFilters={applyAttendanceExceptionFilters}
+          lastSyncedAt={attendanceExceptionLastSyncedAt}
           onChangePage={setAttendanceExceptionPage}
           onClearFilters={clearAttendanceExceptionFilters}
-          onRefresh={() => void loadAttendanceExceptions(accessToken)}
+          onRefresh={loadAttendanceExceptions}
+          onSort={setAttendanceExceptionSort}
+          onPresetFilter={presetAttendanceExceptionFilter}
           pagination={attendanceExceptionPagination}
           records={attendanceExceptionRows}
           updateFilter={updateAttendanceExceptionFilter}
+          apiRequest={apiRequest}
+          accessToken={accessToken}
         />
       )
     }
@@ -1008,24 +1032,25 @@ function FawnixApp() {
     if (activePanel === 'leaves') {
       return (
         <AdminLeavesPage
-          clearLeaveFilters={() => clearLeaveFilters()}
-          employees={employees}
+          error={adminLeaveError}
+          filters={adminLeaveFilters}
+          filterOptions={adminLeaveFilterOptions}
           formatDate={formatDate}
-          formatDateOnly={formatDateOnly}
-          formatLeaveTypeLabel={formatLeaveTypeLabel}
-          getLeaveApproverLabel={getLeaveApproverLabel}
-          getLeaveReasonLabel={getLeaveReasonLabel}
-          leaveEmployeeIdOptions={leaveEmployeeIdOptions}
-          leaveEmployeeNameOptions={leaveEmployeeNameOptions}
-          leaveFilterLoading={leaveFilterLoading}
-          leaveFilters={leaveFilters}
-          leaveFilterStatus={leaveFilterStatus}
-          leaveRows={leaveRows}
-          leaveStatusOptions={LEAVE_STATUS_FILTER_OPTIONS}
-          leaveTypeOptions={LEAVE_TYPE_FILTER_OPTIONS}
+          formatDateTime={formatDateTime}
+          kpis={adminLeaveKpis}
+          loading={adminLeaveLoading}
+          lastSyncedAt={adminLeaveLastSyncedAt}
+          onChangePage={setAdminLeavePage}
+          onClearFilters={clearAdminLeaveFilters}
+          onRefresh={refreshAdminLeaves}
+          onSort={setAdminLeaveSort}
+          onPresetFilter={presetAdminLeaveFilter}
+          pagination={adminLeavePagination}
+          records={adminLeaveRows}
+          updateFilter={updateAdminLeaveFilter}
           onAlertManager={alertLeaveManager}
-          refreshLeaves={refreshLeaves}
-          updateLeaveFilter={updateLeaveFilter}
+          apiRequest={apiRequest}
+          accessToken={accessToken}
         />
       )
     }

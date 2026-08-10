@@ -114,9 +114,9 @@ export type AttendanceExceptionRow = {
   exception_time?: string
   planned_arrival_time?: string
   planned_leave_time?: string
-  late_by_minutes?: number
-  early_by_minutes?: number
-  reason?: string
+  late_by_minutes?: number | null
+  early_by_minutes?: number | null
+  reason?: string | null
   status?: string
   requested_at?: string
   actual_login_time?: string
@@ -130,12 +130,53 @@ export type AttendanceExceptionStatus =
   | 'cancelled'
   | 'resolved'
 
+export type AdminAttendanceExceptionKpiTrendPoint = {
+  date: string
+  count: number
+}
+
+export type AdminAttendanceExceptionRepeatOffenders = {
+  employee_count: number
+  exception_count: number
+}
+
+export type AdminAttendanceExceptionTopShortHoursEntry = {
+  employee_name: string | null
+  employee_code: string | null
+  department: string | null
+  late_count: number
+  early_count: number
+  total_minutes: number
+}
+
+export type AdminAttendanceExceptionKpis = {
+  total: number
+  pending: number
+  early_leave: number
+  late_arrival: number
+  approved: number
+  rejected: number
+  current_month_total: number
+  previous_month_total: number
+  oldest_pending_days: number | null
+  daily_trend: AdminAttendanceExceptionKpiTrendPoint[]
+  repeat_offenders: AdminAttendanceExceptionRepeatOffenders
+  top_short_hours: AdminAttendanceExceptionTopShortHoursEntry[]
+}
+
+export type AdminAttendanceExceptionFilterOptions = {
+  departments: string[]
+}
+
 export type AdminAttendanceExceptionFilterState = {
   search: string
   exceptionType: string
   status: string
+  department: string
   fromDate: string
   toDate: string
+  sortBy: string
+  sortOrder: 'asc' | 'desc'
 }
 
 export type AdminAttendanceExceptionRecord = {
@@ -155,14 +196,21 @@ export type AdminAttendanceExceptionRecord = {
   logout_time?: string
   planned_arrival_time?: string
   planned_leave_time?: string
-  late_by_minutes?: number
-  early_by_minutes?: number
-  reason?: string
-  notes?: string
+  late_by_minutes?: number | null
+  early_by_minutes?: number | null
+  reason?: string | null
+  notes?: string | null
   status?: string
+  manager_remarks?: string | null
+  reviewed_by?: string | null
+  reviewed_at?: string | null
   requested_at?: string
+  created_at?: string
+  updated_at?: string
   created_date?: string
   available_actions?: string[]
+  working_hours?: number
+  prior_exceptions_90d?: number
 }
 
 export type AdminAttendanceExceptionPagination = {
@@ -172,6 +220,104 @@ export type AdminAttendanceExceptionPagination = {
   total_pages: number
   has_next: boolean
   has_previous: boolean
+}
+
+export type AdminLeaveKpiTrendPoint = {
+  date: string
+  count: number
+}
+
+export type AdminLeaveAgeBuckets = {
+  under_7: number
+  d7_30: number
+  d30_90: number
+  over_90: number
+}
+
+export type AdminLeaveTopDaysEntry = {
+  employee_name: string | null
+  employee_code: string | null
+  department: string | null
+  casual_days: number
+  sick_days: number
+  total_days: number
+}
+
+export type AdminLeaveKpis = {
+  total: number
+  pending: number
+  approved: number
+  rejected: number
+  cancelled: number
+  current_month_total: number
+  previous_month_total: number
+  oldest_pending_days: number | null
+  pending_employee_count: number
+  daily_trend: AdminLeaveKpiTrendPoint[]
+  age_buckets: AdminLeaveAgeBuckets
+  top_leave_days: AdminLeaveTopDaysEntry[]
+}
+
+export type AdminLeaveFilterOptions = {
+  departments: string[]
+  managers: Array<{ code: string; name: string }>
+}
+
+export type AdminLeaveFilterState = {
+  search: string
+  leaveType: string
+  status: string
+  department: string
+  manager: string
+  fromDate: string
+  toDate: string
+  sortBy: string
+  sortOrder: 'asc' | 'desc'
+}
+
+export type AdminLeaveRecord = {
+  id?: number
+  employee_code?: string
+  employee_name?: string
+  department?: string
+  leave_type?: string
+  duration?: string
+  leave_count?: number
+  from_date?: string
+  to_date?: string
+  applied_at?: string
+  status?: string
+  manager_code?: string
+  manager_name?: string
+  reviewed_by?: string | null
+  reviewed_at?: string | null
+  remarks?: string | null
+  notes?: string | null
+  created_at?: string
+  updated_at?: string
+  prior_requests_90d?: number
+}
+
+export type AdminLeavePagination = {
+  page: number
+  page_size: number
+  total_records: number
+  total_pages: number
+  has_next: boolean
+  has_previous: boolean
+}
+
+export type AdminLeaveBalanceEntry = {
+  max: number
+  used: number
+  remaining: number
+}
+
+export type AdminLeaveBalance = {
+  casual?: AdminLeaveBalanceEntry
+  sick?: AdminLeaveBalanceEntry
+  annual?: AdminLeaveBalanceEntry
+  monthly?: AdminLeaveBalanceEntry
 }
 
 export type AdminApiTelemetryEntry = {

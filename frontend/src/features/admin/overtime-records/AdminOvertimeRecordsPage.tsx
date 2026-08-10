@@ -14,7 +14,7 @@ import type {
 
 const ALL_COLUMNS: ColumnDef[] = [
   { key: 'employee', label: 'Employee' },
-  { key: 'work_date', label: 'Work Date' },
+  { key: 'work_date', label: 'Dates' },
   { key: 'day', label: 'Day' },
   { key: 'extra_hours', label: 'Extra Hours' },
   { key: 'comp_off_days', label: 'Comp-Off Days' },
@@ -41,7 +41,6 @@ const ALL_COLUMNS: ColumnDef[] = [
 const DEFAULT_VISIBLE = new Set([
   'employee',
   'work_date',
-  'day',
   'extra_hours',
   'comp_off_days',
   'status',
@@ -49,7 +48,7 @@ const DEFAULT_VISIBLE = new Set([
   'details',
 ])
 
-const STORAGE_KEY = 'fawnix_overtime_columns_v1'
+const STORAGE_KEY = 'fawnix_overtime_columns_v2'
 
 const OVERTIME_STATUS_OPTIONS: AdminOvertimeStatus[] = [
   'eligible',
@@ -245,6 +244,23 @@ function toDateTimeInputText(value?: string | null) {
   ].join('')
 }
 
+function formatCompactDate(value?: string | null) {
+  const parsed = parseDateValue(value)
+  if (!parsed) {
+    return '--'
+  }
+
+  return parsed.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+  })
+}
+
+function formatWorkDateRange(record: AdminOvertimeRecord) {
+  const dateLabel = formatCompactDate(record.work_date)
+  return `${dateLabel} - ${dateLabel}`
+}
+
 function getDayLabel(record: AdminOvertimeRecord) {
   const existing = (record.day_of_week || '').trim()
   if (existing) {
@@ -256,7 +272,7 @@ function getDayLabel(record: AdminOvertimeRecord) {
     return '--'
   }
 
-  return parsed.toLocaleDateString('en-IN', { weekday: 'short' })
+  return parsed.toLocaleDateString('en-IN', { weekday: 'long' })
 }
 
 function getEmployeeName(record: AdminOvertimeRecord) {
@@ -356,7 +372,7 @@ function getCsvValue(
     case 'employee':
       return getEmployeeName(record)
     case 'work_date':
-      return formatDateOnly(record.work_date)
+      return `${formatWorkDateRange(record)} ${getDayLabel(record)}`
     case 'day':
       return getDayLabel(record)
     case 'extra_hours':
@@ -1667,7 +1683,7 @@ export default function AdminOvertimeRecordsPage({
               <thead>
                 <tr>
                   <PlainTh columnKey="employee" label="Employee" visible={vis('employee')} />
-                  <PlainTh columnKey="work_date" label="Work Date" visible={vis('work_date')} />
+                  <PlainTh columnKey="work_date" label="Dates" visible={vis('work_date')} />
                   <PlainTh columnKey="day" label="Day" visible={vis('day')} />
                   <PlainTh columnKey="extra_hours" label="Extra Hours" visible={vis('extra_hours')} />
                   <PlainTh columnKey="comp_off_days" label="Comp-Off Days" visible={vis('comp_off_days')} />
@@ -1718,7 +1734,12 @@ export default function AdminOvertimeRecordsPage({
                           </div>
                         </td>
                       )}
-                      {vis('work_date') && <td className="otr-td otr-td--mono otr-col--work_date">{formatDateOnly(record.work_date)}</td>}
+                      {vis('work_date') && (
+                        <td className="otr-td otr-td--date otr-col--work_date">
+                          <span className="otr-date-range">{formatWorkDateRange(record)}</span>
+                          <span className="otr-date-day">{getDayLabel(record)}</span>
+                        </td>
+                      )}
                       {vis('day') && <td className="otr-td otr-col--day">{getDayLabel(record)}</td>}
                       {vis('extra_hours') && <td className="otr-td otr-td--num otr-col--extra_hours">{formatDecimal(record.extra_hours, 'h')}</td>}
                       {vis('comp_off_days') && <td className="otr-td otr-td--num otr-col--comp_off_days">{formatDecimal(record.comp_off_days, 'd')}</td>}

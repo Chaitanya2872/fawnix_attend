@@ -119,6 +119,26 @@ function fmtCompactDate(v?: string) {
   return `${day} ${SHORT_MONTHS[monthIndex] || ''}`.trim()
 }
 
+function fmtWeekday(v?: string) {
+  const raw = (v || '').trim()
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw)
+  if (!match) return '--'
+
+  const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  if (Number.isNaN(parsed.getTime())) return '--'
+
+  return parsed.toLocaleDateString('en-IN', { weekday: 'long' })
+}
+
+function fmtDateRangeDay(fromDate?: string, toDate?: string) {
+  const fromDay = fmtWeekday(fromDate)
+  const toDay = fmtWeekday(toDate)
+
+  if (fromDay === '--') return toDay
+  if (toDay === '--' || fromDay === toDay) return fromDay
+  return `${fromDay} - ${toDay}`
+}
+
 function truncate(v: string | null | undefined, max = 40) {
   if (!v) return '--'
   return v.length > max ? v.slice(0, max) + 'â€¦' : v
@@ -451,8 +471,13 @@ export default function AdminLeavesPage({
                           <td className="lv-td lv-td--trunc" title={row.department || ''}>{row.department || '--'}</td>
                         )}
                         {vis('dates') && (
-                          <td className="lv-td lv-td--mono">
-                            {fmtCompactDate(row.from_date)} â€“ {fmtCompactDate(row.to_date)}
+                          <td className="lv-td lv-td--date">
+                            <span className="lv-date-range">
+                              {fmtCompactDate(row.from_date)} - {fmtCompactDate(row.to_date)}
+                            </span>
+                            <span className="lv-date-day">
+                              {fmtDateRangeDay(row.from_date, row.to_date)}
+                            </span>
                           </td>
                         )}
                         {vis('days') && (

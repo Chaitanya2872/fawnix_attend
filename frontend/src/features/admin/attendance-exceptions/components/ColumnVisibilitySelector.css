@@ -1,0 +1,111 @@
+/* Self-contained styles for ColumnVisibilitySelector so it renders
+   correctly on any page that uses it, regardless of load order. Colors
+   are the shared blue admin design-system values, kept literal since
+   this component is used across pages. */
+
+.exc-col-selector {
+  position: relative;
+}
+
+.exc-col-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #cfe0f2;
+  background: #fff;
+  color: #22456c;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 5px 11px;
+  border-radius: 7px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.exc-col-trigger:hover {
+  border-color: #9dc2e8;
+}
+
+.exc-col-badge {
+  min-width: 17px;
+  padding: 1px 5px;
+  border-radius: 20px;
+  background: #2f7fe0;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.exc-col-arrow {
+  font-size: 8px;
+}
+
+.exc-col-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 226px;
+  max-height: 340px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #cfe0f2;
+  border-radius: 9px;
+  box-shadow: 0 12px 28px rgba(15, 41, 71, 0.15);
+  padding: 5px;
+  z-index: 50;
+}
+
+.exc-col-dropdown-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 8px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #57708f;
+  border-bottom: 1px solid #e8f0f9;
+  margin-bottom: 5px;
+}
+
+.exc-col-reset {
+  border: 0;
+  background: transparent;
+  color: #1b5fb0;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 5px;
+}
+
+.exc-col-reset:hover {
+  background: #f2f8ff;
+}
+
+.exc-col-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: #40597a;
+  user-select: none;
+}
+
+.exc-col-item:hover {
+  background: #f2f8ff;
+}
+
+.exc-col-item input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  accent-color: #2f7fe0;
+  flex-shrink: 0;
+}

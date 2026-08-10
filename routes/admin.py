@@ -3,6 +3,7 @@ Admin Routes
 Administrative endpoints
 """
 
+# pyrefly: ignore [missing-import]
 from flask import Blueprint, jsonify, Response, send_file
 from middleware.auth_middleware import token_required
 from middleware.admin_middleware import hr_or_devtester_required, api_log_viewer_required
@@ -35,6 +36,7 @@ from services.api_log_service import get_api_logs
 
 from database.connection import get_db_connection, return_connection
 from datetime import datetime, date, time
+# pyrefly: ignore [missing-import]
 from flask import request
 
 admin_bp = Blueprint('admin', __name__)
@@ -963,6 +965,94 @@ def get_all_leaves(current_user):
     return jsonify(response), status_code
 
 
+@admin_bp.route('/leaves/board', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_admin_leaves_board(current_user):
+    """
+    Server-side paginated/filtered/sorted leave board for the admin Leaves
+    page: records + KPIs + filter options in one response. Separate from
+    GET /leaves above, which other call sites already depend on with a
+    fixed (unpaginated) contract.
+    Query params:
+    - page, page_size (default 1 / 15, page_size capped at 100)
+    - search: matches employee name, employee code, or manager name
+    - status: pending/approved/rejected/cancelled
+    - leave_type: casual/sick/annual/monthly
+    - department, manager_code
+    - from_date, to_date: YYYY-MM-DD (filters on the leave's own from_date)
+    - sort_by: applied_at | from_date | leave_count | employee_name
+    - sort_order: asc | desc
+    """
+    page = request.args.get('page', default=1, type=int)
+    page_size = request.args.get('page_size', default=15, type=int)
+    search = request.args.get('search')
+    status = request.args.get('status')
+    leave_type = request.args.get('leave_type')
+    department = request.args.get('department')
+    manager_code = request.args.get('manager_code')
+    sort_by = request.args.get('sort_by')
+    sort_order = request.args.get('sort_order')
+    from_date_str = request.args.get('from_date')
+    to_date_str = request.args.get('to_date')
+
+    from_date = None
+    to_date = None
+
+    if from_date_str:
+        try:
+            from_date = datetime.strptime(from_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid from_date format. Use YYYY-MM-DD"
+            }), 400
+
+    if to_date_str:
+        try:
+            to_date = datetime.strptime(to_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": "Invalid to_date format. Use YYYY-MM-DD"
+            }), 400
+
+    if from_date and to_date and from_date > to_date:
+        return jsonify({
+            "success": False,
+            "message": "from_date must be on or before to_date"
+        }), 400
+
+    response, status_code = admin_service.get_admin_leaves_board(
+        search=search,
+        status=status,
+        leave_type=leave_type,
+        department=department,
+        manager_code=manager_code,
+        from_date=from_date,
+        to_date=to_date,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
+    )
+
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/leaves/balance', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_admin_leave_balance_route(current_user):
+    """Leave balance for a specific employee, for the admin Leaves detail drawer."""
+    emp_code = (request.args.get('emp_code') or '').strip()
+    if not emp_code:
+        return jsonify({"success": False, "message": "emp_code is required"}), 400
+
+    response, status_code = admin_service.get_admin_leave_balance(emp_code)
+    return jsonify(response), status_code
+
+
 @admin_bp.route('/leaves/import', methods=['POST'])
 @token_required
 @hr_or_devtester_required
@@ -1446,14 +1536,20 @@ def admin_attendance_exceptions(current_user):
     - search: partial employee name or code search
     - type: late_arrival | early_leave
     - status: pending | approved | rejected | cancelled | resolved
+    - department: partial department name filter
     - from_date: YYYY-MM-DD
     - to_date: YYYY-MM-DD
+    - sort_by: attendance_date | exception_type | status | late_by_minutes | early_by_minutes | severity | employee_name
+    - sort_order: asc | desc (default: desc)
     """
     page = request.args.get('page', default=1, type=int) or 1
     page_size = request.args.get('page_size', default=10, type=int) or 10
     search = request.args.get('search')
     status = request.args.get('status')
     exception_type = request.args.get('type')
+    department = request.args.get('department')
+    sort_by = request.args.get('sort_by')
+    sort_order = request.args.get('sort_order')
     from_date_str = request.args.get('from_date')
     to_date_str = request.args.get('to_date')
 
@@ -1489,8 +1585,11 @@ def admin_attendance_exceptions(current_user):
         search=search,
         status=status,
         exception_type=exception_type,
+        department=department,
         from_date=from_date,
         to_date=to_date,
+        sort_by=sort_by,
+        sort_order=sort_order,
         page=page,
         page_size=page_size,
     )

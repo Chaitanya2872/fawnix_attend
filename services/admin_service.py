@@ -5,6 +5,7 @@ Business logic for admin-only operations
 
 from database.connection import get_db_connection
 from datetime import date, datetime, time, timedelta
+from typing import Dict, List
 import calendar
 from collections import OrderedDict
 from services.attendance_constants import ATTENDANCE_STATUS_LOGGED_IN
@@ -2004,6 +2005,329 @@ def get_all_leaves(limit: int = 100, status: str = None, emp_code: str = None,
     finally:
         cursor.close()
         conn.close()
+
+
+_LEAVE_SORT_COLUMN_MAP = {
+    'applied_at': 'l.applied_at',
+    'from_date': 'l.from_date',
+    'leave_count': 'l.leave_count',
+    'employee_name': "COALESCE(NULLIF(TRIM(e.emp_full_name), ''), l.emp_name)",
+}
+
+
+def _build_leave_order_by(sort_by: str = None, sort_order: str = None) -> str:
+    col = _LEAVE_SORT_COLUMN_MAP.get((sort_by or '').strip().lower())
+    direction = 'ASC' if (sort_order or '').strip().upper() == 'ASC' else 'DESC'
+    if col:
+        return f"{col} {direction} NULLS LAST, l.applied_at DESC NULLS LAST, l.id DESC"
+    return "l.applied_at DESC NULLS LAST, l.id DESC"
+
+
+def _serialize_leave_row(row: Dict) -> Dict:
+    for key, value in row.items():
+        if isinstance(value, datetime):
+            row[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+        elif isinstance(value, date):
+            row[key] = value.strftime('%Y-%m-%d')
+    return row
+
+
+def get_admin_leaves_board(
+    *,
+    search: str = None,
+    status: str = None,
+    leave_type: str = None,
+    department: str = None,
+    manager_code: str = None,
+    from_date: date = None,
+    to_date: date = None,
+    sort_by: str = None,
+    sort_order: str = None,
+    page: int = 1,
+    page_size: int = 15,
+):
+    """Server-side paginated/filtered/sorted leave board — records, KPIs and
+    filter options for the redesigned admin Leaves page. Distinct from
+    get_all_leaves(), which several other call sites (team-leaves fallback,
+    the legacy /api/admin/leaves route) rely on with a fixed contract."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        normalized_page = max(int(page or 1), 1)
+        normalized_page_size = min(max(int(page_size or 15), 1), 100)
+        offset = (normalized_page - 1) * normalized_page_size
+
+        base_query = """
+            FROM leaves l
+            LEFT JOIN employees e ON l.emp_code = e.emp_code
+            LEFT JOIN employees mgr ON l.manager_code = mgr.emp_code
+            WHERE 1=1
+        """
+        params: List[object] = []
+
+        normalized_search = (search or '').strip()
+        if normalized_search:
+            like_value = f"%{normalized_search}%"
+            base_query += """
+                AND (
+                    COALESCE(NULLIF(TRIM(e.emp_full_name), ''), l.emp_name) ILIKE %s
+                    OR l.emp_code ILIKE %s
+                    OR COALESCE(NULLIF(TRIM(mgr.emp_full_name), ''), '') ILIKE %s
+                )
+            """
+            params.extend([like_value, like_value, like_value])
+
+        normalized_status = (status or '').strip().lower()
+        if normalized_status:
+            base_query += " AND LOWER(COALESCE(l.status, '')) = %s"
+            params.append(normalized_status)
+
+        normalized_type = (leave_type or '').strip().lower()
+        if normalized_type:
+            base_query += " AND LOWER(COALESCE(l.leave_type, '')) = %s"
+            params.append(normalized_type)
+
+        normalized_department = (department or '').strip()
+        if normalized_department:
+            base_query += " AND NULLIF(TRIM(COALESCE(e.emp_department, '')), '') ILIKE %s"
+            params.append(f"%{normalized_department}%")
+
+        normalized_manager = (manager_code or '').strip()
+        if normalized_manager:
+            base_query += " AND l.manager_code = %s"
+            params.append(normalized_manager)
+
+        if from_date:
+            base_query += " AND l.from_date >= %s"
+            params.append(from_date)
+
+        if to_date:
+            base_query += " AND l.from_date <= %s"
+            params.append(to_date)
+
+        # --- KPI counts (same WHERE clause as the records query) ---
+        cursor.execute(f"""
+            SELECT
+                COUNT(*) AS total,
+                COUNT(CASE WHEN LOWER(COALESCE(l.status, '')) = 'pending' THEN 1 END) AS pending,
+                COUNT(CASE WHEN LOWER(COALESCE(l.status, '')) = 'approved' THEN 1 END) AS approved,
+                COUNT(CASE WHEN LOWER(COALESCE(l.status, '')) = 'rejected' THEN 1 END) AS rejected,
+                COUNT(CASE WHEN LOWER(COALESCE(l.status, '')) = 'cancelled' THEN 1 END) AS cancelled,
+                COUNT(CASE WHEN l.from_date >= date_trunc('month', CURRENT_DATE) THEN 1 END) AS current_month_total,
+                COUNT(CASE WHEN l.from_date >= date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
+                             AND l.from_date < date_trunc('month', CURRENT_DATE) THEN 1 END) AS previous_month_total,
+                MIN(CASE WHEN LOWER(COALESCE(l.status, '')) = 'pending' THEN l.applied_at END) AS oldest_pending_applied_at,
+                COUNT(DISTINCT CASE WHEN LOWER(COALESCE(l.status, '')) = 'pending' THEN l.emp_code END) AS pending_employee_count
+            {base_query}
+        """, params)
+        kpi_row = cursor.fetchone() or {}
+
+        oldest_pending_applied_at = kpi_row.get('oldest_pending_applied_at')
+        oldest_pending_days = None
+        if oldest_pending_applied_at:
+            applied_dt = oldest_pending_applied_at
+            if isinstance(applied_dt, datetime):
+                applied_dt = applied_dt.date()
+            oldest_pending_days = (date.today() - applied_dt).days
+
+        # --- Age buckets for pending requests (waiting-time histogram) ---
+        cursor.execute(f"""
+            SELECT
+                COUNT(*) FILTER (WHERE age_days < 7) AS under_7,
+                COUNT(*) FILTER (WHERE age_days >= 7 AND age_days < 30) AS d7_30,
+                COUNT(*) FILTER (WHERE age_days >= 30 AND age_days < 90) AS d30_90,
+                COUNT(*) FILTER (WHERE age_days >= 90) AS over_90
+            FROM (
+                SELECT (CURRENT_DATE - l.applied_at::date) AS age_days
+                {base_query}
+                  AND LOWER(COALESCE(l.status, '')) = 'pending'
+            ) ages
+        """, params)
+        age_row = cursor.fetchone() or {}
+
+        # --- Daily request volume for the trailing 14 days (KPI sparkline) ---
+        cursor.execute(f"""
+            SELECT
+                l.applied_at::date AS day,
+                COUNT(*) AS cnt
+            {base_query}
+              AND l.applied_at::date >= CURRENT_DATE - INTERVAL '13 days'
+            GROUP BY day
+            ORDER BY day
+        """, params)
+        trend_rows = cursor.fetchall() or []
+        trend_by_day: Dict[date, int] = {}
+        for trend_row in trend_rows:
+            day_value = trend_row.get('day')
+            if isinstance(day_value, datetime):
+                day_value = day_value.date()
+            if day_value:
+                trend_by_day[day_value] = int(trend_row.get('cnt') or 0)
+        today = date.today()
+        daily_trend = [
+            {
+                'date': (today - timedelta(days=offset_days)).strftime('%Y-%m-%d'),
+                'count': trend_by_day.get(today - timedelta(days=offset_days), 0),
+            }
+            for offset_days in range(13, -1, -1)
+        ]
+
+        # --- Top employees by leave days booked (approved + pending only —
+        # rejected/cancelled requests never became time away) ---
+        cursor.execute(f"""
+            SELECT
+                COALESCE(NULLIF(TRIM(e.emp_full_name), ''), l.emp_name) AS employee_name,
+                l.emp_code AS employee_code,
+                NULLIF(TRIM(COALESCE(e.emp_department, '')), '') AS department,
+                COALESCE(SUM(l.leave_count) FILTER (WHERE LOWER(l.leave_type) = 'casual'), 0) AS casual_days,
+                COALESCE(SUM(l.leave_count) FILTER (WHERE LOWER(l.leave_type) = 'sick'), 0) AS sick_days,
+                COALESCE(SUM(l.leave_count), 0) AS total_days
+            {base_query}
+              AND LOWER(COALESCE(l.status, '')) IN ('approved', 'pending')
+            GROUP BY 1, 2, 3
+            ORDER BY total_days DESC
+            LIMIT 5
+        """, params)
+        top_days_rows = cursor.fetchall() or []
+
+        kpis = {
+            'total': int(kpi_row.get('total') or 0),
+            'pending': int(kpi_row.get('pending') or 0),
+            'approved': int(kpi_row.get('approved') or 0),
+            'rejected': int(kpi_row.get('rejected') or 0),
+            'cancelled': int(kpi_row.get('cancelled') or 0),
+            'current_month_total': int(kpi_row.get('current_month_total') or 0),
+            'previous_month_total': int(kpi_row.get('previous_month_total') or 0),
+            'oldest_pending_days': oldest_pending_days,
+            'pending_employee_count': int(kpi_row.get('pending_employee_count') or 0),
+            'daily_trend': daily_trend,
+            'age_buckets': {
+                'under_7': int(age_row.get('under_7') or 0),
+                'd7_30': int(age_row.get('d7_30') or 0),
+                'd30_90': int(age_row.get('d30_90') or 0),
+                'over_90': int(age_row.get('over_90') or 0),
+            },
+            'top_leave_days': [
+                {
+                    'employee_name': row.get('employee_name'),
+                    'employee_code': row.get('employee_code'),
+                    'department': row.get('department'),
+                    'casual_days': float(row.get('casual_days') or 0),
+                    'sick_days': float(row.get('sick_days') or 0),
+                    'total_days': float(row.get('total_days') or 0),
+                }
+                for row in top_days_rows
+            ],
+        }
+        total_records = kpis['total']
+
+        # --- Filter options: distinct departments + distinct managers (unfiltered, so lists don't shrink as filters are applied) ---
+        cursor.execute("""
+            SELECT DISTINCT emp_department
+            FROM employees
+            WHERE NULLIF(TRIM(COALESCE(emp_department, '')), '') IS NOT NULL
+            ORDER BY emp_department
+        """)
+        department_options = [row['emp_department'] for row in (cursor.fetchall() or []) if row.get('emp_department')]
+
+        cursor.execute("""
+            SELECT DISTINCT
+                l.manager_code AS code,
+                COALESCE(NULLIF(TRIM(mgr.emp_full_name), ''), l.manager_code) AS name
+            FROM leaves l
+            LEFT JOIN employees mgr ON l.manager_code = mgr.emp_code
+            WHERE NULLIF(TRIM(COALESCE(l.manager_code, '')), '') IS NOT NULL
+            ORDER BY name
+        """)
+        manager_options = [
+            {'code': row['code'], 'name': row.get('name') or row['code']}
+            for row in (cursor.fetchall() or [])
+            if row.get('code')
+        ]
+
+        # --- Paginated records ---
+        query = f"""
+            SELECT
+                l.id,
+                l.emp_code AS employee_code,
+                COALESCE(NULLIF(TRIM(e.emp_full_name), ''), l.emp_name) AS employee_name,
+                NULLIF(TRIM(COALESCE(e.emp_department, '')), '') AS department,
+                l.leave_type,
+                l.duration,
+                l.leave_count,
+                l.from_date,
+                l.to_date,
+                l.applied_at,
+                l.status,
+                l.manager_code,
+                COALESCE(NULLIF(TRIM(mgr.emp_full_name), ''), l.manager_code) AS manager_name,
+                l.reviewed_by,
+                l.reviewed_at,
+                l.remarks,
+                l.notes,
+                l.created_at,
+                l.updated_at,
+                (
+                    SELECT COUNT(*)
+                    FROM leaves l2
+                    WHERE l2.emp_code = l.emp_code
+                      AND l2.id <> l.id
+                      AND LOWER(COALESCE(l2.status, '')) <> 'cancelled'
+                      AND l2.applied_at >= CURRENT_DATE - INTERVAL '90 days'
+                ) AS prior_requests_90d
+            {base_query}
+            ORDER BY
+                {_build_leave_order_by(sort_by, sort_order)}
+            LIMIT %s OFFSET %s
+        """
+        cursor.execute(query, [*params, normalized_page_size, offset])
+        rows = cursor.fetchall()
+        for row in rows:
+            row['leave_count'] = float(row.get('leave_count') or 0)
+            row['prior_requests_90d'] = int(row.get('prior_requests_90d') or 0)
+        rows = [_serialize_leave_row(row) for row in rows]
+
+        total_pages = (total_records + normalized_page_size - 1) // normalized_page_size if total_records else 0
+
+        return ({
+            "success": True,
+            "data": {
+                "records": rows,
+                "kpis": kpis,
+                "filter_options": {
+                    "departments": department_options,
+                    "managers": manager_options,
+                },
+                "pagination": {
+                    "page": normalized_page,
+                    "page_size": normalized_page_size,
+                    "total_records": total_records,
+                    "total_pages": total_pages,
+                    "has_next": normalized_page < total_pages,
+                    "has_previous": normalized_page > 1 and total_pages > 0,
+                }
+            }
+        }, 200)
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_admin_leave_balance(emp_code: str):
+    """Leave balance for a specific employee, for the admin Leaves detail
+    drawer. Calls the underlying service function directly rather than the
+    employee-scoped /api/leaves/summary route, since that route only
+    reveals another employee's balance to designations it considers
+    "privileged" (hr/cmd/admin) — an admin panel session authorized via
+    hr_or_devtester_required is not guaranteed to satisfy that check."""
+    from services.leaves_service import get_employee_leave_balance
+
+    balance = get_employee_leave_balance((emp_code or '').strip())
+    if balance.get('error'):
+        return ({"success": False, "message": balance['error']}, 404)
+    return ({"success": True, "data": balance}, 200)
 
 
 def get_all_overtime_records(limit: int = 100, status: str = None,

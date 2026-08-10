@@ -1,14 +1,9 @@
-<<<<<<< HEAD
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { type FormEvent, useMemo, useState } from 'react'
-=======
-import { useCallback, useState, type ReactNode } from 'react'
+﻿import { useCallback, useState, type ReactNode } from 'react'
 import LeaveKpiCards from './components/Leavekpicards'
 import LeaveFilterBar from './components/LeaveFilterBar'
 import LeaveDrawer from './components/LeaveDrawer'
 import ColumnVisibilitySelector, { type ColumnDef } from '../attendance-exceptions/components/ColumnVisibilitySelector'
 import FilterDropdown from '../../../components/FilterDropdown'
->>>>>>> 24888b0f575e540ba0bf5968f3603b8d97b2756c
 import './AdminLeavesPage.css'
 import type {
   AdminLeaveFilterOptions,
@@ -19,7 +14,7 @@ import type {
   LeaveRow,
 } from '../../../types/admin'
 
-// ─── Column definitions ────────────────────────────────────────────────────────
+// â”€â”€â”€ Column definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const ALL_COLUMNS: ColumnDef[] = [
   { key: 'employee', label: 'Employee' },
   { key: 'leave_type', label: 'Leave Type' },
@@ -55,117 +50,6 @@ function loadVisibleKeys(): Set<string> {
   return new Set(DEFAULT_VISIBLE)
 }
 
-<<<<<<< HEAD
-const REQUIRED_IMPORT_FIELDS = ['emp_code', 'from_date', 'to_date', 'leave_type']
-const LEAVE_STATUS_IMPORT_OPTIONS = ['approved', 'pending', 'rejected', 'cancelled']
-const COMPACT_DATE_FORMATTER = new Intl.DateTimeFormat('en-IN', {
-  day: '2-digit',
-  month: 'short'
-})
-const WEEKDAY_FORMATTER = new Intl.DateTimeFormat('en-IN', { weekday: 'short' })
-
-function parseLeaveDate(value?: string) {
-  const rawValue = (value || '').trim()
-  if (!rawValue) {
-    return null
-  }
-
-  const dateMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (dateMatch) {
-    const [, year, month, day] = dateMatch
-    const parsed = new Date(Number(year), Number(month) - 1, Number(day))
-    return Number.isNaN(parsed.getTime()) ? null : parsed
-  }
-
-  const parsed = new Date(rawValue)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
-}
-
-function getLeaveDateKey(value?: string) {
-  const parsed = parseLeaveDate(value)
-  if (!parsed) {
-    return ''
-  }
-
-  return [
-    parsed.getFullYear(),
-    String(parsed.getMonth() + 1).padStart(2, '0'),
-    String(parsed.getDate()).padStart(2, '0')
-  ].join('-')
-}
-
-function formatCompactLeaveDate(value: string | undefined, formatDate: (nextValue?: string) => string) {
-  const parsed = parseLeaveDate(value)
-  return parsed ? COMPACT_DATE_FORMATTER.format(parsed) : formatDate(value)
-}
-
-function formatLeaveDateRange(row: any, formatDate: (nextValue?: string) => string) {
-  const fromDate = row.from_date
-  const toDate = row.to_date
-  const fromKey = getLeaveDateKey(fromDate)
-  const toKey = getLeaveDateKey(toDate)
-
-  if (!fromDate && !toDate) {
-    return '--'
-  }
-
-  if (!toDate || (fromKey && fromKey === toKey)) {
-    return formatCompactLeaveDate(fromDate, formatDate)
-  }
-
-  if (!fromDate) {
-    return formatCompactLeaveDate(toDate, formatDate)
-  }
-
-  return `${formatCompactLeaveDate(fromDate, formatDate)} - ${formatCompactLeaveDate(toDate, formatDate)}`
-}
-
-function formatLeaveWeekdayRange(row: any) {
-  const fromDate = parseLeaveDate(row.from_date)
-  const toDate = parseLeaveDate(row.to_date)
-  const fromKey = getLeaveDateKey(row.from_date)
-  const toKey = getLeaveDateKey(row.to_date)
-
-  if (!fromDate && !toDate) {
-    return ''
-  }
-
-  const fromWeekday = fromDate ? WEEKDAY_FORMATTER.format(fromDate) : ''
-  const toWeekday = toDate ? WEEKDAY_FORMATTER.format(toDate) : ''
-
-  if (!toWeekday || (fromKey && fromKey === toKey)) {
-    return fromWeekday
-  }
-
-  if (!fromWeekday) {
-    return toWeekday
-  }
-
-  return `${fromWeekday} - ${toWeekday}`
-}
-
-export default function AdminLeavesPage({
-  clearLeaveFilters,
-  downloadLeavesTemplate,
-  employees,
-  formatDate,
-  formatDateOnly,
-  formatLeaveTypeLabel,
-  getLeaveApproverLabel,
-  getLeaveReasonLabel,
-  leaveEmployeeIdOptions,
-  leaveEmployeeNameOptions,
-  leaveFilterLoading,
-  leaveFilters,
-  leaveFilterStatus,
-  leaveImportLoading,
-  leaveImportStatus,
-  leaveImportSummary,
-  leaveRows,
-  leaveStatusOptions,
-  leaveTypeOptions,
-  importLeaves,
-=======
 function saveVisibleKeys(keys: Set<string>) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...keys])) } catch { /* ignore */ }
 }
@@ -237,7 +121,7 @@ function fmtCompactDate(v?: string) {
 
 function truncate(v: string | null | undefined, max = 40) {
   if (!v) return '--'
-  return v.length > max ? v.slice(0, max) + '…' : v
+  return v.length > max ? v.slice(0, max) + 'â€¦' : v
 }
 
 function waitingDays(appliedAt?: string): number | null {
@@ -251,7 +135,7 @@ function waitingDays(appliedAt?: string): number | null {
 }
 
 // Presentation-only bucketing of an already-computed waiting-days value into
-// a visual severity tier — no attendance/leave business logic is derived
+// a visual severity tier â€” no attendance/leave business logic is derived
 // here, the day count itself always comes from the backend's applied_at.
 function ageTier(days: number | null): 'high' | 'medium' | 'low' {
   const value = days ?? 0
@@ -307,7 +191,7 @@ function PlainTh({ label, visible, children }: { label: string; visible: boolean
   return <th className="lv-th">{children || label}</th>
 }
 
-// ─── Props ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Props â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type Props = {
   error: string
   filters: AdminLeaveFilterState
@@ -337,7 +221,7 @@ type Props = {
   accessToken: string
 }
 
-// ─── Page Component ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Page Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function AdminLeavesPage({
   error,
   filters,
@@ -355,7 +239,6 @@ export default function AdminLeavesPage({
   pagination,
   records,
   updateFilter,
->>>>>>> 24888b0f575e540ba0bf5968f3603b8d97b2756c
   onAlertManager,
   apiRequest,
   accessToken,
@@ -365,15 +248,6 @@ export default function AdminLeavesPage({
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [alertLoadingKey, setAlertLoadingKey] = useState('')
   const [alertStatus, setAlertStatus] = useState('')
-<<<<<<< HEAD
-  const [importModalOpen, setImportModalOpen] = useState(false)
-  const [importFile, setImportFile] = useState<File | null>(null)
-  const [importDefaultStatus, setImportDefaultStatus] = useState('approved')
-  const [importStrictMode, setImportStrictMode] = useState(false)
-  const [importSkipDuplicates, setImportSkipDuplicates] = useState(true)
-  const normalizedLeaveStatus = (leaveFilters.status || '').trim().toLowerCase()
-=======
->>>>>>> 24888b0f575e540ba0bf5968f3603b8d97b2756c
 
   const toggleColumn = useCallback((key: string) => {
     setVisibleKeys((prev) => {
@@ -415,159 +289,22 @@ export default function AdminLeavesPage({
     }
   }
 
-<<<<<<< HEAD
-  const handleImportSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!importFile || leaveImportLoading) {
-      return
-    }
-
-    await importLeaves(importFile, {
-      defaultStatus: importDefaultStatus,
-      strict: importStrictMode,
-      skipDuplicates: importSkipDuplicates
-    })
-  }
-=======
-  const headline = `${kpis.pending.toLocaleString()} requests awaiting approval · oldest has been waiting ${kpis.oldest_pending_days ?? 0} day${kpis.oldest_pending_days === 1 ? '' : 's'}`
+  const headline = `${kpis.pending.toLocaleString()} requests awaiting approval Â· oldest has been waiting ${kpis.oldest_pending_days ?? 0} day${kpis.oldest_pending_days === 1 ? '' : 's'}`
   const syncedLabel = lastSyncedAt
     ? lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : null
->>>>>>> 24888b0f575e540ba0bf5968f3603b8d97b2756c
 
   return (
     <div className="admin-aligned-page admin-aligned-page--leaves">
-      {/* ─── Header ─────────────────────────────────────────── */}
+      {/* â”€â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="dashboard-section-head attendance-section-head">
         <div>
           <p className="eyebrow">Approvals</p>
           <h2>Leaves</h2>
           <p className="exception-head-copy">{kpis.pending > 0 ? headline : 'Nothing waiting on a manager right now.'}</p>
         </div>
-<<<<<<< HEAD
-        <div className="leave-page-actions">
-          <button
-            className="ghost dashboard-button leave-import-trigger"
-            onClick={() => setImportModalOpen(true)}
-            disabled={leaveImportLoading}
-            type="button"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M12 3v11m0-11 4 4m-4-4-4 4M5 15v3a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-3"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.8"
-              />
-            </svg>
-            Import Leaves
-          </button>
-          <button
-            className="ghost dashboard-button"
-            onClick={() => void refreshLeaves(leaveFilters, true)}
-            disabled={leaveFilterLoading}
-            type="button"
-          >
-            {leaveFilterLoading ? 'Loading...' : 'Refresh'}
-          </button>
-        </div>
-      </div>
-
-      <div className="chart-card pending-approvals-card leave-pending-card">
-        <button
-          className={`pending-approvals-toggle${pendingExpanded ? ' open' : ''}`}
-          onClick={() => setPendingExpanded((current) => !current)}
-          type="button"
-        >
-          <div>
-            <strong>Pending Approvals</strong>
-            <span>Collapsed/expanded manager queue for pending leave requests</span>
-          </div>
-          <span className="pending-approvals-pill">
-            {pendingExpanded ? 'Collapse' : 'Expand'} · {pendingLeaveRows.length}
-          </span>
-        </button>
-
-        {pendingExpanded ? (
-          <div className="pending-approvals-list">
-            {pendingLeaveRows.length ? (
-              pendingLeaveRows.map((row: any, index: number) => {
-                const rowKey = String(row.id || row.emp_code || index)
-                return (
-                  <div key={rowKey} className="pending-approval-row detailed">
-                    <div className="pending-approval-copy">
-                      <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
-                      <span>{formatLeaveTypeLabel(row)}</span>
-                      <small className="leave-date-mini">
-                        <span>{formatLeaveDateRange(row, formatDate)}</span>
-                        {formatLeaveWeekdayRange(row) ? (
-                          <span>{formatLeaveWeekdayRange(row)}</span>
-                        ) : null}
-                      </small>
-                    </div>
-                    <div className="pending-approval-meta">
-                      <span>{getLeaveApproverLabel(row, employees)}</span>
-                      <button
-                        className="ghost dashboard-button"
-                        onClick={() => void handleAlertManager(row, rowKey)}
-                        disabled={alertLoadingKey === rowKey}
-                        type="button"
-                      >
-                        {alertLoadingKey === rowKey ? 'Alerting...' : 'Alert Manager'}
-                      </button>
-                    </div>
-                  </div>
-                )
-              })
-            ) : (
-              <div className="empty-state">No pending leave approvals match the current filters.</div>
-            )}
-            {alertStatus ? <span className="report-status">{alertStatus}</span> : null}
-          </div>
-        ) : null}
-      </div>
-
-      <form
-        className="leave-filter-card"
-        onSubmit={(event) => {
-          event.preventDefault()
-          void refreshLeaves(leaveFilters, true)
-        }}
-      >
-        <div className="leave-filter-head">
-          <div>
-            <strong>Search Leave Records</strong>
-            <span>Filter by employee, leave details, date range, or status.</span>
-            <div className="leave-active-filter-list" aria-live="polite">
-              {activeLeaveFilters.length ? (
-                activeLeaveFilters.map((filter) => (
-                  <span key={filter.key} className="leave-active-filter-pill">
-                    <strong>{filter.label}</strong>
-                    {filter.value}
-                  </span>
-                ))
-              ) : (
-                <span className="leave-filter-muted">No filters selected</span>
-              )}
-            </div>
-          </div>
-          <div className="leave-filter-count-stack">
-            <span className="leave-filter-count">{leaveRows.length} result{leaveRows.length === 1 ? '' : 's'}</span>
-            {activeLeaveFilterCount ? (
-              <span className="table-pill accent">
-                {activeLeaveFilterCount} selected
-              </span>
-            ) : null}
-          </div>
-        </div>
-        <div className="leave-status-chip-row" role="group" aria-label="Quick status filter">
-          <span className="leave-status-chip-label">Quick status</span>
-=======
         <div className="lv-header-actions">
           {syncedLabel && <span className="lv-synced-label">synced {syncedLabel}</span>}
->>>>>>> 24888b0f575e540ba0bf5968f3603b8d97b2756c
           <button
             className="ghost dashboard-button"
             onClick={onRefresh}
@@ -575,7 +312,7 @@ export default function AdminLeavesPage({
             type="button"
             aria-label="Refresh leave requests"
           >
-            {loading ? 'Refreshing…' : '⟳ Refresh'}
+            {loading ? 'Refreshingâ€¦' : 'âŸ³ Refresh'}
           </button>
           <button
             className="cta dashboard-button"
@@ -590,14 +327,14 @@ export default function AdminLeavesPage({
         </div>
       </div>
 
-      {/* ─── KPI Cards ─────────────────────────────────────── */}
+      {/* â”€â”€â”€ KPI Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <LeaveKpiCards
         kpis={kpis}
         loading={loading}
         onFilterByStatus={(status) => onPresetFilter('status', status)}
       />
 
-      {/* ─── Filter Bar ─────────────────────────────────────── */}
+      {/* â”€â”€â”€ Filter Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <LeaveFilterBar
         filters={filters}
         departmentOptions={filterOptions.departments}
@@ -608,11 +345,11 @@ export default function AdminLeavesPage({
         onSort={onSort}
       />
 
-      {/* ─── Table Card ─────────────────────────────────────── */}
+      {/* â”€â”€â”€ Table Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="table-card lv-table-card">
         <div className="lv-toolbar">
           <span className="lv-toolbar__count">
-            {loading ? 'Loading…' : `${pagination.total_records.toLocaleString()} result${pagination.total_records === 1 ? '' : 's'}`}
+            {loading ? 'Loadingâ€¦' : `${pagination.total_records.toLocaleString()} result${pagination.total_records === 1 ? '' : 's'}`}
           </span>
           <div className="lv-toolbar__right">
             <ColumnVisibilitySelector
@@ -623,63 +360,11 @@ export default function AdminLeavesPage({
             />
           </div>
         </div>
-<<<<<<< HEAD
-        {leaveRows.length ? (
-          <div className="table-scroll">
-            <table className="dashboard-table leave-table">
-              <thead>
-                <tr>
-                  <th>Employee</th>
-                  <th>Leave Type</th>
-                  <th>Dates</th>
-                  <th>Applied At</th>
-                  <th>Approver</th>
-                  <th>Reason</th>
-                  <th>Status</th>
-                  <th>Manager Alert</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leaveRows.map((row: any, index: number) => {
-                  const rowKey = String(row.id || row.emp_code || index)
-                  const isPending = (row.status || '').trim().toLowerCase() === 'pending'
-                  const dateRangeLabel = formatLeaveDateRange(row, formatDate)
-                  const weekdayLabel = formatLeaveWeekdayRange(row)
-                  return (
-                    <tr key={`${row.id || row.emp_code || index}`}>
-                      <td>
-                        <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
-                        <span className="table-meta">{row.emp_code || 'Employee ID unavailable'}</span>
-                      </td>
-                      <td>{formatLeaveTypeLabel(row)}</td>
-                      <td>
-                        <span className="leave-date-range">{dateRangeLabel}</span>
-                        {weekdayLabel ? <span className="leave-date-weekdays">{weekdayLabel}</span> : null}
-                      </td>
-                      <td>{formatDateOnly(row.applied_at)}</td>
-                      <td>{getLeaveApproverLabel(row, employees)}</td>
-                      <td>{getLeaveReasonLabel(row)}</td>
-                      <td>
-                        <span className="table-pill">{row.status || 'Unknown'}</span>
-                      </td>
-                      <td>
-                        {isPending ? (
-                          <button
-                            className="ghost dashboard-button compact-action-button"
-                            onClick={() => void handleAlertManager(row, rowKey)}
-                            disabled={alertLoadingKey === rowKey}
-                            type="button"
-                          >
-                            {alertLoadingKey === rowKey ? 'Alerting...' : 'Alert Manager'}
-                          </button>
-                        ) : (
-                          <span className="table-meta">Resolved</span>
-=======
 
         {loading ? (
           <div className="empty-state lv-loading-state">
             <div className="lv-spinner" aria-hidden="true" />
-            Loading leave requests…
+            Loading leave requestsâ€¦
           </div>
         ) : error && records.length === 0 ? (
           <div className="empty-state">
@@ -745,11 +430,10 @@ export default function AdminLeavesPage({
                             <span className="lv-td--employee-info">
                               <strong>{row.employee_name || row.employee_code || 'Unknown'}</strong>
                               <span className="lv-sub">
-                                {[row.employee_code, row.department].filter(Boolean).join(' · ') || '--'}
+                                {[row.employee_code, row.department].filter(Boolean).join(' Â· ') || '--'}
                               </span>
                             </span>
                           </td>
->>>>>>> 24888b0f575e540ba0bf5968f3603b8d97b2756c
                         )}
                         {vis('leave_type') && (
                           <td className="lv-td">
@@ -757,8 +441,8 @@ export default function AdminLeavesPage({
                             {(isPending || hasPriorPattern) && (
                               <span className="lv-sub lv-sub--delta">
                                 {isPending && waiting != null ? `${waiting}d waiting` : ''}
-                                {isPending && waiting != null && hasPriorPattern ? ' · ' : ''}
-                                {hasPriorPattern ? `${row.prior_requests_90d}× prior` : ''}
+                                {isPending && waiting != null && hasPriorPattern ? ' Â· ' : ''}
+                                {hasPriorPattern ? `${row.prior_requests_90d}Ã— prior` : ''}
                               </span>
                             )}
                           </td>
@@ -768,7 +452,7 @@ export default function AdminLeavesPage({
                         )}
                         {vis('dates') && (
                           <td className="lv-td lv-td--mono">
-                            {fmtCompactDate(row.from_date)} – {fmtCompactDate(row.to_date)}
+                            {fmtCompactDate(row.from_date)} â€“ {fmtCompactDate(row.to_date)}
                           </td>
                         )}
                         {vis('days') && (
@@ -810,7 +494,7 @@ export default function AdminLeavesPage({
                                   onClick={() => void handleAlert(row, rowKey)}
                                   disabled={alertLoadingKey === rowKey}
                                 >
-                                  {alertLoadingKey === rowKey ? 'Alerting…' : 'Alert manager'}
+                                  {alertLoadingKey === rowKey ? 'Alertingâ€¦' : 'Alert manager'}
                                 </button>
                               ) : null}
                               <button
@@ -846,7 +530,7 @@ export default function AdminLeavesPage({
                   onClick={() => onChangePage(pagination.page - 1)}
                   disabled={!pagination.has_previous || loading}
                 >
-                  ← Previous
+                  â† Previous
                 </button>
                 <button
                   className="ghost"
@@ -854,7 +538,7 @@ export default function AdminLeavesPage({
                   onClick={() => onChangePage(pagination.page + 1)}
                   disabled={!pagination.has_next || loading}
                 >
-                  Next →
+                  Next â†’
                 </button>
               </div>
             </div>
@@ -866,151 +550,7 @@ export default function AdminLeavesPage({
         )}
       </div>
 
-<<<<<<< HEAD
-      {importModalOpen ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="leave-import-title">
-          <form className="modal-card leave-import-modal" onSubmit={handleImportSubmit}>
-            <div className="modal-header">
-              <div>
-                <strong id="leave-import-title">Import Leaves</strong>
-                <span className="leave-import-subtitle">Upload CSV leave requests with the required fields below.</span>
-              </div>
-              <button
-                className="ghost"
-                onClick={() => setImportModalOpen(false)}
-                disabled={leaveImportLoading}
-                type="button"
-              >
-                Close
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="leave-import-guide">
-                <span>Required CSV columns</span>
-                <div className="leave-import-required-grid">
-                  {REQUIRED_IMPORT_FIELDS.map((field) => (
-                    <code key={field}>{field}</code>
-                  ))}
-                </div>
-                <small>
-                  Date formats: <code>YYYY-MM-DD</code>, <code>DD-MM-YYYY</code>, <code>DD/MM/YYYY</code>, or{' '}
-                  <code>YYYY/MM/DD</code>. Leave types: <code>casual</code>, <code>sick</code>,{' '}
-                  <code>annual</code>, <code>monthly</code>.
-                </small>
-                <small>
-                  Optional columns: <code>duration</code>, <code>status</code>, <code>leave_count</code>,{' '}
-                  <code>applied_at</code>, <code>notes</code>.
-                </small>
-                <button className="ghost leave-template-button" onClick={downloadLeavesTemplate} type="button">
-                  Download CSV Template
-                </button>
-              </div>
-
-              <label className="form-group">
-                <span>CSV file</span>
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={(event) => setImportFile(event.target.files?.[0] || null)}
-                  disabled={leaveImportLoading}
-                />
-              </label>
-
-              {importFile ? (
-                <div className="leave-import-file">
-                  <span>Selected file</span>
-                  <strong>{importFile.name}</strong>
-                </div>
-              ) : null}
-
-              <div className="leave-import-options">
-                <label className="form-group">
-                  <span>Default status</span>
-                  <select
-                    value={importDefaultStatus}
-                    onChange={(event) => setImportDefaultStatus(event.target.value)}
-                    disabled={leaveImportLoading}
-                  >
-                    {LEAVE_STATUS_IMPORT_OPTIONS.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="leave-import-check">
-                  <input
-                    type="checkbox"
-                    checked={importSkipDuplicates}
-                    onChange={(event) => setImportSkipDuplicates(event.target.checked)}
-                    disabled={leaveImportLoading}
-                  />
-                  <span>Skip duplicates</span>
-                </label>
-                <label className="leave-import-check">
-                  <input
-                    type="checkbox"
-                    checked={importStrictMode}
-                    onChange={(event) => setImportStrictMode(event.target.checked)}
-                    disabled={leaveImportLoading}
-                  />
-                  <span>Strict mode</span>
-                </label>
-              </div>
-
-              {leaveImportSummary ? (
-                <div className="leave-import-summary" role="status">
-                  <span>
-                    Total
-                    <strong>{leaveImportSummary.total}</strong>
-                  </span>
-                  <span>
-                    Inserted
-                    <strong>{leaveImportSummary.inserted}</strong>
-                  </span>
-                  <span>
-                    Skipped
-                    <strong>{leaveImportSummary.skipped}</strong>
-                  </span>
-                  <span>
-                    Failed
-                    <strong>{leaveImportSummary.failed}</strong>
-                  </span>
-                </div>
-              ) : null}
-
-              {leaveImportSummary?.failures?.length ? (
-                <div className="leave-import-errors">
-                  {leaveImportSummary.failures.map((failure: string) => (
-                    <span key={failure}>{failure}</span>
-                  ))}
-                </div>
-              ) : null}
-
-              {leaveImportStatus ? (
-                <p className={`form-note${leaveImportSummary?.failed ? ' error' : ''}`}>
-                  {leaveImportStatus}
-                </p>
-              ) : null}
-            </div>
-            <div className="modal-actions">
-              <button
-                className="ghost"
-                onClick={() => setImportModalOpen(false)}
-                disabled={leaveImportLoading}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button className="cta" disabled={!importFile || leaveImportLoading} type="submit">
-                {leaveImportLoading ? 'Importing...' : 'Import CSV'}
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
-=======
-      {/* ─── Drawer ─────────────────────────────────────────── */}
+      {/* â”€â”€â”€ Drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <LeaveDrawer
         record={drawerRecord}
         open={drawerOpen}
@@ -1022,7 +562,6 @@ export default function AdminLeavesPage({
         formatDate={formatDate}
         formatLeaveTypeLabel={fmtLeaveType}
       />
->>>>>>> 24888b0f575e540ba0bf5968f3603b8d97b2756c
     </div>
   )
 }

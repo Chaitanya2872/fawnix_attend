@@ -11,6 +11,7 @@ import { useDashboardData } from '../hooks/useDashboardData'
 import { useEmployeesPanel } from '../employees/useEmployeesPanel'
 import { useAttendancePanel } from '../attendance/useAttendancePanel'
 import { useAttendanceExceptionsData } from '../attendance-exceptions/useAttendanceExceptionsData'
+import { useOvertimeRecordsData } from '../overtime-records/useOvertimeRecordsData'
 import { useLeavesPanel } from '../leaves/useLeavesPanel'
 import { useAdminLeavesData } from '../leaves/useAdminLeavesData'
 import { useActivitiesPanel } from '../activities/useActivitiesPanel'
@@ -34,6 +35,7 @@ import AdminCalendarPage from '../calendar/AdminCalendarPage'
 import AdminEmployeesPage from '../employees/AdminEmployeesPage'
 import AdminFieldVisitsPage from '../field-visits/AdminFieldVisitsPage'
 import AdminLeavesPage from '../leaves/AdminLeavesPage'
+import AdminOvertimeRecordsPage from '../overtime-records/AdminOvertimeRecordsPage'
 import AdminOverviewPage from './sidebar/AdminOverviewPage'
 import AdminReportsPage from '../reports/AdminReportsPage'
 import {
@@ -282,6 +284,7 @@ function FawnixApp() {
     resetDashboardData()
     resetLeavesPanel()
     resetAttendanceExceptionsPanel()
+    resetOvertimeRecordsPanel()
     resetApiTelemetryPanel()
     resetAttendancePanel()
   }
@@ -708,31 +711,32 @@ function FawnixApp() {
     apiRequest
   })
 
-<<<<<<< HEAD
   const {
-    leaveFilters,
-    leaveFilterLoading,
-    leaveFilterStatus,
-    leaveImportLoading,
-    leaveImportStatus,
-    leaveImportSummary,
-    importLeaves,
-    downloadLeavesTemplate,
-    updateLeaveFilter,
-    refreshLeaves,
-    clearLeaveFilters,
-    leaveEmployeeNameOptions,
-    leaveEmployeeIdOptions,
-    resetLeavesPanel
-  } = useLeavesPanel({
-=======
-  // Only resetLeavesPanel is consumed here (on logout) — the rest of this
+    filters: overtimeRecordFilters,
+    records: overtimeRecordRows,
+    kpis: overtimeRecordKpis,
+    meta: overtimeRecordMeta,
+    loading: overtimeRecordLoading,
+    error: overtimeRecordError,
+    validationError: overtimeRecordValidationError,
+    lastSyncedAt: overtimeRecordLastSyncedAt,
+    updateFilter: updateOvertimeRecordFilter,
+    applyDatePreset: applyOvertimeRecordDatePreset,
+    clearFilters: clearOvertimeRecordFilters,
+    refresh: refreshOvertimeRecords,
+    reset: resetOvertimeRecordsPanel
+  } = useOvertimeRecordsData({
+    isActive: activePanel === 'overtime-records',
+    accessToken,
+    apiRequest
+  })
+
+  // Only resetLeavesPanel is consumed here (on logout) - the rest of this
   // hook's filter/refresh surface was exclusive to the legacy Leaves admin
   // page, now replaced by useAdminLeavesData below. leaveRows/setLeaveRows
   // themselves come from useDashboardData and back unrelated dashboard
   // panels, so that state is untouched.
   const { resetLeavesPanel } = useLeavesPanel({
->>>>>>> 24888b0f575e540ba0bf5968f3603b8d97b2756c
     employees,
     apiRequest,
     accessToken,
@@ -1057,25 +1061,6 @@ function FawnixApp() {
           filters={adminLeaveFilters}
           filterOptions={adminLeaveFilterOptions}
           formatDate={formatDate}
-<<<<<<< HEAD
-          formatDateOnly={formatDateOnly}
-          formatLeaveTypeLabel={formatLeaveTypeLabel}
-          getLeaveApproverLabel={getLeaveApproverLabel}
-          getLeaveReasonLabel={getLeaveReasonLabel}
-          leaveEmployeeIdOptions={leaveEmployeeIdOptions}
-          leaveEmployeeNameOptions={leaveEmployeeNameOptions}
-          leaveFilterLoading={leaveFilterLoading}
-          leaveFilters={leaveFilters}
-          leaveFilterStatus={leaveFilterStatus}
-          leaveImportLoading={leaveImportLoading}
-          leaveImportStatus={leaveImportStatus}
-          leaveImportSummary={leaveImportSummary}
-          leaveRows={leaveRows}
-          leaveStatusOptions={LEAVE_STATUS_FILTER_OPTIONS}
-          leaveTypeOptions={LEAVE_TYPE_FILTER_OPTIONS}
-          importLeaves={importLeaves}
-          downloadLeavesTemplate={downloadLeavesTemplate}
-=======
           formatDateTime={formatDateTime}
           kpis={adminLeaveKpis}
           loading={adminLeaveLoading}
@@ -1088,7 +1073,6 @@ function FawnixApp() {
           pagination={adminLeavePagination}
           records={adminLeaveRows}
           updateFilter={updateAdminLeaveFilter}
->>>>>>> 24888b0f575e540ba0bf5968f3603b8d97b2756c
           onAlertManager={alertLeaveManager}
           apiRequest={apiRequest}
           accessToken={accessToken}
@@ -1098,10 +1082,21 @@ function FawnixApp() {
 
     if (activePanel === 'overtime-records') {
       return (
-        <AdminEmptyPanel
-          eyebrow="Activities"
-          title="Overtime Records"
-          message="No overtime records found."
+        <AdminOvertimeRecordsPage
+          error={overtimeRecordError}
+          filters={overtimeRecordFilters}
+          formatDateOnly={formatDateOnly}
+          formatDateTime={formatDateTime}
+          kpis={overtimeRecordKpis}
+          lastSyncedAt={overtimeRecordLastSyncedAt}
+          loading={overtimeRecordLoading}
+          meta={overtimeRecordMeta}
+          records={overtimeRecordRows}
+          validationError={overtimeRecordValidationError}
+          applyDatePreset={applyOvertimeRecordDatePreset}
+          clearFilters={clearOvertimeRecordFilters}
+          refresh={refreshOvertimeRecords}
+          updateFilter={updateOvertimeRecordFilter}
         />
       )
     }

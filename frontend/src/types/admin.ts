@@ -222,6 +222,80 @@ export type AdminAttendanceExceptionPagination = {
   has_previous: boolean
 }
 
+export type AdminOvertimeStatus =
+  | 'eligible'
+  | 'requested'
+  | 'approved'
+  | 'rejected'
+  | 'expired'
+  | 'utilized'
+
+export type AdminOvertimeActivity = {
+  id?: number
+  activity_type?: string
+  status?: string
+  start_time?: string
+  end_time?: string
+  duration_minutes?: number | string | null
+  notes?: string | null
+  field_visit_id?: number | string | null
+}
+
+export type AdminOvertimeRecord = {
+  id?: number
+  attendance_id?: number | null
+  emp_code?: string
+  emp_email?: string
+  emp_name?: string
+  emp_full_name?: string
+  emp_designation?: string
+  work_date?: string
+  day_of_week?: string
+  clock_in_sequence?: number | string | null
+  actual_hours?: number | string | null
+  extra_hours?: number | string | null
+  standard_hours?: number | string | null
+  comp_off_days?: number | string | null
+  status?: AdminOvertimeStatus | string
+  recording_deadline?: string | null
+  expires_at?: string | null
+  expired_at?: string | null
+  approval_completed_at?: string | null
+  utilized_at?: string | null
+  compoff_request_id?: number | string | null
+  created_at?: string
+  updated_at?: string
+  clock_in_time?: string | null
+  clock_out_time?: string | null
+  activities?: AdminOvertimeActivity[]
+}
+
+export type AdminOvertimeDatePreset = '' | 'today' | 'last7' | 'last30' | 'thisMonth' | 'custom'
+
+export type AdminOvertimeFilterState = {
+  search: string
+  status: '' | AdminOvertimeStatus
+  empCode: string
+  fromDate: string
+  toDate: string
+  datePreset: AdminOvertimeDatePreset
+  limit: string
+}
+
+export type AdminOvertimeKpis = {
+  total_loaded: number
+  eligible_comp_off_days: number
+  total_extra_hours: number
+  expiring_or_expired: number
+  requested: number
+  approved: number
+}
+
+export type AdminOvertimeLoadMeta = {
+  count: number
+  limit: number
+}
+
 export type AdminLeaveKpiTrendPoint = {
   date: string
   count: number

@@ -363,6 +363,7 @@
 
 .ov2-spark-bar.green { background: linear-gradient(180deg, #34c77f, #1f9d62); }
 .ov2-spark-bar.blue  { background: linear-gradient(180deg, #60a5fa, #2563eb); }
+.ov2-spark-bar.amber { background: linear-gradient(180deg, #f5c87a, #c47d1a); }
 
 /* Progress bar variant (for leave) */
 .ov2-kpi-progress-wrap {
@@ -950,6 +951,20 @@
 .ov2-approval-copy small {
   font-size: 10.5px;
   color: #9aa39d;
+}
+
+.ov2-approval-date {
+  display: grid;
+  gap: 1px;
+}
+
+.ov2-approval-date span:last-child {
+  color: #6b7670;
+  font-weight: 600;
+}
+
+.ov2-approval-raw-date {
+  display: none;
 }
 
 .ov2-alert-btn {

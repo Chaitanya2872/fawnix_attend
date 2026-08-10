@@ -18,6 +18,112 @@ import { PendingApprovalsPanel } from '../../components/Pendingapprovalspanel'
 
 type Props = any
 
+const LEAVE_SPARK_BUCKETS = 15
+
+function parseOverviewDate(value?: string) {
+  const rawValue = (value || '').trim()
+  if (!rawValue) {
+    return null
+  }
+
+  const dateMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (dateMatch) {
+    const [, year, month, day] = dateMatch
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day))
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+
+  const parsed = new Date(rawValue)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function getMonthBounds(monthKey: string) {
+  const [year, month] = monthKey.split('-').map(Number)
+  if (!year || !month) {
+    return null
+  }
+
+  return {
+    start: new Date(year, month - 1, 1),
+    end: new Date(year, month, 0)
+  }
+}
+
+function getMonthKeyFromDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+function getLeaveDateRange(row: any) {
+  const fromDate = parseOverviewDate(row.from_date)
+  const toDate = parseOverviewDate(row.to_date)
+  const start = fromDate || toDate
+  const end = toDate || fromDate
+
+  if (!start || !end) {
+    return null
+  }
+
+  return start <= end ? { start, end } : { start: end, end: start }
+}
+
+function leaveOverlapsMonth(row: any, monthKey: string) {
+  const range = getLeaveDateRange(row)
+  const bounds = getMonthBounds(monthKey)
+
+  if (!range || !bounds) {
+    return false
+  }
+
+  return range.start <= bounds.end && range.end >= bounds.start
+}
+
+function countLeavesInMonth(rows: any[], monthKey: string) {
+  return rows.filter((row) => leaveOverlapsMonth(row, monthKey)).length
+}
+
+function formatOverviewMonthLabel(monthKey: string) {
+  const bounds = getMonthBounds(monthKey)
+  if (!bounds) {
+    return 'Selected month'
+  }
+
+  return bounds.start.toLocaleDateString('en-IN', {
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
+function buildLeaveSparkData(rows: any[], monthKey: string) {
+  const bounds = getMonthBounds(monthKey)
+  const buckets = Array.from({ length: LEAVE_SPARK_BUCKETS }, () => 0)
+  if (!bounds) {
+    return buckets.map(() => 4)
+  }
+
+  const daysInMonth = bounds.end.getDate()
+  rows.forEach((row) => {
+    const range = getLeaveDateRange(row)
+    if (!range || range.start > bounds.end || range.end < bounds.start) {
+      return
+    }
+
+    const markerTime = Math.max(bounds.start.getTime(), Math.min(range.start.getTime(), bounds.end.getTime()))
+    const markerDate = new Date(markerTime)
+    const bucketIndex = Math.min(
+      buckets.length - 1,
+      Math.floor(((markerDate.getDate() - 1) / daysInMonth) * buckets.length)
+    )
+    buckets[bucketIndex] += 1
+  })
+
+  const maxBucket = Math.max(...buckets, 0)
+  if (!maxBucket) {
+    return buckets.map(() => 4)
+  }
+
+  return buckets.map((count) => (count ? Math.max(Math.round((count / maxBucket) * 100), 18) : 4))
+}
+
 export default function AdminOverviewPage({
   attendanceDateFilter,
   attendanceCountByDate = {},
@@ -50,10 +156,6 @@ export default function AdminOverviewPage({
 
   // ── Date / label helpers ───────────────────────────
   const weekLabel = getWeekRangeLabel(attendanceDateFilter)
-  const monthlyLabel = new Date(`${attendanceDateFilter}T00:00:00`).toLocaleDateString('en-IN', {
-    month: 'long',
-    year: 'numeric',
-  })
   const selectedDateLabel = new Date(`${attendanceDateFilter}T00:00:00`).toLocaleDateString(
     'en-IN',
     { weekday: 'short', day: 'numeric', month: 'short' }
@@ -63,9 +165,32 @@ export default function AdminOverviewPage({
   const prevMonthLabel = getPrevMonthLabel(monthKey)
 
   // ── KPI values ─────────────────────────────────────
-  const monthlyLeaveApprovals = leaveRows.filter(
-    (r: any) => toMonthKey(r.from_date || r.to_date || '') === monthKey
-  ).length
+  const leaveKpi = useMemo(() => {
+    const selectedMonthHasLeaves = countLeavesInMonth(leaveRows, monthKey) > 0
+    const latestLeaveMonthKey = leaveRows.reduce((latestMonth: string, row: any) => {
+      const range = getLeaveDateRange(row)
+      if (!range) {
+        return latestMonth
+      }
+
+      const rowMonthKey = getMonthKeyFromDate(range.end)
+      return !latestMonth || rowMonthKey > latestMonth ? rowMonthKey : latestMonth
+    }, '')
+    const activeMonthKey = selectedMonthHasLeaves ? monthKey : latestLeaveMonthKey || monthKey
+    const previousMonthKey = getPrevMonthKey(activeMonthKey)
+    const currentCount = countLeavesInMonth(leaveRows, activeMonthKey)
+    const previousCount = countLeavesInMonth(leaveRows, previousMonthKey)
+    const delta = currentCount > 0 || previousCount > 0 ? currentCount - previousCount : null
+
+    return {
+      currentCount,
+      previousCount,
+      delta,
+      monthLabel: formatOverviewMonthLabel(activeMonthKey),
+      previousMonthLabel: getPrevMonthLabel(activeMonthKey),
+      sparkData: buildLeaveSparkData(leaveRows, activeMonthKey)
+    }
+  }, [leaveRows, monthKey])
   const weeklyExceptionCount = selectedDateExceptions.length
   const maxWeekly = Math.max(...weeklyAttendanceTrend.map((i: any) => i.count), 1)
 
@@ -116,14 +241,6 @@ export default function AdminOverviewPage({
       : null
   const onTimeDelta =
     thisOnTimeRate !== null && prevOnTimeRate !== null ? thisOnTimeRate - prevOnTimeRate : null
-
-  const prevMonthLeavesCount = leaveRows.filter(
-    (r: any) => toMonthKey(r.from_date || r.to_date || '') === prevMonthKey
-  ).length
-  const leavesDelta =
-    prevMonthLeavesCount > 0 || monthlyLeaveApprovals > 0
-      ? monthlyLeaveApprovals - prevMonthLeavesCount
-      : null
 
   const exceptionsDelta =
     thisMonthExcCount > 0 || prevMonthExcCount > 0
@@ -176,7 +293,7 @@ export default function AdminOverviewPage({
       <DashboardTopbar
         exceptionCount={weeklyExceptionCount}
         onRefresh={loadDashboard}
-        syncDeps={[attendanceDateFilter, presentToday, weeklyExceptionCount, monthlyLeaveApprovals, fieldActive]}
+        syncDeps={[attendanceDateFilter, presentToday, weeklyExceptionCount, leaveKpi.currentCount, fieldActive]}
       />
 
       <div className="ov2-content">
@@ -203,10 +320,12 @@ export default function AdminOverviewPage({
           lateExceptionsToday={lateExceptionsToday}
           selectedDateLabel={selectedDateLabel}
           onTimeDelta={onTimeDelta}
-          monthlyLeaveApprovals={monthlyLeaveApprovals}
-          pendingLeaveCount={pendingLeaveRows.length}
-          monthlyLabel={monthlyLabel}
-          leavesDelta={leavesDelta}
+          monthlyLeaveRequests={leaveKpi.currentCount}
+          previousMonthLeaveRequests={leaveKpi.previousCount}
+          monthlyLabel={leaveKpi.monthLabel}
+          leavesDelta={leaveKpi.delta}
+          leaveSparkData={leaveKpi.sparkData}
+          leavePrevMonthLabel={leaveKpi.previousMonthLabel}
           weeklyExceptionCount={weeklyExceptionCount}
           selectedDateLeavesCount={selectedDateLeaves.length}
           fieldActive={fieldActive}

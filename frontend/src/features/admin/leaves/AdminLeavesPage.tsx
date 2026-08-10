@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useMemo, useState } from 'react'
+import { type FormEvent, useMemo, useState } from 'react'
 import './AdminLeavesPage.css'
 
 type Props = any
@@ -15,8 +15,97 @@ function getOptionLabel(options: any[], value: string) {
   return matchedOption?.label || value
 }
 
+const REQUIRED_IMPORT_FIELDS = ['emp_code', 'from_date', 'to_date', 'leave_type']
+const LEAVE_STATUS_IMPORT_OPTIONS = ['approved', 'pending', 'rejected', 'cancelled']
+const COMPACT_DATE_FORMATTER = new Intl.DateTimeFormat('en-IN', {
+  day: '2-digit',
+  month: 'short'
+})
+const WEEKDAY_FORMATTER = new Intl.DateTimeFormat('en-IN', { weekday: 'short' })
+
+function parseLeaveDate(value?: string) {
+  const rawValue = (value || '').trim()
+  if (!rawValue) {
+    return null
+  }
+
+  const dateMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (dateMatch) {
+    const [, year, month, day] = dateMatch
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day))
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+
+  const parsed = new Date(rawValue)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function getLeaveDateKey(value?: string) {
+  const parsed = parseLeaveDate(value)
+  if (!parsed) {
+    return ''
+  }
+
+  return [
+    parsed.getFullYear(),
+    String(parsed.getMonth() + 1).padStart(2, '0'),
+    String(parsed.getDate()).padStart(2, '0')
+  ].join('-')
+}
+
+function formatCompactLeaveDate(value: string | undefined, formatDate: (nextValue?: string) => string) {
+  const parsed = parseLeaveDate(value)
+  return parsed ? COMPACT_DATE_FORMATTER.format(parsed) : formatDate(value)
+}
+
+function formatLeaveDateRange(row: any, formatDate: (nextValue?: string) => string) {
+  const fromDate = row.from_date
+  const toDate = row.to_date
+  const fromKey = getLeaveDateKey(fromDate)
+  const toKey = getLeaveDateKey(toDate)
+
+  if (!fromDate && !toDate) {
+    return '--'
+  }
+
+  if (!toDate || (fromKey && fromKey === toKey)) {
+    return formatCompactLeaveDate(fromDate, formatDate)
+  }
+
+  if (!fromDate) {
+    return formatCompactLeaveDate(toDate, formatDate)
+  }
+
+  return `${formatCompactLeaveDate(fromDate, formatDate)} - ${formatCompactLeaveDate(toDate, formatDate)}`
+}
+
+function formatLeaveWeekdayRange(row: any) {
+  const fromDate = parseLeaveDate(row.from_date)
+  const toDate = parseLeaveDate(row.to_date)
+  const fromKey = getLeaveDateKey(row.from_date)
+  const toKey = getLeaveDateKey(row.to_date)
+
+  if (!fromDate && !toDate) {
+    return ''
+  }
+
+  const fromWeekday = fromDate ? WEEKDAY_FORMATTER.format(fromDate) : ''
+  const toWeekday = toDate ? WEEKDAY_FORMATTER.format(toDate) : ''
+
+  if (!toWeekday || (fromKey && fromKey === toKey)) {
+    return fromWeekday
+  }
+
+  if (!fromWeekday) {
+    return toWeekday
+  }
+
+  return `${fromWeekday} - ${toWeekday}`
+}
+
 export default function AdminLeavesPage({
   clearLeaveFilters,
+  downloadLeavesTemplate,
   employees,
   formatDate,
   formatDateOnly,
@@ -28,9 +117,13 @@ export default function AdminLeavesPage({
   leaveFilterLoading,
   leaveFilters,
   leaveFilterStatus,
+  leaveImportLoading,
+  leaveImportStatus,
+  leaveImportSummary,
   leaveRows,
   leaveStatusOptions,
   leaveTypeOptions,
+  importLeaves,
   onAlertManager,
   refreshLeaves,
   updateLeaveFilter
@@ -38,6 +131,11 @@ export default function AdminLeavesPage({
   const [pendingExpanded, setPendingExpanded] = useState(true)
   const [alertLoadingKey, setAlertLoadingKey] = useState('')
   const [alertStatus, setAlertStatus] = useState('')
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importDefaultStatus, setImportDefaultStatus] = useState('approved')
+  const [importStrictMode, setImportStrictMode] = useState(false)
+  const [importSkipDuplicates, setImportSkipDuplicates] = useState(true)
   const normalizedLeaveStatus = (leaveFilters.status || '').trim().toLowerCase()
 
   const pendingLeaveRows = useMemo(
@@ -81,6 +179,19 @@ export default function AdminLeavesPage({
     }
   }
 
+  const handleImportSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!importFile || leaveImportLoading) {
+      return
+    }
+
+    await importLeaves(importFile, {
+      defaultStatus: importDefaultStatus,
+      strict: importStrictMode,
+      skipDuplicates: importSkipDuplicates
+    })
+  }
+
   return (
     <div className="admin-aligned-page admin-aligned-page--leaves">
       <div className="dashboard-section-head">
@@ -88,14 +199,34 @@ export default function AdminLeavesPage({
           <p className="eyebrow">Approvals</p>
           <h2>Leaves</h2>
         </div>
-        <button
-          className="ghost dashboard-button"
-          onClick={() => void refreshLeaves(leaveFilters, true)}
-          disabled={leaveFilterLoading}
-          type="button"
-        >
-          {leaveFilterLoading ? 'Loading...' : 'Refresh'}
-        </button>
+        <div className="leave-page-actions">
+          <button
+            className="ghost dashboard-button leave-import-trigger"
+            onClick={() => setImportModalOpen(true)}
+            disabled={leaveImportLoading}
+            type="button"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 3v11m0-11 4 4m-4-4-4 4M5 15v3a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-3"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.8"
+              />
+            </svg>
+            Import Leaves
+          </button>
+          <button
+            className="ghost dashboard-button"
+            onClick={() => void refreshLeaves(leaveFilters, true)}
+            disabled={leaveFilterLoading}
+            type="button"
+          >
+            {leaveFilterLoading ? 'Loading...' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       <div className="chart-card pending-approvals-card leave-pending-card">
@@ -123,7 +254,12 @@ export default function AdminLeavesPage({
                     <div className="pending-approval-copy">
                       <strong>{row.emp_full_name || row.emp_code || 'Unknown employee'}</strong>
                       <span>{formatLeaveTypeLabel(row)}</span>
-                      <small>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</small>
+                      <small className="leave-date-mini">
+                        <span>{formatLeaveDateRange(row, formatDate)}</span>
+                        {formatLeaveWeekdayRange(row) ? (
+                          <span>{formatLeaveWeekdayRange(row)}</span>
+                        ) : null}
+                      </small>
                     </div>
                     <div className="pending-approval-meta">
                       <span>{getLeaveApproverLabel(row, employees)}</span>
@@ -332,6 +468,8 @@ export default function AdminLeavesPage({
                 {leaveRows.map((row: any, index: number) => {
                   const rowKey = String(row.id || row.emp_code || index)
                   const isPending = (row.status || '').trim().toLowerCase() === 'pending'
+                  const dateRangeLabel = formatLeaveDateRange(row, formatDate)
+                  const weekdayLabel = formatLeaveWeekdayRange(row)
                   return (
                     <tr key={`${row.id || row.emp_code || index}`}>
                       <td>
@@ -339,7 +477,10 @@ export default function AdminLeavesPage({
                         <span className="table-meta">{row.emp_code || 'Employee ID unavailable'}</span>
                       </td>
                       <td>{formatLeaveTypeLabel(row)}</td>
-                      <td>{`${formatDate(row.from_date)} - ${formatDate(row.to_date)}`}</td>
+                      <td>
+                        <span className="leave-date-range">{dateRangeLabel}</span>
+                        {weekdayLabel ? <span className="leave-date-weekdays">{weekdayLabel}</span> : null}
+                      </td>
                       <td>{formatDateOnly(row.applied_at)}</td>
                       <td>{getLeaveApproverLabel(row, employees)}</td>
                       <td>{getLeaveReasonLabel(row)}</td>
@@ -370,6 +511,149 @@ export default function AdminLeavesPage({
           <div className="empty-state">No leave requests match the current filters.</div>
         )}
       </div>
+
+      {importModalOpen ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="leave-import-title">
+          <form className="modal-card leave-import-modal" onSubmit={handleImportSubmit}>
+            <div className="modal-header">
+              <div>
+                <strong id="leave-import-title">Import Leaves</strong>
+                <span className="leave-import-subtitle">Upload CSV leave requests with the required fields below.</span>
+              </div>
+              <button
+                className="ghost"
+                onClick={() => setImportModalOpen(false)}
+                disabled={leaveImportLoading}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="leave-import-guide">
+                <span>Required CSV columns</span>
+                <div className="leave-import-required-grid">
+                  {REQUIRED_IMPORT_FIELDS.map((field) => (
+                    <code key={field}>{field}</code>
+                  ))}
+                </div>
+                <small>
+                  Date formats: <code>YYYY-MM-DD</code>, <code>DD-MM-YYYY</code>, <code>DD/MM/YYYY</code>, or{' '}
+                  <code>YYYY/MM/DD</code>. Leave types: <code>casual</code>, <code>sick</code>,{' '}
+                  <code>annual</code>, <code>monthly</code>.
+                </small>
+                <small>
+                  Optional columns: <code>duration</code>, <code>status</code>, <code>leave_count</code>,{' '}
+                  <code>applied_at</code>, <code>notes</code>.
+                </small>
+                <button className="ghost leave-template-button" onClick={downloadLeavesTemplate} type="button">
+                  Download CSV Template
+                </button>
+              </div>
+
+              <label className="form-group">
+                <span>CSV file</span>
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(event) => setImportFile(event.target.files?.[0] || null)}
+                  disabled={leaveImportLoading}
+                />
+              </label>
+
+              {importFile ? (
+                <div className="leave-import-file">
+                  <span>Selected file</span>
+                  <strong>{importFile.name}</strong>
+                </div>
+              ) : null}
+
+              <div className="leave-import-options">
+                <label className="form-group">
+                  <span>Default status</span>
+                  <select
+                    value={importDefaultStatus}
+                    onChange={(event) => setImportDefaultStatus(event.target.value)}
+                    disabled={leaveImportLoading}
+                  >
+                    {LEAVE_STATUS_IMPORT_OPTIONS.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="leave-import-check">
+                  <input
+                    type="checkbox"
+                    checked={importSkipDuplicates}
+                    onChange={(event) => setImportSkipDuplicates(event.target.checked)}
+                    disabled={leaveImportLoading}
+                  />
+                  <span>Skip duplicates</span>
+                </label>
+                <label className="leave-import-check">
+                  <input
+                    type="checkbox"
+                    checked={importStrictMode}
+                    onChange={(event) => setImportStrictMode(event.target.checked)}
+                    disabled={leaveImportLoading}
+                  />
+                  <span>Strict mode</span>
+                </label>
+              </div>
+
+              {leaveImportSummary ? (
+                <div className="leave-import-summary" role="status">
+                  <span>
+                    Total
+                    <strong>{leaveImportSummary.total}</strong>
+                  </span>
+                  <span>
+                    Inserted
+                    <strong>{leaveImportSummary.inserted}</strong>
+                  </span>
+                  <span>
+                    Skipped
+                    <strong>{leaveImportSummary.skipped}</strong>
+                  </span>
+                  <span>
+                    Failed
+                    <strong>{leaveImportSummary.failed}</strong>
+                  </span>
+                </div>
+              ) : null}
+
+              {leaveImportSummary?.failures?.length ? (
+                <div className="leave-import-errors">
+                  {leaveImportSummary.failures.map((failure: string) => (
+                    <span key={failure}>{failure}</span>
+                  ))}
+                </div>
+              ) : null}
+
+              {leaveImportStatus ? (
+                <p className={`form-note${leaveImportSummary?.failed ? ' error' : ''}`}>
+                  {leaveImportStatus}
+                </p>
+              ) : null}
+            </div>
+            <div className="modal-actions">
+              <button
+                className="ghost"
+                onClick={() => setImportModalOpen(false)}
+                disabled={leaveImportLoading}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button className="cta" disabled={!importFile || leaveImportLoading} type="submit">
+                {leaveImportLoading ? 'Importing...' : 'Import CSV'}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </div>
   )
 }

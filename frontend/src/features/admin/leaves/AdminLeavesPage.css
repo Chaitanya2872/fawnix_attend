@@ -11,6 +11,26 @@
   box-shadow: 0 14px 30px rgba(17, 44, 50, 0.06);
 }
 
+.leave-page-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.leave-import-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.leave-import-trigger svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
 .leave-filter-head {
   display: flex;
   justify-content: space-between;
@@ -236,11 +256,50 @@
   font-size: 12px;
 }
 
+.leave-date-range,
+.leave-date-weekdays {
+  display: block;
+}
+
+.leave-date-range {
+  color: var(--text-primary, #112c32);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.leave-date-weekdays {
+  margin-top: 2px;
+  color: var(--text-secondary, #607076);
+  font-size: 11px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.leave-date-mini {
+  display: grid;
+  gap: 1px;
+}
+
+.leave-date-mini span:first-child {
+  color: var(--text-secondary, #607076);
+}
+
+.leave-date-mini span:last-child {
+  color: var(--text-muted, #7b8b90);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 @media (max-width: 640px) {
   .leave-filter-count-stack,
   .leave-table-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .leave-page-actions {
+    justify-content: flex-start;
+    width: 100%;
   }
 
   .leave-status-chip-row {

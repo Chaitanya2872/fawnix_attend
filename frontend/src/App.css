@@ -3823,6 +3823,13 @@ a {
   line-height: 1.5;
 }
 
+.leave-import-required-grid {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .leave-import-guide code {
   padding: 2px 6px;
   border-radius: 6px;
@@ -3832,6 +3839,33 @@ a {
 
 .leave-template-button {
   justify-self: start;
+}
+
+.leave-import-options {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) repeat(2, minmax(130px, auto));
+  gap: 12px;
+  align-items: end;
+}
+
+.leave-import-check {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid rgba(17, 44, 50, 0.12);
+  border-radius: 10px;
+  background: #fbfcfb;
+  color: #244047;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.leave-import-check input {
+  width: 15px;
+  height: 15px;
+  accent-color: #1fa7a4;
 }
 
 .leave-import-file {
@@ -3852,7 +3886,7 @@ a {
 
 .leave-import-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -3910,7 +3944,8 @@ a {
   gap: 8px;
 }
 
-.form-group label {
+.form-group label,
+.form-group > span {
   font-size: 13px;
   font-weight: 500;
   color: #112c32;
@@ -4932,6 +4967,10 @@ a {
   }
 
   .leave-import-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .leave-import-options {
     grid-template-columns: 1fr;
   }
 

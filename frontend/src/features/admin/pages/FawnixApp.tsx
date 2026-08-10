@@ -710,6 +710,11 @@ function FawnixApp() {
     leaveFilters,
     leaveFilterLoading,
     leaveFilterStatus,
+    leaveImportLoading,
+    leaveImportStatus,
+    leaveImportSummary,
+    importLeaves,
+    downloadLeavesTemplate,
     updateLeaveFilter,
     refreshLeaves,
     clearLeaveFilters,
@@ -719,6 +724,8 @@ function FawnixApp() {
   } = useLeavesPanel({
     employees,
     apiRequest,
+    accessToken,
+    refreshAccessToken,
     setLeaveRows
   })
 
@@ -1020,9 +1027,14 @@ function FawnixApp() {
           leaveFilterLoading={leaveFilterLoading}
           leaveFilters={leaveFilters}
           leaveFilterStatus={leaveFilterStatus}
+          leaveImportLoading={leaveImportLoading}
+          leaveImportStatus={leaveImportStatus}
+          leaveImportSummary={leaveImportSummary}
           leaveRows={leaveRows}
           leaveStatusOptions={LEAVE_STATUS_FILTER_OPTIONS}
           leaveTypeOptions={LEAVE_TYPE_FILTER_OPTIONS}
+          importLeaves={importLeaves}
+          downloadLeavesTemplate={downloadLeavesTemplate}
           onAlertManager={alertLeaveManager}
           refreshLeaves={refreshLeaves}
           updateLeaveFilter={updateLeaveFilter}

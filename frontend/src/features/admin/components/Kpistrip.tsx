@@ -1,12 +1,11 @@
+import type { ReactNode } from 'react'
 import { DeltaBadge } from './Deltabadge'
-
-// ── KpiCard ────────────────────────────────────────────
 
 type KpiCardProps = {
   label: string
   period: string
   color: 'green' | 'blue' | 'amber' | 'red'
-  icon: React.ReactNode
+  icon: ReactNode
   value: string | number
   sub: string
   delta: number | null
@@ -80,10 +79,7 @@ export function KpiCard({
   )
 }
 
-// ── KpiStrip ───────────────────────────────────────────
-
 type KpiStripProps = {
-  // Attendance card
   averageWeeklyAttendance: number
   presentToday: number
   totalEmployees: number
@@ -91,19 +87,18 @@ type KpiStripProps = {
   attendanceDelta: number | null
   sparkData: number[]
 
-  // On-time card
   punctualityRate: number
   lateExceptionsToday: number
   selectedDateLabel: string
   onTimeDelta: number | null
 
-  // Leave card
-  monthlyLeaveApprovals: number
-  pendingLeaveCount: number
+  monthlyLeaveRequests: number
+  previousMonthLeaveRequests: number
   monthlyLabel: string
   leavesDelta: number | null
+  leaveSparkData: number[]
+  leavePrevMonthLabel: string
 
-  // Exceptions card
   weeklyExceptionCount: number
   selectedDateLeavesCount: number
   fieldActive: number
@@ -124,10 +119,12 @@ export function KpiStrip({
   lateExceptionsToday,
   selectedDateLabel,
   onTimeDelta,
-  monthlyLeaveApprovals,
-  pendingLeaveCount,
+  monthlyLeaveRequests,
+  previousMonthLeaveRequests,
   monthlyLabel,
   leavesDelta,
+  leaveSparkData,
+  leavePrevMonthLabel,
   weeklyExceptionCount,
   selectedDateLeavesCount,
   fieldActive,
@@ -139,7 +136,7 @@ export function KpiStrip({
     <div className="ov2-kpi-row">
       <KpiCard
         label="Attendance Rate"
-        period={`Weekly · ${weekLabel}`}
+        period={`Weekly \u00b7 ${weekLabel}`}
         color="green"
         icon={
           <svg viewBox="0 0 16 16" fill="none" width="14" height="14">
@@ -162,7 +159,7 @@ export function KpiStrip({
 
       <KpiCard
         label="On-Time Rate"
-        period={`Today · ${selectedDateLabel}`}
+        period={`Today \u00b7 ${selectedDateLabel}`}
         color="blue"
         icon={
           <svg viewBox="0 0 16 16" fill="none" width="14" height="14">
@@ -180,7 +177,7 @@ export function KpiStrip({
 
       <KpiCard
         label="Leave Requests"
-        period={`Monthly · ${monthlyLabel}`}
+        period={`Monthly \u00b7 ${monthlyLabel}`}
         color="amber"
         icon={
           <svg viewBox="0 0 16 16" fill="none" width="14" height="14">
@@ -188,12 +185,12 @@ export function KpiStrip({
             <path d="M5 1.5v2M11 1.5v2M1.5 6.5h13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
           </svg>
         }
-        value={monthlyLeaveApprovals}
-        sub={`${pendingLeaveCount} pending approval${pendingLeaveCount === 1 ? '' : 's'}`}
+        value={monthlyLeaveRequests}
+        sub={`This month ${monthlyLeaveRequests} \u00b7 last month ${previousMonthLeaveRequests}`}
         delta={leavesDelta}
-        deltaLabel={`vs ${prevMonthLabel}`}
+        deltaLabel={`vs ${leavePrevMonthLabel}`}
         deltaGood="down"
-        progressPct={(pendingLeaveCount / Math.max(monthlyLeaveApprovals, 1)) * 100}
+        sparkData={leaveSparkData}
       />
 
       <KpiCard
@@ -212,7 +209,7 @@ export function KpiStrip({
           </svg>
         }
         value={weeklyExceptionCount}
-        sub={`${selectedDateLeavesCount} on leave · ${fieldActive} field agents`}
+        sub={`${selectedDateLeavesCount} on leave \u00b7 ${fieldActive} field agents`}
         delta={exceptionsDelta}
         deltaLabel={`vs ${prevMonthLabel}`}
         deltaGood="down"

@@ -5,7 +5,7 @@ Business logic for admin-only operations
 
 from database.connection import get_db_connection
 from datetime import date, datetime, time, timedelta
-from typing import Dict, List
+from typing import Dict, List, Optional
 import calendar
 from collections import OrderedDict
 from services.attendance_constants import ATTENDANCE_STATUS_LOGGED_IN
@@ -2330,60 +2330,687 @@ def get_admin_leave_balance(emp_code: str):
     return ({"success": True, "data": balance}, 200)
 
 
-def get_all_overtime_records(limit: int = 100, status: str = None,
-                             emp_code: str = None,
-                             from_date: date = None,
-                             to_date: date = None):
-    """Get overtime records for all employees"""
+OVERTIME_RECORD_STATUSES = {
+    'eligible',
+    'requested',
+    'approved',
+    'rejected',
+    'expired',
+    'utilized',
+}
+
+_OVERTIME_SORT_COLUMN_MAP = {
+    'work_date': 'o.work_date',
+    'employee_name': "COALESCE(NULLIF(TRIM(e.emp_full_name), ''), o.emp_name)",
+    'employee_code': 'o.emp_code',
+    'extra_hours': 'o.extra_hours',
+    'comp_off_days': 'o.comp_off_days',
+    'status': 'o.status',
+    'created_at': 'o.created_at',
+    'updated_at': 'o.updated_at',
+}
+
+_OVERTIME_NUMERIC_FIELDS = {
+    'actual_hours',
+    'extra_hours',
+    'standard_hours',
+    'comp_off_days',
+}
+
+_OVERTIME_INTEGER_FIELDS = {
+    'attendance_id',
+    'clock_in_sequence',
+    'compoff_request_id',
+}
+
+_OVERTIME_DATE_FIELDS = {
+    'work_date',
+    'recording_deadline',
+    'expires_at',
+    'expired_at',
+    'approval_completed_at',
+    'utilized_at',
+}
+
+_OVERTIME_UPDATE_FIELDS = (
+    'attendance_id',
+    'emp_code',
+    'work_date',
+    'clock_in_sequence',
+    'actual_hours',
+    'extra_hours',
+    'standard_hours',
+    'comp_off_days',
+    'status',
+    'recording_deadline',
+    'expires_at',
+    'expired_at',
+    'approval_completed_at',
+    'utilized_at',
+    'compoff_request_id',
+)
+
+
+def _get_overtime_records_columns(cursor):
+    return _get_table_columns(cursor, 'overtime_records')
+
+
+def _normalize_overtime_status(status: Optional[str]) -> str:
+    normalized = (status or '').strip().lower()
+    if not normalized:
+        return ''
+    if normalized not in OVERTIME_RECORD_STATUSES:
+        raise ValueError(
+            f"Invalid status '{status}'. Allowed: {', '.join(sorted(OVERTIME_RECORD_STATUSES))}"
+        )
+    return normalized
+
+
+def _parse_overtime_date(value, field_name: str):
+    if value is None or value == '':
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        for fmt in ('%Y-%m-%d', '%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S'):
+            try:
+                parsed = datetime.strptime(raw[:19], fmt)
+                return parsed.date() if fmt == '%Y-%m-%d' else parsed
+            except ValueError:
+                continue
+    raise ValueError(f"{field_name} must use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS format")
+
+
+def _parse_non_negative_number(value, field_name: str):
+    if value is None or value == '':
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_name} must be a number")
+    if parsed < 0:
+        raise ValueError(f"{field_name} cannot be negative")
+    return parsed
+
+
+def _parse_positive_integer_or_none(value, field_name: str):
+    if value is None or value == '':
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_name} must be a whole number")
+    if parsed <= 0:
+        raise ValueError(f"{field_name} must be greater than 0")
+    return parsed
+
+
+def _build_overtime_order_by(sort_by: str = None, sort_order: str = None) -> str:
+    col = _OVERTIME_SORT_COLUMN_MAP.get((sort_by or '').strip().lower())
+    direction = 'ASC' if (sort_order or '').strip().upper() == 'ASC' else 'DESC'
+    if col:
+        return f"{col} {direction} NULLS LAST, o.work_date DESC NULLS LAST, o.id DESC"
+    return "o.work_date DESC NULLS LAST, o.id DESC"
+
+
+def _serialize_overtime_records(cursor, records: List[Dict]) -> List[Dict]:
+    attach_attendance_context_to_overtime_records(cursor, records)
+    serialized = []
+    for record in records:
+        record['employee_code'] = record.get('emp_code')
+        record['employee_name'] = (
+            record.get('emp_full_name')
+            or record.get('emp_name')
+            or record.get('emp_code')
+        )
+        record['department'] = record.get('emp_department')
+        serialized.append(serialize_temporal_values(record))
+    return serialized
+
+
+def _fetch_overtime_record(cursor, record_id: int):
+    cursor.execute(
+        """
+        SELECT
+            o.*,
+            e.emp_full_name,
+            e.emp_email AS employee_email,
+            e.emp_designation,
+            e.emp_department
+        FROM overtime_records o
+        LEFT JOIN employees e ON o.emp_code = e.emp_code
+        WHERE o.id = %s
+        """,
+        (record_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return None
+
+    return _serialize_overtime_records(cursor, [row])[0]
+
+
+def _get_overtime_employee(cursor, emp_code: str):
+    cursor.execute(
+        """
+        SELECT emp_code, emp_full_name, emp_email, emp_designation, emp_department
+        FROM employees
+        WHERE emp_code = %s
+        """,
+        (emp_code,),
+    )
+    return cursor.fetchone()
+
+
+def _build_overtime_payload(payload: Dict, cursor, *, require_required_fields: bool, record_id: int = None):
+    columns = _get_overtime_records_columns(cursor)
+    updates = {}
+
+    if require_required_fields:
+        required = ['emp_code', 'work_date']
+        missing = [field for field in required if not str(payload.get(field) or '').strip()]
+        if missing:
+            raise ValueError(f"Missing required fields: {', '.join(missing)}")
+
+    if 'emp_code' in payload:
+        emp_code = str(payload.get('emp_code') or '').strip()
+        if not emp_code:
+            raise ValueError("emp_code is required")
+        employee = _get_overtime_employee(cursor, emp_code)
+        if not employee:
+            raise LookupError("Employee not found")
+        updates['emp_code'] = emp_code
+        if 'emp_email' in columns:
+            updates['emp_email'] = employee.get('emp_email')
+        if 'emp_name' in columns:
+            updates['emp_name'] = employee.get('emp_full_name') or emp_code
+
+    for field_name in _OVERTIME_UPDATE_FIELDS:
+        if field_name not in payload:
+            continue
+        if field_name == 'emp_code':
+            continue
+        if field_name == 'status':
+            updates[field_name] = _normalize_overtime_status(payload.get(field_name))
+        elif field_name in _OVERTIME_NUMERIC_FIELDS:
+            updates[field_name] = _parse_non_negative_number(payload.get(field_name), field_name)
+        elif field_name in _OVERTIME_INTEGER_FIELDS:
+            updates[field_name] = _parse_positive_integer_or_none(payload.get(field_name), field_name)
+        elif field_name in _OVERTIME_DATE_FIELDS:
+            parsed_value = _parse_overtime_date(payload.get(field_name), field_name)
+            if field_name == 'work_date' and isinstance(parsed_value, datetime):
+                parsed_value = parsed_value.date()
+            updates[field_name] = parsed_value
+        else:
+            updates[field_name] = payload.get(field_name)
+
+    if require_required_fields:
+        updates.setdefault('status', 'eligible')
+        work_date = updates.get('work_date')
+        if work_date and 'day_of_week' in columns:
+            updates['day_of_week'] = work_date.strftime('%A')
+        if work_date and 'recording_deadline' in columns and 'recording_deadline' not in updates:
+            updates['recording_deadline'] = work_date + timedelta(days=3)
+        if work_date and 'expires_at' in columns and 'expires_at' not in updates:
+            updates['expires_at'] = work_date + timedelta(days=3)
+        if 'clock_in_sequence' in columns:
+            updates.setdefault('clock_in_sequence', 1)
+        if 'actual_hours' in columns:
+            updates.setdefault('actual_hours', 0)
+        if 'extra_hours' in columns:
+            updates.setdefault('extra_hours', 0)
+        if 'standard_hours' in columns:
+            updates.setdefault('standard_hours', 0)
+        if 'comp_off_days' in columns:
+            extra_hours = float(updates.get('extra_hours') or 0)
+            default_comp_days = 1.0 if extra_hours >= 6 else 0.5 if extra_hours > 3 else 0.0
+            updates.setdefault('comp_off_days', default_comp_days)
+
+    if 'work_date' in updates and updates['work_date'] and 'day_of_week' in columns:
+        updates['day_of_week'] = updates['work_date'].strftime('%A')
+
+    attendance_id = updates.get('attendance_id')
+    if attendance_id is not None and 'attendance_id' in columns:
+        cursor.execute("SELECT id FROM attendance WHERE id = %s", (attendance_id,))
+        if not cursor.fetchone():
+            raise ValueError("attendance_id does not exist")
+
+        params = [attendance_id]
+        duplicate_query = "SELECT id FROM overtime_records WHERE attendance_id = %s"
+        if record_id:
+            duplicate_query += " AND id <> %s"
+            params.append(record_id)
+        duplicate_query += " LIMIT 1"
+        cursor.execute(duplicate_query, params)
+        if cursor.fetchone():
+            raise ValueError("An overtime record already exists for this attendance_id")
+
+    return {
+        key: value
+        for key, value in updates.items()
+        if key in columns and key not in {'id', 'created_at'}
+    }
+
+
+def _status_timestamp_updates(next_status: str):
+    assignments = ["status = %s", "updated_at = NOW()"]
+    params = [next_status]
+    if next_status in {'approved', 'rejected'}:
+        assignments.append("approval_completed_at = COALESCE(approval_completed_at, NOW())")
+    elif next_status == 'expired':
+        assignments.append("expired_at = COALESCE(expired_at, NOW())")
+    elif next_status == 'utilized':
+        assignments.append("utilized_at = COALESCE(utilized_at, NOW())")
+    return assignments, params
+
+
+def get_all_overtime_records(
+    limit: int = None,
+    status: str = None,
+    emp_code: str = None,
+    from_date: date = None,
+    to_date: date = None,
+    search: str = None,
+    department: str = None,
+    sort_by: str = None,
+    sort_order: str = None,
+    page: int = 1,
+    page_size: int = 15,
+):
+    """Server-side paginated/filtered/sorted overtime records board."""
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
-        query = """
-            SELECT 
-                o.*,
-                e.emp_full_name,
-                e.emp_email,
-                e.emp_designation
+        normalized_page = max(int(page or 1), 1)
+        requested_page_size = page_size if page_size is not None else limit if limit is not None else 15
+        normalized_page_size = min(max(int(requested_page_size or 15), 1), 100)
+        offset = (normalized_page - 1) * normalized_page_size
+
+        base_query = """
             FROM overtime_records o
             LEFT JOIN employees e ON o.emp_code = e.emp_code
             WHERE 1=1
         """
-        params = []
+        params: List[object] = []
 
-        if status:
-            query += " AND o.status = %s"
-            params.append(status)
+        normalized_search = (search or '').strip()
+        if normalized_search:
+            like_value = f"%{normalized_search}%"
+            base_query += """
+                AND (
+                    COALESCE(NULLIF(TRIM(e.emp_full_name), ''), o.emp_name) ILIKE %s
+                    OR o.emp_code ILIKE %s
+                    OR COALESCE(o.emp_email, e.emp_email, '') ILIKE %s
+                    OR COALESCE(e.emp_designation, '') ILIKE %s
+                    OR COALESCE(o.status, '') ILIKE %s
+                )
+            """
+            params.extend([like_value, like_value, like_value, like_value, like_value])
 
-        if emp_code:
-            query += " AND o.emp_code = %s"
-            params.append(emp_code)
+        normalized_status = _normalize_overtime_status(status)
+        if normalized_status:
+            base_query += " AND LOWER(COALESCE(o.status, '')) = %s"
+            params.append(normalized_status)
+
+        normalized_emp_code = (emp_code or '').strip()
+        if normalized_emp_code:
+            base_query += " AND o.emp_code ILIKE %s"
+            params.append(f"%{normalized_emp_code}%")
+
+        normalized_department = (department or '').strip()
+        if normalized_department:
+            base_query += " AND NULLIF(TRIM(COALESCE(e.emp_department, '')), '') ILIKE %s"
+            params.append(f"%{normalized_department}%")
 
         if from_date:
-            query += " AND o.work_date >= %s"
+            base_query += " AND o.work_date >= %s"
             params.append(from_date)
 
         if to_date:
-            query += " AND o.work_date <= %s"
+            base_query += " AND o.work_date <= %s"
             params.append(to_date)
 
-        query += " ORDER BY o.work_date DESC LIMIT %s"
-        params.append(limit)
+        cursor.execute(
+            f"""
+            SELECT
+                COUNT(*) AS total,
+                COALESCE(SUM(o.extra_hours), 0) AS total_extra_hours,
+                COALESCE(SUM(CASE WHEN LOWER(COALESCE(o.status, '')) = 'eligible' THEN o.comp_off_days ELSE 0 END), 0) AS eligible_comp_off_days,
+                COUNT(CASE WHEN LOWER(COALESCE(o.status, '')) = 'eligible' THEN 1 END) AS eligible,
+                COUNT(CASE WHEN LOWER(COALESCE(o.status, '')) = 'requested' THEN 1 END) AS requested,
+                COUNT(CASE WHEN LOWER(COALESCE(o.status, '')) = 'approved' THEN 1 END) AS approved,
+                COUNT(CASE WHEN LOWER(COALESCE(o.status, '')) = 'rejected' THEN 1 END) AS rejected,
+                COUNT(CASE WHEN LOWER(COALESCE(o.status, '')) = 'expired' THEN 1 END) AS expired,
+                COUNT(CASE WHEN LOWER(COALESCE(o.status, '')) = 'utilized' THEN 1 END) AS utilized,
+                COUNT(CASE
+                    WHEN LOWER(COALESCE(o.status, '')) = 'expired'
+                         OR COALESCE(o.recording_deadline, o.expires_at)::date <= CURRENT_DATE + INTERVAL '7 days'
+                    THEN 1
+                END) AS expiring_or_expired,
+                COUNT(CASE WHEN o.work_date >= date_trunc('month', CURRENT_DATE) THEN 1 END) AS current_month_total,
+                COUNT(CASE WHEN o.work_date >= date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
+                             AND o.work_date < date_trunc('month', CURRENT_DATE) THEN 1 END) AS previous_month_total
+            {base_query}
+            """,
+            params,
+        )
+        kpi_row = cursor.fetchone() or {}
+        total_records = int(kpi_row.get('total') or 0)
 
-        cursor.execute(query, params)
-        records = cursor.fetchall()
-        attach_attendance_context_to_overtime_records(cursor, records)
-        records = [serialize_temporal_values(record) for record in records]
+        cursor.execute("""
+            SELECT DISTINCT emp_department
+            FROM employees
+            WHERE NULLIF(TRIM(COALESCE(emp_department, '')), '') IS NOT NULL
+            ORDER BY emp_department
+        """)
+        department_options = [
+            row['emp_department']
+            for row in (cursor.fetchall() or [])
+            if row.get('emp_department')
+        ]
+
+        query = f"""
+            SELECT
+                o.*,
+                e.emp_full_name,
+                e.emp_email AS employee_email,
+                e.emp_designation,
+                e.emp_department
+            {base_query}
+            ORDER BY
+                {_build_overtime_order_by(sort_by, sort_order)}
+            LIMIT %s OFFSET %s
+        """
+        cursor.execute(query, [*params, normalized_page_size, offset])
+        records = _serialize_overtime_records(cursor, cursor.fetchall() or [])
+
+        total_pages = (total_records + normalized_page_size - 1) // normalized_page_size if total_records else 0
+
+        kpis = {
+            "total_loaded": len(records),
+            "total": total_records,
+            "eligible": int(kpi_row.get('eligible') or 0),
+            "requested": int(kpi_row.get('requested') or 0),
+            "approved": int(kpi_row.get('approved') or 0),
+            "rejected": int(kpi_row.get('rejected') or 0),
+            "expired": int(kpi_row.get('expired') or 0),
+            "utilized": int(kpi_row.get('utilized') or 0),
+            "eligible_comp_off_days": float(kpi_row.get('eligible_comp_off_days') or 0),
+            "total_extra_hours": float(kpi_row.get('total_extra_hours') or 0),
+            "expiring_or_expired": int(kpi_row.get('expiring_or_expired') or 0),
+            "current_month_total": int(kpi_row.get('current_month_total') or 0),
+            "previous_month_total": int(kpi_row.get('previous_month_total') or 0),
+        }
 
         return ({
             "success": True,
             "data": {
+                "records": records,
                 "overtime_records": records,
-                "count": len(records)
+                "count": total_records,
+                "kpis": kpis,
+                "filter_options": {
+                    "departments": department_options,
+                    "statuses": sorted(OVERTIME_RECORD_STATUSES),
+                },
+                "pagination": {
+                    "page": normalized_page,
+                    "page_size": normalized_page_size,
+                    "total_records": total_records,
+                    "total_pages": total_pages,
+                    "has_next": normalized_page < total_pages,
+                    "has_previous": normalized_page > 1 and total_pages > 0,
+                },
             }
         }, 200)
-
+    except ValueError as exc:
+        return ({"success": False, "message": str(exc)}, 400)
     finally:
         cursor.close()
         conn.close()
+
+
+def get_overtime_record(record_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        record = _fetch_overtime_record(cursor, record_id)
+        if not record:
+            return ({"success": False, "message": "Overtime record not found"}, 404)
+        return ({"success": True, "data": {"record": record}}, 200)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def create_overtime_record(payload: Dict, created_by_emp_code: str = None):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        record_data = _build_overtime_payload(payload or {}, cursor, require_required_fields=True)
+        if not record_data:
+            return ({"success": False, "message": "No valid overtime record fields provided"}, 400)
+
+        columns = list(record_data.keys())
+        values = [record_data[column] for column in columns]
+        if 'created_at' in _get_overtime_records_columns(cursor):
+            columns.append('created_at')
+            values.append(datetime.now())
+        if 'updated_at' in _get_overtime_records_columns(cursor):
+            columns.append('updated_at')
+            values.append(datetime.now())
+
+        cursor.execute(
+            f"""
+            INSERT INTO overtime_records ({', '.join(columns)})
+            VALUES ({', '.join(['%s'] * len(columns))})
+            RETURNING id
+            """,
+            values,
+        )
+        created = cursor.fetchone()
+        conn.commit()
+        record = _fetch_overtime_record(cursor, created['id'])
+        return ({
+            "success": True,
+            "message": "Overtime record created successfully",
+            "data": {"record": record, "created_by": created_by_emp_code}
+        }, 201)
+    except LookupError as exc:
+        conn.rollback()
+        return ({"success": False, "message": str(exc)}, 404)
+    except ValueError as exc:
+        conn.rollback()
+        return ({"success": False, "message": str(exc)}, 400)
+    except Exception as exc:
+        conn.rollback()
+        return ({"success": False, "message": str(exc)}, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def update_overtime_record(record_id: int, payload: Dict, updated_by_emp_code: str = None):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM overtime_records WHERE id = %s", (record_id,))
+        if not cursor.fetchone():
+            return ({"success": False, "message": "Overtime record not found"}, 404)
+
+        record_data = _build_overtime_payload(
+            payload or {},
+            cursor,
+            require_required_fields=False,
+            record_id=record_id,
+        )
+        if not record_data:
+            return ({"success": False, "message": "No valid overtime record fields provided"}, 400)
+
+        if 'updated_at' in _get_overtime_records_columns(cursor):
+            record_data['updated_at'] = datetime.now()
+
+        assignments = [f"{column} = %s" for column in record_data]
+        values = [record_data[column] for column in record_data]
+        values.append(record_id)
+        cursor.execute(
+            f"""
+            UPDATE overtime_records
+            SET {', '.join(assignments)}
+            WHERE id = %s
+            RETURNING id
+            """,
+            values,
+        )
+        conn.commit()
+        record = _fetch_overtime_record(cursor, record_id)
+        return ({
+            "success": True,
+            "message": "Overtime record updated successfully",
+            "data": {"record": record, "updated_by": updated_by_emp_code}
+        }, 200)
+    except LookupError as exc:
+        conn.rollback()
+        return ({"success": False, "message": str(exc)}, 404)
+    except ValueError as exc:
+        conn.rollback()
+        return ({"success": False, "message": str(exc)}, 400)
+    except Exception as exc:
+        conn.rollback()
+        return ({"success": False, "message": str(exc)}, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def delete_overtime_record(record_id: int, force: bool = False):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT id, status, compoff_request_id
+            FROM overtime_records
+            WHERE id = %s
+            """,
+            (record_id,),
+        )
+        record = cursor.fetchone()
+        if not record:
+            return ({"success": False, "message": "Overtime record not found"}, 404)
+
+        status = (record.get('status') or '').strip().lower()
+        has_linked_request = record.get('compoff_request_id') is not None
+        if not force and (has_linked_request or status in {'requested', 'approved', 'utilized'}):
+            return ({
+                "success": False,
+                "message": "Cannot delete a linked or finalized overtime record without force=true"
+            }, 400)
+
+        cursor.execute(
+            """
+            DELETE FROM overtime_records
+            WHERE id = %s
+            RETURNING id
+            """,
+            (record_id,),
+        )
+        deleted = cursor.fetchone()
+        conn.commit()
+        return ({
+            "success": True,
+            "message": "Overtime record deleted successfully",
+            "data": deleted
+        }, 200)
+    except Exception as exc:
+        conn.rollback()
+        return ({"success": False, "message": str(exc)}, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def update_overtime_record_status(
+    record_id: int,
+    status: str,
+    updated_by_emp_code: str = None,
+    remarks: str = '',
+):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        next_status = _normalize_overtime_status(status)
+        if not next_status:
+            return ({"success": False, "message": "status is required"}, 400)
+
+        cursor.execute("SELECT id FROM overtime_records WHERE id = %s", (record_id,))
+        if not cursor.fetchone():
+            return ({"success": False, "message": "Overtime record not found"}, 404)
+
+        assignments, params = _status_timestamp_updates(next_status)
+        params.append(record_id)
+        cursor.execute(
+            f"""
+            UPDATE overtime_records
+            SET {', '.join(assignments)}
+            WHERE id = %s
+            RETURNING id
+            """,
+            params,
+        )
+        conn.commit()
+        record = _fetch_overtime_record(cursor, record_id)
+        return ({
+            "success": True,
+            "message": "Overtime record status updated successfully",
+            "data": {
+                "record": record,
+                "status": next_status,
+                "updated_by": updated_by_emp_code,
+                "remarks": remarks,
+            }
+        }, 200)
+    except ValueError as exc:
+        conn.rollback()
+        return ({"success": False, "message": str(exc)}, 400)
+    except Exception as exc:
+        conn.rollback()
+        return ({"success": False, "message": str(exc)}, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def approve_overtime_record(
+    record_id: int,
+    action: str,
+    approver_emp_code: str,
+    remarks: str = '',
+):
+    normalized_action = (action or '').strip().lower()
+    action_map = {
+        'approve': 'approved',
+        'approved': 'approved',
+        'reject': 'rejected',
+        'rejected': 'rejected',
+    }
+    next_status = action_map.get(normalized_action)
+    if not next_status:
+        return ({
+            "success": False,
+            "message": "action must be 'approved' or 'rejected'"
+        }, 400)
+
+    return update_overtime_record_status(
+        record_id=record_id,
+        status=next_status,
+        updated_by_emp_code=approver_emp_code,
+        remarks=remarks,
+    )

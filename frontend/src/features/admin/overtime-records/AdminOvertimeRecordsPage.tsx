@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import ColumnVisibilitySelector, { type ColumnDef } from '../attendance-exceptions/components/ColumnVisibilitySelector'
 import './AdminOvertimeRecordsPage.css'
 import type {
   AdminOvertimeDatePreset,
+  AdminOvertimeFilterOptions,
   AdminOvertimeFilterState,
   AdminOvertimeKpis,
-  AdminOvertimeLoadMeta,
+  AdminOvertimeMutationPayload,
+  AdminOvertimePagination,
   AdminOvertimeRecord,
+  AdminOvertimeStatus,
 } from '../../../types/admin'
 
 const ALL_COLUMNS: ColumnDef[] = [
@@ -48,14 +51,13 @@ const DEFAULT_VISIBLE = new Set([
 
 const STORAGE_KEY = 'fawnix_overtime_columns_v1'
 
-const STATUS_FILTER_OPTIONS = [
-  { value: '', label: 'All statuses' },
-  { value: 'eligible', label: 'Eligible' },
-  { value: 'requested', label: 'Requested' },
-  { value: 'approved', label: 'Approved' },
-  { value: 'rejected', label: 'Rejected' },
-  { value: 'expired', label: 'Expired' },
-  { value: 'utilized', label: 'Utilized' },
+const OVERTIME_STATUS_OPTIONS: AdminOvertimeStatus[] = [
+  'eligible',
+  'requested',
+  'approved',
+  'rejected',
+  'expired',
+  'utilized',
 ]
 
 const DATE_PRESETS: Array<{ value: AdminOvertimeDatePreset; label: string }> = [
@@ -67,24 +69,48 @@ const DATE_PRESETS: Array<{ value: AdminOvertimeDatePreset; label: string }> = [
   { value: 'custom', label: 'Custom range' },
 ]
 
+const SORT_OPTIONS = [
+  { value: 'work_date', label: 'Work Date' },
+  { value: 'employee_name', label: 'Employee Name' },
+  { value: 'employee_code', label: 'Employee Code' },
+  { value: 'extra_hours', label: 'Extra Hours' },
+  { value: 'comp_off_days', label: 'Comp-Off Days' },
+  { value: 'status', label: 'Status' },
+  { value: 'created_at', label: 'Created At' },
+  { value: 'updated_at', label: 'Updated At' },
+]
+
+const PAGE_SIZE_OPTIONS = ['10', '15', '25', '50', '100']
+
 type AdminOvertimeRecordsPageProps = {
+  actionLoading: boolean
+  actionStatus: string
+  canWriteAdminData: boolean
   error: string
+  filterOptions: AdminOvertimeFilterOptions
   filters: AdminOvertimeFilterState
   formatDateOnly: (value?: string) => string
   formatDateTime: (value?: string) => string
   kpis: AdminOvertimeKpis
   lastSyncedAt: Date | null
   loading: boolean
-  meta: AdminOvertimeLoadMeta
+  pagination: AdminOvertimePagination
   records: AdminOvertimeRecord[]
   validationError: string
+  approveRecord: (recordId: number, action: 'approved' | 'rejected', remarks?: string) => Promise<AdminOvertimeRecord | undefined>
   applyDatePreset: (preset: AdminOvertimeDatePreset) => void
   clearFilters: () => void
+  createRecord: (payload: AdminOvertimeMutationPayload) => Promise<AdminOvertimeRecord | undefined>
+  deleteRecord: (recordId: number, force?: boolean) => Promise<AdminOvertimeRecord | undefined>
+  onChangePage: (page: number) => void
   refresh: () => void
+  onSort: (sortBy: string, sortOrder: 'asc' | 'desc') => void
+  updateRecord: (recordId: number, payload: AdminOvertimeMutationPayload) => Promise<AdminOvertimeRecord | undefined>
   updateFilter: <K extends keyof AdminOvertimeFilterState>(
     key: K,
     value: AdminOvertimeFilterState[K]
   ) => void
+  updateStatus: (recordId: number, status: AdminOvertimeStatus, remarks?: string) => Promise<AdminOvertimeRecord | undefined>
 }
 
 function loadVisibleKeys(): Set<string> {
@@ -130,6 +156,13 @@ function formatCount(value: number | string | null | undefined) {
   return numericValue === null ? '--' : numericValue.toLocaleString()
 }
 
+function normalizeOvertimeStatus(value?: string): AdminOvertimeStatus {
+  const normalized = (value || '').toLowerCase()
+  return OVERTIME_STATUS_OPTIONS.includes(normalized as AdminOvertimeStatus)
+    ? normalized as AdminOvertimeStatus
+    : 'eligible'
+}
+
 function formatStatus(value?: string) {
   const raw = (value || '').trim()
   if (!raw) {
@@ -165,6 +198,51 @@ function parseDateValue(value?: string | null) {
 
   const parsed = new Date(raw)
   return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function toDateInputText(value?: string | null) {
+  const raw = (value || '').trim()
+  if (!raw) {
+    return ''
+  }
+
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(raw)
+  if (match) {
+    return match[1]
+  }
+
+  const parsed = new Date(raw)
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 10)
+}
+
+function toDateTimeInputText(value?: string | null) {
+  const raw = (value || '').trim()
+  if (!raw) {
+    return ''
+  }
+
+  const match = /^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2})/.exec(raw)
+  if (match) {
+    return `${match[1]}T${match[2]}`
+  }
+
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) {
+    return ''
+  }
+
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return [
+    parsed.getFullYear(),
+    '-',
+    pad(parsed.getMonth() + 1),
+    '-',
+    pad(parsed.getDate()),
+    'T',
+    pad(parsed.getHours()),
+    ':',
+    pad(parsed.getMinutes()),
+  ].join('')
 }
 
 function getDayLabel(record: AdminOvertimeRecord) {
@@ -257,24 +335,6 @@ function getActivitiesSummary(record: AdminOvertimeRecord) {
       return parts.join(' - ')
     })
     .join('; ')
-}
-
-function getSearchText(record: AdminOvertimeRecord) {
-  return [
-    getEmployeeName(record),
-    record.emp_code,
-    record.emp_email,
-    record.emp_designation,
-    record.status,
-    record.work_date,
-    getDayLabel(record),
-    record.attendance_id,
-    record.compoff_request_id,
-    getActivitiesSummary(record),
-  ]
-    .filter((value) => value != null)
-    .join(' ')
-    .toLowerCase()
 }
 
 function csvEscape(value: unknown) {
@@ -370,6 +430,153 @@ function downloadRecordsAsCsv(
   URL.revokeObjectURL(url)
 }
 
+type OvertimeFormValues = {
+  attendance_id: string
+  emp_code: string
+  work_date: string
+  clock_in_sequence: string
+  actual_hours: string
+  extra_hours: string
+  standard_hours: string
+  comp_off_days: string
+  status: AdminOvertimeStatus
+  recording_deadline: string
+  expires_at: string
+  expired_at: string
+  approval_completed_at: string
+  utilized_at: string
+  compoff_request_id: string
+}
+
+const EMPTY_FORM_VALUES: OvertimeFormValues = {
+  attendance_id: '',
+  emp_code: '',
+  work_date: '',
+  clock_in_sequence: '1',
+  actual_hours: '',
+  extra_hours: '',
+  standard_hours: '',
+  comp_off_days: '',
+  status: 'eligible',
+  recording_deadline: '',
+  expires_at: '',
+  expired_at: '',
+  approval_completed_at: '',
+  utilized_at: '',
+  compoff_request_id: '',
+}
+
+function recordToFormValues(record: AdminOvertimeRecord | null): OvertimeFormValues {
+  if (!record) {
+    return EMPTY_FORM_VALUES
+  }
+
+  return {
+    attendance_id: record.attendance_id == null ? '' : String(record.attendance_id),
+    emp_code: record.emp_code || record.employee_code || '',
+    work_date: toDateInputText(record.work_date),
+    clock_in_sequence: record.clock_in_sequence == null ? '' : String(record.clock_in_sequence),
+    actual_hours: record.actual_hours == null ? '' : String(record.actual_hours),
+    extra_hours: record.extra_hours == null ? '' : String(record.extra_hours),
+    standard_hours: record.standard_hours == null ? '' : String(record.standard_hours),
+    comp_off_days: record.comp_off_days == null ? '' : String(record.comp_off_days),
+    status: normalizeOvertimeStatus(record.status),
+    recording_deadline: toDateInputText(record.recording_deadline),
+    expires_at: toDateInputText(record.expires_at),
+    expired_at: toDateTimeInputText(record.expired_at),
+    approval_completed_at: toDateTimeInputText(record.approval_completed_at),
+    utilized_at: toDateTimeInputText(record.utilized_at),
+    compoff_request_id: record.compoff_request_id == null ? '' : String(record.compoff_request_id),
+  }
+}
+
+function isNonNegativeNumber(value: string) {
+  if (!value.trim()) {
+    return true
+  }
+
+  const numericValue = Number(value)
+  return Number.isFinite(numericValue) && numericValue >= 0
+}
+
+function isPositiveInteger(value: string) {
+  if (!value.trim()) {
+    return true
+  }
+
+  const numericValue = Number(value)
+  return Number.isInteger(numericValue) && numericValue > 0
+}
+
+function validateFormValues(values: OvertimeFormValues) {
+  if (!values.emp_code.trim()) {
+    return 'Employee code is required.'
+  }
+
+  if (!values.work_date) {
+    return 'Work date is required.'
+  }
+
+  const numberFields = [
+    ['actual hours', values.actual_hours],
+    ['extra hours', values.extra_hours],
+    ['standard hours', values.standard_hours],
+    ['comp-off days', values.comp_off_days],
+  ]
+  const invalidNumber = numberFields.find(([, value]) => !isNonNegativeNumber(value))
+  if (invalidNumber) {
+    return `${invalidNumber[0]} must be zero or greater.`
+  }
+
+  const integerFields = [
+    ['attendance ID', values.attendance_id],
+    ['clock-in sequence', values.clock_in_sequence],
+    ['comp-off request ID', values.compoff_request_id],
+  ]
+  const invalidInteger = integerFields.find(([, value]) => !isPositiveInteger(value))
+  if (invalidInteger) {
+    return `${invalidInteger[0]} must be a positive whole number.`
+  }
+
+  return ''
+}
+
+function buildMutationPayload(values: OvertimeFormValues, includeBlankNulls: boolean): AdminOvertimeMutationPayload {
+  const optionalValue = (value: string) => {
+    const trimmed = value.trim()
+    return trimmed || (includeBlankNulls ? null : undefined)
+  }
+  const payload: AdminOvertimeMutationPayload = {
+    emp_code: values.emp_code.trim(),
+    work_date: values.work_date,
+    status: values.status,
+  }
+
+  const optionalFields: Array<keyof OvertimeFormValues> = [
+    'attendance_id',
+    'clock_in_sequence',
+    'actual_hours',
+    'extra_hours',
+    'standard_hours',
+    'comp_off_days',
+    'recording_deadline',
+    'expires_at',
+    'expired_at',
+    'approval_completed_at',
+    'utilized_at',
+    'compoff_request_id',
+  ]
+
+  optionalFields.forEach((fieldName) => {
+    const value = optionalValue(values[fieldName])
+    if (value !== undefined) {
+      ;(payload as Record<string, string | null | undefined>)[fieldName] = value
+    }
+  })
+
+  return payload
+}
+
 function PlainTh({
   columnKey,
   label,
@@ -388,7 +595,11 @@ function PlainTh({
   return <th className={`otr-th otr-col--${columnKey}`}>{children || label}</th>
 }
 
-function ToolbarIcon({ name }: { name: 'refresh' | 'download' | 'clear' | 'search' }) {
+function ToolbarIcon({
+  name,
+}: {
+  name: 'refresh' | 'download' | 'clear' | 'search' | 'plus' | 'edit' | 'trash' | 'check'
+}) {
   if (name === 'download') {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -404,6 +615,44 @@ function ToolbarIcon({ name }: { name: 'refresh' | 'download' | 'clear' | 'searc
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M6 6l12 12" />
         <path d="M18 6 6 18" />
+      </svg>
+    )
+  }
+
+  if (name === 'plus') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 5v14" />
+        <path d="M5 12h14" />
+      </svg>
+    )
+  }
+
+  if (name === 'edit') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+      </svg>
+    )
+  }
+
+  if (name === 'trash') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 6h18" />
+        <path d="M8 6V4h8v2" />
+        <path d="M19 6l-1 14H6L5 6" />
+        <path d="M10 11v5" />
+        <path d="M14 11v5" />
+      </svg>
+    )
+  }
+
+  if (name === 'check') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m5 13 4 4L19 7" />
       </svg>
     )
   }
@@ -440,18 +689,305 @@ function DetailFactList({ items }: { items: Array<{ label: string; value: ReactN
   )
 }
 
+function OvertimeRecordFormDialog({
+  actionLoading,
+  error,
+  mode,
+  onChange,
+  onClose,
+  onSubmit,
+  values,
+}: {
+  actionLoading: boolean
+  error: string
+  mode: 'create' | 'edit' | null
+  onChange: <K extends keyof OvertimeFormValues>(key: K, value: OvertimeFormValues[K]) => void
+  onClose: () => void
+  onSubmit: () => void
+  values: OvertimeFormValues
+}) {
+  if (!mode) {
+    return null
+  }
+
+  const title = mode === 'create' ? 'New Overtime Record' : 'Edit Overtime Record'
+  const submitLabel = mode === 'create' ? 'Create Record' : 'Save Changes'
+
+  return (
+    <div className="otr-modal-shell" role="presentation">
+      <button className="otr-modal-overlay" type="button" onClick={onClose} aria-label="Close overtime form" />
+      <form
+        className="otr-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onSubmit={(event) => {
+          event.preventDefault()
+          onSubmit()
+        }}
+      >
+        <header className="otr-modal-header">
+          <div>
+            <p className="otr-drawer-kicker">Overtime Records</p>
+            <h3>{title}</h3>
+          </div>
+          <button className="otr-drawer-close" type="button" onClick={onClose} aria-label="Close form">
+            x
+          </button>
+        </header>
+
+        <div className="otr-modal-body">
+          <div className="otr-form-grid">
+            <label className="otr-form-field">
+              <span>Employee Code</span>
+              <input
+                value={values.emp_code}
+                onChange={(event) => onChange('emp_code', event.target.value)}
+                placeholder="EMP001"
+                required
+              />
+            </label>
+            <label className="otr-form-field">
+              <span>Work Date</span>
+              <input
+                type="date"
+                value={values.work_date}
+                onChange={(event) => onChange('work_date', event.target.value)}
+                required
+              />
+            </label>
+            <label className="otr-form-field">
+              <span>Status</span>
+              <select
+                value={values.status}
+                onChange={(event) => onChange('status', event.target.value as AdminOvertimeStatus)}
+              >
+                {OVERTIME_STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>
+                    {formatStatus(status)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="otr-form-field">
+              <span>Attendance ID</span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={values.attendance_id}
+                onChange={(event) => onChange('attendance_id', event.target.value)}
+              />
+            </label>
+            <label className="otr-form-field">
+              <span>Clock-In Sequence</span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={values.clock_in_sequence}
+                onChange={(event) => onChange('clock_in_sequence', event.target.value)}
+              />
+            </label>
+            <label className="otr-form-field">
+              <span>Actual Hours</span>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={values.actual_hours}
+                onChange={(event) => onChange('actual_hours', event.target.value)}
+              />
+            </label>
+            <label className="otr-form-field">
+              <span>Extra Hours</span>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={values.extra_hours}
+                onChange={(event) => onChange('extra_hours', event.target.value)}
+              />
+            </label>
+            <label className="otr-form-field">
+              <span>Standard Hours</span>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={values.standard_hours}
+                onChange={(event) => onChange('standard_hours', event.target.value)}
+              />
+            </label>
+            <label className="otr-form-field">
+              <span>Comp-Off Days</span>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={values.comp_off_days}
+                onChange={(event) => onChange('comp_off_days', event.target.value)}
+              />
+            </label>
+            <label className="otr-form-field">
+              <span>Recording Deadline</span>
+              <input
+                type="date"
+                value={values.recording_deadline}
+                onChange={(event) => onChange('recording_deadline', event.target.value)}
+              />
+            </label>
+            <label className="otr-form-field">
+              <span>Expires At</span>
+              <input
+                type="date"
+                value={values.expires_at}
+                onChange={(event) => onChange('expires_at', event.target.value)}
+              />
+            </label>
+            <label className="otr-form-field">
+              <span>Comp-Off Request ID</span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={values.compoff_request_id}
+                onChange={(event) => onChange('compoff_request_id', event.target.value)}
+              />
+            </label>
+            <label className="otr-form-field">
+              <span>Approved At</span>
+              <input
+                type="datetime-local"
+                value={values.approval_completed_at}
+                onChange={(event) => onChange('approval_completed_at', event.target.value)}
+              />
+            </label>
+            <label className="otr-form-field">
+              <span>Expired At</span>
+              <input
+                type="datetime-local"
+                value={values.expired_at}
+                onChange={(event) => onChange('expired_at', event.target.value)}
+              />
+            </label>
+            <label className="otr-form-field">
+              <span>Utilized At</span>
+              <input
+                type="datetime-local"
+                value={values.utilized_at}
+                onChange={(event) => onChange('utilized_at', event.target.value)}
+              />
+            </label>
+          </div>
+          {error ? <p className="otr-filter-error">{error}</p> : null}
+        </div>
+
+        <footer className="otr-modal-footer">
+          <button className="otr-btn" type="button" onClick={onClose} disabled={actionLoading}>
+            Cancel
+          </button>
+          <button className="otr-btn otr-btn--primary" type="submit" disabled={actionLoading}>
+            <ToolbarIcon name="check" />
+            {actionLoading ? 'Saving...' : submitLabel}
+          </button>
+        </footer>
+      </form>
+    </div>
+  )
+}
+
+function DeleteOvertimeRecordDialog({
+  actionLoading,
+  forceDelete,
+  onChangeForce,
+  onClose,
+  onConfirm,
+  record,
+}: {
+  actionLoading: boolean
+  forceDelete: boolean
+  onChangeForce: (value: boolean) => void
+  onClose: () => void
+  onConfirm: () => void
+  record: AdminOvertimeRecord | null
+}) {
+  if (!record) {
+    return null
+  }
+
+  return (
+    <div className="otr-modal-shell" role="presentation">
+      <button className="otr-modal-overlay" type="button" onClick={onClose} aria-label="Close delete confirmation" />
+      <section className="otr-modal otr-modal--narrow" role="dialog" aria-modal="true" aria-label="Delete overtime record">
+        <header className="otr-modal-header">
+          <div>
+            <p className="otr-drawer-kicker">Delete Record</p>
+            <h3>{getEmployeeName(record)}</h3>
+          </div>
+          <button className="otr-drawer-close" type="button" onClick={onClose} aria-label="Close delete confirmation">
+            x
+          </button>
+        </header>
+        <div className="otr-modal-body">
+          <p className="otr-confirm-copy">
+            This removes the overtime record for {formatStatus(record.status)} status on {toDateInputText(record.work_date) || 'the selected work date'}.
+          </p>
+          <label className="otr-checkbox-field">
+            <input
+              type="checkbox"
+              checked={forceDelete}
+              onChange={(event) => onChangeForce(event.target.checked)}
+            />
+            <span>Force delete linked or finalized records</span>
+          </label>
+        </div>
+        <footer className="otr-modal-footer">
+          <button className="otr-btn" type="button" onClick={onClose} disabled={actionLoading}>
+            Cancel
+          </button>
+          <button className="otr-btn otr-btn--danger" type="button" onClick={onConfirm} disabled={actionLoading}>
+            <ToolbarIcon name="trash" />
+            {actionLoading ? 'Deleting...' : 'Delete'}
+          </button>
+        </footer>
+      </section>
+    </div>
+  )
+}
+
 function DetailDrawer({
   record,
   open,
   onClose,
+  actionLoading,
+  canWriteAdminData,
   formatDateOnly,
   formatDateTime,
+  onApprove,
+  onDelete,
+  onEdit,
+  onRemarksChange,
+  onStatusValueChange,
+  onUpdateStatus,
+  remarks,
+  statusValue,
 }: {
   record: AdminOvertimeRecord | null
   open: boolean
   onClose: () => void
+  actionLoading: boolean
+  canWriteAdminData: boolean
   formatDateOnly: (value?: string) => string
   formatDateTime: (value?: string) => string
+  onApprove: (record: AdminOvertimeRecord, action: 'approved' | 'rejected', remarks: string) => void
+  onDelete: (record: AdminOvertimeRecord) => void
+  onEdit: (record: AdminOvertimeRecord) => void
+  onRemarksChange: (value: string) => void
+  onStatusValueChange: (value: AdminOvertimeStatus) => void
+  onUpdateStatus: (record: AdminOvertimeRecord, status: AdminOvertimeStatus, remarks: string) => void
+  remarks: string
+  statusValue: AdminOvertimeStatus
 }) {
   useEffect(() => {
     if (!open) {
@@ -542,6 +1078,60 @@ function DetailDrawer({
             </div>
           </section>
 
+          {canWriteAdminData ? (
+            <section className="otr-drawer-section otr-drawer-actions" aria-label="Record actions">
+              <div className="otr-action-row">
+                <button className="otr-btn" type="button" onClick={() => onEdit(record)} disabled={actionLoading}>
+                  <ToolbarIcon name="edit" />
+                  Edit
+                </button>
+                <button className="otr-btn otr-btn--danger-soft" type="button" onClick={() => onDelete(record)} disabled={actionLoading}>
+                  <ToolbarIcon name="trash" />
+                  Delete
+                </button>
+                <button className="otr-btn otr-btn--primary" type="button" onClick={() => onApprove(record, 'approved', remarks)} disabled={actionLoading}>
+                  Approve
+                </button>
+                <button className="otr-btn" type="button" onClick={() => onApprove(record, 'rejected', remarks)} disabled={actionLoading}>
+                  Reject
+                </button>
+              </div>
+              <div className="otr-status-editor">
+                <label className="otr-form-field">
+                  <span>Status Update</span>
+                  <select
+                    value={statusValue}
+                    onChange={(event) => onStatusValueChange(event.target.value as AdminOvertimeStatus)}
+                    disabled={actionLoading}
+                  >
+                    {OVERTIME_STATUS_OPTIONS.map((status) => (
+                      <option key={status} value={status}>
+                        {formatStatus(status)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="otr-form-field otr-form-field--wide">
+                  <span>Remarks</span>
+                  <input
+                    value={remarks}
+                    onChange={(event) => onRemarksChange(event.target.value)}
+                    placeholder="Optional note"
+                    disabled={actionLoading}
+                  />
+                </label>
+                <button
+                  className="otr-btn"
+                  type="button"
+                  onClick={() => onUpdateStatus(record, statusValue, remarks)}
+                  disabled={actionLoading}
+                >
+                  Save Status
+                </button>
+              </div>
+            </section>
+          ) : null}
+
           <section className="otr-drawer-section">
             <h4>Employee</h4>
             <DetailFactList items={employeeFacts} />
@@ -590,41 +1180,55 @@ function DetailDrawer({
 }
 
 export default function AdminOvertimeRecordsPage({
+  actionLoading,
+  actionStatus,
+  canWriteAdminData,
   error,
+  filterOptions,
   filters,
   formatDateOnly,
   formatDateTime,
   kpis,
   lastSyncedAt,
   loading,
-  meta,
+  pagination,
   records,
   validationError,
+  approveRecord,
   applyDatePreset,
   clearFilters,
+  createRecord,
+  deleteRecord,
+  onChangePage,
   refresh,
+  onSort,
+  updateRecord,
   updateFilter,
+  updateStatus,
 }: AdminOvertimeRecordsPageProps) {
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(loadVisibleKeys)
   const [drawerRecord, setDrawerRecord] = useState<AdminOvertimeRecord | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const normalizedSearch = filters.search.trim().toLowerCase()
-
-  const visibleRecords = useMemo(() => {
-    if (!normalizedSearch) {
-      return records
-    }
-
-    return records.filter((record) => getSearchText(record).includes(normalizedSearch))
-  }, [normalizedSearch, records])
+  const [drawerStatus, setDrawerStatus] = useState<AdminOvertimeStatus>('eligible')
+  const [drawerRemarks, setDrawerRemarks] = useState('')
+  const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null)
+  const [formRecord, setFormRecord] = useState<AdminOvertimeRecord | null>(null)
+  const [formValues, setFormValues] = useState<OvertimeFormValues>(EMPTY_FORM_VALUES)
+  const [formError, setFormError] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<AdminOvertimeRecord | null>(null)
+  const [forceDelete, setForceDelete] = useState(false)
+  const [mutationError, setMutationError] = useState('')
 
   const filtersActive = Boolean(
     filters.search.trim() ||
     filters.status ||
     filters.empCode.trim() ||
+    filters.department.trim() ||
     filters.fromDate ||
     filters.toDate ||
-    filters.limit !== '100'
+    filters.pageSize !== '15' ||
+    filters.sortBy !== 'work_date' ||
+    filters.sortOrder !== 'desc'
   )
 
   const toggleColumn = useCallback((key: string) => {
@@ -648,6 +1252,8 @@ export default function AdminOvertimeRecordsPage({
 
   const openDrawer = useCallback((record: AdminOvertimeRecord) => {
     setDrawerRecord(record)
+    setDrawerStatus(normalizeOvertimeStatus(record.status))
+    setDrawerRemarks('')
     setDrawerOpen(true)
   }, [])
 
@@ -655,15 +1261,150 @@ export default function AdminOvertimeRecordsPage({
     setDrawerOpen(false)
   }, [])
 
+  const openCreateForm = useCallback(() => {
+    setFormMode('create')
+    setFormRecord(null)
+    setFormValues(EMPTY_FORM_VALUES)
+    setFormError('')
+    setMutationError('')
+  }, [])
+
+  const openEditForm = useCallback((record: AdminOvertimeRecord) => {
+    setFormMode('edit')
+    setFormRecord(record)
+    setFormValues(recordToFormValues(record))
+    setFormError('')
+    setMutationError('')
+  }, [])
+
+  const closeForm = useCallback(() => {
+    if (actionLoading) {
+      return
+    }
+
+    setFormMode(null)
+    setFormRecord(null)
+    setFormError('')
+  }, [actionLoading])
+
+  const updateFormValue = useCallback(
+    <K extends keyof OvertimeFormValues>(key: K, value: OvertimeFormValues[K]) => {
+      setFormValues((previousValues) => ({
+        ...previousValues,
+        [key]: value,
+      }))
+    },
+    []
+  )
+
+  const submitForm = useCallback(async () => {
+    const nextFormError = validateFormValues(formValues)
+    setFormError(nextFormError)
+    setMutationError('')
+    if (nextFormError) {
+      return
+    }
+
+    try {
+      const payload = buildMutationPayload(formValues, formMode === 'edit')
+      if (formMode === 'edit') {
+        if (!formRecord?.id) {
+          setFormError('This record is missing an ID and cannot be updated.')
+          return
+        }
+        await updateRecord(formRecord.id, payload)
+        setDrawerOpen(false)
+      } else {
+        await createRecord(payload)
+      }
+      setFormMode(null)
+      setFormRecord(null)
+      setFormError('')
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Unable to save overtime record.')
+    }
+  }, [createRecord, formMode, formRecord, formValues, updateRecord])
+
+  const openDeleteDialog = useCallback((record: AdminOvertimeRecord) => {
+    setDeleteTarget(record)
+    setForceDelete(false)
+    setMutationError('')
+  }, [])
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget?.id) {
+      setMutationError('This record is missing an ID and cannot be deleted.')
+      return
+    }
+
+    try {
+      setMutationError('')
+      await deleteRecord(deleteTarget.id, forceDelete)
+      setDeleteTarget(null)
+      setDrawerOpen(false)
+    } catch (err) {
+      setMutationError(err instanceof Error ? err.message : 'Unable to delete overtime record.')
+    }
+  }, [deleteRecord, deleteTarget, forceDelete])
+
+  const handleStatusUpdate = useCallback(
+    async (record: AdminOvertimeRecord, status: AdminOvertimeStatus, remarks: string) => {
+      if (!record.id) {
+        setMutationError('This record is missing an ID and cannot be updated.')
+        return
+      }
+
+      try {
+        setMutationError('')
+        await updateStatus(record.id, status, remarks)
+        setDrawerStatus(status)
+        setDrawerRemarks('')
+      } catch (err) {
+        setMutationError(err instanceof Error ? err.message : 'Unable to update overtime status.')
+      }
+    },
+    [updateStatus]
+  )
+
+  const handleApproval = useCallback(
+    async (record: AdminOvertimeRecord, action: 'approved' | 'rejected', remarks: string) => {
+      if (!record.id) {
+        setMutationError('This record is missing an ID and cannot be approved or rejected.')
+        return
+      }
+
+      try {
+        setMutationError('')
+        await approveRecord(record.id, action, remarks)
+        setDrawerStatus(action)
+        setDrawerRemarks('')
+      } catch (err) {
+        setMutationError(err instanceof Error ? err.message : 'Unable to update overtime approval.')
+      }
+    },
+    [approveRecord]
+  )
+
   const vis = (key: string) => visibleKeys.has(key)
   const hasOptionalColumns = ALL_COLUMNS.some((column) => visibleKeys.has(column.key) && !DEFAULT_VISIBLE.has(column.key))
   const tableClassName = `dashboard-table otr-table${hasOptionalColumns ? ' otr-table--wide' : ' otr-table--default'}`
   const syncedLabel = lastSyncedAt
     ? lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : null
-  const headline = `${formatDecimal(kpis.total_extra_hours, 'h')} extra loaded - ${formatDecimal(kpis.eligible_comp_off_days, 'd')} eligible comp-off`
+  const headline = `${formatDecimal(kpis.total_extra_hours, 'h')} extra - ${formatDecimal(kpis.eligible_comp_off_days, 'd')} eligible comp-off`
   const loadingLabel = loading && records.length ? 'Refreshing...' : 'Refresh'
-  const visibleLabel = `${visibleRecords.length.toLocaleString()} of ${meta.count.toLocaleString()} loaded record${meta.count === 1 ? '' : 's'}`
+  const firstRecordIndex = pagination.total_records ? (pagination.page - 1) * pagination.page_size + 1 : 0
+  const lastRecordIndex = Math.min(pagination.page * pagination.page_size, pagination.total_records)
+  const visibleLabel = pagination.total_records
+    ? `Showing ${firstRecordIndex.toLocaleString()}-${lastRecordIndex.toLocaleString()} of ${pagination.total_records.toLocaleString()} records`
+    : 'No overtime records loaded'
+  const statusFilterOptions = filterOptions.statuses.length
+    ? filterOptions.statuses
+    : OVERTIME_STATUS_OPTIONS
+  const operationMessage = mutationError || actionStatus
+  const activeDrawerRecord = drawerRecord?.id
+    ? records.find((record) => record.id === drawerRecord.id) || drawerRecord
+    : drawerRecord
 
   return (
     <div className="admin-aligned-page admin-aligned-page--overtime-records">
@@ -685,10 +1426,22 @@ export default function AdminOvertimeRecordsPage({
             <ToolbarIcon name="refresh" />
             {loadingLabel}
           </button>
+          {canWriteAdminData ? (
+            <button
+              className="otr-btn otr-btn--primary"
+              onClick={openCreateForm}
+              disabled={actionLoading}
+              type="button"
+              aria-label="Create overtime record"
+            >
+              <ToolbarIcon name="plus" />
+              New Record
+            </button>
+          ) : null}
           <button
-            className="otr-btn otr-btn--primary"
-            onClick={() => downloadRecordsAsCsv(visibleRecords, visibleKeys, formatDateOnly, formatDateTime)}
-            disabled={loading || visibleRecords.length === 0}
+            className="otr-btn"
+            onClick={() => downloadRecordsAsCsv(records, visibleKeys, formatDateOnly, formatDateTime)}
+            disabled={loading || records.length === 0}
             type="button"
             aria-label="Export visible overtime records"
           >
@@ -700,14 +1453,14 @@ export default function AdminOvertimeRecordsPage({
 
       <div className="otr-kpi-grid" aria-label="Overtime summary">
         <article className="otr-kpi-card">
-          <span>Total Loaded</span>
-          <strong>{kpis.total_loaded.toLocaleString()}</strong>
-          <small>Limit {meta.limit.toLocaleString()}</small>
+          <span>Total Records</span>
+          <strong>{kpis.total.toLocaleString()}</strong>
+          <small>{kpis.total_loaded.toLocaleString()} loaded on this page</small>
         </article>
         <article className="otr-kpi-card">
           <span>Extra Hours</span>
           <strong>{formatDecimal(kpis.total_extra_hours, 'h')}</strong>
-          <small>Across loaded records</small>
+          <small>Across matching records</small>
         </article>
         <article className="otr-kpi-card">
           <span>Eligible Comp-Off</span>
@@ -747,7 +1500,10 @@ export default function AdminOvertimeRecordsPage({
               onChange={(event) => updateFilter('status', event.target.value as AdminOvertimeFilterState['status'])}
               disabled={loading}
             >
-              {STATUS_FILTER_OPTIONS.map((option) => (
+              {[{ value: '', label: 'All statuses' }, ...statusFilterOptions.map((status) => ({
+                value: status,
+                label: formatStatus(status),
+              }))].map((option) => (
                 <option key={option.value || 'all'} value={option.value}>
                   {option.label}
                 </option>
@@ -763,6 +1519,22 @@ export default function AdminOvertimeRecordsPage({
               placeholder="EMP001"
               disabled={loading}
             />
+          </label>
+
+          <label className="otr-filter-field">
+            <span>Department</span>
+            <select
+              value={filters.department}
+              onChange={(event) => updateFilter('department', event.target.value)}
+              disabled={loading}
+            >
+              <option value="">All departments</option>
+              {filterOptions.departments.map((department) => (
+                <option key={department} value={department}>
+                  {department}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label className="otr-filter-field">
@@ -801,16 +1573,45 @@ export default function AdminOvertimeRecordsPage({
           </label>
 
           <label className="otr-filter-field otr-filter-field--limit">
-            <span>Limit</span>
-            <input
-              type="number"
-              min={1}
-              max={500}
-              step={1}
-              value={filters.limit}
-              onChange={(event) => updateFilter('limit', event.target.value)}
+            <span>Page Size</span>
+            <select
+              value={filters.pageSize}
+              onChange={(event) => updateFilter('pageSize', event.target.value)}
               disabled={loading}
-            />
+            >
+              {PAGE_SIZE_OPTIONS.map((pageSize) => (
+                <option key={pageSize} value={pageSize}>
+                  {pageSize}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="otr-filter-field">
+            <span>Sort By</span>
+            <select
+              value={filters.sortBy}
+              onChange={(event) => onSort(event.target.value, filters.sortOrder)}
+              disabled={loading}
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="otr-filter-field">
+            <span>Order</span>
+            <select
+              value={filters.sortOrder}
+              onChange={(event) => onSort(filters.sortBy, event.target.value as 'asc' | 'desc')}
+              disabled={loading}
+            >
+              <option value="desc">Desc</option>
+              <option value="asc">Asc</option>
+            </select>
           </label>
 
           {filtersActive ? (
@@ -822,15 +1623,18 @@ export default function AdminOvertimeRecordsPage({
         </div>
 
         {validationError ? <p className="otr-filter-error">{validationError}</p> : null}
+        {operationMessage ? (
+          <p className={`otr-action-message${mutationError ? ' otr-action-message--error' : ''}`}>
+            {operationMessage}
+          </p>
+        ) : null}
       </section>
 
       <div className="table-card otr-table-card">
         <div className="otr-toolbar">
           <div>
             <strong>{loading && !records.length ? 'Loading records...' : visibleLabel}</strong>
-            <span>
-              {normalizedSearch ? 'Local search is filtering the loaded set.' : 'Backend filters apply to status, employee, date range, and limit.'}
-            </span>
+            <span>Search, filters, sorting, and pagination are backed by the API.</span>
           </div>
           <div className="otr-toolbar__right">
             {filtersActive ? <span className="table-pill accent">Filtered</span> : null}
@@ -857,7 +1661,7 @@ export default function AdminOvertimeRecordsPage({
               Retry
             </button>
           </div>
-        ) : visibleRecords.length ? (
+        ) : records.length ? (
           <div className="table-scroll otr-table-scroll">
             <table className={tableClassName} aria-label="Overtime records">
               <thead>
@@ -888,7 +1692,7 @@ export default function AdminOvertimeRecordsPage({
                 </tr>
               </thead>
               <tbody>
-                {visibleRecords.map((record, index) => {
+                {records.map((record, index) => {
                   const rowKey = `${record.id ?? record.attendance_id ?? record.emp_code ?? 'overtime'}-${record.work_date || index}`
                   const deadlineState = getDeadlineState(record)
                   return (
@@ -974,19 +1778,74 @@ export default function AdminOvertimeRecordsPage({
           </div>
         ) : (
           <div className="empty-state otr-empty-state">
-            {records.length
-              ? 'No loaded overtime records match the current search.'
-              : 'No overtime records found for the current filters.'}
+            No overtime records found for the current filters.
           </div>
         )}
+
+        <footer className="otr-pagination">
+          <span>
+            Page {pagination.total_pages ? pagination.page : 0} of {pagination.total_pages || 0}
+          </span>
+          <div>
+            <button
+              className="otr-btn"
+              type="button"
+              onClick={() => onChangePage(pagination.page - 1)}
+              disabled={loading || !pagination.has_previous}
+            >
+              Previous
+            </button>
+            <button
+              className="otr-btn"
+              type="button"
+              onClick={() => onChangePage(pagination.page + 1)}
+              disabled={loading || !pagination.has_next}
+            >
+              Next
+            </button>
+          </div>
+        </footer>
       </div>
 
       <DetailDrawer
-        record={drawerRecord}
+        record={activeDrawerRecord}
         open={drawerOpen}
         onClose={closeDrawer}
+        actionLoading={actionLoading}
+        canWriteAdminData={canWriteAdminData}
         formatDateOnly={formatDateOnly}
         formatDateTime={formatDateTime}
+        onApprove={handleApproval}
+        onDelete={openDeleteDialog}
+        onEdit={openEditForm}
+        onRemarksChange={setDrawerRemarks}
+        onStatusValueChange={setDrawerStatus}
+        onUpdateStatus={handleStatusUpdate}
+        remarks={drawerRemarks}
+        statusValue={drawerStatus}
+      />
+
+      <OvertimeRecordFormDialog
+        actionLoading={actionLoading}
+        error={formError}
+        mode={formMode}
+        onChange={updateFormValue}
+        onClose={closeForm}
+        onSubmit={submitForm}
+        values={formValues}
+      />
+
+      <DeleteOvertimeRecordDialog
+        actionLoading={actionLoading}
+        forceDelete={forceDelete}
+        onChangeForce={setForceDelete}
+        onClose={() => {
+          if (!actionLoading) {
+            setDeleteTarget(null)
+          }
+        }}
+        onConfirm={confirmDelete}
+        record={deleteTarget}
       />
     </div>
   )

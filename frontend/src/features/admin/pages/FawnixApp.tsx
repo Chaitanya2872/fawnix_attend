@@ -715,15 +715,25 @@ function FawnixApp() {
     filters: overtimeRecordFilters,
     records: overtimeRecordRows,
     kpis: overtimeRecordKpis,
-    meta: overtimeRecordMeta,
+    filterOptions: overtimeRecordFilterOptions,
+    pagination: overtimeRecordPagination,
     loading: overtimeRecordLoading,
+    actionLoading: overtimeRecordActionLoading,
+    actionStatus: overtimeRecordActionStatus,
     error: overtimeRecordError,
     validationError: overtimeRecordValidationError,
     lastSyncedAt: overtimeRecordLastSyncedAt,
     updateFilter: updateOvertimeRecordFilter,
     applyDatePreset: applyOvertimeRecordDatePreset,
     clearFilters: clearOvertimeRecordFilters,
+    changePage: changeOvertimeRecordPage,
+    setSort: setOvertimeRecordSort,
     refresh: refreshOvertimeRecords,
+    createRecord: createOvertimeRecord,
+    updateRecord: updateOvertimeRecord,
+    deleteRecord: deleteOvertimeRecord,
+    updateStatus: updateOvertimeRecordStatus,
+    approveRecord: approveOvertimeRecord,
     reset: resetOvertimeRecordsPanel
   } = useOvertimeRecordsData({
     isActive: activePanel === 'overtime-records',
@@ -1083,20 +1093,31 @@ function FawnixApp() {
     if (activePanel === 'overtime-records') {
       return (
         <AdminOvertimeRecordsPage
+          actionLoading={overtimeRecordActionLoading}
+          actionStatus={overtimeRecordActionStatus}
+          canWriteAdminData={canWriteAdminData}
           error={overtimeRecordError}
+          filterOptions={overtimeRecordFilterOptions}
           filters={overtimeRecordFilters}
           formatDateOnly={formatDateOnly}
           formatDateTime={formatDateTime}
           kpis={overtimeRecordKpis}
           lastSyncedAt={overtimeRecordLastSyncedAt}
           loading={overtimeRecordLoading}
-          meta={overtimeRecordMeta}
+          pagination={overtimeRecordPagination}
           records={overtimeRecordRows}
           validationError={overtimeRecordValidationError}
+          approveRecord={approveOvertimeRecord}
           applyDatePreset={applyOvertimeRecordDatePreset}
           clearFilters={clearOvertimeRecordFilters}
+          createRecord={createOvertimeRecord}
+          deleteRecord={deleteOvertimeRecord}
+          onChangePage={changeOvertimeRecordPage}
           refresh={refreshOvertimeRecords}
+          onSort={setOvertimeRecordSort}
+          updateRecord={updateOvertimeRecord}
           updateFilter={updateOvertimeRecordFilter}
+          updateStatus={updateOvertimeRecordStatus}
         />
       )
     }

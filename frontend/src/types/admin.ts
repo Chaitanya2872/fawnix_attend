@@ -245,10 +245,14 @@ export type AdminOvertimeRecord = {
   id?: number
   attendance_id?: number | null
   emp_code?: string
+  employee_code?: string
   emp_email?: string
   emp_name?: string
   emp_full_name?: string
+  employee_name?: string
   emp_designation?: string
+  emp_department?: string
+  department?: string
   work_date?: string
   day_of_week?: string
   clock_in_sequence?: number | string | null
@@ -276,24 +280,61 @@ export type AdminOvertimeFilterState = {
   search: string
   status: '' | AdminOvertimeStatus
   empCode: string
+  department: string
   fromDate: string
   toDate: string
   datePreset: AdminOvertimeDatePreset
-  limit: string
+  pageSize: string
+  sortBy: string
+  sortOrder: 'asc' | 'desc'
 }
 
 export type AdminOvertimeKpis = {
   total_loaded: number
+  total: number
+  eligible: number
   eligible_comp_off_days: number
   total_extra_hours: number
   expiring_or_expired: number
   requested: number
   approved: number
+  rejected: number
+  expired: number
+  utilized: number
+  current_month_total: number
+  previous_month_total: number
 }
 
-export type AdminOvertimeLoadMeta = {
-  count: number
-  limit: number
+export type AdminOvertimeFilterOptions = {
+  departments: string[]
+  statuses: AdminOvertimeStatus[]
+}
+
+export type AdminOvertimePagination = {
+  page: number
+  page_size: number
+  total_records: number
+  total_pages: number
+  has_next: boolean
+  has_previous: boolean
+}
+
+export type AdminOvertimeMutationPayload = {
+  attendance_id?: number | string | null
+  emp_code?: string
+  work_date?: string
+  clock_in_sequence?: number | string | null
+  actual_hours?: number | string | null
+  extra_hours?: number | string | null
+  standard_hours?: number | string | null
+  comp_off_days?: number | string | null
+  status?: '' | AdminOvertimeStatus
+  recording_deadline?: string | null
+  expires_at?: string | null
+  expired_at?: string | null
+  approval_completed_at?: string | null
+  utilized_at?: string | null
+  compoff_request_id?: number | string | null
 }
 
 export type AdminLeaveKpiTrendPoint = {

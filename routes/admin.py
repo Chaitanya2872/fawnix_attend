@@ -1138,56 +1138,178 @@ def import_leaves(current_user):
 
     return jsonify(response), status_code
 
+def _parse_admin_date_param(value, field_name):
+    if not value:
+        return None, None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date(), None
+    except ValueError:
+        return None, f"Invalid {field_name} format. Use YYYY-MM-DD"
+
+
 @admin_bp.route('/overtime-records', methods=['GET'])
 @token_required
 @hr_or_devtester_required
 def get_all_overtime_records(current_user):
     """
-    Get overtime records for all employees
+    Get paginated overtime records for all employees
 
     Optional query params:
-    - limit: number of records (default: 100)
+    - page: page number (default 1)
+    - page_size: records per page (default 15, capped at 100)
+    - limit: legacy alias for page_size
+    - search: employee name/code/email/designation/status search
     - status: eligible/requested/approved/rejected/expired/utilized (optional)
     - emp_code: filter by employee code (optional)
+    - department: department filter (optional)
     - from_date: YYYY-MM-DD (optional)
     - to_date: YYYY-MM-DD (optional)
+    - sort_by: work_date | employee_name | employee_code | extra_hours | comp_off_days | status | created_at | updated_at
+    - sort_order: asc | desc
     """
-
-    limit = request.args.get('limit', default=100, type=int)
+    page = request.args.get('page', default=1, type=int)
+    page_size = request.args.get('page_size', type=int)
+    limit = request.args.get('limit', type=int)
+    search = request.args.get('search')
     status = request.args.get('status')
     emp_code = request.args.get('emp_code')
+    department = request.args.get('department')
+    sort_by = request.args.get('sort_by')
+    sort_order = request.args.get('sort_order')
     from_date_str = request.args.get('from_date')
     to_date_str = request.args.get('to_date')
 
-    from_date = None
-    to_date = None
+    from_date, date_error = _parse_admin_date_param(from_date_str, "from_date")
+    if date_error:
+        return jsonify({"success": False, "message": date_error}), 400
 
-    if from_date_str:
-        try:
-            from_date = datetime.strptime(from_date_str, "%Y-%m-%d").date()
-        except ValueError:
-            return jsonify({
-                "success": False,
-                "message": "Invalid from_date format. Use YYYY-MM-DD"
-            }), 400
+    to_date, date_error = _parse_admin_date_param(to_date_str, "to_date")
+    if date_error:
+        return jsonify({"success": False, "message": date_error}), 400
 
-    if to_date_str:
-        try:
-            to_date = datetime.strptime(to_date_str, "%Y-%m-%d").date()
-        except ValueError:
-            return jsonify({
-                "success": False,
-                "message": "Invalid to_date format. Use YYYY-MM-DD"
-            }), 400
+    if from_date and to_date and from_date > to_date:
+        return jsonify({
+            "success": False,
+            "message": "from_date must be on or before to_date"
+        }), 400
 
     response, status_code = admin_service.get_all_overtime_records(
         limit=limit,
         status=status,
         emp_code=emp_code,
         from_date=from_date,
-        to_date=to_date
+        to_date=to_date,
+        search=search,
+        department=department,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
     )
 
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/overtime-records', methods=['POST'])
+@token_required
+@hr_or_devtester_required
+def create_overtime_record_route(current_user):
+    """
+    Create an admin-managed overtime record.
+
+    Required body fields:
+    - emp_code
+    - work_date: YYYY-MM-DD
+
+    Optional fields:
+    - attendance_id, clock_in_sequence
+    - actual_hours, extra_hours, standard_hours, comp_off_days
+    - status, recording_deadline, expires_at
+    """
+    payload = request.get_json() or {}
+    response, status_code = admin_service.create_overtime_record(
+        payload,
+        created_by_emp_code=current_user.get('emp_code')
+    )
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/overtime-records/<int:record_id>', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_overtime_record_route(current_user, record_id):
+    """Get one overtime record with attendance context."""
+    response, status_code = admin_service.get_overtime_record(record_id)
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/overtime-records/<int:record_id>', methods=['PUT'])
+@token_required
+@hr_or_devtester_required
+def update_overtime_record_route(current_user, record_id):
+    """Update editable overtime record fields."""
+    payload = request.get_json() or {}
+    response, status_code = admin_service.update_overtime_record(
+        record_id,
+        payload,
+        updated_by_emp_code=current_user.get('emp_code')
+    )
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/overtime-records/<int:record_id>', methods=['DELETE'])
+@token_required
+@hr_or_devtester_required
+def delete_overtime_record_route(current_user, record_id):
+    """Delete an overtime record. Linked/finalized rows require force=true."""
+    force = _parse_boolean_option(request.args.get('force'), default=False)
+    response, status_code = admin_service.delete_overtime_record(record_id, force=force)
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/overtime-records/<int:record_id>/status', methods=['PATCH'])
+@token_required
+@hr_or_devtester_required
+def update_overtime_record_status_route(current_user, record_id):
+    """
+    Update overtime record status.
+
+    Request body:
+    {
+      "status": "eligible|requested|approved|rejected|expired|utilized",
+      "remarks": "optional audit note"
+    }
+    """
+    payload = request.get_json() or {}
+    response, status_code = admin_service.update_overtime_record_status(
+        record_id=record_id,
+        status=payload.get('status'),
+        updated_by_emp_code=current_user.get('emp_code'),
+        remarks=payload.get('remarks') or '',
+    )
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/overtime-records/<int:record_id>/approval', methods=['POST'])
+@token_required
+@hr_or_devtester_required
+def approve_overtime_record_route(current_user, record_id):
+    """
+    Approve or reject an overtime record from the admin screen.
+
+    Request body:
+    {
+      "action": "approved|rejected",
+      "remarks": "optional"
+    }
+    """
+    payload = request.get_json() or {}
+    response, status_code = admin_service.approve_overtime_record(
+        record_id=record_id,
+        action=payload.get('action'),
+        approver_emp_code=current_user.get('emp_code'),
+        remarks=payload.get('remarks') or '',
+    )
     return jsonify(response), status_code
 
 

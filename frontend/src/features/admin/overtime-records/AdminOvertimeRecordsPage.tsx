@@ -279,6 +279,13 @@ function getEmployeeName(record: AdminOvertimeRecord) {
   return record.emp_full_name || record.emp_name || record.emp_code || 'Unknown employee'
 }
 
+function getEmployeeMeta(record: AdminOvertimeRecord) {
+  const code = (record.emp_code || record.employee_code || '').trim()
+  const department = (record.emp_department || record.department || '').trim()
+  const meta = [code, department].filter(Boolean).join('.')
+  return meta || record.emp_email || '--'
+}
+
 function getDeadlineValue(record: AdminOvertimeRecord) {
   return record.recording_deadline || record.expires_at || record.expired_at || ''
 }
@@ -1729,7 +1736,7 @@ export default function AdminOvertimeRecordsPage({
                             <span className={`otr-status-rail otr-status-rail--${statusPillClass(record.status)}`} aria-hidden="true" />
                             <div>
                               <strong>{getEmployeeName(record)}</strong>
-                              <span>{record.emp_code || record.emp_email || '--'}</span>
+                              <span>{getEmployeeMeta(record)}</span>
                             </div>
                           </div>
                         </td>

@@ -107,6 +107,12 @@ function fmtLeaveType(record: AdminLeaveRecord): string {
   return display
 }
 
+function fmtEmployeeMeta(employeeCode?: string | null, department?: string | null) {
+  const code = (employeeCode || '').trim()
+  const dept = (department || '').trim()
+  return [code, dept].filter(Boolean).join('.') || '--'
+}
+
 // Compact "07 Aug" rendering, parsed manually from the backend's YYYY-MM-DD
 // string to avoid timezone drift.
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -450,7 +456,7 @@ export default function AdminLeavesPage({
                             <span className="lv-td--employee-info">
                               <strong>{row.employee_name || row.employee_code || 'Unknown'}</strong>
                               <span className="lv-sub">
-                                {[row.employee_code, row.department].filter(Boolean).join(' Â· ') || '--'}
+                                {fmtEmployeeMeta(row.employee_code, row.department)}
                               </span>
                             </span>
                           </td>

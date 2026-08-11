@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 connection_pool = None
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
+LEGACY_BASELINE_MAX_MIGRATION_NUMBER = 15
 
 
 def _print_db_login_config():
@@ -176,7 +177,15 @@ def _should_baseline_legacy_migrations(cursor) -> bool:
 
 def _baseline_existing_migrations(cursor):
     migration_files = sorted(path for path in MIGRATIONS_DIR.glob("*.sql") if path.is_file())
+    baseline_files = []
     for migration_path in migration_files:
+        try:
+            migration_number = int(migration_path.name.split("_", 1)[0])
+        except (TypeError, ValueError):
+            migration_number = LEGACY_BASELINE_MAX_MIGRATION_NUMBER + 1
+        if migration_number > LEGACY_BASELINE_MAX_MIGRATION_NUMBER:
+            continue
+        baseline_files.append(migration_path)
         cursor.execute(
             """
             INSERT INTO schema_migrations (filename)
@@ -185,7 +194,7 @@ def _baseline_existing_migrations(cursor):
             """,
             (migration_path.name,),
         )
-    return len(migration_files)
+    return len(baseline_files)
 
 
 def run_migrations():
@@ -205,7 +214,13 @@ def run_migrations():
                 "Detected legacy database without migration tracking; baselined %s migration(s)",
                 baseline_count,
             )
-            executed = {path.name for path in MIGRATIONS_DIR.glob("*.sql") if path.is_file()}
+            executed = {
+                path.name
+                for path in MIGRATIONS_DIR.glob("*.sql")
+                if path.is_file()
+                and path.name.split("_", 1)[0].isdigit()
+                and int(path.name.split("_", 1)[0]) <= LEGACY_BASELINE_MAX_MIGRATION_NUMBER
+            }
         migration_files = sorted(path for path in MIGRATIONS_DIR.glob("*.sql") if path.is_file())
         pending = [path for path in migration_files if path.name not in executed]
 

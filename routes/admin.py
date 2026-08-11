@@ -8,6 +8,7 @@ from flask import Blueprint, jsonify, Response, send_file
 from middleware.auth_middleware import token_required
 from middleware.admin_middleware import hr_or_devtester_required, api_log_viewer_required
 from services import admin_service
+from services import employee_master_service
 from services import field_visit_service
 import csv
 from io import StringIO, BytesIO
@@ -112,6 +113,70 @@ def get_employees(current_user):
         "count": len(employees),
         "data": [serialize_row(emp) for emp in employees]
     }), 200
+
+
+@admin_bp.route('/employee-master/<resource>', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def list_employee_master_records(current_user, resource):
+    """List employee master records with search, filters, sorting, and pagination."""
+    query_params = {
+        "page": request.args.get("page", default=1, type=int),
+        "page_size": request.args.get("page_size", default=15, type=int),
+        "search": request.args.get("search"),
+        "status": request.args.get("status"),
+        "sort_by": request.args.get("sort_by"),
+        "sort_order": request.args.get("sort_order"),
+        "location": request.args.get("location"),
+        "unit_head_manager": request.args.get("unit_head_manager"),
+        "payroll_manager": request.args.get("payroll_manager"),
+        "department_head": request.args.get("department_head"),
+        "pay_cycle": request.args.get("pay_cycle"),
+        "department": request.args.get("department"),
+        "job_level_grade": request.args.get("job_level_grade"),
+        "parent_department": request.args.get("parent_department"),
+        "working_unit": request.args.get("working_unit"),
+    }
+    response, status_code = employee_master_service.list_master_records(resource, query_params)
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/employee-master/<resource>', methods=['POST'])
+@token_required
+@hr_or_devtester_required
+def create_employee_master_record(current_user, resource):
+    """Create an employee master record."""
+    payload = request.get_json() or {}
+    response, status_code = employee_master_service.create_master_record(resource, payload)
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/employee-master/<resource>/<int:record_id>', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_employee_master_record(current_user, resource, record_id):
+    """Get one employee master record."""
+    response, status_code = employee_master_service.get_master_record(resource, record_id)
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/employee-master/<resource>/<int:record_id>', methods=['PUT'])
+@token_required
+@hr_or_devtester_required
+def update_employee_master_record(current_user, resource, record_id):
+    """Update an employee master record."""
+    payload = request.get_json() or {}
+    response, status_code = employee_master_service.update_master_record(resource, record_id, payload)
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/employee-master/<resource>/<int:record_id>', methods=['DELETE'])
+@token_required
+@hr_or_devtester_required
+def delete_employee_master_record(current_user, resource, record_id):
+    """Delete an employee master record."""
+    response, status_code = employee_master_service.delete_master_record(resource, record_id)
+    return jsonify(response), status_code
 
 
 @admin_bp.route('/employees/report', methods=['GET'])

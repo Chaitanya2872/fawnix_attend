@@ -26,6 +26,46 @@ export default function SidebarIcon({ name }: SidebarIconProps) {
         strokeLinejoin="round"
       />
     ),
+    building: (
+      <path
+        d="M4 21V7l8-4 8 4v14M4 11h16M8 21v-4h3v4m2 0v-4h3v4M8 8h.01M12 8h.01M16 8h.01M8 13h.01M12 13h.01M16 13h.01"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    ),
+    wallet: (
+      <path
+        d="M4 7h15a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12M17 13h.01M3 8h18"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    ),
+    badge: (
+      <path
+        d="M8 4h8l2 4-6 13L6 8l2-4Zm-2 4h12M9.5 12h5M10.5 15h3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    ),
+    layers: (
+      <path
+        d="m12 3 9 5-9 5-9-5 9-5Zm-7 9 7 4 7-4M5 16l7 4 7-4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    ),
     pulse: (
       <path
         d="M3 12h4l2.5-5 4 10 2.5-5H21"

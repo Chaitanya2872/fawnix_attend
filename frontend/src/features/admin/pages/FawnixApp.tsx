@@ -19,6 +19,7 @@ import { useFieldVisitsPanel } from '../field-visits/useFieldVisitsPanel'
 import { useCalendarPanel } from '../calendar/useCalendarPanel'
 import { useReportsPanel } from '../reports/useReportsPanel'
 import { useApiTelemetryPanel } from '../api-telemetry/useApiTelemetryPanel'
+import { useEmployeeMasterResource } from '../employee-master/useEmployeeMasterResource'
 import AdminLoginPage from './AdminLoginPage'
 import AdminSidebar from '../components/AdminSidebar'
 import DeleteEmployeeModal from '../employees/DeleteEmployeeModal'
@@ -36,8 +37,14 @@ import AdminEmployeesPage from '../employees/AdminEmployeesPage'
 import AdminFieldVisitsPage from '../field-visits/AdminFieldVisitsPage'
 import AdminLeavesPage from '../leaves/AdminLeavesPage'
 import AdminOvertimeRecordsPage from '../overtime-records/AdminOvertimeRecordsPage'
+import AdminEmployeeMasterPage from '../employee-master/AdminEmployeeMasterPage'
 import AdminOverviewPage from './sidebar/AdminOverviewPage'
 import AdminReportsPage from '../reports/AdminReportsPage'
+import {
+  employeeMasterResourceConfigs,
+  getEmployeeMasterResourceByPanel,
+  isEmployeeMasterSidebarId
+} from '../employee-master/employeeMasterConfig'
 import {
   formatDistanceKm,
   formatEmployeeGrade,
@@ -68,6 +75,10 @@ import type {
 const adminPanelPathMap: Record<SidebarId, string> = {
   dashboard: '',
   employees: 'employees',
+  'employee-master-working-units': 'employee-master/working-units',
+  'employee-master-payroll-units': 'employee-master/payroll-units',
+  'employee-master-designations': 'employee-master/designations',
+  'employee-master-departments': 'employee-master/departments',
   attendance: 'attendance',
   'attendance-records': 'attendance-records',
   'attendance-exceptions': 'attendance-exceptions',
@@ -286,6 +297,7 @@ function FawnixApp() {
     resetAttendanceExceptionsPanel()
     resetOvertimeRecordsPanel()
     resetApiTelemetryPanel()
+    resetEmployeeMasterPanel()
     resetAttendancePanel()
   }
   const {
@@ -352,6 +364,34 @@ function FawnixApp() {
   }
 
   const canWriteAdminData = hasWriteAccess(profile)
+  const employeeMasterResource =
+    getEmployeeMasterResourceByPanel(activePanel) || employeeMasterResourceConfigs.workingUnits
+  const employeeMasterIsActive = isEmployeeMasterSidebarId(activePanel)
+  const {
+    filters: employeeMasterFilters,
+    records: employeeMasterRecords,
+    filterOptions: employeeMasterFilterOptions,
+    pagination: employeeMasterPagination,
+    loading: employeeMasterLoading,
+    error: employeeMasterError,
+    actionLoading: employeeMasterActionLoading,
+    actionStatus: employeeMasterActionStatus,
+    lastSyncedAt: employeeMasterLastSyncedAt,
+    updateFilter: updateEmployeeMasterFilter,
+    applyFilters: applyEmployeeMasterFilters,
+    clearFilters: clearEmployeeMasterFilters,
+    changePage: changeEmployeeMasterPage,
+    refresh: refreshEmployeeMaster,
+    createRecord: createEmployeeMasterRecord,
+    updateRecord: updateEmployeeMasterRecord,
+    deleteRecord: deleteEmployeeMasterRecord,
+    reset: resetEmployeeMasterPanel
+  } = useEmployeeMasterResource({
+    isActive: employeeMasterIsActive,
+    accessToken,
+    apiRequest,
+    resource: employeeMasterResource
+  })
 
   const {
     employeeSearch,
@@ -936,6 +976,33 @@ function FawnixApp() {
           setEmployeeSearch={setEmployeeSearch}
           setEmployeeStatusFilter={setEmployeeStatusFilter}
           setEmployeeStatusMenuOpen={setEmployeeStatusMenuOpen}
+        />
+      )
+    }
+
+    if (employeeMasterIsActive) {
+      return (
+        <AdminEmployeeMasterPage
+          key={employeeMasterResource.key}
+          actionLoading={employeeMasterActionLoading}
+          actionStatus={employeeMasterActionStatus}
+          canWriteAdminData={canWriteAdminData}
+          error={employeeMasterError}
+          filterOptions={employeeMasterFilterOptions}
+          filters={employeeMasterFilters}
+          lastSyncedAt={employeeMasterLastSyncedAt}
+          loading={employeeMasterLoading}
+          pagination={employeeMasterPagination}
+          records={employeeMasterRecords}
+          resource={employeeMasterResource}
+          applyFilters={applyEmployeeMasterFilters}
+          changePage={changeEmployeeMasterPage}
+          clearFilters={clearEmployeeMasterFilters}
+          createRecord={createEmployeeMasterRecord}
+          deleteRecord={deleteEmployeeMasterRecord}
+          refresh={refreshEmployeeMaster}
+          updateFilter={updateEmployeeMasterFilter}
+          updateRecord={updateEmployeeMasterRecord}
         />
       )
     }

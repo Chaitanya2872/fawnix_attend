@@ -4,13 +4,37 @@ export const API_TELEMETRY_EMP_CODE = '8888'
 
 export const sidebarItems: SidebarItemDefinition[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'home' },
-  { id: 'attendance', label: "Today's Activity", icon: 'pulse' },
-  { id: 'attendance-records', label: 'Attendance Records', icon: 'list' },
-  { id: 'attendance-exceptions', label: ' Exceptions', icon: 'alert' },
+  { id: 'attendance', label: "Today's activity", icon: 'pulse' },
+  { id: 'attendance-records', label: 'Attendance records', icon: 'list' },
+  { id: 'attendance-exceptions', label: 'Attendance exceptions', icon: 'alert' },
   { id: 'leaves', label: 'Leaves', icon: 'leaf' },
-  { id: 'overtime-records', label: 'Overtime Records', icon: 'clock' },
-  { id: 'employees', label: 'Employee Master', icon: 'users' },
-  { id: 'reports', label: 'Reports & Analytics', icon: 'chart' },
+  { id: 'overtime-records', label: 'Overtime records', icon: 'clock' },
+  { id: 'employees', label: 'Employee master', icon: 'users' },
+  {
+    id: 'employee-master-working-units',
+    label: 'Working units',
+    icon: 'building',
+    groupLabel: 'Organization Units',
+  },
+  {
+    id: 'employee-master-payroll-units',
+    label: 'Payroll units',
+    icon: 'wallet',
+    groupLabel: 'Organization Units',
+  },
+  {
+    id: 'employee-master-designations',
+    label: 'Designations',
+    icon: 'badge',
+    groupLabel: 'Profiles',
+  },
+  {
+    id: 'employee-master-departments',
+    label: 'Departments',
+    icon: 'layers',
+    groupLabel: 'Profiles',
+  },
+  { id: 'reports', label: 'Reports and analytics', icon: 'chart' },
   { id: 'inbox', label: 'Inbox', icon: 'inbox' }
 ]
 
@@ -21,18 +45,42 @@ export const sidebarSections: SidebarSectionDefinition[] = [
   {
     title: 'Activities',
     items: [
-      { id: 'attendance', label: "Today's Activity", icon: 'pulse' },
-      { id: 'attendance-records', label: 'Attendance Records', icon: 'list' },
-      { id: 'attendance-exceptions', label: 'Attendance Exceptions', icon: 'alert' },
+      { id: 'attendance', label: "Today's activity", icon: 'pulse' },
+      { id: 'attendance-records', label: 'Attendance records', icon: 'list' },
+      { id: 'attendance-exceptions', label: 'Attendance exceptions', icon: 'alert' },
       { id: 'leaves', label: 'Leaves', icon: 'leaf' },
-      { id: 'overtime-records', label: 'Overtime Records', icon: 'clock' }
+      { id: 'overtime-records', label: 'Overtime records', icon: 'clock' }
     ]
   },
   {
     title: 'Administration',
     items: [
-      { id: 'employees', label: 'Employee Master', icon: 'users' },
-      { id: 'reports', label: 'Reports & Analytics', icon: 'chart' },
+      { id: 'employees', label: 'Employee master', icon: 'users' },
+      {
+        id: 'employee-master-working-units',
+        label: 'Working units',
+        icon: 'building',
+        groupLabel: 'Organization Units',
+      },
+      {
+        id: 'employee-master-payroll-units',
+        label: 'Payroll units',
+        icon: 'wallet',
+        groupLabel: 'Organization Units',
+      },
+      {
+        id: 'employee-master-designations',
+        label: 'Designations',
+        icon: 'badge',
+        groupLabel: 'Profiles',
+      },
+      {
+        id: 'employee-master-departments',
+        label: 'Departments',
+        icon: 'layers',
+        groupLabel: 'Profiles',
+      },
+      { id: 'reports', label: 'Reports and analytics', icon: 'chart' },
       { id: 'inbox', label: 'Inbox', icon: 'inbox' }
     ]
   }

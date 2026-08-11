@@ -7,6 +7,10 @@ export type PrivacySection = {
 export type SidebarId =
   | 'dashboard'
   | 'employees'
+  | 'employee-master-working-units'
+  | 'employee-master-payroll-units'
+  | 'employee-master-designations'
+  | 'employee-master-departments'
   | 'attendance'
   | 'attendance-records'
   | 'attendance-exceptions'
@@ -18,6 +22,123 @@ export type SidebarId =
   | 'activities'
   | 'field-visits'
   | 'api-telemetry'
+
+export type EmployeeMasterResourceKey =
+  | 'workingUnits'
+  | 'payrollUnits'
+  | 'designations'
+  | 'departments'
+
+export type EmployeeMasterSidebarId =
+  | 'employee-master-working-units'
+  | 'employee-master-payroll-units'
+  | 'employee-master-designations'
+  | 'employee-master-departments'
+
+export type EmployeeMasterRecord = Record<string, unknown> & {
+  id?: number | string
+  working_unit_code?: string
+  working_unit_name?: string
+  unit_head_manager?: string
+  payroll_unit_code?: string
+  payroll_unit_name?: string
+  payroll_manager?: string
+  pay_cycle?: string
+  designation_code?: string
+  designation_name?: string
+  job_level_grade?: string
+  department_code?: string
+  department_name?: string
+  department_head?: string
+  department?: string
+  working_unit?: string
+  location?: string
+  parent_department?: string
+  status?: string
+  description?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export type EmployeeMasterFilterState = {
+  search: string
+  status: string
+  pageSize: string
+  location: string
+  unitHeadManager: string
+  payrollManager: string
+  payCycle: string
+  jobLevelGrade: string
+  department: string
+  workingUnit: string
+  parentDepartment: string
+}
+
+export type EmployeeMasterPagination = {
+  page: number
+  page_size: number
+  total_records: number
+  total_pages: number
+  has_next: boolean
+  has_previous: boolean
+}
+
+export type EmployeeMasterFilterOptionEntry =
+  | string
+  | number
+  | {
+      value?: string | number
+      label?: string
+      code?: string | number
+      name?: string
+      id?: string | number
+    }
+
+export type EmployeeMasterFilterOptions = Record<
+  string,
+  EmployeeMasterFilterOptionEntry[] | undefined
+>
+
+export type EmployeeMasterFormFieldType = 'text' | 'select' | 'textarea'
+
+export type EmployeeMasterFormFieldConfig = {
+  key: string
+  label: string
+  required?: boolean
+  type?: EmployeeMasterFormFieldType
+  placeholder?: string
+  optionKey?: string
+  options?: Array<{ value: string; label: string }>
+}
+
+export type EmployeeMasterFilterConfig = {
+  stateKey: keyof EmployeeMasterFilterState
+  param: string
+  label: string
+  optionKey: string
+  recordField: string
+}
+
+export type EmployeeMasterTableColumnConfig = {
+  key: string
+  label: string
+  kind?: 'primary' | 'code' | 'status' | 'text'
+  minWidth?: number
+}
+
+export type EmployeeMasterResourceConfig = {
+  key: EmployeeMasterResourceKey
+  sidebarId: EmployeeMasterSidebarId
+  title: string
+  tabLabel: string
+  singularLabel: string
+  endpoint: string
+  codeField: string
+  nameField: string
+  tableColumns: EmployeeMasterTableColumnConfig[]
+  formFields: EmployeeMasterFormFieldConfig[]
+  filters: EmployeeMasterFilterConfig[]
+}
 
 export type AdminProfile = {
   emp_code: string

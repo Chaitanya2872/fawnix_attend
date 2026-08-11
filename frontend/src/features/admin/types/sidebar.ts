@@ -3,6 +3,10 @@ import type { SidebarId } from '../../../types/admin'
 export type SidebarIconName =
   | 'home'
   | 'users'
+  | 'building'
+  | 'wallet'
+  | 'badge'
+  | 'layers'
   | 'pulse'
   | 'list'
   | 'alert'
@@ -20,6 +24,7 @@ export type SidebarItemDefinition = {
   label: string
   icon: SidebarIconName
   badge?: string
+  groupLabel?: string
 }
 
 export type SidebarSectionDefinition = {

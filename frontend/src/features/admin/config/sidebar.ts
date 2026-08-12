@@ -7,6 +7,7 @@ export const sidebarItems: SidebarItemDefinition[] = [
   { id: 'attendance', label: "Today's activity", icon: 'pulse' },
   { id: 'attendance-records', label: 'Attendance records', icon: 'list' },
   { id: 'attendance-exceptions', label: 'Attendance exceptions', icon: 'alert' },
+  { id: 'field-visits', label: 'Field visits', icon: 'pin' },
   { id: 'leaves', label: 'Leaves', icon: 'leaf' },
   { id: 'overtime-records', label: 'Overtime records', icon: 'clock' },
   { id: 'employees', label: 'Employee master', icon: 'users' },
@@ -48,6 +49,7 @@ export const sidebarSections: SidebarSectionDefinition[] = [
       { id: 'attendance', label: "Today's activity", icon: 'pulse' },
       { id: 'attendance-records', label: 'Attendance records', icon: 'list' },
       { id: 'attendance-exceptions', label: 'Attendance exceptions', icon: 'alert' },
+      { id: 'field-visits', label: 'Field visits', icon: 'pin' },
       { id: 'leaves', label: 'Leaves', icon: 'leaf' },
       { id: 'overtime-records', label: 'Overtime records', icon: 'clock' }
     ]

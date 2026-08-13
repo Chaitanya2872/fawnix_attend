@@ -289,7 +289,7 @@ export default function AdminOverviewPage({
   const greeting = getGreeting()
 
   return (
-    <div className="ov2-shell">
+    <div className="ov2-shell admin-aligned-page admin-aligned-page--overview">
       <DashboardTopbar
         exceptionCount={weeklyExceptionCount}
         onRefresh={loadDashboard}

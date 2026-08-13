@@ -250,16 +250,17 @@ export default function AdminAttendancePage(props: Props) {
   )
 
   return (
-    <div className="attendance-dashboard">
+    <div className="attendance-dashboard admin-aligned-page admin-aligned-page--attendance">
       <section className="attendance-toolbar">
-        {/* Title */}
-        <div className="attendance-title-block">
-          <p className="eyebrow">Operations</p>
-          <h2>Today's Activity</h2>
-        </div>
+        <div className="dashboard-section-head attendance-toolbar-head">
+          {/* Title */}
+          <div className="attendance-title-block">
+            <p className="eyebrow">Operations</p>
+            <h2>Today's Activity</h2>
+          </div>
 
-        {/* Controls row */}
-        <div className="attendance-controls-row">
+          {/* Controls row */}
+          <div className="attendance-controls-row">
           <AttendanceDatePicker value={attendanceDateFilter} onChange={setAttendanceDateFilter} />
 
           <div className="attendance-search-shell">
@@ -316,6 +317,7 @@ export default function AdminAttendancePage(props: Props) {
                 View missed logins
               </button>
             </div>
+          </div>
           </div>
         </div>
 

@@ -1287,3 +1287,304 @@
     transition: none;
   }
 }
+
+/* Admin consistency pass */
+.admin-aligned-page--overtime-records {
+  --otr-ink: var(--text-primary);
+  --otr-ink-2: var(--text-primary);
+  --otr-muted: var(--text-muted);
+  --otr-soft: var(--text-muted);
+  --otr-body: var(--text-secondary);
+  --otr-canvas: var(--theme-canvas);
+  --otr-surface: var(--surface-2);
+  --otr-tint: var(--surface-1);
+  --otr-line: var(--border);
+  --otr-line-2: var(--border-strong);
+  --otr-line-3: var(--border);
+  --otr-primary: var(--text-accent);
+  --otr-primary-hover: var(--border-accent);
+  --otr-primary-ink: var(--text-accent);
+  --otr-success: var(--text-success);
+  --otr-success-bg: var(--bg-success);
+  --otr-warning: var(--text-warning);
+  --otr-warning-bg: var(--bg-warning);
+  --otr-danger: var(--text-danger);
+  --otr-danger-bg: var(--bg-danger);
+
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  padding-bottom: 0;
+}
+
+.admin-aligned-page--overtime-records button,
+.admin-aligned-page--overtime-records input,
+.admin-aligned-page--overtime-records select,
+.admin-aligned-page--overtime-records textarea,
+.otr-drawer,
+.otr-modal {
+  font-family: inherit;
+}
+
+.admin-aligned-page--overtime-records .otr-synced-label,
+.admin-aligned-page--overtime-records .otr-kpi-card strong,
+.admin-aligned-page--overtime-records .otr-td--mono,
+.admin-aligned-page--overtime-records .otr-date-range,
+.admin-aligned-page--overtime-records .otr-deadline,
+.admin-aligned-page--overtime-records .otr-activity-count,
+.otr-drawer .otr-drawer-kicker,
+.otr-drawer .otr-drawer-summary strong,
+.otr-drawer .otr-drawer-fact dd,
+.otr-drawer .otr-activity-meta {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-aligned-page--overtime-records .otr-page-head {
+  padding-bottom: 0;
+}
+
+.admin-aligned-page--overtime-records .otr-page-title {
+  color: var(--text-primary);
+  font-size: 22px;
+}
+
+.admin-aligned-page--overtime-records .otr-page-sub,
+.admin-aligned-page--overtime-records .otr-toolbar span,
+.admin-aligned-page--overtime-records .otr-kpi-card small,
+.admin-aligned-page--overtime-records .otr-filter-field span,
+.admin-aligned-page--overtime-records .otr-form-field span,
+.admin-aligned-page--overtime-records .otr-checkbox-field span,
+.otr-drawer .otr-drawer-section h4,
+.otr-drawer .otr-drawer-fact dt {
+  color: var(--text-secondary);
+}
+
+.admin-aligned-page--overtime-records .otr-kpi-grid {
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.admin-aligned-page--overtime-records .otr-kpi-card,
+.admin-aligned-page--overtime-records .otr-filter-card,
+.admin-aligned-page--overtime-records .otr-table-card,
+.otr-drawer .otr-status-editor,
+.otr-drawer .otr-drawer-summary div,
+.otr-drawer .otr-drawer-facts,
+.otr-drawer .otr-activity-list li,
+.otr-drawer .otr-drawer-empty,
+.otr-modal {
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.admin-aligned-page--overtime-records .otr-kpi-card {
+  padding: 14px 16px;
+}
+
+.admin-aligned-page--overtime-records .otr-kpi-card--watch {
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+.admin-aligned-page--overtime-records .otr-kpi-card span,
+.otr-drawer .otr-drawer-summary span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.admin-aligned-page--overtime-records .otr-kpi-card strong {
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.admin-aligned-page--overtime-records .otr-filter-card {
+  margin-bottom: 0;
+  padding: 12px;
+}
+
+.admin-aligned-page--overtime-records .otr-btn,
+.admin-aligned-page--overtime-records .otr-action-btn,
+.admin-aligned-page--overtime-records .otr-filter-field input,
+.admin-aligned-page--overtime-records .otr-filter-field select,
+.admin-aligned-page--overtime-records .otr-search-shell,
+.admin-aligned-page--overtime-records .otr-form-field input,
+.admin-aligned-page--overtime-records .otr-form-field select {
+  min-height: 34px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+.admin-aligned-page--overtime-records .otr-search-shell {
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
+.admin-aligned-page--overtime-records .otr-search-shell input {
+  color: var(--text-primary);
+}
+
+.admin-aligned-page--overtime-records .otr-btn--primary {
+  border-color: var(--border-accent);
+  background: var(--bg-accent);
+  color: var(--text-accent);
+}
+
+.admin-aligned-page--overtime-records .otr-btn--danger,
+.admin-aligned-page--overtime-records .otr-btn--danger-soft {
+  border-color: var(--border);
+  background: var(--bg-danger);
+  color: var(--text-danger);
+}
+
+.admin-aligned-page--overtime-records .otr-btn:hover:not(:disabled),
+.admin-aligned-page--overtime-records .otr-action-btn:hover,
+.admin-aligned-page--overtime-records .otr-filter-field input:hover:not(:disabled),
+.admin-aligned-page--overtime-records .otr-filter-field select:hover:not(:disabled) {
+  border-color: var(--border-accent);
+  background: var(--surface-1);
+}
+
+.admin-aligned-page--overtime-records .otr-filter-error,
+.admin-aligned-page--overtime-records .otr-action-message--error {
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-danger);
+  color: var(--text-danger);
+}
+
+.admin-aligned-page--overtime-records .otr-action-message {
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-accent);
+  color: var(--text-accent);
+}
+
+.admin-aligned-page--overtime-records .otr-toolbar,
+.admin-aligned-page--overtime-records .otr-pagination,
+.otr-drawer .otr-drawer-header,
+.otr-modal .otr-modal-header,
+.otr-modal .otr-modal-footer {
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+.admin-aligned-page--overtime-records .otr-th,
+.admin-aligned-page--overtime-records .otr-th.otr-col--details {
+  border-color: var(--border);
+  background: var(--surface-1);
+  color: var(--text-muted);
+}
+
+.admin-aligned-page--overtime-records .otr-row,
+.admin-aligned-page--overtime-records .otr-col--details {
+  background: var(--surface-2);
+}
+
+.admin-aligned-page--overtime-records .otr-row:hover td,
+.admin-aligned-page--overtime-records .otr-row:focus-within td,
+.admin-aligned-page--overtime-records .otr-row:hover .otr-col--details,
+.admin-aligned-page--overtime-records .otr-row:focus-within .otr-col--details {
+  background: var(--surface-1);
+}
+
+.admin-aligned-page--overtime-records .otr-td,
+.otr-drawer .otr-drawer-fact {
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.admin-aligned-page--overtime-records .otr-td--mono,
+.admin-aligned-page--overtime-records .otr-date-day,
+.admin-aligned-page--overtime-records .otr-employee-cell span:not(.otr-status-rail),
+.otr-drawer .otr-activity-note,
+.otr-drawer .otr-confirm-copy {
+  color: var(--text-secondary);
+}
+
+.admin-aligned-page--overtime-records .table-pill.accent,
+.admin-aligned-page--overtime-records .otr-deadline--ok,
+.admin-aligned-page--overtime-records .otr-activity-count {
+  background: var(--bg-accent);
+  color: var(--text-accent);
+}
+
+.admin-aligned-page--overtime-records .table-pill.success,
+.admin-aligned-page--overtime-records .table-pill.active {
+  background: var(--bg-success);
+  color: var(--text-success);
+}
+
+.admin-aligned-page--overtime-records .table-pill.danger,
+.admin-aligned-page--overtime-records .otr-deadline--expired {
+  background: var(--bg-danger);
+  color: var(--text-danger);
+}
+
+.admin-aligned-page--overtime-records .table-pill.inactive,
+.admin-aligned-page--overtime-records .otr-deadline--missing {
+  background: var(--surface-1);
+  color: var(--text-secondary);
+}
+
+.admin-aligned-page--overtime-records .otr-deadline--soon {
+  background: var(--bg-warning);
+  color: var(--text-warning);
+}
+
+.admin-aligned-page--overtime-records .otr-status-rail,
+.admin-aligned-page--overtime-records .otr-status-rail--inactive {
+  background: var(--text-muted);
+}
+
+.admin-aligned-page--overtime-records .otr-status-rail--success,
+.admin-aligned-page--overtime-records .otr-status-rail--active {
+  background: var(--text-success);
+}
+
+.admin-aligned-page--overtime-records .otr-status-rail--accent {
+  background: var(--text-accent);
+}
+
+.admin-aligned-page--overtime-records .otr-status-rail--danger {
+  background: var(--text-danger);
+}
+
+.otr-drawer {
+  border-left: 0.5px solid var(--border);
+  background: var(--surface-2);
+  box-shadow: -12px 0 28px rgba(17, 24, 39, 0.12);
+  color: var(--text-primary);
+}
+
+.otr-drawer .otr-drawer-header,
+.otr-drawer .otr-status-editor,
+.otr-drawer .otr-drawer-summary div,
+.otr-drawer .otr-drawer-empty,
+.otr-modal .otr-modal-header {
+  background: var(--surface-1);
+}
+
+.otr-modal {
+  border-radius: 10px;
+  box-shadow: 0 20px 48px rgba(17, 24, 39, 0.16);
+}
+
+.admin-aligned-page--overtime-records button:focus-visible,
+.admin-aligned-page--overtime-records input:focus-visible,
+.admin-aligned-page--overtime-records select:focus-visible,
+.otr-drawer button:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 2px var(--bg-accent);
+}

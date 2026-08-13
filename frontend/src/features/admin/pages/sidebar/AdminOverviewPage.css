@@ -1047,3 +1047,364 @@
   }
 }
 
+/* Admin consistency pass */
+.ov2-shell.admin-aligned-page--overview {
+  gap: 20px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.admin-aligned-page--overview .ov2-content {
+  gap: 20px;
+  padding: 0;
+}
+
+.admin-aligned-page--overview .ov2-topbar {
+  position: static;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.admin-aligned-page--overview .ov2-search {
+  max-width: 340px;
+}
+
+.admin-aligned-page--overview .ov2-search input,
+.admin-aligned-page--overview .ov2-clock,
+.admin-aligned-page--overview .ov2-refresh-btn,
+.admin-aligned-page--overview .ov2-bell-btn,
+.admin-aligned-page--overview .ov2-resolve-btn,
+.admin-aligned-page--overview .ov2-alert-btn {
+  height: 34px;
+  min-height: 34px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.admin-aligned-page--overview .ov2-search input {
+  padding-left: 34px;
+}
+
+.admin-aligned-page--overview .ov2-search input::placeholder,
+.admin-aligned-page--overview .ov2-date-str,
+.admin-aligned-page--overview .ov2-sync-label {
+  color: var(--text-muted);
+}
+
+.admin-aligned-page--overview .ov2-search input:focus,
+.admin-aligned-page--overview .ov2-refresh-btn:focus-visible,
+.admin-aligned-page--overview .ov2-bell-btn:focus-visible,
+.admin-aligned-page--overview .ov2-resolve-btn:focus-visible,
+.admin-aligned-page--overview .ov2-alert-btn:focus-visible,
+.admin-aligned-page--overview .ov2-exc-chip:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 2px var(--bg-accent);
+}
+
+.admin-aligned-page--overview .ov2-refresh-btn {
+  background: var(--bg-accent);
+  border-color: var(--border-accent);
+  color: var(--text-accent);
+}
+
+.admin-aligned-page--overview .ov2-refresh-btn:hover,
+.admin-aligned-page--overview .ov2-bell-btn:hover,
+.admin-aligned-page--overview .ov2-resolve-btn:hover:not(:disabled),
+.admin-aligned-page--overview .ov2-alert-btn:hover:not(:disabled) {
+  background: var(--surface-1);
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+}
+
+.admin-aligned-page--overview .ov2-page-header {
+  margin: 0;
+  gap: 12px;
+}
+
+.admin-aligned-page--overview .ov2-page-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+
+.admin-aligned-page--overview .ov2-page-sub,
+.admin-aligned-page--overview .ov2-kpi-sub,
+.admin-aligned-page--overview .ov2-card-sub,
+.admin-aligned-page--overview .ov2-exc-mini-item,
+.admin-aligned-page--overview .ov2-exc-desc,
+.admin-aligned-page--overview .ov2-dept-count,
+.admin-aligned-page--overview .ov2-approval-copy span,
+.admin-aligned-page--overview .ov2-approval-copy small,
+.admin-aligned-page--overview .ov2-empty {
+  color: var(--text-secondary);
+}
+
+.admin-aligned-page--overview .ov2-kpi-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-aligned-page--overview .ov2-main-grid,
+.admin-aligned-page--overview .ov2-lower-grid {
+  gap: 10px;
+}
+
+.admin-aligned-page--overview .ov2-kpi-card,
+.admin-aligned-page--overview .ov2-card,
+.admin-aligned-page--overview .ov2-chart-insight {
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.admin-aligned-page--overview .ov2-kpi-card {
+  min-height: 104px;
+  padding: 14px 16px;
+}
+
+.admin-aligned-page--overview .ov2-card {
+  padding: 16px;
+}
+
+.admin-aligned-page--overview .ov2-card-head {
+  padding-bottom: 12px;
+}
+
+.admin-aligned-page--overview .ov2-card-title,
+.admin-aligned-page--overview .ov2-kpi-label,
+.admin-aligned-page--overview .ov2-chart-stat strong,
+.admin-aligned-page--overview .ov2-chart-insight strong,
+.admin-aligned-page--overview .ov2-dept-name,
+.admin-aligned-page--overview .ov2-approval-copy strong,
+.admin-aligned-page--overview .ov2-time {
+  color: var(--text-primary);
+}
+
+.admin-aligned-page--overview .ov2-kpi-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.admin-aligned-page--overview .ov2-kpi-period,
+.admin-aligned-page--overview .ov2-chart-stat span,
+.admin-aligned-page--overview .ov2-chart-insight span,
+.admin-aligned-page--overview .ov2-bar-val,
+.admin-aligned-page--overview .ov2-bar-lbl,
+.admin-aligned-page--overview .ov2-dept-legend-pill,
+.admin-aligned-page--overview .ov2-dept-chart-values {
+  color: var(--text-muted);
+}
+
+.admin-aligned-page--overview .ov2-kpi-num {
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-aligned-page--overview .ov2-kpi-num.blue,
+.admin-aligned-page--overview .ov2-kpi-num.amber,
+.admin-aligned-page--overview .ov2-kpi-num.red {
+  color: var(--text-primary);
+}
+
+.admin-aligned-page--overview .ov2-kpi-icon-wrap {
+  border-radius: 8px;
+  background: var(--surface-1);
+  color: var(--text-muted);
+}
+
+.admin-aligned-page--overview .ov2-kpi-icon-wrap.green,
+.admin-aligned-page--overview .ov2-kpi-icon-wrap.blue {
+  background: var(--bg-accent);
+  color: var(--text-accent);
+}
+
+.admin-aligned-page--overview .ov2-kpi-icon-wrap.amber {
+  background: var(--bg-warning);
+  color: var(--text-warning);
+}
+
+.admin-aligned-page--overview .ov2-kpi-icon-wrap.red {
+  background: var(--bg-danger);
+  color: var(--text-danger);
+}
+
+.admin-aligned-page--overview .ov2-delta {
+  border-radius: 6px;
+}
+
+.admin-aligned-page--overview .ov2-delta.good {
+  background: var(--bg-success);
+  color: var(--text-success);
+}
+
+.admin-aligned-page--overview .ov2-delta.bad,
+.admin-aligned-page--overview .ov2-live-chip,
+.admin-aligned-page--overview .ov2-exc-live-badge {
+  background: var(--bg-danger);
+  color: var(--text-danger);
+}
+
+.admin-aligned-page--overview .ov2-delta.flat,
+.admin-aligned-page--overview .ov2-count-badge,
+.admin-aligned-page--overview .ov2-collapse-btn {
+  border: 0.5px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+}
+
+.admin-aligned-page--overview .ov2-spark-bar.green,
+.admin-aligned-page--overview .ov2-spark-bar.blue,
+.admin-aligned-page--overview .ov2-bar-fill,
+.admin-aligned-page--overview .ov2-dept-chart-bar.present {
+  background: var(--text-accent);
+}
+
+.admin-aligned-page--overview .ov2-spark-bar.amber,
+.admin-aligned-page--overview .ov2-kpi-progress.amber {
+  background: var(--text-warning);
+}
+
+.admin-aligned-page--overview .ov2-kpi-progress-wrap,
+.admin-aligned-page--overview .ov2-bar-track,
+.admin-aligned-page--overview .ov2-dept-chart-bar.head {
+  background: var(--surface-1);
+}
+
+.admin-aligned-page--overview .ov2-chart-insight {
+  padding: 10px 8px;
+}
+
+.admin-aligned-page--overview .ov2-exc-chip {
+  height: 26px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+
+.admin-aligned-page--overview .ov2-exc-chip:hover {
+  border-color: var(--border-accent);
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+
+.admin-aligned-page--overview .ov2-exc-chip.active {
+  border-color: var(--border-accent);
+  background: var(--bg-accent);
+  color: var(--text-accent);
+}
+
+.admin-aligned-page--overview .ov2-chip-count {
+  background: var(--surface-1);
+  color: inherit;
+}
+
+.admin-aligned-page--overview .ov2-exc-item,
+.admin-aligned-page--overview .ov2-approval-row {
+  border-radius: 8px;
+}
+
+.admin-aligned-page--overview .ov2-exc-item:hover,
+.admin-aligned-page--overview .ov2-approvals-toggle:hover,
+.admin-aligned-page--overview .ov2-approval-row:hover {
+  background: var(--surface-1);
+}
+
+.admin-aligned-page--overview .ov2-exc-dot.red,
+.admin-aligned-page--overview .ov2-exc-mini-dot.red,
+.admin-aligned-page--overview .ov2-live-dot.red,
+.admin-aligned-page--overview .ov2-bell-badge {
+  background: var(--text-danger);
+}
+
+.admin-aligned-page--overview .ov2-exc-dot.amber {
+  background: var(--text-warning);
+}
+
+.admin-aligned-page--overview .ov2-exc-dot.blue,
+.admin-aligned-page--overview .ov2-live-dot {
+  background: var(--text-accent);
+}
+
+.admin-aligned-page--overview .ov2-exc-dot.muted {
+  background: var(--text-muted);
+}
+
+.admin-aligned-page--overview .ov2-approval-avatar {
+  border-radius: 8px;
+  background: var(--bg-accent);
+  color: var(--text-accent);
+}
+
+.admin-aligned-page--overview .ov2-alert-status {
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-success);
+  color: var(--text-success);
+}
+
+.admin-aligned-page--overview .ov2-kpi-progress.green,
+.admin-aligned-page--overview .ov2-dept-legend-swatch.present {
+  background: var(--text-accent);
+}
+
+.admin-aligned-page--overview .ov2-collapse-btn.open,
+.admin-aligned-page--overview .ov2-resolve-btn,
+.admin-aligned-page--overview .ov2-alert-btn {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-accent);
+}
+
+.admin-aligned-page--overview .ov2-exc-chip.active .ov2-chip-count,
+.admin-aligned-page--overview .ov2-chip-count {
+  background: var(--surface-1);
+  color: inherit;
+}
+
+.admin-aligned-page--overview .ov2-live-dot {
+  animation: none;
+}
+
+@media (max-width: 980px) {
+  .admin-aligned-page--overview .ov2-kpi-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .admin-aligned-page--overview .ov2-content {
+    padding: 0;
+  }
+
+  .admin-aligned-page--overview .ov2-search,
+  .admin-aligned-page--overview .ov2-topbar-right {
+    width: 100%;
+    max-width: none;
+  }
+
+  .admin-aligned-page--overview .ov2-kpi-row,
+  .admin-aligned-page--overview .ov2-lower-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

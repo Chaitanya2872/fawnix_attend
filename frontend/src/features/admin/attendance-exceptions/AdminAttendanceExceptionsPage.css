@@ -829,19 +829,19 @@
 }
 
 /* ─── Column-header filter dropdowns (FilterDropdown, compact) ───── */
-.filter-dropdown {
+.admin-aligned-page--attendance-exceptions .filter-dropdown {
   position: relative;
   display: grid;
   gap: 6px;
 }
 
-.filter-dropdown__label {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__label {
   font-size: 12px;
   font-weight: 500;
   color: var(--exc-muted);
 }
 
-.filter-dropdown__trigger {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__trigger {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -856,30 +856,30 @@
   text-align: left;
 }
 
-.filter-dropdown__trigger--active {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__trigger--active {
   border-color: var(--exc-primary);
   color: var(--exc-primary-ink);
   font-weight: 600;
 }
 
-.filter-dropdown__value {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__value {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.filter-dropdown__arrow {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__arrow {
   font-size: 8px;
   flex-shrink: 0;
 }
 
 /* Compact = lives inside a <th>, looks like the header label itself */
-.filter-dropdown--compact {
+.admin-aligned-page--attendance-exceptions .filter-dropdown--compact {
   display: inline-block;
   gap: 0;
 }
 
-.filter-dropdown__trigger--compact {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__trigger--compact {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -893,15 +893,15 @@
   color: var(--exc-muted);
 }
 
-.filter-dropdown__trigger--compact:hover {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__trigger--compact:hover {
   color: var(--exc-primary-ink);
 }
 
-.filter-dropdown__trigger--compact.filter-dropdown__trigger--active {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__trigger--compact.filter-dropdown__trigger--active {
   color: var(--exc-primary-ink);
 }
 
-.filter-dropdown__active-dot {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__active-dot {
   width: 5px;
   height: 5px;
   border-radius: 50%;
@@ -909,7 +909,7 @@
   flex: none;
 }
 
-.filter-dropdown__menu {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__menu {
   position: absolute;
   top: 26px;
   left: -8px;
@@ -922,12 +922,12 @@
   padding: 5px;
 }
 
-.filter-dropdown__menu--right {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__menu--right {
   left: auto;
   right: -8px;
 }
 
-.filter-dropdown__item {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__item {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -942,23 +942,23 @@
   position: relative;
 }
 
-.filter-dropdown__item:hover {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__item:hover {
   background: #f2f8ff;
 }
 
-.filter-dropdown__item--active {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__item--active {
   color: var(--exc-ink);
   font-weight: 600;
 }
 
-.filter-dropdown__item input {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__item input {
   position: absolute;
   opacity: 0;
   width: 0;
   height: 0;
 }
 
-.filter-dropdown__dot {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__dot {
   width: 13px;
   height: 13px;
   border-radius: 50%;
@@ -967,7 +967,7 @@
   box-shadow: none;
 }
 
-.filter-dropdown__item--active .filter-dropdown__dot {
+.admin-aligned-page--attendance-exceptions .filter-dropdown__item--active .filter-dropdown__dot {
   border-color: var(--exc-primary);
   box-shadow: inset 0 0 0 2.5px #fff, inset 0 0 0 8px var(--exc-primary);
 }
@@ -1396,4 +1396,274 @@
   .exc-kpi__skeleton {
     animation: none;
   }
+}
+
+/* Admin consistency pass */
+.admin-aligned-page--attendance-exceptions {
+  --exc-ink: var(--text-primary);
+  --exc-ink-2: var(--text-primary);
+  --exc-muted: var(--text-muted);
+  --exc-muted-2: var(--text-secondary);
+  --exc-soft: var(--text-muted);
+  --exc-body: var(--text-secondary);
+  --exc-canvas: var(--theme-canvas);
+  --exc-line: var(--border);
+  --exc-line-2: var(--border-strong);
+  --exc-line-3: var(--border);
+  --exc-line-4: var(--border);
+  --exc-tint: var(--surface-1);
+  --exc-primary: var(--text-accent);
+  --exc-primary-hover: var(--border-accent);
+  --exc-primary-ink: var(--text-accent);
+
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  padding-bottom: 0;
+}
+
+.admin-aligned-page--attendance-exceptions button,
+.admin-aligned-page--attendance-exceptions input,
+.admin-aligned-page--attendance-exceptions select,
+.admin-aligned-page--attendance-exceptions textarea,
+.exc-drawer {
+  font-family: inherit;
+}
+
+.admin-aligned-page--attendance-exceptions .exc-synced-label,
+.admin-aligned-page--attendance-exceptions .exc-kpi-card__value,
+.admin-aligned-page--attendance-exceptions .exc-leaderboard__stats strong,
+.admin-aligned-page--attendance-exceptions .exc-td--mono,
+.admin-aligned-page--attendance-exceptions .exc-min-badge,
+.admin-aligned-page--attendance-exceptions .exc-col-badge,
+.exc-drawer .exc-drawer-date,
+.exc-drawer .exc-drawer-fact__v {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-aligned-page--attendance-exceptions .exc-page-head {
+  padding-bottom: 0;
+}
+
+.admin-aligned-page--attendance-exceptions .exc-page-title {
+  color: var(--text-primary);
+  font-size: 22px;
+}
+
+.admin-aligned-page--attendance-exceptions .exc-page-sub,
+.admin-aligned-page--attendance-exceptions .exc-toolbar__sub,
+.admin-aligned-page--attendance-exceptions .exc-leaderboard__dept,
+.admin-aligned-page--attendance-exceptions .exc-leaderboard__stats span,
+.admin-aligned-page--attendance-exceptions .exc-pagination,
+.exc-drawer .exc-drawer-header__meta,
+.exc-drawer .exc-drawer-fact__k,
+.exc-drawer .exc-drawer-footer__note {
+  color: var(--text-secondary);
+}
+
+.admin-aligned-page--attendance-exceptions .exc-kpi-grid {
+  gap: 10px;
+}
+
+.admin-aligned-page--attendance-exceptions .exc-kpi-card,
+.admin-aligned-page--attendance-exceptions .exc-table-card,
+.admin-aligned-page--attendance-exceptions .exc-daterange,
+.admin-aligned-page--attendance-exceptions .filter-dropdown__menu,
+.exc-col-dropdown,
+.exc-drawer .exc-drawer-facts,
+.exc-drawer .exc-drawer-note {
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.admin-aligned-page--attendance-exceptions .exc-kpi-card {
+  padding: 14px 16px;
+}
+
+.admin-aligned-page--attendance-exceptions .exc-kpi-card--clickable:hover,
+.admin-aligned-page--attendance-exceptions .exc-kpi-card--clickable:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--surface-1);
+}
+
+.admin-aligned-page--attendance-exceptions .exc-kpi-card__value {
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.admin-aligned-page--attendance-exceptions .exc-btn,
+.admin-aligned-page--attendance-exceptions .exc-action-btn,
+.admin-aligned-page--attendance-exceptions .exc-page-btn,
+.admin-aligned-page--attendance-exceptions .exc-col-trigger,
+.admin-aligned-page--attendance-exceptions .filter-dropdown__trigger {
+  min-height: 34px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+.admin-aligned-page--attendance-exceptions .exc-btn--primary {
+  border-color: var(--border-accent);
+  background: var(--bg-accent);
+  color: var(--text-accent);
+}
+
+.admin-aligned-page--attendance-exceptions .exc-btn:hover:not(:disabled),
+.admin-aligned-page--attendance-exceptions .exc-action-btn:hover:not(:disabled),
+.admin-aligned-page--attendance-exceptions .exc-page-btn:hover:not(:disabled),
+.admin-aligned-page--attendance-exceptions .exc-col-trigger:hover,
+.admin-aligned-page--attendance-exceptions .filter-dropdown__trigger:hover {
+  border-color: var(--border-accent);
+  background: var(--surface-1);
+}
+
+.admin-aligned-page--attendance-exceptions .exc-filter-search,
+.admin-aligned-page--attendance-exceptions .exc-filter-select,
+.admin-aligned-page--attendance-exceptions .exc-daterange input,
+.exc-drawer .exc-drawer-remarks {
+  min-height: 34px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+.admin-aligned-page--attendance-exceptions .exc-daterange input {
+  border: 0;
+}
+
+.admin-aligned-page--attendance-exceptions .exc-toolbar,
+.admin-aligned-page--attendance-exceptions .exc-pagination,
+.exc-drawer .exc-drawer-header,
+.exc-drawer .exc-drawer-footer {
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+.admin-aligned-page--attendance-exceptions .exc-th {
+  border-color: var(--border);
+  background: var(--surface-1);
+  color: var(--text-muted);
+}
+
+.admin-aligned-page--attendance-exceptions .exc-row {
+  background: var(--surface-2);
+}
+
+.admin-aligned-page--attendance-exceptions .exc-row:hover td {
+  background: var(--surface-1);
+}
+
+.admin-aligned-page--attendance-exceptions .exc-td {
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.admin-aligned-page--attendance-exceptions .exc-td--reason,
+.admin-aligned-page--attendance-exceptions .exc-td--mono,
+.exc-drawer .exc-drawer-text,
+.exc-drawer .exc-drawer-note {
+  color: var(--text-secondary);
+}
+
+.admin-aligned-page--attendance-exceptions .exc-leaderboard__avatar,
+.admin-aligned-page--attendance-exceptions .table-pill.accent,
+.admin-aligned-page--attendance-exceptions .filter-dropdown__active-dot {
+  background: var(--bg-accent);
+  color: var(--text-accent);
+}
+
+.admin-aligned-page--attendance-exceptions .table-pill.active {
+  background: var(--bg-success);
+  color: var(--text-success);
+}
+
+.admin-aligned-page--attendance-exceptions .table-pill.danger,
+.admin-aligned-page--attendance-exceptions .exc-min-badge--late,
+.admin-aligned-page--attendance-exceptions .exc-drawer-reject:hover:not(:disabled) {
+  background: var(--bg-danger);
+  color: var(--text-danger);
+}
+
+.admin-aligned-page--attendance-exceptions .table-pill.inactive {
+  background: var(--surface-1);
+  color: var(--text-secondary);
+}
+
+.admin-aligned-page--attendance-exceptions .exc-min-badge--early {
+  background: var(--bg-warning);
+  color: var(--text-warning);
+}
+
+.admin-aligned-page--attendance-exceptions .exc-sparkline__bar,
+.admin-aligned-page--attendance-exceptions .exc-progress-track,
+.admin-aligned-page--attendance-exceptions .exc-kpi__skeleton {
+  background: var(--surface-1);
+}
+
+.admin-aligned-page--attendance-exceptions .exc-sparkline__bar--current,
+.admin-aligned-page--attendance-exceptions .exc-progress-fill,
+.admin-aligned-page--attendance-exceptions .exc-col-badge,
+.admin-aligned-page--attendance-exceptions .filter-dropdown__dot {
+  background: var(--text-accent);
+}
+
+.admin-aligned-page--attendance-exceptions .exc-severity-bar,
+.admin-aligned-page--attendance-exceptions .exc-severity-bar--low {
+  background: var(--text-muted);
+}
+
+.admin-aligned-page--attendance-exceptions .exc-severity-bar--medium {
+  background: var(--text-warning);
+}
+
+.admin-aligned-page--attendance-exceptions .exc-severity-bar--high {
+  background: var(--text-danger);
+}
+
+.admin-aligned-page--attendance-exceptions .filter-dropdown__item,
+.exc-col-item {
+  color: var(--text-secondary);
+}
+
+.admin-aligned-page--attendance-exceptions .filter-dropdown__item:hover,
+.exc-col-item:hover,
+.exc-col-reset:hover {
+  background: var(--surface-1);
+}
+
+.exc-drawer {
+  border-left: 0.5px solid var(--border);
+  background: var(--surface-2);
+  box-shadow: -12px 0 28px rgba(17, 24, 39, 0.12);
+  color: var(--text-primary);
+}
+
+.exc-drawer .exc-drawer-header,
+.exc-drawer .exc-drawer-note {
+  background: var(--surface-1);
+}
+
+.exc-drawer .exc-drawer-approve {
+  border-color: var(--border-accent);
+  background: var(--bg-accent);
+  color: var(--text-accent);
+}
+
+.admin-aligned-page--attendance-exceptions button:focus-visible,
+.admin-aligned-page--attendance-exceptions input:focus-visible,
+.admin-aligned-page--attendance-exceptions select:focus-visible,
+.exc-drawer button:focus-visible,
+.exc-drawer textarea:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 2px var(--bg-accent);
 }

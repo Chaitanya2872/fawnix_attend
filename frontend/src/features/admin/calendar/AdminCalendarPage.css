@@ -321,3 +321,225 @@
     transition: none;
   }
 }
+
+/* Admin consistency pass */
+.ops-cal.admin-aligned-page--calendar {
+  --ink: var(--text-primary);
+  --ink-soft: var(--text-secondary);
+  --paper: var(--theme-canvas);
+  --panel: var(--surface-2);
+  --line: var(--border);
+  --teal: var(--text-accent);
+  --teal-soft: var(--bg-accent);
+  --gold: var(--text-warning);
+  --gold-soft: var(--bg-warning);
+  --rust: var(--text-danger);
+  --rust-soft: var(--bg-danger);
+
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0;
+  border-radius: 0;
+  font-family: inherit;
+}
+
+.ops-cal.admin-aligned-page--calendar button,
+.ops-cal.admin-aligned-page--calendar .ops-cal-title,
+.ops-cal.admin-aligned-page--calendar .ops-cal-eyebrow,
+.ops-cal.admin-aligned-page--calendar .ops-metric-label,
+.ops-cal.admin-aligned-page--calendar .ops-metric-value,
+.ops-cal.admin-aligned-page--calendar .ops-cal-panel-title,
+.ops-cal.admin-aligned-page--calendar .ops-cal-weekdays,
+.ops-cal.admin-aligned-page--calendar .ops-day-number,
+.ops-cal.admin-aligned-page--calendar .ops-day-badge,
+.ops-cal.admin-aligned-page--calendar .ops-day-stats {
+  font-family: inherit;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-cal-head {
+  margin-bottom: 0;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-cal-title {
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-cal-copy,
+.ops-cal.admin-aligned-page--calendar .ops-cal-legend,
+.ops-cal.admin-aligned-page--calendar .ops-metric-caption,
+.ops-cal.admin-aligned-page--calendar .ops-day-stats {
+  color: var(--text-secondary);
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-cal-nav {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-cal-nav-btn,
+.ops-cal.admin-aligned-page--calendar .ops-cal-nav-today {
+  height: 34px;
+  min-height: 34px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-cal-nav-today {
+  width: auto;
+  padding: 0 12px;
+  background: var(--bg-accent);
+  color: var(--text-accent);
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-cal-nav-btn:hover,
+.ops-cal.admin-aligned-page--calendar .ops-cal-nav-today:hover,
+.ops-cal.admin-aligned-page--calendar .ops-day:hover {
+  border-color: var(--border-accent);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  opacity: 1;
+  transform: none;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-cal-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-metric,
+.ops-cal.admin-aligned-page--calendar .ops-cal-panel,
+.ops-cal.admin-aligned-page--calendar .ops-day {
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-metric {
+  border-top: 0.5px solid var(--border);
+  padding: 14px 16px;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-metric-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-metric-value {
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-cal-panel {
+  overflow-x: auto;
+  padding: 16px;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-cal-panel-head {
+  margin-bottom: 12px;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-cal-weekdays,
+.ops-cal.admin-aligned-page--calendar .ops-cal-grid {
+  min-width: 760px;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-cal-weekdays {
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-day {
+  min-height: 92px;
+  aspect-ratio: auto;
+  padding: 8px;
+  color: var(--text-primary);
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-day-outside {
+  opacity: 0.42;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-day-today {
+  border-color: var(--border-accent);
+  border-width: 0.5px;
+  box-shadow: inset 0 0 0 1px var(--border-accent);
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-day-badge {
+  border-radius: 6px;
+  background: var(--bg-accent);
+  color: var(--text-accent);
+  font-size: 10px;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-signal-teal,
+.ops-cal.admin-aligned-page--calendar .ops-dot-teal {
+  background: var(--text-accent);
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-signal-gold,
+.ops-cal.admin-aligned-page--calendar .ops-dot-gold {
+  background: var(--text-warning);
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-signal-rust,
+.ops-cal.admin-aligned-page--calendar .ops-dot-rust {
+  background: var(--text-danger);
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-day-stats span {
+  background: transparent;
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-day-stats span:nth-child(1) {
+  color: var(--text-accent);
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-day-stats span:nth-child(2) {
+  color: var(--text-warning);
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-day-stats span:nth-child(3) {
+  color: var(--text-danger);
+}
+
+.ops-cal.admin-aligned-page--calendar .ops-cal-nav-btn:focus-visible,
+.ops-cal.admin-aligned-page--calendar .ops-cal-nav-today:focus-visible,
+.ops-cal.admin-aligned-page--calendar .ops-day:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 2px var(--bg-accent);
+}
+
+@media (max-width: 980px) {
+  .ops-cal.admin-aligned-page--calendar .ops-cal-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .ops-cal.admin-aligned-page--calendar {
+    padding: 0;
+  }
+
+  .ops-cal.admin-aligned-page--calendar .ops-cal-metrics {
+    grid-template-columns: 1fr;
+  }
+}

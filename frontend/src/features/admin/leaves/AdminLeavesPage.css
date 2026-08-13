@@ -963,3 +963,260 @@
     animation: none;
   }
 }
+
+/* Admin consistency pass */
+.admin-aligned-page--leaves {
+  --lv-ink: var(--text-primary);
+  --lv-ink-2: var(--text-primary);
+  --lv-muted: var(--text-muted);
+  --lv-muted-2: var(--text-secondary);
+  --lv-soft: var(--text-muted);
+  --lv-body: var(--text-secondary);
+  --lv-canvas: var(--theme-canvas);
+  --lv-line: var(--border);
+  --lv-line-2: var(--border-strong);
+  --lv-line-3: var(--border);
+  --lv-line-4: var(--border);
+  --lv-tint: var(--surface-1);
+  --lv-primary: var(--text-accent);
+  --lv-primary-hover: var(--border-accent);
+  --lv-primary-ink: var(--text-accent);
+
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  padding-bottom: 0;
+}
+
+.admin-aligned-page--leaves button,
+.admin-aligned-page--leaves input,
+.admin-aligned-page--leaves select,
+.admin-aligned-page--leaves textarea,
+.lv-drawer {
+  font-family: inherit;
+}
+
+.admin-aligned-page--leaves ::placeholder {
+  color: var(--text-muted);
+}
+
+.admin-aligned-page--leaves .lv-synced-label,
+.admin-aligned-page--leaves .lv-kpi-card__value,
+.admin-aligned-page--leaves .lv-leaderboard__stats strong,
+.admin-aligned-page--leaves .lv-td--num,
+.admin-aligned-page--leaves .lv-td--mono,
+.admin-aligned-page--leaves .lv-date-range,
+.admin-aligned-page--leaves .lv-sub--delta,
+.lv-drawer .lv-drawer-days,
+.lv-drawer .lv-drawer-fact__v,
+.lv-drawer .lv-drawer-balance__fill {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-aligned-page--leaves .lv-header-actions {
+  flex-wrap: wrap;
+}
+
+.admin-aligned-page--leaves .lv-kpi-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.admin-aligned-page--leaves .lv-kpi-card,
+.admin-aligned-page--leaves .lv-table-card,
+.lv-drawer,
+.lv-drawer-facts,
+.lv-drawer-note {
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.admin-aligned-page--leaves .lv-kpi-card {
+  padding: 14px 16px;
+}
+
+.admin-aligned-page--leaves .lv-kpi-card--clickable:hover,
+.admin-aligned-page--leaves .lv-kpi-card--clickable:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--surface-1);
+}
+
+.admin-aligned-page--leaves .lv-kpi-card__label,
+.admin-aligned-page--leaves .lv-kpi-card__label-hint,
+.admin-aligned-page--leaves .lv-leaderboard__dept,
+.admin-aligned-page--leaves .lv-leaderboard__code,
+.admin-aligned-page--leaves .lv-leaderboard__stats span,
+.admin-aligned-page--leaves .lv-toolbar__right,
+.admin-aligned-page--leaves .lv-pagination,
+.lv-drawer .lv-drawer-header__meta,
+.lv-drawer .lv-drawer-fact__k,
+.lv-drawer .lv-drawer-section__title,
+.lv-drawer .lv-drawer-footer__note {
+  color: var(--text-secondary);
+}
+
+.admin-aligned-page--leaves .lv-kpi-card__value {
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.admin-aligned-page--leaves .lv-leaderboard__avatar,
+.lv-drawer .lv-drawer-typepill {
+  background: var(--bg-accent);
+  color: var(--text-accent);
+}
+
+.admin-aligned-page--leaves .lv-trend-pill {
+  border-radius: 6px;
+}
+
+.admin-aligned-page--leaves .lv-trend-pill--up,
+.admin-aligned-page--leaves .table-pill.danger {
+  background: var(--bg-danger);
+  color: var(--text-danger);
+}
+
+.admin-aligned-page--leaves .lv-trend-pill--down,
+.admin-aligned-page--leaves .table-pill.active {
+  background: var(--bg-success);
+  color: var(--text-success);
+}
+
+.admin-aligned-page--leaves .table-pill.accent {
+  background: var(--bg-accent);
+  color: var(--text-accent);
+}
+
+.admin-aligned-page--leaves .table-pill.inactive {
+  background: var(--surface-1);
+  color: var(--text-secondary);
+}
+
+.admin-aligned-page--leaves .lv-sparkline__bar,
+.admin-aligned-page--leaves .lv-age-histogram__bar,
+.admin-aligned-page--leaves .lv-drawer-balance__track,
+.admin-aligned-page--leaves .lv-kpi__skeleton {
+  background: var(--surface-1);
+}
+
+.admin-aligned-page--leaves .lv-sparkline__bar--current,
+.admin-aligned-page--leaves .lv-drawer-balance__fill {
+  background: var(--text-accent);
+}
+
+.admin-aligned-page--leaves .lv-age-bar,
+.admin-aligned-page--leaves .lv-age-bar--low {
+  background: var(--text-muted);
+}
+
+.admin-aligned-page--leaves .lv-age-bar--medium {
+  background: var(--text-warning);
+}
+
+.admin-aligned-page--leaves .lv-age-bar--high {
+  background: var(--text-danger);
+}
+
+.admin-aligned-page--leaves .lv-filter-grid {
+  gap: 10px;
+}
+
+.admin-aligned-page--leaves .lv-filter-clear-link,
+.admin-aligned-page--leaves .lv-action-btn,
+.admin-aligned-page--leaves .lv-alert-status,
+.lv-drawer .lv-drawer-review-status {
+  color: var(--text-accent);
+}
+
+.admin-aligned-page--leaves .lv-table-card {
+  border-radius: 10px;
+}
+
+.admin-aligned-page--leaves .lv-toolbar,
+.admin-aligned-page--leaves .lv-pagination,
+.lv-drawer .lv-drawer-header,
+.lv-drawer .lv-drawer-footer {
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+.admin-aligned-page--leaves .lv-th {
+  height: 34px;
+  border-color: var(--border);
+  background: var(--surface-1);
+  color: var(--text-muted);
+  font-family: inherit;
+}
+
+.admin-aligned-page--leaves .lv-row {
+  background: var(--surface-2);
+}
+
+.admin-aligned-page--leaves .lv-row:hover td {
+  background: var(--surface-1);
+}
+
+.admin-aligned-page--leaves .lv-td {
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.admin-aligned-page--leaves .lv-td--mono,
+.admin-aligned-page--leaves .lv-date-range,
+.admin-aligned-page--leaves .lv-drawer-text,
+.admin-aligned-page--leaves .lv-drawer-note {
+  color: var(--text-primary);
+}
+
+.admin-aligned-page--leaves .lv-date-day,
+.admin-aligned-page--leaves .lv-sub {
+  color: var(--text-secondary);
+}
+
+.admin-aligned-page--leaves .lv-action-btn,
+.lv-drawer .lv-drawer-alert {
+  height: 30px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-accent);
+  box-shadow: none;
+}
+
+.admin-aligned-page--leaves .lv-action-btn:hover:not(:disabled),
+.lv-drawer .lv-drawer-alert:hover:not(:disabled) {
+  border-color: var(--border-accent);
+  background: var(--surface-1);
+}
+
+.lv-drawer {
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 0;
+  box-shadow: -12px 0 28px rgba(17, 24, 39, 0.12);
+}
+
+.lv-drawer .lv-drawer-header,
+.lv-drawer .lv-drawer-note {
+  background: var(--surface-1);
+}
+
+.lv-drawer .lv-drawer-fact,
+.lv-drawer .lv-drawer-fact:last-child {
+  border-color: var(--border);
+}
+
+.admin-aligned-page--leaves button:focus-visible,
+.admin-aligned-page--leaves input:focus-visible,
+.admin-aligned-page--leaves select:focus-visible,
+.lv-drawer button:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 2px var(--bg-accent);
+}

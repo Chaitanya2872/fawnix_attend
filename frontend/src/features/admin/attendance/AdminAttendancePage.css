@@ -512,3 +512,134 @@
   .kpi-cards { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .kpi-count { font-size: 20px; }
 }
+
+/* Admin consistency pass */
+.attendance-dashboard.admin-aligned-page--attendance {
+  gap: 20px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.admin-aligned-page--attendance .attendance-toolbar {
+  gap: 16px;
+}
+
+.admin-aligned-page--attendance .attendance-toolbar-head {
+  margin: 0;
+  align-items: flex-start;
+}
+
+.admin-aligned-page--attendance .attendance-title-block {
+  min-width: 0;
+  gap: 2px;
+}
+
+.admin-aligned-page--attendance .attendance-controls-row {
+  width: auto;
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
+.admin-aligned-page--attendance .attendance-date-trigger,
+.admin-aligned-page--attendance .attendance-search-shell input,
+.admin-aligned-page--attendance .icon-btn,
+.admin-aligned-page--attendance .attendance-quick-trigger {
+  height: 34px;
+  min-height: 34px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  box-shadow: none;
+  font-family: inherit;
+}
+
+.admin-aligned-page--attendance .icon-btn,
+.admin-aligned-page--attendance .attendance-quick-trigger {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.admin-aligned-page--attendance .attendance-date-trigger:hover,
+.admin-aligned-page--attendance .attendance-search-shell input:hover,
+.admin-aligned-page--attendance .icon-btn:hover,
+.admin-aligned-page--attendance .attendance-quick-trigger:hover {
+  border-color: var(--border-accent);
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+
+.admin-aligned-page--attendance .icon-btn:focus-visible,
+.admin-aligned-page--attendance .attendance-quick-trigger:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 2px var(--bg-accent);
+}
+
+.admin-aligned-page--attendance .attendance-calendar-popover,
+.admin-aligned-page--attendance .attendance-quick-menu {
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: 0 12px 24px rgba(17, 24, 39, 0.08);
+}
+
+.admin-aligned-page--attendance .attendance-calendar-shortcuts button,
+.admin-aligned-page--attendance .attendance-calendar-nav,
+.admin-aligned-page--attendance .attendance-calendar-day {
+  border-radius: var(--radius);
+  font-family: inherit;
+}
+
+.admin-aligned-page--attendance .attendance-calendar-day--today {
+  border-color: var(--border-accent);
+  color: var(--text-accent);
+}
+
+.admin-aligned-page--attendance .attendance-calendar-day--selected,
+.admin-aligned-page--attendance .attendance-calendar-day--selected:hover {
+  border-color: var(--border-accent);
+  background: var(--text-accent);
+  color: #fff;
+  box-shadow: none;
+}
+
+.admin-aligned-page--attendance .kpi-card,
+.admin-aligned-page--attendance .attendance-content-card {
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.admin-aligned-page--attendance .kpi-card:hover,
+.admin-aligned-page--attendance .kpi-card.active {
+  border-color: var(--border-strong);
+  background: var(--surface-1);
+}
+
+.admin-aligned-page--attendance .kpi-icon-wrap {
+  border-radius: 8px;
+  background: var(--surface-1);
+  color: var(--text-muted);
+}
+
+.admin-aligned-page--attendance .kpi-card.active .kpi-icon-wrap {
+  background: var(--bg-accent);
+  color: var(--text-accent);
+}
+
+.admin-aligned-page--attendance .quick-badge {
+  border-radius: 6px;
+}
+
+@media (max-width: 640px) {
+  .admin-aligned-page--attendance .attendance-toolbar-head {
+    align-items: stretch;
+  }
+
+  .admin-aligned-page--attendance .attendance-controls-row {
+    flex-basis: 100%;
+  }
+}

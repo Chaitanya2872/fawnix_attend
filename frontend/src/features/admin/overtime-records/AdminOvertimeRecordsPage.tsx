@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import ColumnVisibilitySelector, { type ColumnDef } from '../attendance-exceptions/components/ColumnVisibilitySelector'
 import './AdminOvertimeRecordsPage.css'
 import type {
-  AdminOvertimeDatePreset,
   AdminOvertimeFilterOptions,
   AdminOvertimeFilterState,
   AdminOvertimeKpis,
@@ -59,28 +58,6 @@ const OVERTIME_STATUS_OPTIONS: AdminOvertimeStatus[] = [
   'utilized',
 ]
 
-const DATE_PRESETS: Array<{ value: AdminOvertimeDatePreset; label: string }> = [
-  { value: '', label: 'All dates' },
-  { value: 'today', label: 'Today' },
-  { value: 'last7', label: 'Last 7 days' },
-  { value: 'last30', label: 'Last 30 days' },
-  { value: 'thisMonth', label: 'This month' },
-  { value: 'custom', label: 'Custom range' },
-]
-
-const SORT_OPTIONS = [
-  { value: 'work_date', label: 'Work Date' },
-  { value: 'employee_name', label: 'Employee Name' },
-  { value: 'employee_code', label: 'Employee Code' },
-  { value: 'extra_hours', label: 'Extra Hours' },
-  { value: 'comp_off_days', label: 'Comp-Off Days' },
-  { value: 'status', label: 'Status' },
-  { value: 'created_at', label: 'Created At' },
-  { value: 'updated_at', label: 'Updated At' },
-]
-
-const PAGE_SIZE_OPTIONS = ['10', '15', '25', '50', '100']
-
 type AdminOvertimeRecordsPageProps = {
   actionLoading: boolean
   actionStatus: string
@@ -97,13 +74,10 @@ type AdminOvertimeRecordsPageProps = {
   records: AdminOvertimeRecord[]
   validationError: string
   approveRecord: (recordId: number, action: 'approved' | 'rejected', remarks?: string) => Promise<AdminOvertimeRecord | undefined>
-  applyDatePreset: (preset: AdminOvertimeDatePreset) => void
-  clearFilters: () => void
   createRecord: (payload: AdminOvertimeMutationPayload) => Promise<AdminOvertimeRecord | undefined>
   deleteRecord: (recordId: number, force?: boolean) => Promise<AdminOvertimeRecord | undefined>
   onChangePage: (page: number) => void
   refresh: () => void
-  onSort: (sortBy: string, sortOrder: 'asc' | 'desc') => void
   updateRecord: (recordId: number, payload: AdminOvertimeMutationPayload) => Promise<AdminOvertimeRecord | undefined>
   updateFilter: <K extends keyof AdminOvertimeFilterState>(
     key: K,
@@ -1218,13 +1192,10 @@ export default function AdminOvertimeRecordsPage({
   records,
   validationError,
   approveRecord,
-  applyDatePreset,
-  clearFilters,
   createRecord,
   deleteRecord,
   onChangePage,
   refresh,
-  onSort,
   updateRecord,
   updateFilter,
   updateStatus,
@@ -1241,18 +1212,6 @@ export default function AdminOvertimeRecordsPage({
   const [deleteTarget, setDeleteTarget] = useState<AdminOvertimeRecord | null>(null)
   const [forceDelete, setForceDelete] = useState(false)
   const [mutationError, setMutationError] = useState('')
-
-  const filtersActive = Boolean(
-    filters.search.trim() ||
-    filters.status ||
-    filters.empCode.trim() ||
-    filters.department.trim() ||
-    filters.fromDate ||
-    filters.toDate ||
-    filters.pageSize !== '15' ||
-    filters.sortBy !== 'work_date' ||
-    filters.sortOrder !== 'desc'
-  )
 
   const toggleColumn = useCallback((key: string) => {
     setVisibleKeys((previousKeys) => {
@@ -1421,6 +1380,13 @@ export default function AdminOvertimeRecordsPage({
   const visibleLabel = pagination.total_records
     ? `Showing ${firstRecordIndex.toLocaleString()}-${lastRecordIndex.toLocaleString()} of ${pagination.total_records.toLocaleString()} records`
     : 'No overtime records loaded'
+  const visibleFiltersActive = Boolean(
+    filters.search.trim() ||
+    filters.status ||
+    filters.department.trim() ||
+    filters.fromDate ||
+    filters.toDate
+  )
   const statusFilterOptions = filterOptions.statuses.length
     ? filterOptions.statuses
     : OVERTIME_STATUS_OPTIONS
@@ -1535,16 +1501,6 @@ export default function AdminOvertimeRecordsPage({
           </label>
 
           <label className="otr-filter-field">
-            <span>Employee Code</span>
-            <input
-              value={filters.empCode}
-              onChange={(event) => updateFilter('empCode', event.target.value)}
-              placeholder="EMP001"
-              disabled={loading}
-            />
-          </label>
-
-          <label className="otr-filter-field">
             <span>Department</span>
             <select
               value={filters.department}
@@ -1555,21 +1511,6 @@ export default function AdminOvertimeRecordsPage({
               {filterOptions.departments.map((department) => (
                 <option key={department} value={department}>
                   {department}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="otr-filter-field">
-            <span>Date Range</span>
-            <select
-              value={filters.datePreset}
-              onChange={(event) => applyDatePreset(event.target.value as AdminOvertimeDatePreset)}
-              disabled={loading}
-            >
-              {DATE_PRESETS.map((option) => (
-                <option key={option.value || 'all'} value={option.value}>
-                  {option.label}
                 </option>
               ))}
             </select>
@@ -1594,55 +1535,6 @@ export default function AdminOvertimeRecordsPage({
               disabled={loading}
             />
           </label>
-
-          <label className="otr-filter-field otr-filter-field--limit">
-            <span>Page Size</span>
-            <select
-              value={filters.pageSize}
-              onChange={(event) => updateFilter('pageSize', event.target.value)}
-              disabled={loading}
-            >
-              {PAGE_SIZE_OPTIONS.map((pageSize) => (
-                <option key={pageSize} value={pageSize}>
-                  {pageSize}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="otr-filter-field">
-            <span>Sort By</span>
-            <select
-              value={filters.sortBy}
-              onChange={(event) => onSort(event.target.value, filters.sortOrder)}
-              disabled={loading}
-            >
-              {SORT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="otr-filter-field">
-            <span>Order</span>
-            <select
-              value={filters.sortOrder}
-              onChange={(event) => onSort(filters.sortBy, event.target.value as 'asc' | 'desc')}
-              disabled={loading}
-            >
-              <option value="desc">Desc</option>
-              <option value="asc">Asc</option>
-            </select>
-          </label>
-
-          {filtersActive ? (
-            <button className="otr-btn otr-btn--clear" type="button" onClick={clearFilters} disabled={loading}>
-              <ToolbarIcon name="clear" />
-              Clear
-            </button>
-          ) : null}
         </div>
 
         {validationError ? <p className="otr-filter-error">{validationError}</p> : null}
@@ -1660,7 +1552,7 @@ export default function AdminOvertimeRecordsPage({
             <span>Search, filters, sorting, and pagination are backed by the API.</span>
           </div>
           <div className="otr-toolbar__right">
-            {filtersActive ? <span className="table-pill accent">Filtered</span> : null}
+            {visibleFiltersActive ? <span className="table-pill accent">Filtered</span> : null}
             <ColumnVisibilitySelector
               columns={ALL_COLUMNS}
               visibleKeys={visibleKeys}

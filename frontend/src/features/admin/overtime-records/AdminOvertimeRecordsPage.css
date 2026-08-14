@@ -218,7 +218,11 @@
 
 .otr-filter-grid {
   display: grid;
-  grid-template-columns: minmax(300px, 2fr) repeat(4, minmax(124px, 1fr)) auto;
+  grid-template-columns:
+    minmax(260px, 1.8fr)
+    minmax(140px, 0.9fr)
+    minmax(180px, 1.1fr)
+    repeat(2, minmax(130px, 0.8fr));
   gap: 8px;
   align-items: end;
 }
@@ -231,7 +235,6 @@
 .otr-search-shell {
   display: flex;
   align-items: center;
-  grid-column: span 2;
   gap: 8px;
   min-height: 36px;
   border: 1px solid var(--otr-line-2);
@@ -1203,7 +1206,7 @@
   }
 
   .otr-filter-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .otr-search-shell {

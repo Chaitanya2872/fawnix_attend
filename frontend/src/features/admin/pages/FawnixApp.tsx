@@ -764,10 +764,7 @@ function FawnixApp() {
     validationError: overtimeRecordValidationError,
     lastSyncedAt: overtimeRecordLastSyncedAt,
     updateFilter: updateOvertimeRecordFilter,
-    applyDatePreset: applyOvertimeRecordDatePreset,
-    clearFilters: clearOvertimeRecordFilters,
     changePage: changeOvertimeRecordPage,
-    setSort: setOvertimeRecordSort,
     refresh: refreshOvertimeRecords,
     createRecord: createOvertimeRecord,
     updateRecord: updateOvertimeRecord,
@@ -1175,13 +1172,10 @@ function FawnixApp() {
           records={overtimeRecordRows}
           validationError={overtimeRecordValidationError}
           approveRecord={approveOvertimeRecord}
-          applyDatePreset={applyOvertimeRecordDatePreset}
-          clearFilters={clearOvertimeRecordFilters}
           createRecord={createOvertimeRecord}
           deleteRecord={deleteOvertimeRecord}
           onChangePage={changeOvertimeRecordPage}
           refresh={refreshOvertimeRecords}
-          onSort={setOvertimeRecordSort}
           updateRecord={updateOvertimeRecord}
           updateFilter={updateOvertimeRecordFilter}
           updateStatus={updateOvertimeRecordStatus}

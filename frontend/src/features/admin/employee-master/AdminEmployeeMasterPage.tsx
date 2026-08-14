@@ -175,12 +175,14 @@ function truncate(value: unknown, maxLength = 64) {
 
 function DataListInput({
   id,
+  type = 'text',
   value,
   options,
   placeholder,
   onChange,
 }: {
   id: string
+  type?: 'text' | 'number' | 'date'
   value: string
   options: SelectOption[]
   placeholder?: string
@@ -191,6 +193,7 @@ function DataListInput({
     <>
       <input
         id={id}
+        type={type}
         list={options.length ? listId : undefined}
         value={value}
         placeholder={placeholder}
@@ -757,6 +760,7 @@ export default function AdminEmployeeMasterPage({
                       ) : (
                         <DataListInput
                           id={fieldId}
+                          type={field.inputType}
                           value={formPanel.values[field.key] || ''}
                           options={fieldOptions}
                           placeholder={field.placeholder}

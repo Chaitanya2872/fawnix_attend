@@ -37,6 +37,30 @@ export type EmployeeMasterSidebarId =
 
 export type EmployeeMasterRecord = Record<string, unknown> & {
   id?: number | string
+  unit_name?: string
+  unit_code?: string
+  address?: string
+  city?: string
+  state?: string
+  country?: string
+  pincode?: string
+  latitude?: string | number
+  longitude?: string | number
+  geofence_radius?: string | number
+  branch_site_name?: string
+  shift_mapping_id?: string | number
+  legal_entity_name?: string
+  pay_group_id?: string | number
+  pan_tax_id?: string
+  gst_registration_no?: string
+  pf_registration_no?: string
+  esi_registration_no?: string
+  bank_name?: string
+  bank_account_no?: string
+  ifsc_swift_code?: string
+  payslip_template_id?: string | number
+  created_by?: string
+  created_date?: string
   working_unit_code?: string
   working_unit_name?: string
   unit_head_manager?: string
@@ -65,8 +89,12 @@ export type EmployeeMasterFilterState = {
   status: string
   pageSize: string
   location: string
+  city: string
+  state: string
+  country: string
   unitHeadManager: string
   payrollManager: string
+  payGroupId: string
   payCycle: string
   jobLevelGrade: string
   department: string
@@ -106,6 +134,7 @@ export type EmployeeMasterFormFieldConfig = {
   label: string
   required?: boolean
   type?: EmployeeMasterFormFieldType
+  inputType?: 'text' | 'number' | 'date'
   placeholder?: string
   optionKey?: string
   options?: Array<{ value: string; label: string }>

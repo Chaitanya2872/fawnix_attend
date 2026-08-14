@@ -6,6 +6,7 @@ administration master tables under Employee Master.
 """
 
 from datetime import date, datetime, time
+from decimal import Decimal, InvalidOperation
 from typing import Dict, List
 
 from database.connection import get_db_connection, return_connection
@@ -17,92 +18,130 @@ RESOURCE_CONFIGS = {
     "working-units": {
         "table": "working_units",
         "singular": "Working unit",
-        "code_field": "working_unit_code",
-        "name_field": "working_unit_name",
+        "code_field": "unit_code",
+        "name_field": "unit_name",
         "required_fields": [
-            "working_unit_code",
-            "working_unit_name",
-            "unit_head_manager",
-            "location",
+            "unit_code",
+            "unit_name",
             "status",
         ],
         "fields": [
-            "working_unit_code",
-            "working_unit_name",
-            "description",
-            "unit_head_manager",
-            "location",
+            "unit_name",
+            "unit_code",
+            "address",
+            "city",
+            "state",
+            "country",
+            "pincode",
+            "latitude",
+            "longitude",
+            "geofence_radius",
+            "branch_site_name",
+            "shift_mapping_id",
             "status",
+            "created_by",
+            "created_date",
         ],
+        "integer_fields": {"shift_mapping_id"},
+        "numeric_fields": {"latitude", "longitude", "geofence_radius"},
+        "date_fields": {"created_date"},
         "search_fields": [
-            "working_unit_code",
-            "working_unit_name",
-            "description",
-            "unit_head_manager",
-            "location",
+            "unit_name",
+            "unit_code",
+            "address",
+            "city",
+            "state",
+            "country",
+            "pincode",
+            "latitude",
+            "longitude",
+            "geofence_radius",
+            "branch_site_name",
+            "shift_mapping_id",
             "status",
+            "created_by",
+            "created_date",
         ],
-        "filter_fields": ["location", "unit_head_manager"],
+        "filter_fields": ["city", "state", "country"],
         "filter_option_aliases": {
-            "location": "locations",
-            "unit_head_manager": "unit_head_managers",
+            "city": "cities",
+            "state": "states",
+            "country": "countries",
         },
         "sort_fields": [
-            "working_unit_code",
-            "working_unit_name",
-            "unit_head_manager",
-            "location",
+            "unit_name",
+            "unit_code",
+            "city",
+            "state",
+            "country",
+            "branch_site_name",
             "status",
-            "created_at",
-            "updated_at",
+            "created_by",
+            "created_date",
         ],
     },
     "payroll-units": {
         "table": "payroll_units",
         "singular": "Payroll unit",
-        "code_field": "payroll_unit_code",
-        "name_field": "payroll_unit_name",
+        "code_field": "unit_code",
+        "name_field": "unit_name",
         "required_fields": [
-            "payroll_unit_code",
-            "payroll_unit_name",
-            "payroll_manager",
-            "pay_cycle",
-            "location",
+            "unit_code",
+            "unit_name",
             "status",
         ],
         "fields": [
-            "payroll_unit_code",
-            "payroll_unit_name",
-            "description",
-            "payroll_manager",
+            "unit_name",
+            "unit_code",
+            "legal_entity_name",
+            "pay_group_id",
+            "pan_tax_id",
+            "gst_registration_no",
+            "pf_registration_no",
+            "esi_registration_no",
+            "bank_name",
+            "bank_account_no",
+            "ifsc_swift_code",
+            "payslip_template_id",
             "pay_cycle",
-            "location",
             "status",
+            "created_by",
+            "created_date",
         ],
+        "integer_fields": {"pay_group_id", "payslip_template_id"},
+        "date_fields": {"created_date"},
         "search_fields": [
-            "payroll_unit_code",
-            "payroll_unit_name",
-            "description",
-            "payroll_manager",
+            "unit_name",
+            "unit_code",
+            "legal_entity_name",
+            "pay_group_id",
+            "pan_tax_id",
+            "gst_registration_no",
+            "pf_registration_no",
+            "esi_registration_no",
+            "bank_name",
+            "bank_account_no",
+            "ifsc_swift_code",
+            "payslip_template_id",
             "pay_cycle",
-            "location",
             "status",
+            "created_by",
+            "created_date",
         ],
-        "filter_fields": ["pay_cycle", "location", "payroll_manager"],
+        "filter_fields": ["pay_group_id", "pay_cycle"],
         "filter_option_aliases": {
+            "pay_group_id": "pay_group_ids",
             "pay_cycle": "pay_cycles",
-            "location": "locations",
-            "payroll_manager": "payroll_managers",
         },
         "sort_fields": [
-            "payroll_unit_code",
-            "payroll_unit_name",
-            "payroll_manager",
+            "unit_name",
+            "unit_code",
+            "legal_entity_name",
+            "pay_group_id",
             "pay_cycle",
-            "location",
             "status",
-            "created_at",
-            "updated_at",
+            "created_by",
+            "created_date",
         ],
     },
     "designations": {
@@ -208,6 +247,8 @@ def _serialize_row(row: Dict) -> Dict:
     for key, value in (row or {}).items():
         if isinstance(value, (datetime, date, time)):
             result[key] = value.isoformat()
+        elif isinstance(value, Decimal):
+            result[key] = str(value)
         else:
             result[key] = value
     return result
@@ -229,9 +270,43 @@ def _normalize_status(value) -> str:
     return normalized
 
 
+def _normalize_integer(field_name: str, value):
+    text_value = "" if value is None else str(value).strip()
+    if not text_value:
+        return None
+    try:
+        return int(text_value)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a whole number") from exc
+
+
+def _normalize_decimal(field_name: str, value):
+    text_value = "" if value is None else str(value).strip()
+    if not text_value:
+        return None
+    try:
+        return Decimal(text_value)
+    except InvalidOperation as exc:
+        raise ValueError(f"{field_name} must be a number") from exc
+
+
+def _normalize_date(field_name: str, value):
+    text_value = "" if value is None else str(value).strip()
+    if not text_value:
+        return None
+    try:
+        return date.fromisoformat(text_value)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a valid date") from exc
+
+
 def _normalize_payload(payload: Dict, config: Dict, *, require_required_fields: bool) -> Dict:
     payload = payload or {}
     normalized = {}
+    integer_fields = config.get("integer_fields") or set()
+    numeric_fields = config.get("numeric_fields") or set()
+    date_fields = config.get("date_fields") or set()
+    required_fields = set(config["required_fields"])
 
     for field_name in config["fields"]:
         if field_name not in payload:
@@ -240,10 +315,29 @@ def _normalize_payload(payload: Dict, config: Dict, *, require_required_fields: 
         if field_name == "status":
             normalized[field_name] = _normalize_status(value)
             continue
+        if field_name in integer_fields:
+            normalized_value = _normalize_integer(field_name, value)
+            if normalized_value is None and require_required_fields:
+                continue
+            normalized[field_name] = normalized_value
+            continue
+        if field_name in numeric_fields:
+            normalized_value = _normalize_decimal(field_name, value)
+            if normalized_value is None and require_required_fields:
+                continue
+            normalized[field_name] = normalized_value
+            continue
+        if field_name in date_fields:
+            normalized_value = _normalize_date(field_name, value)
+            if normalized_value is None and require_required_fields:
+                continue
+            normalized[field_name] = normalized_value
+            continue
         if value is None:
             normalized[field_name] = None
             continue
-        normalized[field_name] = str(value).strip()
+        text_value = str(value).strip()
+        normalized[field_name] = text_value if text_value or field_name in required_fields else None
 
     if require_required_fields:
         normalized.setdefault("status", "active")
@@ -273,7 +367,7 @@ def _build_where(config: Dict, query_params: Dict):
     search = str(query_params.get("search") or "").strip()
     if search:
         like_value = f"%{search}%"
-        search_clauses = [f"COALESCE({field}, '') ILIKE %s" for field in config["search_fields"]]
+        search_clauses = [f"COALESCE({field}::text, '') ILIKE %s" for field in config["search_fields"]]
         clauses.append(f"({' OR '.join(search_clauses)})")
         values.extend([like_value] * len(search_clauses))
 
@@ -287,7 +381,7 @@ def _build_where(config: Dict, query_params: Dict):
     for field_name in config["filter_fields"]:
         raw_value = str(query_params.get(field_name) or "").strip()
         if raw_value:
-            clauses.append(f"{field_name} ILIKE %s")
+            clauses.append(f"COALESCE({field_name}::text, '') ILIKE %s")
             values.append(f"%{raw_value}%")
 
     return " AND ".join(clauses), values
@@ -322,7 +416,7 @@ def _filter_options(cursor, config: Dict):
             f"""
             SELECT DISTINCT {field_name}
             FROM {config['table']}
-            WHERE NULLIF(TRIM(COALESCE({field_name}, '')), '') IS NOT NULL
+            WHERE NULLIF(TRIM(COALESCE({field_name}::text, '')), '') IS NOT NULL
             ORDER BY {field_name}
             """
         )
@@ -415,12 +509,17 @@ def get_master_record(resource: str, record_id: int):
         return_connection(conn)
 
 
-def create_master_record(resource: str, payload: Dict):
+def create_master_record(resource: str, payload: Dict, created_by_emp_code: str = None):
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
         config = _get_config(resource)
+        if created_by_emp_code and "created_by" in config["fields"]:
+            payload = {
+                **(payload or {}),
+                "created_by": (payload or {}).get("created_by") or created_by_emp_code,
+            }
         record_data = _normalize_payload(payload, config, require_required_fields=True)
         code_field = config["code_field"]
 

@@ -128,8 +128,12 @@ def list_employee_master_records(current_user, resource):
         "sort_by": request.args.get("sort_by"),
         "sort_order": request.args.get("sort_order"),
         "location": request.args.get("location"),
+        "city": request.args.get("city"),
+        "state": request.args.get("state"),
+        "country": request.args.get("country"),
         "unit_head_manager": request.args.get("unit_head_manager"),
         "payroll_manager": request.args.get("payroll_manager"),
+        "pay_group_id": request.args.get("pay_group_id"),
         "department_head": request.args.get("department_head"),
         "pay_cycle": request.args.get("pay_cycle"),
         "department": request.args.get("department"),
@@ -147,7 +151,11 @@ def list_employee_master_records(current_user, resource):
 def create_employee_master_record(current_user, resource):
     """Create an employee master record."""
     payload = request.get_json() or {}
-    response, status_code = employee_master_service.create_master_record(resource, payload)
+    response, status_code = employee_master_service.create_master_record(
+        resource,
+        payload,
+        created_by_emp_code=current_user.get("emp_code"),
+    )
     return jsonify(response), status_code
 
 

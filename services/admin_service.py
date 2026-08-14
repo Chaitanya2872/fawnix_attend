@@ -47,6 +47,11 @@ def get_all_employees():
     try:
         employee_columns = _get_employees_columns(cursor)
         blood_group_select = _get_employee_blood_group_select_expression(employee_columns)
+        birthday_column = _get_employee_birthday_column(employee_columns)
+        birthday_select = (
+            f"e.{birthday_column} AS emp_date_of_birth" if birthday_column
+            else "NULL::DATE AS emp_date_of_birth"
+        )
 
         cursor.execute("""
             SELECT
@@ -56,11 +61,14 @@ def get_all_employees():
                 e.emp_contact,
                 e.emp_grade,
                 {blood_group_select},
+                {birthday_select},
                 e.emp_designation,
                 e.emp_department,
                 e.emp_branch_id,
                 e.emp_manager,
                 e.emp_informing_manager,
+                e.emp_shift_id,
+                s.shift_name,
                 m.emp_full_name AS manager_name,
                 m.emp_email AS manager_email,
                 m.emp_code AS manager_code,
@@ -69,10 +77,30 @@ def get_all_employees():
                 u.last_login
             FROM employees e
             LEFT JOIN employees m ON e.emp_manager = m.emp_code
+            LEFT JOIN shifts s ON e.emp_shift_id = s.shift_id
             LEFT JOIN users u ON e.emp_code = u.emp_code
             ORDER BY e.emp_full_name
-        """.format(blood_group_select=blood_group_select))
+        """.format(blood_group_select=blood_group_select, birthday_select=birthday_select))
 
+        return cursor.fetchall()
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_all_shifts():
+    """Active shifts, for the Employee Master add/edit form's Shift dropdown."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT shift_id, shift_name, shift_start_time, shift_end_time, shift_duration_hours
+            FROM shifts
+            WHERE is_active = true
+            ORDER BY shift_start_time
+        """)
         return cursor.fetchall()
 
     finally:

@@ -188,12 +188,27 @@ export type EmployeeRow = {
   emp_grade?: string
   emp_designation?: string
   emp_department?: string
+  emp_branch_id?: string | number | null
   emp_manager?: string
+  emp_informing_manager?: string | null
+  emp_shift_id?: number | string | null
+  shift_name?: string | null
+  emp_date_of_birth?: string | null
+  emp_blood_group?: string | null
   manager_name?: string
   manager_email?: string
   manager_code?: string
   role?: string
   is_active?: boolean
+  last_login?: string | null
+}
+
+export type ShiftOption = {
+  shift_id: number
+  shift_name: string
+  shift_start_time?: string
+  shift_end_time?: string
+  shift_duration_hours?: number
 }
 
 export type AttendanceRow = {

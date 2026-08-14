@@ -428,6 +428,7 @@ function FawnixApp() {
     newEmployee,
     updateNewEmployee,
     resetNewEmployee,
+    shiftOptions,
     closeEmployeePanel,
     openAddEmployeePanel,
     handleCreateEmployee,
@@ -1334,6 +1335,7 @@ function FawnixApp() {
               editStatus={editStatus}
               onSaveEmployee={handleSaveEmployee}
               onClose={closeEmployeePanel}
+              shiftOptions={shiftOptions}
             />
           ) : null}
           {viewingEmployee ? (

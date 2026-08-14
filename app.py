@@ -4,6 +4,7 @@ Main Flask Application Entry Point
 FIXED: Proper auto clock out integration with testing and production schedules
 """
 
+# pyrefly: ignore [missing-import]
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from config import Config
@@ -14,7 +15,9 @@ from middleware.logging_middleware import setup_logging, setup_api_log_capture
 import atexit
 import logging
 import os
+# pyrefly: ignore [missing-import]
 from apscheduler.schedulers.background import BackgroundScheduler
+# pyrefly: ignore [missing-import]
 from apscheduler.triggers.cron import CronTrigger
 from schedulers.attendance_reminder_scheduler import register_attendance_reminder_job
 import time

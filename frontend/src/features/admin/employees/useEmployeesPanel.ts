@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useClickOutside } from '../../../hooks/useClickOutside'
 import { toDateInputValue } from '../../../utils/date/dateUtils'
-import type { EmployeeRow } from '../../../types/admin'
+import type { EmployeeRow, ShiftOption } from '../../../types/admin'
 
 type NewEmployeeForm = {
   emp_code: string
@@ -12,6 +12,9 @@ type NewEmployeeForm = {
   emp_designation: string
   emp_department: string
   emp_manager: string
+  emp_shift_id: string
+  emp_date_of_birth: string
+  emp_blood_group: string
   role: string
 }
 
@@ -24,6 +27,9 @@ const EMPTY_NEW_EMPLOYEE: NewEmployeeForm = {
   emp_designation: '',
   emp_department: '',
   emp_manager: '',
+  emp_shift_id: '',
+  emp_date_of_birth: '',
+  emp_blood_group: '',
   role: 'employee'
 }
 
@@ -82,11 +88,23 @@ export function useEmployeesPanel({
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
   const [createEmployeeStatus, setCreateEmployeeStatus] = useState('')
   const [newEmployee, setNewEmployee] = useState<NewEmployeeForm>({ ...EMPTY_NEW_EMPLOYEE })
+  const [shiftOptions, setShiftOptions] = useState<ShiftOption[]>([])
   const employeeStatusMenuRef = useRef<HTMLDivElement | null>(null)
+  const shiftsLoadedRef = useRef(false)
 
   useClickOutside(employeeStatusMenuRef, employeeStatusMenuOpen, () => setEmployeeStatusMenuOpen(false), {
     closeOnEscape: false
   })
+
+  useEffect(() => {
+    if (shiftsLoadedRef.current) return
+    shiftsLoadedRef.current = true
+    apiRequest('/api/admin/shifts')
+      .then((response) => {
+        if (response?.success && Array.isArray(response.data)) setShiftOptions(response.data)
+      })
+      .catch(() => { /* the Shift field is a convenience dropdown; leave it empty on failure */ })
+  }, [apiRequest])
 
   const normalizedEmployeeSearch = employeeSearch.trim().toLowerCase()
   const filteredEmployees = employees
@@ -280,7 +298,9 @@ export function useEmployeesPanel({
         'emp_manager',
         'emp_grade',
         'emp_shift_id',
-        'emp_joined_date'
+        'emp_joined_date',
+        'emp_date_of_birth',
+        'emp_blood_group'
       ])
 
       const payload = Object.fromEntries(
@@ -427,6 +447,7 @@ export function useEmployeesPanel({
     newEmployee,
     updateNewEmployee,
     resetNewEmployee,
+    shiftOptions,
     closeEmployeePanel,
     openAddEmployeePanel,
     handleCreateEmployee,

@@ -5,23 +5,23 @@ export const API_TELEMETRY_EMP_CODE = '8888'
 export const sidebarItems: SidebarItemDefinition[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'home' },
   { id: 'attendance', label: "Today's activity", icon: 'pulse' },
-  { id: 'attendance-records', label: 'Attendance records', icon: 'list' },
-  { id: 'attendance-exceptions', label: 'Attendance exceptions', icon: 'alert' },
+  { id: 'attendance-records', label: 'Attendance log', icon: 'list' },
+  { id: 'attendance-exceptions', label: 'Exceptions', icon: 'alert' },
   { id: 'field-visits', label: 'Field visits', icon: 'pin' },
-  { id: 'leaves', label: 'Leaves', icon: 'leaf' },
-  { id: 'overtime-records', label: 'Overtime records', icon: 'clock' },
-  { id: 'employees', label: 'Employee master', icon: 'users' },
+  { id: 'leaves', label: 'Leave requests', icon: 'leaf' },
+  { id: 'overtime-records', label: 'Overtime log', icon: 'clock' },
+  { id: 'employees', label: 'Employee directory', icon: 'users' },
   {
     id: 'employee-master-working-units',
-    label: 'Working units',
+    label: 'Work locations',
     icon: 'building',
-    groupLabel: 'Organization Units',
+    groupLabel: 'Organization units',
   },
   {
     id: 'employee-master-payroll-units',
     label: 'Payroll units',
     icon: 'wallet',
-    groupLabel: 'Organization Units',
+    groupLabel: 'Organization units',
   },
   {
     id: 'employee-master-designations',
@@ -35,7 +35,7 @@ export const sidebarItems: SidebarItemDefinition[] = [
     icon: 'layers',
     groupLabel: 'Profiles',
   },
-  { id: 'reports', label: 'Reports and analytics', icon: 'chart' },
+  { id: 'reports', label: 'Insights & reports', icon: 'chart' },
   { id: 'inbox', label: 'Inbox', icon: 'inbox' }
 ]
 
@@ -47,28 +47,28 @@ export const sidebarSections: SidebarSectionDefinition[] = [
     title: 'Activities',
     items: [
       { id: 'attendance', label: "Today's activity", icon: 'pulse' },
-      { id: 'attendance-records', label: 'Attendance records', icon: 'list' },
-      { id: 'attendance-exceptions', label: 'Attendance exceptions', icon: 'alert' },
+      { id: 'attendance-records', label: 'Attendance log', icon: 'list' },
+      { id: 'attendance-exceptions', label: 'Exceptions', icon: 'alert' },
       { id: 'field-visits', label: 'Field visits', icon: 'pin' },
-      { id: 'leaves', label: 'Leaves', icon: 'leaf' },
-      { id: 'overtime-records', label: 'Overtime records', icon: 'clock' }
+      { id: 'leaves', label: 'Leave requests', icon: 'leaf' },
+      { id: 'overtime-records', label: 'Overtime log', icon: 'clock' }
     ]
   },
   {
     title: 'Administration',
     items: [
-      { id: 'employees', label: 'Employee master', icon: 'users' },
+      { id: 'employees', label: 'Employee directory', icon: 'users' },
       {
         id: 'employee-master-working-units',
-        label: 'Working units',
+        label: 'Work locations',
         icon: 'building',
-        groupLabel: 'Organization Units',
+        groupLabel: 'Organization units',
       },
       {
         id: 'employee-master-payroll-units',
         label: 'Payroll units',
         icon: 'wallet',
-        groupLabel: 'Organization Units',
+        groupLabel: 'Organization units',
       },
       {
         id: 'employee-master-designations',
@@ -82,11 +82,14 @@ export const sidebarSections: SidebarSectionDefinition[] = [
         icon: 'layers',
         groupLabel: 'Profiles',
       },
-      { id: 'reports', label: 'Reports and analytics', icon: 'chart' },
+      { id: 'reports', label: 'Insights & reports', icon: 'chart' },
       { id: 'inbox', label: 'Inbox', icon: 'inbox' }
     ]
   }
 ]
+
+// Item ids that should show a live/pulsing status dot instead of a count badge.
+export const SIDEBAR_LIVE_ITEM_IDS = ['attendance']
 
 export const LEAVE_TYPE_FILTER_OPTIONS = [
   { value: 'casual', label: 'Casual' },

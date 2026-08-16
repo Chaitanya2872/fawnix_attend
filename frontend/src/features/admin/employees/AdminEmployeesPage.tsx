@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import './AdminEmployeesPage.css'
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 
 type Props = any
 
@@ -16,7 +16,6 @@ const JOIN_DATE_KEYS = [
   'created_at'
 ] as const
 
-const MONTH_FORMATTER = new Intl.DateTimeFormat('en-IN', { month: 'short' })
 const DATE_FORMATTER = new Intl.DateTimeFormat('en-IN', {
   day: '2-digit',
   month: 'short',
@@ -76,13 +75,40 @@ function getSelectionKey(employee: any) {
   return String(employee.emp_code || employee.emp_email || employee.emp_full_name || '')
 }
 
+// Dropdown Menu Component
+function DropdownMenu({ trigger, children }: { trigger: React.ReactNode; children: React.ReactNode }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  return (
+    <div className="adm-dropdown-btn" ref={menuRef}>
+      <div onClick={() => setIsOpen(!isOpen)} style={{ display: 'inline-flex' }}>
+        {trigger}
+      </div>
+      <div className={`adm-dropdown-menu${isOpen ? ' adm-dropdown-menu--open' : ''}`}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 export default function AdminEmployeesPage(props: Props) {
   const importInputRef = useRef<HTMLInputElement>(null)
   const [selectedEmployeeKeys, setSelectedEmployeeKeys] = useState<Set<string>>(() => new Set())
+  
   const {
     canWriteAdminData,
     downloadEmployeesReport,
-    employeeExportFormat,
     employeeExportStatus,
     employeeSearch,
     employeeKpiFilter,
@@ -155,7 +181,7 @@ export default function AdminEmployeesPage(props: Props) {
   ]
 
   if (birthdays.length > 0) {
-    filterOptions.push({ id: 'birthdays', label: 'Birthdays' })
+    filterOptions.push({ id: 'birthdays', label: '🎂 Birthdays' })
   }
 
   const visibleEmployeeKeys = filteredRows.map(getSelectionKey).filter(Boolean)
@@ -186,6 +212,12 @@ export default function AdminEmployeesPage(props: Props) {
     })
   }
 
+  const handleBulkImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) void importEmployees(file)
+    event.currentTarget.value = ''
+  }
+
   return (
     <div className="adm-page admin-aligned-page admin-aligned-page--employees">
       <div className="adm-header dashboard-section-head">
@@ -207,64 +239,61 @@ export default function AdminEmployeesPage(props: Props) {
         <div className="adm-header__actions">
           {canWriteAdminData && (
             <>
-              <button
-                className="adm-btn adm-btn--ghost"
-                onClick={() => importInputRef.current?.click()}
-                type="button"
-                disabled={employeeImportLoading}
+              <DropdownMenu
+                trigger={
+                  <button className="adm-btn adm-btn--ghost" type="button">
+                    <svg className="adm-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        d="M4 17v3a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-3M12 4v11m0-11 4 4m-4-4-4 4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    Import / Export
+                    <svg className="adm-icon" viewBox="0 0 24 24" style={{ width: '12px', height: '12px' }}>
+                      <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                }
               >
-                <svg className="adm-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path
-                    d="M12 3v11m0-11 4 4m-4-4-4 4M5 15v3a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-3"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                Bulk Import
-              </button>
-              <button
-                className="adm-btn adm-btn--ghost adm-btn--template"
-                onClick={downloadEmployeesTemplate}
-                type="button"
-              >
-                Template
-              </button>
+                <button onClick={() => importInputRef.current?.click()} disabled={employeeImportLoading}>
+                  <svg className="adm-icon" viewBox="0 0 24 24">
+                    <path d="M12 3v11m0-11 4 4m-4-4-4 4M5 15v3a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Bulk Import
+                </button>
+                <button onClick={downloadEmployeesTemplate}>
+                  <svg className="adm-icon" viewBox="0 0 24 24">
+                    <path d="M4 17v3a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-3M12 4v11m0-11 4 4m-4-4-4 4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Download Template
+                </button>
+                <div className="adm-dropdown-divider" />
+                <div style={{ padding: '4px 14px', fontSize: '11px', color: 'var(--adm-text-soft)' }}>
+                  Export as:
+                </div>
+                <button onClick={() => { setEmployeeExportFormat('csv'); downloadEmployeesReport(); }}>
+                  CSV
+                </button>
+                <button onClick={() => { setEmployeeExportFormat('pdf'); downloadEmployeesReport(); }}>
+                  PDF
+                </button>
+                <button onClick={() => { setEmployeeExportFormat('xlsx'); downloadEmployeesReport(); }}>
+                  XLSX
+                </button>
+              </DropdownMenu>
               <input
                 ref={importInputRef}
                 className="adm-visually-hidden"
                 type="file"
                 accept=".csv,text/csv"
-                onChange={(event) => {
-                  const file = event.target.files?.[0]
-                  if (file) void importEmployees(file)
-                  event.currentTarget.value = ''
-                }}
+                onChange={handleBulkImport}
               />
             </>
           )}
-
-          <div className="adm-split-btn">
-            <select
-              className="adm-split-btn__select"
-              aria-label="Export format"
-              value={employeeExportFormat}
-              onChange={(e) => setEmployeeExportFormat(e.target.value)}
-            >
-              <option value="csv">CSV</option>
-              <option value="pdf">PDF</option>
-              <option value="xlsx">XLSX</option>
-            </select>
-            <button
-              className="adm-split-btn__action"
-              onClick={downloadEmployeesReport}
-              type="button"
-            >
-              Export Directory
-            </button>
-          </div>
 
           {canWriteAdminData && (
             <button className="adm-btn adm-btn--primary" onClick={openAddEmployeePanel} type="button">
@@ -276,7 +305,7 @@ export default function AdminEmployeesPage(props: Props) {
                   strokeLinecap="round"
                 />
               </svg>
-              Add a New Employee
+              Add Employee
             </button>
           )}
 
@@ -285,6 +314,7 @@ export default function AdminEmployeesPage(props: Props) {
             onClick={() => void loadDashboard()}
             type="button"
             aria-label="Refresh"
+            title="Refresh"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true" className="adm-icon">
               <path
@@ -300,6 +330,7 @@ export default function AdminEmployeesPage(props: Props) {
         </div>
       </div>
 
+      {/* KPI Cards */}
       <section className="adm-stats-strip" aria-label="Employee summary">
         <div className="adm-stat-item">
           <span className="adm-stat-icon" aria-hidden="true">
@@ -310,7 +341,7 @@ export default function AdminEmployeesPage(props: Props) {
           <div>
             <p className="adm-stat-label">Total Employees</p>
             <strong className="adm-stat-value">{employeeRows.length}</strong>
-            <span className="adm-stat-caption">{activeCount} active, {inactiveCount} inactive</span>
+            <span className="adm-stat-caption">{activeCount} active · {inactiveCount} inactive</span>
           </div>
         </div>
         <div className="adm-stat-item">
@@ -320,9 +351,9 @@ export default function AdminEmployeesPage(props: Props) {
             </svg>
           </span>
           <div>
-            <p className="adm-stat-label">New Hires This Month</p>
+            <p className="adm-stat-label">New Hires</p>
             <strong className="adm-stat-value">{newHiresThisMonth}</strong>
-            <span className="adm-stat-caption">Joined in {MONTH_FORMATTER.format(now)}</span>
+            <span className="adm-stat-caption">this month</span>
           </div>
         </div>
         <div className="adm-stat-item">
@@ -332,9 +363,9 @@ export default function AdminEmployeesPage(props: Props) {
             </svg>
           </span>
           <div>
-            <p className="adm-stat-label">Average Tenure (Years)</p>
+            <p className="adm-stat-label">Avg. Tenure</p>
             <strong className="adm-stat-value">{formatTenure(averageTenure)}</strong>
-            <span className="adm-stat-caption">{joinDates.length ? 'Based on joining dates' : 'No joining dates found'}</span>
+            <span className="adm-stat-caption">years</span>
           </div>
         </div>
         <div className="adm-stat-item">
@@ -344,10 +375,10 @@ export default function AdminEmployeesPage(props: Props) {
             </svg>
           </span>
           <div>
-            <p className="adm-stat-label">Active Departments</p>
+            <p className="adm-stat-label">Departments</p>
             <strong className="adm-stat-value">{uniqueDepartmentNames.length}</strong>
             <span className="adm-stat-caption">
-              {uniqueDepartmentNames.slice(0, 2).join(', ') || 'No departments listed'}
+              {uniqueDepartmentNames.slice(0, 2).join(', ') || '—'}
             </span>
           </div>
         </div>
@@ -362,19 +393,15 @@ export default function AdminEmployeesPage(props: Props) {
       <div className="adm-table-card table-card">
         <div className="adm-table-toolbar">
           <div className="adm-table-title">
-            <strong>Total Employee: {employeeRows.length} employees</strong>
-            <span>
-              Showing {filteredRows.length} {filteredRows.length === 1 ? 'result' : 'results'}
-            </span>
+            <strong>{filteredRows.length} {filteredRows.length === 1 ? 'employee' : 'employees'}</strong>
+            {filteredRows.length !== employeeRows.length && (
+              <span>of {employeeRows.length}</span>
+            )}
           </div>
 
           <div className="adm-table-controls">
             <div className="adm-search-wrap">
-              <svg
-                className="adm-search-wrap__icon"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
+              <svg className="adm-search-wrap__icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.43 4.43 1.06-1.06-4.43-4.43A6.5 6.5 0 0 0 10.5 4Zm0 1.5a5 5 0 1 1 0 10a5 5 0 0 1 0-10Z" />
               </svg>
               <input
@@ -383,7 +410,7 @@ export default function AdminEmployeesPage(props: Props) {
                 className="adm-search-wrap__input"
                 value={employeeSearch}
                 onChange={(e) => setEmployeeSearch(e.target.value)}
-                placeholder="Search employee"
+                placeholder="Search employees..."
               />
               {employeeSearch && (
                 <button
@@ -393,12 +420,7 @@ export default function AdminEmployeesPage(props: Props) {
                   aria-label="Clear search"
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true" className="adm-icon">
-                    <path
-                      d="M18 6 6 18M6 6l12 12"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                    />
+                    <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                   </svg>
                 </button>
               )}
@@ -434,13 +456,13 @@ export default function AdminEmployeesPage(props: Props) {
           <div className="adm-table-scroll table-scroll">
             <table className="adm-table dashboard-table">
               <colgroup>
-                <col style={{ width: '44px' }} />
-                <col style={{ width: '260px' }} />
-                <col style={{ width: '180px' }} />
-                <col style={{ width: '230px' }} />
-                <col style={{ width: '120px' }} />
-                <col style={{ width: '145px' }} />
-                <col style={{ width: canWriteAdminData ? '136px' : '76px' }} />
+                <col style={{ width: '40px' }} />
+                <col style={{ width: '250px' }} />
+                <col style={{ width: '170px' }} />
+                <col style={{ width: '210px' }} />
+                <col style={{ width: '100px' }} />
+                <col style={{ width: '130px' }} />
+                <col style={{ width: canWriteAdminData ? '120px' : '64px' }} />
               </colgroup>
               <thead>
                 <tr>
@@ -489,22 +511,22 @@ export default function AdminEmployeesPage(props: Props) {
                               {displayName}
                             </span>
                             <span className="adm-code">
-                              {employee.emp_email || employee.emp_code || 'Email unavailable'}
+                              {employee.emp_email || employee.emp_code || 'No email'}
                             </span>
                           </div>
                         </div>
                       </td>
                       <td>
                         <span className="adm-cell-primary">
-                          {employee.emp_department || '--'}
+                          {employee.emp_department || '—'}
                         </span>
                         <span className="adm-cell-meta">
-                          {employee.manager_name || employee.emp_manager || 'No manager listed'}
+                          {employee.manager_name || employee.emp_manager || 'No manager'}
                         </span>
                       </td>
                       <td>
                         <span className="adm-cell-primary">
-                          {employee.emp_designation || employee.role || '--'}
+                          {employee.emp_designation || employee.role || '—'}
                         </span>
                         <span className="adm-cell-meta">
                           Grade {formatEmployeeGrade(employee.emp_grade)}
@@ -539,19 +561,8 @@ export default function AdminEmployeesPage(props: Props) {
                               type="button"
                               aria-label={`Edit ${displayName}`}
                             >
-                              <svg
-                                viewBox="0 0 24 24"
-                                aria-hidden="true"
-                                className="adm-icon"
-                              >
-                                <path
-                                  d="M4 20h4l10.5-10.5a2.12 2.12 0 1 0-3-3L5 17v3Z"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.8"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
+                              <svg viewBox="0 0 24 24" aria-hidden="true" className="adm-icon">
+                                <path d="M4 20h4l10.5-10.5a2.12 2.12 0 1 0-3-3L5 17v3Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                               </svg>
                             </button>
                             <button
@@ -561,19 +572,8 @@ export default function AdminEmployeesPage(props: Props) {
                               type="button"
                               aria-label={`Delete ${displayName}`}
                             >
-                              <svg
-                                viewBox="0 0 24 24"
-                                aria-hidden="true"
-                                className="adm-icon"
-                              >
-                                <path
-                                  d="M5 7h14M9 7V5h6v2m-7 0 1 12h6l1-12M10 11v5m4-5v5"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.8"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
+                              <svg viewBox="0 0 24 24" aria-hidden="true" className="adm-icon">
+                                <path d="M5 7h14M9 7V5h6v2m-7 0 1 12h6l1-12M10 11v5m4-5v5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                               </svg>
                             </button>
                           </div>
@@ -596,17 +596,10 @@ export default function AdminEmployeesPage(props: Props) {
         ) : (
           <div className="adm-empty empty-state">
             <svg viewBox="0 0 24 24" aria-hidden="true" className="adm-empty__icon">
-              <path
-                d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             <strong>No employees found</strong>
-            <span>Try another search term or filter.</span>
+            <span>Try adjusting your search or filter.</span>
           </div>
         )}
       </div>

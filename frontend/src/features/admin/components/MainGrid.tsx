@@ -1,24 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { AttendanceTrendChart } from './Attendancetrendchart'
-import { ExceptionsPanel } from './Exceptionspanel'
+import { UpcomingBirthdaysPanel } from './UpcomingBirthdaysPanel'
+import type { UpcomingBirthday } from './UpcomingBirthdaysPanel'
 
 type TrendItem = { label: string; count: number }
-type ExceptionRow = Record<string, any>
-
 type MainGridProps = {
   // Chart
   trend: TrendItem[]
   weekLabel: string
   averageWeeklyAttendance: number
   presentToday: number
-  lateExceptionsToday: number
   selectedDateLeavesCount: number
   fieldVisitsCount: number
   fieldActive: number
   totalEmployees: number
-  // Exceptions
-  exceptions: ExceptionRow[]
-  onAlertManager: (row: ExceptionRow) => Promise<string>
+  birthdays: UpcomingBirthday[]
 }
 
 export function MainGrid({
@@ -26,13 +22,11 @@ export function MainGrid({
   weekLabel,
   averageWeeklyAttendance,
   presentToday,
-  lateExceptionsToday,
   selectedDateLeavesCount,
   fieldVisitsCount,
   fieldActive,
   totalEmployees,
-  exceptions,
-  onAlertManager,
+  birthdays,
 }: MainGridProps) {
   return (
     <div className="ov2-main-grid">
@@ -41,13 +35,12 @@ export function MainGrid({
         weekLabel={weekLabel}
         averageWeeklyAttendance={averageWeeklyAttendance}
         presentToday={presentToday}
-        lateExceptionsToday={lateExceptionsToday}
         selectedDateLeavesCount={selectedDateLeavesCount}
         fieldVisitsCount={fieldVisitsCount}
         fieldActive={fieldActive}
         totalEmployees={totalEmployees}
       />
-      <ExceptionsPanel exceptions={exceptions} onAlertManager={onAlertManager} />
+      <UpcomingBirthdaysPanel birthdays={birthdays} />
     </div>
   )
 }

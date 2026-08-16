@@ -1,0 +1,610 @@
+/* Employee bulk-import wizard. Colors are literal rather than variables so the
+   modal renders correctly regardless of which admin stylesheet has loaded. */
+
+.empimp-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  font-family: 'General Sans', 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #111827;
+}
+
+.empimp-scrim {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  background: rgba(15, 27, 45, 0.42);
+  backdrop-filter: blur(2px);
+  cursor: pointer;
+}
+
+.empimp-panel {
+  position: relative;
+  width: min(1220px, 100%);
+  height: min(860px, 100%);
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 32px 80px -24px rgba(15, 27, 45, 0.45);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: empimp-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes empimp-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- Header + stepper ---------- */
+.empimp-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid #eef1f6;
+}
+.empimp-head-title h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.empimp-head-title p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+.empimp-close {
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #9aa3b0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.16s, color 0.16s;
+}
+.empimp-close:hover:not(:disabled) { background: #f3f5f9; color: #111827; }
+.empimp-close:disabled { opacity: 0.4; cursor: not-allowed; }
+.empimp-close svg { width: 18px; height: 18px; }
+
+.empimp-steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 14px 24px;
+  list-style: none;
+  border-bottom: 1px solid #eef1f6;
+  background: #fafbfd;
+}
+.empimp-steps-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #9aa3b0;
+  padding-right: 8px;
+}
+.empimp-steps-item:not(:last-child)::after {
+  content: '';
+  width: 26px;
+  height: 1px;
+  background: #dfe4ec;
+  margin-left: 4px;
+}
+.empimp-steps-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #eceff4;
+  color: #8b95a4;
+  font-size: 11.5px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.empimp-steps-dot svg { width: 12px; height: 12px; }
+.empimp-steps-item--current { color: #1f2937; font-weight: 600; }
+.empimp-steps-item--current .empimp-steps-dot { background: #2563eb; color: #fff; }
+.empimp-steps-item--done { color: #4b5563; }
+.empimp-steps-item--done .empimp-steps-dot { background: #dcfce7; color: #16a34a; }
+
+/* ---------- Body ---------- */
+.empimp-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  background: #fff;
+}
+.empimp-step { display: flex; flex-direction: column; gap: 14px; height: 100%; }
+.empimp-step--preview { gap: 12px; }
+
+.empimp-footnote {
+  margin: 0;
+  font-size: 11.5px;
+  color: #8b95a4;
+}
+
+.empimp-link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: #2563eb;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.empimp-link-btn:hover { text-decoration: underline; }
+.empimp-link-btn svg { width: 14px; height: 14px; }
+
+.empimp-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0;
+  padding: 10px 13px;
+  border-radius: 9px;
+  font-size: 12.8px;
+  line-height: 1.5;
+}
+.empimp-alert svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; }
+.empimp-alert--error { background: #fdecec; color: #b42318; }
+.empimp-alert--warn { background: #fff5e6; color: #92400e; }
+.empimp-alert--info { background: #eff4ff; color: #1e40af; }
+
+/* ---------- Step 1: upload ---------- */
+.empimp-step--upload { justify-content: flex-start; }
+
+.empimp-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 260px;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 14px;
+  background: #fafbfd;
+  cursor: pointer;
+  text-align: center;
+  padding: 24px;
+  transition: border-color 0.18s, background 0.18s;
+}
+.empimp-drop:hover, .empimp-drop--active {
+  border-color: #2563eb;
+  background: #f5f8ff;
+}
+.empimp-drop input { display: none; }
+.empimp-drop strong { font-size: 14.5px; font-weight: 600; }
+.empimp-drop-hint { font-size: 12.5px; color: #8b95a4; }
+.empimp-drop-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: #e8f0ff;
+  color: #2563eb;
+  display: grid;
+  place-items: center;
+  margin-bottom: 4px;
+}
+.empimp-drop-icon svg { width: 22px; height: 22px; }
+
+.empimp-upload-aside {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.empimp-note {
+  flex: 1;
+  min-width: 260px;
+  background: #f8fafc;
+  border: 1px solid #eef1f6;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.empimp-note strong { font-size: 12.5px; font-weight: 600; }
+.empimp-note p { margin: 5px 0 0; font-size: 12.5px; line-height: 1.55; color: #5b6779; }
+.empimp-note b { color: #1f2937; font-weight: 600; }
+
+/* ---------- Step 2: mapping ---------- */
+.empimp-filebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid #e5e9f0;
+  border-radius: 10px;
+  background: #fafbfd;
+}
+.empimp-filebar-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #e8f0ff;
+  color: #2563eb;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.empimp-filebar-icon svg { width: 16px; height: 16px; }
+.empimp-filebar-text { display: flex; flex-direction: column; min-width: 0; margin-right: auto; }
+.empimp-filebar-text strong { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.empimp-filebar-text span { font-size: 11.5px; color: #8b95a4; margin-top: 1px; }
+
+.empimp-sheet-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6b7280;
+  font-size: 12.5px;
+}
+.empimp-sheet-pick svg { width: 15px; height: 15px; }
+.empimp-sheet-pick select {
+  font-family: inherit;
+  font-size: 12.5px;
+  padding: 5px 8px;
+  border: 1px solid #dfe4ec;
+  border-radius: 7px;
+  background: #fff;
+  color: #111827;
+}
+
+.empimp-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: #6b7280;
+}
+
+.empimp-map-grid {
+  border: 1px solid #e9edf3;
+  border-radius: 11px;
+  overflow: hidden;
+}
+.empimp-map-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.1fr) minmax(120px, 1fr) 34px minmax(220px, 1.1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border-top: 1px solid #f1f4f8;
+}
+.empimp-map-row:first-child { border-top: none; }
+.empimp-map-row--head {
+  background: #f8fafc;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #97a1b0;
+  padding: 9px 14px;
+}
+.empimp-map-row--skipped { background: #fcfcfd; }
+.empimp-map-row--skipped .empimp-map-source b { color: #9aa3b0; }
+.empimp-map-source b { font-size: 13px; font-weight: 500; }
+.empimp-map-sample {
+  font-size: 12.5px;
+  color: #8b95a4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.empimp-map-arrow { color: #cbd5e1; display: grid; place-items: center; }
+.empimp-map-arrow svg { width: 16px; height: 16px; }
+.empimp-map-target { display: flex; flex-direction: column; gap: 3px; }
+.empimp-map-target select {
+  width: 100%;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 7px 9px;
+  border: 1px solid #dfe4ec;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  cursor: pointer;
+}
+.empimp-map-target select:focus-visible { outline: 2px solid #2563eb; outline-offset: -1px; }
+.empimp-map-target small { font-size: 11px; color: #97a1b0; }
+
+/* ---------- Step 3: preview ---------- */
+.empimp-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  border: 1px solid #e5e9f0;
+  border-radius: 10px;
+  background: #fafbfd;
+}
+.empimp-summary-total { font-size: 13px; font-weight: 600; margin-right: 4px; }
+
+.empimp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid transparent;
+  border-radius: 20px;
+  padding: 4px 11px;
+  font-family: inherit;
+  font-size: 12.2px;
+  cursor: pointer;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.empimp-chip b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.empimp-chip--new { background: #e9f7ef; color: #17784a; }
+.empimp-chip--update { background: #eff4ff; color: #1e40af; }
+.empimp-chip--unchanged { background: #f1f3f7; color: #5b6779; }
+.empimp-chip--error { background: #fdecec; color: #b42318; }
+.empimp-chip--on { border-color: currentColor; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12); }
+
+.empimp-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  font-size: 12.3px;
+  color: #5b6779;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.empimp-toggle input { width: 15px; height: 15px; accent-color: #2563eb; cursor: pointer; }
+
+.empimp-table-wrap {
+  flex: 1;
+  min-height: 200px;
+  overflow: auto;
+  border: 1px solid #e9edf3;
+  border-radius: 11px;
+}
+.empimp-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12.5px;
+}
+.empimp-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fafc;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #97a1b0;
+  padding: 9px 12px;
+  border-bottom: 1px solid #e9edf3;
+  white-space: nowrap;
+}
+.empimp-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #f2f4f8;
+  vertical-align: top;
+}
+.empimp-table tbody tr:last-child td { border-bottom: none; }
+.empimp-col-row { width: 44px; color: #a8b0bd; font-variant-numeric: tabular-nums; }
+.empimp-col-status { width: 210px; }
+.empimp-cell-code { font-weight: 600; white-space: nowrap; }
+
+.empimp-row--error { background: #fffafa; }
+.empimp-row--unchanged { color: #8b95a4; }
+.empimp-row:hover { background: #f9fbfe; }
+
+.empimp-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.empimp-badge--new { background: #e9f7ef; color: #17784a; }
+.empimp-badge--update { background: #eff4ff; color: #1e40af; }
+.empimp-badge--unchanged { background: #f1f3f7; color: #6b7280; }
+.empimp-badge--error { background: #fdecec; color: #b42318; }
+
+.empimp-row-errors {
+  margin: 5px 0 0;
+  padding-left: 14px;
+  font-size: 11.2px;
+  color: #b42318;
+  line-height: 1.45;
+}
+
+.empimp-cell { white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.empimp-cell--muted { color: #a8b0bd; }
+.empimp-cell--fresh { color: #17784a; }
+/* The diff lives in an inner span: a flex <td> would stop behaving as a table
+   cell and drop out of its column. */
+.empimp-cell--changed { white-space: normal; }
+.empimp-diff {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: #eff4ff;
+}
+.empimp-cell--clearing .empimp-diff { background: #fff5e6; }
+.empimp-diff-from {
+  color: #98a2b3;
+  text-decoration: line-through;
+  text-decoration-color: #cbd5e1;
+}
+.empimp-diff-arrow { color: #93a3bd; flex-shrink: 0; }
+.empimp-diff-to { color: #1e40af; font-weight: 600; }
+.empimp-cell--clearing .empimp-diff-to { color: #92400e; }
+.empimp-diff-to em, .empimp-cell-code em { color: #b42318; font-style: italic; font-weight: 500; }
+
+.empimp-empty { text-align: center; color: #98a2b3; padding: 28px 12px; }
+
+.empimp-legend {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: #8b95a4;
+}
+.empimp-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.empimp-swatch { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+.empimp-swatch--update { background: #eff4ff; border: 1px solid #c7d7fe; }
+.empimp-swatch--new { background: #e9f7ef; border: 1px solid #b7e4c9; }
+.empimp-swatch--keep { background: #f4f6f9; border: 1px solid #e3e8ef; }
+
+/* ---------- Step 4: results ---------- */
+.empimp-step--result { gap: 18px; }
+
+.empimp-progress-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 60px 20px;
+  text-align: center;
+}
+.empimp-progress-block strong { font-size: 15px; font-weight: 600; }
+.empimp-progress {
+  width: min(420px, 100%);
+  height: 7px;
+  border-radius: 20px;
+  background: #eceff4;
+  overflow: hidden;
+}
+.empimp-progress span {
+  display: block;
+  height: 100%;
+  border-radius: 20px;
+  background: #2563eb;
+  transition: width 0.25s ease;
+}
+.empimp-progress-count { font-size: 12.5px; color: #6b7280; font-variant-numeric: tabular-nums; }
+
+.empimp-result-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: #f0fdf4;
+  border: 1px solid #cdf0da;
+}
+.empimp-result-hero--partial { background: #fffaf0; border-color: #fde6c0; }
+.empimp-result-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #16a34a;
+  color: #fff;
+  flex-shrink: 0;
+}
+.empimp-result-hero--partial .empimp-result-icon { background: #d97706; }
+.empimp-result-icon svg { width: 20px; height: 20px; }
+.empimp-result-hero strong { font-size: 15px; font-weight: 600; }
+.empimp-result-hero p { margin: 3px 0 0; font-size: 13px; color: #5b6779; }
+
+.empimp-failures {
+  border: 1px solid #f3d9d9;
+  border-radius: 11px;
+  overflow: hidden;
+}
+.empimp-failures > strong {
+  display: block;
+  padding: 10px 14px;
+  background: #fdf3f3;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #b42318;
+  border-bottom: 1px solid #f6e2e2;
+}
+.empimp-failures ul { margin: 0; padding: 0; list-style: none; }
+.empimp-failures li {
+  display: flex;
+  gap: 12px;
+  padding: 8px 14px;
+  font-size: 12.4px;
+  border-bottom: 1px solid #f6f7f9;
+}
+.empimp-failures li:last-child { border-bottom: none; }
+.empimp-failure-row { color: #a8b0bd; width: 62px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.empimp-failure-emp { font-weight: 500; width: 220px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.empimp-failure-msg { color: #b42318; }
+
+/* ---------- Footer ---------- */
+.empimp-foot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 24px;
+  border-top: 1px solid #eef1f6;
+  background: #fafbfd;
+}
+.empimp-foot-info { font-size: 12.5px; color: #6b7280; margin-right: auto; }
+.empimp-foot-info b { color: #111827; font-weight: 600; }
+.empimp-foot-actions { display: flex; gap: 8px; margin-left: auto; }
+
+.empimp-btn {
+  border: 1px solid #dfe4ec;
+  background: #fff;
+  color: #374151;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.16s, border-color 0.16s, opacity 0.16s;
+}
+.empimp-btn:hover:not(:disabled) { background: #f5f7fa; border-color: #cbd5e1; }
+.empimp-btn--primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+  font-weight: 600;
+}
+.empimp-btn--primary:hover:not(:disabled) { background: #1d4fd8; border-color: #1d4fd8; }
+.empimp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.empimp-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+/* ---------- Small screens ---------- */
+@media (max-width: 860px) {
+  .empimp-overlay { padding: 0; }
+  .empimp-panel { height: 100%; width: 100%; border-radius: 0; }
+  .empimp-map-row {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 8px;
+  }
+  .empimp-map-row--head, .empimp-map-arrow { display: none; }
+  .empimp-map-target { grid-column: 1 / -1; }
+  .empimp-toggle { margin-left: 0; }
+  .empimp-foot-info { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .empimp-panel { animation: none; }
+  .empimp-progress span { transition: none; }
+}

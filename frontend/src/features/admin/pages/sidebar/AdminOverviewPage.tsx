@@ -6,7 +6,6 @@ import {
   getPrevMonthKey,
   getPrevMonthLabel,
   getMonthAvgRate,
-  getMonthExceptionCount,
   getWeekRangeLabel,
   getGreeting,
 } from '../../utils/Utils'
@@ -14,7 +13,8 @@ import { DashboardTopbar } from '../../components/Dashboardtopbar'
 import { KpiStrip } from '../../components/Kpistrip'
 import { MainGrid } from '../../components/MainGrid'
 import { DepartmentsPanel } from '../../components/Departmentspanel'
-import { PendingApprovalsPanel } from '../../components/Pendingapprovalspanel'
+import { EmployeeAuditPanel } from '../../components/EmployeeAuditPanel'
+import type { UpcomingBirthday } from '../../components/UpcomingBirthdaysPanel'
 
 type Props = any
 
@@ -127,15 +127,13 @@ function buildLeaveSparkData(rows: any[], monthKey: string) {
 export default function AdminOverviewPage({
   attendanceDateFilter,
   attendanceCountByDate = {},
-  exceptionCountByDate = {},
   employees,
+  employeeAuditLogs,
+  missedLoginLeader,
   fieldVisitRows,
   firstClockInRows,
-  formatLeaveTypeLabel,
   leaveRows,
   loadDashboard,
-  onAlertManager,
-  selectedDateExceptions,
   selectedDateLeaves,
   weeklyAttendanceTrend,
 }: Props) {
@@ -143,17 +141,27 @@ export default function AdminOverviewPage({
   const activeEmployees = employees.filter((e: any) => e.is_active !== false).length
   const totalEmployees = activeEmployees || employees.length
   const presentToday = firstClockInRows.length
-  const pendingLeaveRows = leaveRows.filter(
-    (r: any) => (r.status || '').trim().toLowerCase() === 'pending'
-  )
-  const lateExceptionsToday = selectedDateExceptions.filter((r: any) =>
-    `${r?.type || ''} ${r?.reason || ''} ${r?.message || ''}`.toLowerCase().includes('late')
-  ).length
   const fieldActive = fieldVisitRows.filter((r: any) => {
     const s = `${r?.status || r?.visitStatus || ''}`.toLowerCase()
     return s ? !s.includes('complete') && !s.includes('closed') : true
   }).length
+  const upcomingBirthdays = useMemo<UpcomingBirthday[]>(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
 
+    return employees
+      .map((employee: any) => {
+        const dob = parseOverviewDate(employee.emp_date_of_birth)
+        if (!dob) return null
+
+        let next = new Date(today.getFullYear(), dob.getMonth(), dob.getDate())
+        if (next < today) next = new Date(today.getFullYear() + 1, dob.getMonth(), dob.getDate())
+        const daysUntil = Math.round((next.getTime() - today.getTime()) / 86400000)
+        return { employee, date: next, daysUntil }
+      })
+      .filter((item: UpcomingBirthday | null): item is UpcomingBirthday => item !== null && item.daysUntil <= 30)
+      .sort((a: UpcomingBirthday, b: UpcomingBirthday) => a.daysUntil - b.daysUntil)
+  }, [employees])
   // ── Date / label helpers ───────────────────────────
   const weekLabel = getWeekRangeLabel(attendanceDateFilter)
   const selectedDateLabel = new Date(`${attendanceDateFilter}T00:00:00`).toLocaleDateString(
@@ -191,7 +199,6 @@ export default function AdminOverviewPage({
       sparkData: buildLeaveSparkData(leaveRows, activeMonthKey)
     }
   }, [leaveRows, monthKey])
-  const weeklyExceptionCount = selectedDateExceptions.length
   const maxWeekly = Math.max(...weeklyAttendanceTrend.map((i: any) => i.count), 1)
 
   const averageWeeklyAttendance = weeklyAttendanceTrend.length
@@ -203,48 +210,12 @@ export default function AdminOverviewPage({
       )
     : 0
 
-  const punctualityRate = totalEmployees
-    ? Math.max(
-        0,
-        Math.round(
-          ((presentToday - lateExceptionsToday) /
-            Math.max(presentToday || totalEmployees, 1)) *
-            100
-        )
-      )
-    : 0
-
   // ── Month-over-month deltas ────────────────────────
   const thisMonthAttRate = getMonthAvgRate(attendanceCountByDate, monthKey, totalEmployees)
   const prevMonthAttRate = getMonthAvgRate(attendanceCountByDate, prevMonthKey, totalEmployees)
   const attendanceDelta =
     thisMonthAttRate !== null && prevMonthAttRate !== null
       ? thisMonthAttRate - prevMonthAttRate
-      : null
-
-  const thisMonthExcCount = getMonthExceptionCount(exceptionCountByDate, monthKey)
-  const prevMonthExcCount = getMonthExceptionCount(exceptionCountByDate, prevMonthKey)
-  const thisMonthTotalAtt = Object.keys(attendanceCountByDate)
-    .filter((d) => d.startsWith(monthKey))
-    .reduce((s, d) => s + (attendanceCountByDate[d] || 0), 0)
-  const prevMonthTotalAtt = Object.keys(attendanceCountByDate)
-    .filter((d) => d.startsWith(prevMonthKey))
-    .reduce((s, d) => s + (attendanceCountByDate[d] || 0), 0)
-
-  const thisOnTimeRate =
-    thisMonthTotalAtt > 0
-      ? Math.round(((thisMonthTotalAtt - thisMonthExcCount) / thisMonthTotalAtt) * 100)
-      : null
-  const prevOnTimeRate =
-    prevMonthTotalAtt > 0
-      ? Math.round(((prevMonthTotalAtt - prevMonthExcCount) / prevMonthTotalAtt) * 100)
-      : null
-  const onTimeDelta =
-    thisOnTimeRate !== null && prevOnTimeRate !== null ? thisOnTimeRate - prevOnTimeRate : null
-
-  const exceptionsDelta =
-    thisMonthExcCount > 0 || prevMonthExcCount > 0
-      ? thisMonthExcCount - prevMonthExcCount
       : null
 
   // ── Spark data (shared between attendance + on-time cards) ──
@@ -291,9 +262,8 @@ export default function AdminOverviewPage({
   return (
     <div className="ov2-shell admin-aligned-page admin-aligned-page--overview">
       <DashboardTopbar
-        exceptionCount={weeklyExceptionCount}
         onRefresh={loadDashboard}
-        syncDeps={[attendanceDateFilter, presentToday, weeklyExceptionCount, leaveKpi.currentCount, fieldActive]}
+        syncDeps={[attendanceDateFilter, presentToday, leaveKpi.currentCount, fieldActive, upcomingBirthdays.length]}
       />
 
       <div className="ov2-content">
@@ -302,8 +272,7 @@ export default function AdminOverviewPage({
           <div>
             <h1 className="ov2-page-title">{greeting}, Admin</h1>
             <p className="ov2-page-sub">
-              {presentToday} of {totalEmployees} present &middot; {weeklyExceptionCount} exceptions
-              &middot; {fieldActive} in the field
+              {presentToday} of {totalEmployees} present &middot; {fieldActive} in the field
             </p>
           </div>
         </div>
@@ -316,23 +285,16 @@ export default function AdminOverviewPage({
           weekLabel={weekLabel}
           attendanceDelta={attendanceDelta}
           sparkData={sparkData}
-          punctualityRate={punctualityRate}
-          lateExceptionsToday={lateExceptionsToday}
-          selectedDateLabel={selectedDateLabel}
-          onTimeDelta={onTimeDelta}
+          missedLoginEmployeeName={String(missedLoginLeader?.emp_full_name || '')}
+          missedLoginCount={Number(missedLoginLeader?.missed_logins || 0)}
           monthlyLeaveRequests={leaveKpi.currentCount}
           previousMonthLeaveRequests={leaveKpi.previousCount}
           monthlyLabel={leaveKpi.monthLabel}
           leavesDelta={leaveKpi.delta}
           leaveSparkData={leaveKpi.sparkData}
           leavePrevMonthLabel={leaveKpi.previousMonthLabel}
-          weeklyExceptionCount={weeklyExceptionCount}
-          selectedDateLeavesCount={selectedDateLeaves.length}
-          fieldActive={fieldActive}
-          exceptionsDelta={exceptionsDelta}
-          exceptionMiniList={selectedDateExceptions
-            .slice(0, 3)
-            .map((r: any) => r.emp_full_name || r.emp_code || 'Unknown')}
+          upcomingBirthdayCount={upcomingBirthdays.length}
+          nextBirthdayName={upcomingBirthdays[0]?.employee.emp_full_name || ''}
           prevMonthLabel={prevMonthLabel}
         />
 
@@ -342,13 +304,11 @@ export default function AdminOverviewPage({
           weekLabel={weekLabel}
           averageWeeklyAttendance={averageWeeklyAttendance}
           presentToday={presentToday}
-          lateExceptionsToday={lateExceptionsToday}
           selectedDateLeavesCount={selectedDateLeaves.length}
           fieldVisitsCount={fieldVisitRows.length}
           fieldActive={fieldActive}
           totalEmployees={totalEmployees}
-          exceptions={selectedDateExceptions}
-          onAlertManager={onAlertManager}
+          birthdays={upcomingBirthdays}
         />
 
         {/* ── Lower grid: departments + approvals ── */}
@@ -357,11 +317,7 @@ export default function AdminOverviewPage({
             deptEntries={deptEntries}
             selectedDateLabel={selectedDateLabel}
           />
-          <PendingApprovalsPanel
-            pendingLeaveRows={pendingLeaveRows}
-            onAlertManager={onAlertManager}
-            formatLeaveTypeLabel={formatLeaveTypeLabel}
-          />
+          <EmployeeAuditPanel logs={employeeAuditLogs} />
         </div>
       </div>
     </div>

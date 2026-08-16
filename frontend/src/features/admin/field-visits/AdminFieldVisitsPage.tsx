@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { useEffect, useState } from 'react'
+import { ClientPagination } from '../components/ClientPagination'
 type Props = any
 
 export default function AdminFieldVisitsPage({
@@ -12,6 +14,11 @@ export default function AdminFieldVisitsPage({
   openMapForFieldVisit,
   resolveVisitDurationMinutes
 }: Props) {
+  const [currentPage, setCurrentPage] = useState(1)
+  const pageSize = 10
+  const totalPages = Math.max(1, Math.ceil(fieldVisitRows.length / pageSize))
+  const pageRows = fieldVisitRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  useEffect(() => setCurrentPage((page) => Math.min(page, totalPages)), [totalPages])
   const completedVisits = fieldVisitRows.filter((row: any) => row.isCompleted).length
   const activeVisits = fieldVisitRows.length - completedVisits
   const destinationCompleted = fieldVisitRows.filter((row: any) => row.destinationVisited).length
@@ -74,7 +81,7 @@ export default function AdminFieldVisitsPage({
                 </tr>
               </thead>
               <tbody>
-                {fieldVisitRows.map((row: any) => {
+                {pageRows.map((row: any) => {
                   const showRouteDetails = row.isCompleted
                   const durationMinutes = resolveVisitDurationMinutes(row.durationMinutes, row.visitStartTime || row.visitDate, row.visitEndTime, row.isCompleted, fieldVisitDurationTick)
                   return (
@@ -108,6 +115,7 @@ export default function AdminFieldVisitsPage({
                 })}
               </tbody>
             </table>
+            <ClientPagination page={currentPage} pageSize={pageSize} total={fieldVisitRows.length} onPageChange={setCurrentPage} />
           </div>
         ) : (
           <div className="empty-state">No field visits found in the latest activity feed.</div>

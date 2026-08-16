@@ -115,6 +115,27 @@ def get_employees(current_user):
     }), 200
 
 
+@admin_bp.route('/database-audit-logs', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_database_audit_logs_route(current_user):
+    logs = admin_service.get_database_audit_logs(request.args.get('limit', default=20, type=int))
+    return jsonify({
+        "success": True,
+        "data": [serialize_row(row) for row in logs],
+    }), 200
+
+
+@admin_bp.route('/attendance/missed-login-leader', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_missed_login_leader_route(current_user):
+    row = admin_service.get_non_flexible_missed_login_leader(
+        request.args.get('days', default=30, type=int)
+    )
+    return jsonify({"success": True, "data": serialize_row(row) if row else None}), 200
+
+
 @admin_bp.route('/employee-master/<resource>', methods=['GET'])
 @token_required
 @hr_or_devtester_required

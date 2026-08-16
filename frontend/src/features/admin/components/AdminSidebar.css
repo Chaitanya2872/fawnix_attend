@@ -611,6 +611,30 @@
   display: none;
 }
 
+@media (min-width: 981px) {
+  .admin-shell:not(.admin-shell-login) > .sidebar {
+    align-self: start;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+  .admin-shell:not(.admin-shell-login) > .sidebar .sidebar-panel {
+    height: 100%;
+    min-height: 0;
+  }
+  .admin-shell:not(.admin-shell-login) > .sidebar .sidebar-nav {
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .admin-shell:not(.admin-shell-login) > .sidebar .sidebar-support,
+  .admin-shell:not(.admin-shell-login) > .sidebar .sidebar-foot {
+    flex: 0 0 auto;
+  }
+}
+
 /* ---------- Rail-mode tooltips (pure CSS, no JS/state needed) ---------- */
 .sidebar--rail [data-tip] {
   position: relative;

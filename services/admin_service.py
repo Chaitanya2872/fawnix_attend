@@ -52,19 +52,27 @@ def get_all_employees():
             f"e.{birthday_column} AS emp_date_of_birth" if birthday_column
             else "NULL::DATE AS emp_date_of_birth"
         )
+        joined_date_select = _get_employee_joined_date_select_expression(employee_columns)
+        first_name_select = _get_optional_employee_select_expression(employee_columns, 'emp_first_name')
+        last_name_select = _get_optional_employee_select_expression(employee_columns, 'emp_last_name')
+        work_timings_select = _get_optional_employee_select_expression(employee_columns, 'emp_work_timings')
 
         cursor.execute("""
             SELECT
                 e.emp_code,
+                {first_name_select},
+                {last_name_select},
                 e.emp_full_name,
                 e.emp_email,
                 e.emp_contact,
                 e.emp_grade,
                 {blood_group_select},
                 {birthday_select},
+                {joined_date_select},
                 e.emp_designation,
                 e.emp_department,
                 e.emp_branch_id,
+                {work_timings_select},
                 e.emp_manager,
                 e.emp_informing_manager,
                 e.emp_shift_id,
@@ -80,10 +88,97 @@ def get_all_employees():
             LEFT JOIN shifts s ON e.emp_shift_id = s.shift_id
             LEFT JOIN users u ON e.emp_code = u.emp_code
             ORDER BY e.emp_full_name
-        """.format(blood_group_select=blood_group_select, birthday_select=birthday_select))
+        """.format(
+            blood_group_select=blood_group_select,
+            birthday_select=birthday_select,
+            joined_date_select=joined_date_select,
+            first_name_select=first_name_select,
+            last_name_select=last_name_select,
+            work_timings_select=work_timings_select,
+        ))
 
         return cursor.fetchall()
 
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_database_audit_logs(limit=20):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS database_audit_logs (
+                id BIGSERIAL PRIMARY KEY,
+                table_name TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                record_id TEXT,
+                changed_fields JSONB NOT NULL DEFAULT '[]'::jsonb,
+                old_data JSONB,
+                new_data JSONB,
+                changed_by TEXT,
+                changed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            SELECT l.*
+            FROM database_audit_logs l
+            ORDER BY changed_at DESC, id DESC
+            LIMIT %s
+        """, (max(1, min(int(limit or 20), 100)),))
+        conn.commit()
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_non_flexible_missed_login_leader(days=30):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        columns = _get_employees_columns(cursor)
+        if 'emp_work_timings' not in columns:
+            return None
+        joined_column = next((name for name in ('emp_joined_date', 'emp_joining_date') if name in columns), None)
+        joined_filter = f"AND work_day >= COALESCE(e.{joined_column}, work_day)" if joined_column else ""
+        cursor.execute(f"""
+            WITH work_days AS (
+                SELECT day::date AS work_day
+                FROM generate_series(
+                    CURRENT_DATE - (%s::integer - 1),
+                    CURRENT_DATE,
+                    INTERVAL '1 day'
+                ) day
+                WHERE EXTRACT(ISODOW FROM day) < 6
+            ), missed AS (
+                SELECT e.emp_code, e.emp_full_name, COUNT(*)::integer AS missed_logins
+                FROM employees e
+                CROSS JOIN work_days
+                LEFT JOIN users u ON u.emp_code = e.emp_code
+                WHERE LOWER(REGEXP_REPLACE(TRIM(COALESCE(e.emp_work_timings, '')), '\\s*-?\\s*', '', 'g')) = 'nonflexible'
+                  AND COALESCE(u.is_active, TRUE) = TRUE
+                  {joined_filter}
+                  AND NOT EXISTS (
+                      SELECT 1 FROM attendance a
+                      WHERE LOWER(a.employee_email) = LOWER(e.emp_email)
+                        AND a.date = work_day
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM leaves l
+                      WHERE l.emp_code = e.emp_code
+                        AND LOWER(COALESCE(l.status, '')) = 'approved'
+                        AND work_day BETWEEN l.from_date AND l.to_date
+                  )
+                GROUP BY e.emp_code, e.emp_full_name
+            )
+            SELECT emp_code, emp_full_name, missed_logins
+            FROM missed
+            ORDER BY missed_logins DESC, emp_full_name
+            LIMIT 1
+        """, (max(1, min(int(days or 30), 365)),))
+        return cursor.fetchone()
     finally:
         cursor.close()
         conn.close()
@@ -1119,6 +1214,19 @@ def _get_employee_birthday_column(employee_columns):
         if column_name in employee_columns:
             return column_name
     return None
+
+
+def _get_employee_joined_date_select_expression(employee_columns):
+    for column_name in ('emp_joined_date', 'emp_joining_date'):
+        if column_name in employee_columns:
+            return f"e.{column_name} AS emp_joined_date"
+    return "NULL::DATE AS emp_joined_date"
+
+
+def _get_optional_employee_select_expression(employee_columns, column_name):
+    if column_name in employee_columns:
+        return f"e.{column_name}"
+    return f"NULL::TEXT AS {column_name}"
 
 
 def _parse_holiday_row(row):

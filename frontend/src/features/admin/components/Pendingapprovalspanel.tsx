@@ -5,7 +5,6 @@ type LeaveRow = Record<string, any>
 
 type PendingApprovalsPanelProps = {
   pendingLeaveRows: LeaveRow[]
-  onAlertManager: (row: LeaveRow) => Promise<string>
   formatLeaveTypeLabel: (row: LeaveRow) => string
 }
 
@@ -95,26 +94,9 @@ function formatPanelWeekdayRange(row: LeaveRow) {
 
 export function PendingApprovalsPanel({
   pendingLeaveRows,
-  onAlertManager,
   formatLeaveTypeLabel,
 }: PendingApprovalsPanelProps) {
   const [pendingExpanded, setPendingExpanded] = useState(true)
-  const [alertLoadingKey, setAlertLoadingKey] = useState('')
-  const [alertStatus, setAlertStatus] = useState('')
-
-  const handleAlert = async (row: LeaveRow) => {
-    const key = String(row.id || row.emp_code || Math.random())
-    setAlertLoadingKey(key)
-    setAlertStatus('')
-    try {
-      const next = await onAlertManager(row)
-      setAlertStatus(next)
-    } catch (err) {
-      setAlertStatus(err instanceof Error ? err.message : 'Failed.')
-    } finally {
-      setAlertLoadingKey('')
-    }
-  }
 
   return (
     <div className="ov2-card ov2-approvals-card">
@@ -155,14 +137,6 @@ export function PendingApprovalsPanel({
                     {row.from_date || '--'} → {row.to_date || '--'}
                   </small>
                 </div>
-                <button
-                  className="ov2-alert-btn"
-                  onClick={() => void handleAlert(row)}
-                  disabled={alertLoadingKey === key}
-                  type="button"
-                >
-                  {alertLoadingKey === key ? '…' : 'Alert Mgr'}
-                </button>
               </div>
             )
           })}
@@ -171,7 +145,6 @@ export function PendingApprovalsPanel({
             <div className="ov2-empty">No pending approvals right now.</div>
           )}
 
-          {alertStatus && <div className="ov2-alert-status">{alertStatus}</div>}
         </div>
       )}
     </div>

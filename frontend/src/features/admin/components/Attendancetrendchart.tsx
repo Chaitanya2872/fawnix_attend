@@ -5,7 +5,6 @@ type AttendanceTrendChartProps = {
   weekLabel: string
   averageWeeklyAttendance: number
   presentToday: number
-  lateExceptionsToday: number
   selectedDateLeavesCount: number
   fieldVisitsCount: number
   fieldActive: number
@@ -17,7 +16,6 @@ export function AttendanceTrendChart({
   weekLabel,
   averageWeeklyAttendance,
   presentToday,
-  lateExceptionsToday,
   selectedDateLeavesCount,
   fieldVisitsCount,
   fieldActive,
@@ -40,10 +38,6 @@ export function AttendanceTrendChart({
           <div className="ov2-chart-stat">
             <span>PRESENT</span>
             <strong>{presentToday}</strong>
-          </div>
-          <div className="ov2-chart-stat amber">
-            <span>LATE</span>
-            <strong>{lateExceptionsToday}</strong>
           </div>
         </div>
       </div>

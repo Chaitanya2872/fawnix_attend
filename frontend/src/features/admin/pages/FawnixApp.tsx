@@ -24,6 +24,7 @@ import AdminLoginPage from './AdminLoginPage'
 import AdminSidebar from '../components/AdminSidebar'
 import DeleteEmployeeModal from '../employees/DeleteEmployeeModal'
 import EmployeeFormDrawer from '../employees/EmployeeFormDrawer'
+import EmployeeImportDrawer from '../employees/import/EmployeeImportDrawer'
 import EmployeeViewDrawer from '../employees/EmployeeViewDrawer'
 import FieldVisitDetailDrawer from '../field-visits/FieldVisitDetailDrawer'
 import MapDialog from '../field-visits/MapDialog'
@@ -324,6 +325,8 @@ function FawnixApp() {
   })
   const {
     employees,
+    employeeAuditLogs,
+    missedLoginLeader,
     attendanceRows,
     leaveRows,
     setLeaveRows,
@@ -417,8 +420,10 @@ function FawnixApp() {
     openEmployeeView,
     closeEmployeeView,
     employeeImportStatus,
-    employeeImportLoading,
-    importEmployees,
+    employeeImportOpen,
+    openEmployeeImport,
+    closeEmployeeImport,
+    refreshAfterEmployeeImport,
     downloadEmployeesTemplate,
     deleteEmployeeTarget,
     setDeleteEmployeeTarget,
@@ -932,6 +937,8 @@ function FawnixApp() {
           attendanceCountByDate={attendanceCountByDate}
           exceptionCountByDate={exceptionCountByDate}
           employees={employees}
+          employeeAuditLogs={employeeAuditLogs}
+          missedLoginLeader={missedLoginLeader}
           fieldVisitRows={fieldVisitRows}
           firstClockInRows={firstClockInRows}
           formatLeaveTypeLabel={formatLeaveTypeLabel}
@@ -963,8 +970,7 @@ function FawnixApp() {
           handleEditEmployee={handleEditEmployee}
           openEmployeeView={openEmployeeView}
           employeeImportStatus={employeeImportStatus}
-          employeeImportLoading={employeeImportLoading}
-          importEmployees={importEmployees}
+          openEmployeeImport={openEmployeeImport}
           downloadEmployeesTemplate={downloadEmployeesTemplate}
           loadDashboard={() => loadDashboard(accessToken)}
           openAddEmployeePanel={openAddEmployeePanel}
@@ -1336,6 +1342,15 @@ function FawnixApp() {
               onSaveEmployee={handleSaveEmployee}
               onClose={closeEmployeePanel}
               shiftOptions={shiftOptions}
+            />
+          ) : null}
+          {employeeImportOpen ? (
+            <EmployeeImportDrawer
+              employees={employees}
+              apiRequest={apiRequest}
+              onClose={closeEmployeeImport}
+              onImported={refreshAfterEmployeeImport}
+              onDownloadTemplate={downloadEmployeesTemplate}
             />
           ) : null}
           {viewingEmployee ? (

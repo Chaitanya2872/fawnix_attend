@@ -87,10 +87,8 @@ type KpiStripProps = {
   attendanceDelta: number | null
   sparkData: number[]
 
-  punctualityRate: number
-  lateExceptionsToday: number
-  selectedDateLabel: string
-  onTimeDelta: number | null
+  missedLoginEmployeeName: string
+  missedLoginCount: number
 
   monthlyLeaveRequests: number
   previousMonthLeaveRequests: number
@@ -99,11 +97,8 @@ type KpiStripProps = {
   leaveSparkData: number[]
   leavePrevMonthLabel: string
 
-  weeklyExceptionCount: number
-  selectedDateLeavesCount: number
-  fieldActive: number
-  exceptionsDelta: number | null
-  exceptionMiniList: string[]
+  upcomingBirthdayCount: number
+  nextBirthdayName: string
 
   prevMonthLabel: string
 }
@@ -115,21 +110,16 @@ export function KpiStrip({
   weekLabel,
   attendanceDelta,
   sparkData,
-  punctualityRate,
-  lateExceptionsToday,
-  selectedDateLabel,
-  onTimeDelta,
+  missedLoginEmployeeName,
+  missedLoginCount,
   monthlyLeaveRequests,
   previousMonthLeaveRequests,
   monthlyLabel,
   leavesDelta,
   leaveSparkData,
   leavePrevMonthLabel,
-  weeklyExceptionCount,
-  selectedDateLeavesCount,
-  fieldActive,
-  exceptionsDelta,
-  exceptionMiniList,
+  upcomingBirthdayCount,
+  nextBirthdayName,
   prevMonthLabel,
 }: KpiStripProps) {
   return (
@@ -158,8 +148,8 @@ export function KpiStrip({
       />
 
       <KpiCard
-        label="On-Time Rate"
-        period={`Today \u00b7 ${selectedDateLabel}`}
+        label="Most Missed Logins"
+        period="Last 30 days · Non-flexible"
         color="blue"
         icon={
           <svg viewBox="0 0 16 16" fill="none" width="14" height="14">
@@ -167,12 +157,11 @@ export function KpiStrip({
             <path d="M8 5v3.5l2.5 1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         }
-        value={`${punctualityRate}%`}
-        sub={`${lateExceptionsToday} late exception${lateExceptionsToday === 1 ? '' : 's'}`}
-        delta={onTimeDelta}
-        deltaLabel={`vs ${prevMonthLabel}`}
-        deltaGood="up"
-        sparkData={sparkData}
+        value={missedLoginCount}
+        sub={missedLoginEmployeeName || 'No missed logins'}
+        delta={null}
+        deltaLabel="Approved leaves excluded"
+        deltaGood="down"
       />
 
       <KpiCard
@@ -194,8 +183,8 @@ export function KpiStrip({
       />
 
       <KpiCard
-        label="Exceptions"
-        period="Active this period"
+        label="Upcoming Birthdays"
+        period="Next 30 days"
         color="red"
         icon={
           <svg viewBox="0 0 16 16" fill="none" width="14" height="14">
@@ -208,13 +197,11 @@ export function KpiStrip({
             <path d="M8 7v3M8 11.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         }
-        value={weeklyExceptionCount}
-        sub={`${selectedDateLeavesCount} on leave \u00b7 ${fieldActive} field agents`}
-        delta={exceptionsDelta}
-        deltaLabel={`vs ${prevMonthLabel}`}
-        deltaGood="down"
-        liveChip={weeklyExceptionCount > 0}
-        miniList={weeklyExceptionCount > 0 ? exceptionMiniList : []}
+        value={upcomingBirthdayCount}
+        sub={nextBirthdayName ? `Next: ${nextBirthdayName}` : 'No birthdays scheduled'}
+        delta={null}
+        deltaLabel=""
+        deltaGood="up"
       />
     </div>
   )

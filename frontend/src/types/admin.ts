@@ -182,6 +182,8 @@ export type AdminProfile = {
 
 export type EmployeeRow = {
   emp_code: string
+  emp_first_name?: string | null
+  emp_last_name?: string | null
   emp_full_name: string
   emp_email?: string
   emp_contact?: string
@@ -189,9 +191,12 @@ export type EmployeeRow = {
   emp_designation?: string
   emp_department?: string
   emp_branch_id?: string | number | null
+  emp_work_timings?: string | null
   emp_manager?: string
   emp_informing_manager?: string | null
   emp_shift_id?: number | string | null
+  emp_joined_date?: string | null
+  emp_joining_date?: string | null
   shift_name?: string | null
   emp_date_of_birth?: string | null
   emp_blood_group?: string | null

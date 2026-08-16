@@ -82,7 +82,7 @@ export function useEmployeesPanel({
   const [employeePanelMode, setEmployeePanelMode] = useState<'add' | 'edit' | null>(null)
   const [viewingEmployee, setViewingEmployee] = useState<EmployeeRow | null>(null)
   const [employeeImportStatus, setEmployeeImportStatus] = useState('')
-  const [employeeImportLoading, setEmployeeImportLoading] = useState(false)
+  const [employeeImportOpen, setEmployeeImportOpen] = useState(false)
   const [deleteEmployeeTarget, setDeleteEmployeeTarget] = useState<EmployeeRow | null>(null)
   const [deleteEmployeeLoading, setDeleteEmployeeLoading] = useState(false)
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
@@ -232,8 +232,27 @@ export function useEmployeesPanel({
   const closeEmployeeView = () => setViewingEmployee(null)
 
   const downloadEmployeesTemplate = () => {
-    const columns = ['emp_code', 'emp_full_name', 'emp_email', 'emp_contact', 'emp_grade', 'emp_designation', 'emp_department', 'emp_manager', 'role']
-    const blob = new Blob([`${columns.join(',')}\nEMP001,Jane Doe,jane@example.com,9876543210,F,HR Executive,Human Resources,EMP001,employee\n`], { type: 'text/csv;charset=utf-8' })
+    // Human-readable headers: the import wizard auto-maps these onto API fields,
+    // and they double as documentation of what each column should hold.
+    const columns = [
+      'Employee ID',
+      'Employee Name',
+      'Email',
+      'Contact Number',
+      'Designation',
+      'Department',
+      'Grade',
+      'Manager (Employee ID)',
+      'Joining Date',
+      'Date of Birth',
+      'Blood Group',
+      'System Role'
+    ]
+    const sampleRows = [
+      'EMP001,Jane Doe,jane@example.com,9876543210,HR Executive,Human Resources,F,EMP000,2024-04-01,1996-08-23,O+,employee',
+      'EMP002,John Smith,john@example.com,9876500000,Sales Executive,Sales,E,EMP001,2023-11-15,1994-02-09,B+,employee'
+    ]
+    const blob = new Blob([`${columns.join(',')}\n${sampleRows.join('\n')}\n`], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -242,36 +261,20 @@ export function useEmployeesPanel({
     URL.revokeObjectURL(url)
   }
 
-  const importEmployees = async (file: File) => {
-    if (!canWriteAdminData) return
-    setEmployeeImportLoading(true)
-    setEmployeeImportStatus('Importing employees…')
-    try {
-      const text = await file.text()
-      const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean)
-      if (lines.length < 2) throw new Error('The CSV needs a header and at least one employee row.')
-      const parse = (line: string) => line.match(/(?:[^,"]+|"(?:[^"]|"")*")+/g)?.map((value) => value.trim().replace(/^"|"$/g, '').replace(/""/g, '"')) || []
-      const headers = parse(lines[0]).map((header) => header.trim())
-      const required = ['emp_code', 'emp_full_name', 'emp_email']
-      const missing = required.filter((field) => !headers.includes(field))
-      if (missing.length) throw new Error(`Template is missing: ${missing.join(', ')}.`)
-      let created = 0
-      const failed: string[] = []
-      for (const [index, line] of lines.slice(1).entries()) {
-        const values = parse(line)
-        const row = Object.fromEntries(headers.map((header, i) => [header, (values[i] || '').trim()])) as Record<string, string>
-        if (!row.emp_code && !row.emp_full_name && !row.emp_email) continue
-        if (required.some((field) => !row[field])) { failed.push(`row ${index + 2}`); continue }
-        try {
-          await apiRequest('/api/users', { method: 'POST', body: JSON.stringify(Object.fromEntries(Object.entries(row).filter(([, value]) => value))) })
-          created += 1
-        } catch { failed.push(`row ${index + 2}`) }
-      }
-      setEmployeeImportStatus(`Imported ${created} employee${created === 1 ? '' : 's'}${failed.length ? `; ${failed.length} row${failed.length === 1 ? '' : 's'} could not be imported.` : '.'}`)
-      await loadDashboard(accessToken)
-    } catch (error) {
-      setEmployeeImportStatus(error instanceof Error ? error.message : 'Could not import this file.')
-    } finally { setEmployeeImportLoading(false) }
+  const openEmployeeImport = () => {
+    if (!canWriteAdminData) {
+      setEmployeeImportStatus('Write permission is required to import employees.')
+      return
+    }
+    setEmployeeImportStatus('')
+    setEmployeeImportOpen(true)
+  }
+
+  const closeEmployeeImport = () => setEmployeeImportOpen(false)
+
+  /** Reloads the dashboard once the wizard has finished a confirmed import. */
+  const refreshAfterEmployeeImport = async () => {
+    await loadDashboard(accessToken)
   }
 
   const handleSaveEmployee = async () => {
@@ -436,8 +439,10 @@ export function useEmployeesPanel({
     openEmployeeView,
     closeEmployeeView,
     employeeImportStatus,
-    employeeImportLoading,
-    importEmployees,
+    employeeImportOpen,
+    openEmployeeImport,
+    closeEmployeeImport,
+    refreshAfterEmployeeImport,
     downloadEmployeesTemplate,
     deleteEmployeeTarget,
     setDeleteEmployeeTarget,

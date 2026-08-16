@@ -128,6 +128,7 @@ const fieldConfig: Record<string, { label: string; icon: () => ReactNode; color:
   shift_name: { label: 'Shift', icon: Icons.clock, color: '#f59e0b' },
   manager_name: { label: 'Manager', icon: Icons.manager, color: '#10b981' },
   emp_manager: { label: 'Manager Code', icon: Icons.badge, color: '#6b7280' },
+  emp_joined_date: { label: 'Joining Date', icon: Icons.calendar, color: '#f59e0b' },
   emp_joining_date: { label: 'Joining Date', icon: Icons.calendar, color: '#f59e0b' },
 }
 
@@ -135,7 +136,7 @@ const fields = [
   'emp_code', 'emp_email', 'emp_contact',
   'emp_date_of_birth', 'emp_blood_group',
   'emp_designation', 'emp_grade', 'emp_department',
-  'shift_name', 'manager_name', 'emp_manager'
+  'shift_name', 'manager_name', 'emp_manager', 'emp_joined_date'
 ] as const
 
 export default function EmployeeViewDrawer({ employee, onClose, onEdit, onDelete }: Props) {
@@ -183,7 +184,7 @@ export default function EmployeeViewDrawer({ employee, onClose, onEdit, onDelete
               const raw = record[field]
               
               let display: string
-              if (field === 'emp_date_of_birth') {
+              if (field === 'emp_date_of_birth' || field === 'emp_joined_date') {
                 display = raw ? formatDateOnly(String(raw)) : '—'
               } else if (field === 'emp_code' && !raw) {
                 display = '—'

@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
 
 type DashboardTopbarProps = {
-  exceptionCount: number
   onRefresh: () => Promise<void>
   // syncs whenever key dashboard data changes so the label resets
   syncDeps: unknown[]
 }
 
-export function DashboardTopbar({ exceptionCount, onRefresh, syncDeps }: DashboardTopbarProps) {
+export function DashboardTopbar({ onRefresh, syncDeps }: DashboardTopbarProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [now, setNow] = useState(() => new Date())
   const [lastSyncLabel, setLastSyncLabel] = useState('just now')
@@ -105,17 +104,6 @@ export function DashboardTopbar({ exceptionCount, onRefresh, syncDeps }: Dashboa
           Refresh
         </button>
 
-        <button className="ov2-bell-btn" type="button" title="Alerts">
-          <svg viewBox="0 0 20 20" fill="none" width="17" height="17">
-            <path
-              d="M10 2.5a5.5 5.5 0 0 1 5.5 5.5v2.5l1.5 2.5h-14L4.5 10.5V8A5.5 5.5 0 0 1 10 2.5z"
-              stroke="currentColor"
-              strokeWidth="1.4"
-            />
-            <path d="M8 16.5a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.4" />
-          </svg>
-          {exceptionCount > 0 && <span className="ov2-bell-badge">{exceptionCount}</span>}
-        </button>
       </div>
     </div>
   )

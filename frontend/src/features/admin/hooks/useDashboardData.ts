@@ -93,6 +93,8 @@ export function useDashboardData(accessToken: string, apiRequest: ApiRequest) {
   const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([])
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [fieldVisitRows, setFieldVisitRows] = useState<FieldVisitRow[]>([])
+  const [employeeAuditLogs, setEmployeeAuditLogs] = useState<Record<string, unknown>[]>([])
+  const [missedLoginLeader, setMissedLoginLeader] = useState<Record<string, unknown> | null>(null)
   const [attendanceDateFilter, setAttendanceDateFilter] = useState(() => toDateInputValue(new Date()))
 
   const loadDashboard = async (token: string) => {
@@ -123,6 +125,8 @@ export function useDashboardData(accessToken: string, apiRequest: ApiRequest) {
         lateArrivalsResponse,
         earlyLeavesResponse,
         selectedExceptionsResponse,
+        employeeAuditLogsResponse,
+        missedLoginLeaderResponse,
       ] = await Promise.all([
         apiRequest('/api/admin/employees', {}, token),
         apiRequest(attendancePath, {}, token),
@@ -132,9 +136,13 @@ export function useDashboardData(accessToken: string, apiRequest: ApiRequest) {
         apiRequest('/api/admin/late-arrivals', {}, token).catch(() => null),
         apiRequest('/api/admin/early-leaves', {}, token).catch(() => null),
         apiRequest(selectedExceptionsPath, {}, token),
+        apiRequest('/api/admin/database-audit-logs?limit=100', {}, token).catch(() => ({ data: [] })),
+        apiRequest('/api/admin/attendance/missed-login-leader?days=30', {}, token).catch(() => ({ data: null })),
       ])
 
       const employeesData = Array.isArray(employeesResponse?.data) ? employeesResponse.data : []
+      const employeeAuditLogsData = Array.isArray(employeeAuditLogsResponse?.data) ? employeeAuditLogsResponse.data : []
+      const missedLoginLeaderData = missedLoginLeaderResponse?.data || null
       const attendanceData: AttendanceRow[] = Array.isArray(attendanceResponse?.data?.records)
         ? attendanceResponse.data.records
         : []
@@ -176,6 +184,8 @@ export function useDashboardData(accessToken: string, apiRequest: ApiRequest) {
       ])
 
       setEmployees(employeesData)
+      setEmployeeAuditLogs(employeeAuditLogsData)
+      setMissedLoginLeader(missedLoginLeaderData)
       const attendanceDeduped = Array.from(
         [...attendanceData, ...selectedAttendanceData].reduce((map, row) => {
           const key =
@@ -281,6 +291,8 @@ export function useDashboardData(accessToken: string, apiRequest: ApiRequest) {
 
   const resetDashboardData = () => {
     setEmployees([])
+    setEmployeeAuditLogs([])
+    setMissedLoginLeader(null)
     setAttendanceRows([])
     setAttendanceExceptions([])
     setLeaveRows([])
@@ -299,6 +311,8 @@ export function useDashboardData(accessToken: string, apiRequest: ApiRequest) {
 
   return {
     employees,
+    employeeAuditLogs,
+    missedLoginLeader,
     attendanceRows,
     leaveRows,
     setLeaveRows,

@@ -432,7 +432,7 @@ def update_employee(emp_code: str, payload: dict, updated_by_emp_code: str = Non
         
         cursor.execute(query, update_values)
         updated_employee = cursor.fetchone()
-        
+
         conn.commit()
         
         return {

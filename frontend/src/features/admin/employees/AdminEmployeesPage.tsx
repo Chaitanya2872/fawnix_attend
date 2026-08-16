@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import './AdminEmployeesPage.css'
 import { useRef, useState, useEffect } from 'react'
+import { ClientPagination } from '../components/ClientPagination'
 
 type Props = any
 
@@ -103,8 +104,8 @@ function DropdownMenu({ trigger, children }: { trigger: React.ReactNode; childre
 }
 
 export default function AdminEmployeesPage(props: Props) {
-  const importInputRef = useRef<HTMLInputElement>(null)
   const [selectedEmployeeKeys, setSelectedEmployeeKeys] = useState<Set<string>>(() => new Set())
+  const [currentPage, setCurrentPage] = useState(1)
   
   const {
     canWriteAdminData,
@@ -124,13 +125,21 @@ export default function AdminEmployeesPage(props: Props) {
     applyEmployeeKpiFilter,
     openEmployeeView,
     employeeImportStatus,
-    employeeImportLoading,
-    importEmployees,
+    openEmployeeImport,
     downloadEmployeesTemplate,
   } = props
 
   const employeeRows = employees as any[]
   const filteredRows = filteredEmployees as any[]
+  const pageSize = 10
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
+  const pageRows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages))
+  }, [totalPages])
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [employeeSearch, employeeKpiFilter])
   const now = new Date()
   const activeCount = employeeRows.filter((employee) => employee.is_active).length
   const inactiveCount = employeeRows.length - activeCount
@@ -184,7 +193,7 @@ export default function AdminEmployeesPage(props: Props) {
     filterOptions.push({ id: 'birthdays', label: '🎂 Birthdays' })
   }
 
-  const visibleEmployeeKeys = filteredRows.map(getSelectionKey).filter(Boolean)
+  const visibleEmployeeKeys = pageRows.map(getSelectionKey).filter(Boolean)
   const selectedVisibleCount = visibleEmployeeKeys.filter((key) => selectedEmployeeKeys.has(key)).length
   const allVisibleSelected = visibleEmployeeKeys.length > 0 && selectedVisibleCount === visibleEmployeeKeys.length
   const toggleAllVisibleEmployees = () => {
@@ -210,12 +219,6 @@ export default function AdminEmployeesPage(props: Props) {
       }
       return next
     })
-  }
-
-  const handleBulkImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) void importEmployees(file)
-    event.currentTarget.value = ''
   }
 
   return (
@@ -259,11 +262,11 @@ export default function AdminEmployeesPage(props: Props) {
                   </button>
                 }
               >
-                <button onClick={() => importInputRef.current?.click()} disabled={employeeImportLoading}>
+                <button onClick={() => openEmployeeImport()}>
                   <svg className="adm-icon" viewBox="0 0 24 24">
                     <path d="M12 3v11m0-11 4 4m-4-4-4 4M5 15v3a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  Bulk Import
+                  Import Employees
                 </button>
                 <button onClick={downloadEmployeesTemplate}>
                   <svg className="adm-icon" viewBox="0 0 24 24">
@@ -285,13 +288,6 @@ export default function AdminEmployeesPage(props: Props) {
                   XLSX
                 </button>
               </DropdownMenu>
-              <input
-                ref={importInputRef}
-                className="adm-visually-hidden"
-                type="file"
-                accept=".csv,text/csv"
-                onChange={handleBulkImport}
-              />
             </>
           )}
 
@@ -483,7 +479,7 @@ export default function AdminEmployeesPage(props: Props) {
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((employee) => {
+                {pageRows.map((employee) => {
                   const displayName =
                     employee.emp_full_name || employee.emp_code || ''
                   const selectionKey = getSelectionKey(employee)
@@ -602,6 +598,7 @@ export default function AdminEmployeesPage(props: Props) {
             <span>Try adjusting your search or filter.</span>
           </div>
         )}
+        <ClientPagination page={currentPage} pageSize={pageSize} total={filteredRows.length} onPageChange={setCurrentPage} />
       </div>
     </div>
   )

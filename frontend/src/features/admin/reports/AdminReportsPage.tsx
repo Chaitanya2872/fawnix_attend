@@ -3,17 +3,20 @@ type Props = any
 
 export default function AdminReportsPage(props: Props) {
   const {
-    attendanceDateFilter,
     attendanceEfficiencyScores,
     attendanceReportFormat,
     attendanceReportMonth,
     attendanceReportStatus,
     attendanceReportYear,
-    downloadDailyAttendanceReport,
-    downloadMonthlyAttendanceReport,
+    reportDateMode,
+    setReportDateMode,
+    reportStartDate,
+    setReportStartDate,
+    reportEndDate,
+    setReportEndDate,
+    downloadRangeReport,
     loadDashboard,
     maxWeeklyAttendance,
-    setAttendanceDateFilter,
     setAttendanceReportFormat,
     setAttendanceReportMonth,
     setAttendanceReportYear,
@@ -32,25 +35,43 @@ export default function AdminReportsPage(props: Props) {
       </div>
       <div className="reports-main">
         <div className="report-toolbar attendance-controls-row">
-          <div className="attendance-filter attendance-filter-date">
-            <label htmlFor="reports-date">Reference Date</label>
-            <input className="modern-date-input" id="reports-date" type="date" value={attendanceDateFilter} onChange={(event) => setAttendanceDateFilter(event.target.value)} />
-          </div>
           <div className="attendance-filter attendance-filter-compact">
-            <label htmlFor="attendance-month">Month</label>
-            <select id="attendance-month" value={attendanceReportMonth} onChange={(event) => setAttendanceReportMonth(event.target.value)}>
-              {['01','02','03','04','05','06','07','08','09','10','11','12'].map((month, index) => <option key={month} value={index + 1}>{month}</option>)}
+            <label htmlFor="report-date-mode">Date Filter</label>
+            <select id="report-date-mode" value={reportDateMode} onChange={(event) => setReportDateMode(event.target.value)}>
+              <option value="month">Monthly</option>
+              <option value="custom">Custom dates</option>
             </select>
           </div>
-          <div className="attendance-filter attendance-filter-compact">
-            <label htmlFor="attendance-year">Year</label>
-            <select id="attendance-year" value={attendanceReportYear} onChange={(event) => setAttendanceReportYear(event.target.value)}>
-              {Array.from({ length: 6 }, (_, index) => {
-                const year = new Date().getFullYear() - index
-                return <option key={year} value={year}>{year}</option>
-              })}
-            </select>
-          </div>
+          {reportDateMode === 'month' ? (
+            <>
+              <div className="attendance-filter attendance-filter-compact">
+                <label htmlFor="attendance-month">Month</label>
+                <select id="attendance-month" value={attendanceReportMonth} onChange={(event) => setAttendanceReportMonth(event.target.value)}>
+                  {['01','02','03','04','05','06','07','08','09','10','11','12'].map((month, index) => <option key={month} value={index + 1}>{month}</option>)}
+                </select>
+              </div>
+              <div className="attendance-filter attendance-filter-compact">
+                <label htmlFor="attendance-year">Year</label>
+                <select id="attendance-year" value={attendanceReportYear} onChange={(event) => setAttendanceReportYear(event.target.value)}>
+                  {Array.from({ length: 8 }, (_, index) => {
+                    const year = new Date().getFullYear() - index
+                    return <option key={year} value={year}>{year}</option>
+                  })}
+                </select>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="attendance-filter attendance-filter-date">
+                <label htmlFor="report-start-date">Start Date</label>
+                <input className="modern-date-input" id="report-start-date" type="date" value={reportStartDate} onChange={(event) => setReportStartDate(event.target.value)} />
+              </div>
+              <div className="attendance-filter attendance-filter-date">
+                <label htmlFor="report-end-date">End Date</label>
+                <input className="modern-date-input" id="report-end-date" type="date" value={reportEndDate} min={reportStartDate} onChange={(event) => setReportEndDate(event.target.value)} />
+              </div>
+            </>
+          )}
           <div className="attendance-filter attendance-filter-compact">
             <label htmlFor="attendance-format">Format</label>
             <select id="attendance-format" value={attendanceReportFormat} onChange={(event) => setAttendanceReportFormat(event.target.value)}>
@@ -63,11 +84,12 @@ export default function AdminReportsPage(props: Props) {
         <div className="report-actions-card">
           <div>
             <strong>Download Reports</strong>
-            <span>Export daily attendance by date and monthly attendance summaries.</span>
+            <span>Export attendance, exceptions, or leaves for the selected month or custom date range.</span>
           </div>
           <div className="report-actions">
-            <button className="cta dashboard-button" onClick={downloadDailyAttendanceReport} type="button">Daily Attendance</button>
-            <button className="ghost dashboard-button" onClick={downloadMonthlyAttendanceReport} type="button">Monthly Summary</button>
+            <button className="cta dashboard-button" onClick={() => void downloadRangeReport('attendance')} type="button">Attendance Report</button>
+            <button className="ghost dashboard-button" onClick={() => void downloadRangeReport('exceptions')} type="button">Exceptions Report</button>
+            <button className="ghost dashboard-button" onClick={() => void downloadRangeReport('leaves')} type="button">Leaves Report</button>
           </div>
           {attendanceReportStatus ? <span className="report-status attendance-report-status">{attendanceReportStatus}</span> : null}
         </div>

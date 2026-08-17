@@ -901,6 +901,13 @@ function FawnixApp() {
     attendanceReportFormat,
     setAttendanceReportFormat,
     attendanceReportStatus,
+    reportDateMode,
+    setReportDateMode,
+    reportStartDate,
+    setReportStartDate,
+    reportEndDate,
+    setReportEndDate,
+    downloadRangeReport,
     downloadDailyAttendanceReport,
     downloadMonthlyAttendanceReport,
     maxWeeklyAttendance,
@@ -1121,6 +1128,13 @@ function FawnixApp() {
           attendanceReportMonth={attendanceReportMonth}
           attendanceReportStatus={attendanceReportStatus}
           attendanceReportYear={attendanceReportYear}
+          reportDateMode={reportDateMode}
+          setReportDateMode={setReportDateMode}
+          reportStartDate={reportStartDate}
+          setReportStartDate={setReportStartDate}
+          reportEndDate={reportEndDate}
+          setReportEndDate={setReportEndDate}
+          downloadRangeReport={downloadRangeReport}
           downloadDailyAttendanceReport={downloadDailyAttendanceReport}
           downloadMonthlyAttendanceReport={downloadMonthlyAttendanceReport}
           loadDashboard={() => loadDashboard(accessToken)}

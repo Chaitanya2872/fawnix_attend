@@ -859,6 +859,132 @@ def download_monthly_attendance_report(current_user):
     """Download only monthly attendance summary in CSV/XLSX/PDF (requires ?month & ?year)."""
     return _download_attendance_report_by_type('monthly')
 
+
+RANGE_REPORT_CONFIG = {
+    'attendance': {
+        'date_column': 'a.date',
+        'query': """
+            SELECT a.date, e.emp_code, a.employee_name, a.employee_email,
+                   e.emp_department, e.emp_designation, a.login_time, a.logout_time,
+                   a.working_hours, a.status, a.attendance_type
+            FROM attendance a
+            LEFT JOIN employees e ON LOWER(e.emp_email) = LOWER(a.employee_email)
+            WHERE a.date BETWEEN %s AND %s
+            ORDER BY a.date DESC, a.employee_name
+        """,
+    },
+    'exceptions': {
+        'date_column': 'ae.exception_date',
+        'query': """
+            SELECT ae.*, e.emp_full_name, e.emp_department, e.emp_designation
+            FROM attendance_exceptions ae
+            LEFT JOIN employees e ON e.emp_code = ae.emp_code
+            WHERE ae.exception_date BETWEEN %s AND %s
+            ORDER BY ae.exception_date DESC, ae.emp_code
+        """,
+    },
+    'leaves': {
+        'date_column': 'l.from_date',
+        'query': """
+            SELECT l.*
+            FROM leaves l
+            WHERE l.from_date <= %s AND l.to_date >= %s
+            ORDER BY l.from_date DESC, l.emp_code
+        """,
+        'reverse_params': True,
+    },
+}
+
+
+def _export_range_report(report_type, report_format, start_date, end_date, rows):
+    columns = list(rows[0].keys()) if rows else ['message']
+    values = [[serialize_row(row).get(column, '') for column in columns] for row in rows]
+    filename = f"{report_type}_report_{start_date}_{end_date}.{report_format}"
+
+    if report_format == 'csv':
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(columns)
+        writer.writerows(values)
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+        )
+
+    if report_format == 'xlsx':
+        workbook = openpyxl.Workbook()
+        worksheet = workbook.active
+        worksheet.title = report_type.title()
+        worksheet.append(columns)
+        for cell in worksheet[1]:
+            cell.font = Font(bold=True)
+        for row in values:
+            worksheet.append([str(value) if value is not None else '' for value in row])
+        output = BytesIO()
+        workbook.save(output)
+        output.seek(0)
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename,
+        )
+
+    output = BytesIO()
+    document = SimpleDocTemplate(output, pagesize=landscape(letter), leftMargin=20, rightMargin=20, topMargin=24, bottomMargin=24)
+    styles = getSampleStyleSheet()
+    story = [Paragraph(f"{report_type.title()} Report: {start_date} to {end_date}", styles['Title']), Spacer(1, 12)]
+    table_data = [[Paragraph(str(column).replace('_', ' ').title(), styles['BodyText']) for column in columns]]
+    for row in values:
+        table_data.append([Paragraph(str(value if value is not None else ''), styles['BodyText']) for value in row])
+    if values:
+        available_width = landscape(letter)[0] - 40
+        table = Table(table_data, colWidths=[available_width / len(columns)] * len(columns), repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4f7bf7')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('GRID', (0, 0), (-1, -1), 0.35, colors.HexColor('#d9dee8')),
+            ('FONTSIZE', (0, 0), (-1, -1), 6),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+        story.append(table)
+    else:
+        story.append(Paragraph('No records found for this date range.', styles['BodyText']))
+    document.build(story)
+    output.seek(0)
+    return send_file(output, mimetype='application/pdf', as_attachment=True, download_name=filename)
+
+
+@admin_bp.route('/reports/<string:report_type>', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def download_range_report(current_user, report_type):
+    config = RANGE_REPORT_CONFIG.get(report_type)
+    if not config:
+        return jsonify({'success': False, 'message': 'Report type must be attendance, exceptions, or leaves.'}), 400
+    report_format = (request.args.get('format') or 'csv').lower()
+    if report_format not in {'csv', 'xlsx', 'pdf'}:
+        return jsonify({'success': False, 'message': 'Format must be csv, xlsx, or pdf.'}), 400
+    try:
+        start_date = date.fromisoformat(request.args.get('start_date') or '')
+        end_date = date.fromisoformat(request.args.get('end_date') or '')
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Use YYYY-MM-DD for start_date and end_date.'}), 400
+    if start_date > end_date:
+        return jsonify({'success': False, 'message': 'start_date cannot be after end_date.'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        params = (end_date, start_date) if config.get('reverse_params') else (start_date, end_date)
+        cursor.execute(config['query'], params)
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        return_connection(conn)
+    return _export_range_report(report_type, report_format, start_date.isoformat(), end_date.isoformat(), rows)
+
 @admin_bp.route('/field-visits/<int:field_visit_id>/tracking', methods=['GET'])
 @token_required
 @hr_or_devtester_required

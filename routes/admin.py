@@ -20,6 +20,7 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 import openpyxl
 from openpyxl.styles import Font
+from openpyxl.utils import get_column_letter
 from services.notification_service import (
     create_scheduled_notification,
     get_notification_candidates,
@@ -860,9 +861,208 @@ def download_monthly_attendance_report(current_user):
     return _download_attendance_report_by_type('monthly')
 
 
+def _format_report_code(value):
+    """Render enum-style codes (late_arrival, full_day) as readable labels."""
+    text = '' if value is None else str(value).strip()
+    if not text:
+        return ''
+    return text.replace('_', ' ').title()
+
+
+def _format_report_text(value):
+    return '' if value is None else str(value).strip()
+
+
+def _format_report_date(value):
+    if isinstance(value, datetime):
+        return value.strftime('%d-%b-%Y')
+    if isinstance(value, date):
+        return value.strftime('%d-%b-%Y')
+    return _format_report_text(value)
+
+
+def _format_report_datetime(value):
+    if isinstance(value, datetime):
+        return value.strftime('%d-%b-%Y %I:%M %p')
+    if isinstance(value, date):
+        return value.strftime('%d-%b-%Y')
+    return _format_report_text(value)
+
+
+def _format_report_time(value):
+    if isinstance(value, datetime):
+        return value.strftime('%I:%M %p')
+    if isinstance(value, time):
+        return value.strftime('%I:%M %p')
+    return _format_report_text(value)
+
+
+def _format_report_number(value):
+    """Keep counts numeric for Excel while dropping noise like 1.0 -> 1."""
+    if value is None or value == '':
+        return ''
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        return _format_report_text(value)
+    if numeric_value.is_integer():
+        return str(int(numeric_value))
+    return f"{numeric_value:g}"
+
+
+def _format_report_hours(value):
+    """Render decimal hours (8.25) as 8h 15m."""
+    if value is None or value == '':
+        return ''
+    try:
+        total_minutes = int(round(float(value) * 60))
+    except (TypeError, ValueError):
+        return _format_report_text(value)
+    hours, minutes = divmod(max(total_minutes, 0), 60)
+    return f"{hours}h {minutes:02d}m"
+
+
+REPORT_VALUE_FORMATTERS = {
+    'text': _format_report_text,
+    'code': _format_report_code,
+    'date': _format_report_date,
+    'datetime': _format_report_datetime,
+    'time': _format_report_time,
+    'number': _format_report_number,
+    'hours': _format_report_hours,
+}
+
+
+# (row key, HR-facing header, formatter). Column order is the export order.
+ATTENDANCE_RANGE_REPORT_COLUMNS = [
+    ('date', 'Date', 'date'),
+    ('emp_code', 'Employee ID', 'text'),
+    ('employee_name', 'Employee Name', 'text'),
+    ('employee_email', 'Employee Email', 'text'),
+    ('emp_department', 'Department', 'text'),
+    ('emp_designation', 'Designation', 'text'),
+    ('login_time', 'Clock In', 'time'),
+    ('logout_time', 'Clock Out', 'time'),
+    ('working_hours', 'Working Hours', 'hours'),
+    ('status', 'Attendance Status', 'code'),
+    ('attendance_type', 'Work Mode', 'code'),
+]
+
+EXCEPTIONS_RANGE_REPORT_COLUMNS = [
+    ('emp_code', 'Employee ID', 'text'),
+    ('employee_name', 'Employee Name', 'text'),
+    ('emp_email', 'Employee Email', 'text'),
+    ('emp_department', 'Department', 'text'),
+    ('emp_designation', 'Designation', 'text'),
+    ('exception_date', 'Exception Date', 'date'),
+    ('exception_type', 'Exception Type', 'code'),
+    ('actual_time', 'Actual Time', 'time'),
+    ('planned_arrival_time', 'Planned Arrival Time', 'time'),
+    ('planned_leave_time', 'Planned Leave Time', 'time'),
+    ('late_by_minutes', 'Late By (Minutes)', 'number'),
+    ('early_by_minutes', 'Early By (Minutes)', 'number'),
+    ('reason', 'Reason', 'text'),
+    ('notes', 'Employee Notes', 'text'),
+    ('status', 'Approval Status', 'code'),
+    ('manager_code', 'Manager ID', 'text'),
+    ('manager_email', 'Manager Email', 'text'),
+    ('requested_at', 'Requested On', 'datetime'),
+    ('reviewed_by', 'Reviewed By', 'text'),
+    ('reviewed_at', 'Reviewed On', 'datetime'),
+    ('manager_remarks', 'Manager Remarks', 'text'),
+]
+
+LEAVES_RANGE_REPORT_COLUMNS = [
+    ('emp_code', 'Employee ID', 'text'),
+    ('employee_name', 'Employee Name', 'text'),
+    ('emp_email', 'Employee Email', 'text'),
+    ('emp_department', 'Department', 'text'),
+    ('emp_designation', 'Designation', 'text'),
+    ('leave_type', 'Leave Type', 'code'),
+    ('from_date', 'From Date', 'date'),
+    ('to_date', 'To Date', 'date'),
+    ('duration', 'Day Type', 'code'),
+    ('leave_count', 'Leave Days', 'number'),
+    ('notes', 'Reason', 'text'),
+    ('status', 'Approval Status', 'code'),
+    ('applied_at', 'Applied On', 'datetime'),
+    ('manager_code', 'Manager ID', 'text'),
+    ('manager_email', 'Manager Email', 'text'),
+    ('reviewed_by', 'Reviewed By', 'text'),
+    ('reviewed_at', 'Reviewed On', 'datetime'),
+    ('remarks', 'Manager Remarks', 'text'),
+]
+
+
+def _get_table_columns(cursor, table_name):
+    """Available column names for a table, so exports survive schema drift."""
+    cursor.execute("""
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = %s
+    """, (table_name,))
+    return {row['column_name'] for row in cursor.fetchall()}
+
+
+def _build_exceptions_range_query(cursor):
+    """
+    attendance_exceptions predates this repo's migrations and drifts between
+    deployments, so resolve each column before selecting it.
+    """
+    columns = _get_table_columns(cursor, 'attendance_exceptions')
+
+    def pick(column_name, alias=None):
+        alias = alias or column_name
+        if column_name in columns:
+            return f"ae.{column_name} AS {alias}"
+        return f"NULL AS {alias}"
+
+    def pick_first(candidates, alias):
+        for column_name in candidates:
+            if column_name in columns:
+                return f"ae.{column_name} AS {alias}"
+        return f"NULL AS {alias}"
+
+    employee_name = "COALESCE(NULLIF(TRIM(e.emp_full_name), ''), ae.emp_name)" \
+        if 'emp_name' in columns else "e.emp_full_name"
+
+    select_parts = [
+        pick('emp_code'),
+        f"{employee_name} AS employee_name",
+        pick('emp_email'),
+        "e.emp_department AS emp_department",
+        "e.emp_designation AS emp_designation",
+        pick('exception_date'),
+        pick('exception_type'),
+        pick('exception_time', 'actual_time'),
+        pick('planned_arrival_time'),
+        pick('planned_leave_time'),
+        pick('late_by_minutes'),
+        pick('early_by_minutes'),
+        pick('reason'),
+        pick('notes'),
+        pick('status'),
+        pick('manager_code'),
+        pick('manager_email'),
+        pick('requested_at'),
+        pick_first(['reviewed_by', 'approved_by'], 'reviewed_by'),
+        pick_first(['reviewed_at', 'approved_at'], 'reviewed_at'),
+        pick('manager_remarks'),
+    ]
+
+    return f"""
+        SELECT {', '.join(select_parts)}
+        FROM attendance_exceptions ae
+        LEFT JOIN employees e ON e.emp_code = ae.emp_code
+        WHERE ae.exception_date BETWEEN %s AND %s
+        ORDER BY ae.exception_date DESC, ae.emp_code
+    """
+
+
 RANGE_REPORT_CONFIG = {
     'attendance': {
-        'date_column': 'a.date',
+        'title': 'Attendance Report',
+        'columns': ATTENDANCE_RANGE_REPORT_COLUMNS,
         'query': """
             SELECT a.date, e.emp_code, a.employee_name, a.employee_email,
                    e.emp_department, e.emp_designation, a.login_time, a.logout_time,
@@ -874,20 +1074,22 @@ RANGE_REPORT_CONFIG = {
         """,
     },
     'exceptions': {
-        'date_column': 'ae.exception_date',
-        'query': """
-            SELECT ae.*, e.emp_full_name, e.emp_department, e.emp_designation
-            FROM attendance_exceptions ae
-            LEFT JOIN employees e ON e.emp_code = ae.emp_code
-            WHERE ae.exception_date BETWEEN %s AND %s
-            ORDER BY ae.exception_date DESC, ae.emp_code
-        """,
+        'title': 'Attendance Exceptions Report',
+        'columns': EXCEPTIONS_RANGE_REPORT_COLUMNS,
+        'query_builder': _build_exceptions_range_query,
     },
     'leaves': {
-        'date_column': 'l.from_date',
+        'title': 'Leave Report',
+        'columns': LEAVES_RANGE_REPORT_COLUMNS,
         'query': """
-            SELECT l.*
+            SELECT l.emp_code,
+                   COALESCE(NULLIF(TRIM(e.emp_full_name), ''), l.emp_name) AS employee_name,
+                   l.emp_email, e.emp_department, e.emp_designation,
+                   l.leave_type, l.from_date, l.to_date, l.duration, l.leave_count,
+                   l.notes, l.status, l.applied_at, l.manager_code, l.manager_email,
+                   l.reviewed_by, l.reviewed_at, l.remarks
             FROM leaves l
+            LEFT JOIN employees e ON e.emp_code = l.emp_code
             WHERE l.from_date <= %s AND l.to_date >= %s
             ORDER BY l.from_date DESC, l.emp_code
         """,
@@ -896,10 +1098,42 @@ RANGE_REPORT_CONFIG = {
 }
 
 
-def _export_range_report(report_type, report_format, start_date, end_date, rows):
-    columns = list(rows[0].keys()) if rows else ['message']
-    values = [[serialize_row(row).get(column, '') for column in columns] for row in rows]
-    filename = f"{report_type}_report_{start_date}_{end_date}.{report_format}"
+def _build_report_rows(column_specs, rows):
+    """Map raw DB rows onto the configured HR columns, formatting each value."""
+    headers = [label for _key, label, _formatter in column_specs]
+    values = []
+    for row in rows:
+        formatted_row = []
+        for key, _label, formatter in column_specs:
+            format_value = REPORT_VALUE_FORMATTERS.get(formatter, _format_report_text)
+            formatted_row.append(format_value(row.get(key)))
+        values.append(formatted_row)
+    return headers, values
+
+
+def _proportional_col_widths(columns, values, available_width):
+    """
+    Share PDF width by typical content length so a 20-column HR export stays
+    readable instead of squeezing every column to the same sliver.
+    """
+    weights = []
+    for column_index, header in enumerate(columns):
+        content_lengths = [len(str(row[column_index])) for row in values]
+        typical_length = max(content_lengths) if content_lengths else 0
+        # Header text still needs to wrap in about two lines.
+        weights.append(min(max(typical_length, len(header) / 2, 6), 30))
+    total_weight = sum(weights)
+    return [available_width * weight / total_weight for weight in weights]
+
+
+def _export_range_report(report_type, report_format, start_date, end_date, rows, config):
+    column_specs = config['columns']
+    report_title = config.get('title', f"{report_type.title()} Report")
+    columns, values = _build_report_rows(column_specs, rows)
+    filename = (
+        f"{report_title.replace(' ', '_')}"
+        f"_{_format_report_date(start_date)}_to_{_format_report_date(end_date)}.{report_format}"
+    )
 
     if report_format == 'csv':
         output = StringIO()
@@ -915,12 +1149,21 @@ def _export_range_report(report_type, report_format, start_date, end_date, rows)
     if report_format == 'xlsx':
         workbook = openpyxl.Workbook()
         worksheet = workbook.active
-        worksheet.title = report_type.title()
+        worksheet.title = report_title[:31]
         worksheet.append(columns)
         for cell in worksheet[1]:
             cell.font = Font(bold=True)
         for row in values:
             worksheet.append([str(value) if value is not None else '' for value in row])
+        # Keep headers visible and filterable while HR scrolls a long export.
+        worksheet.freeze_panes = 'A2'
+        worksheet.auto_filter.ref = worksheet.dimensions
+        for column_index, header in enumerate(columns, start=1):
+            longest_value = max(
+                [len(header)] + [len(str(row[column_index - 1])) for row in values],
+                default=len(header),
+            )
+            worksheet.column_dimensions[get_column_letter(column_index)].width = min(max(longest_value + 2, 12), 45)
         output = BytesIO()
         workbook.save(output)
         output.seek(0)
@@ -934,13 +1177,16 @@ def _export_range_report(report_type, report_format, start_date, end_date, rows)
     output = BytesIO()
     document = SimpleDocTemplate(output, pagesize=landscape(letter), leftMargin=20, rightMargin=20, topMargin=24, bottomMargin=24)
     styles = getSampleStyleSheet()
-    story = [Paragraph(f"{report_type.title()} Report: {start_date} to {end_date}", styles['Title']), Spacer(1, 12)]
-    table_data = [[Paragraph(str(column).replace('_', ' ').title(), styles['BodyText']) for column in columns]]
+    story = [
+        Paragraph(f"{report_title}: {_format_report_date(start_date)} to {_format_report_date(end_date)}", styles['Title']),
+        Spacer(1, 12),
+    ]
+    table_data = [[Paragraph(f"<b>{column}</b>", styles['BodyText']) for column in columns]]
     for row in values:
         table_data.append([Paragraph(str(value if value is not None else ''), styles['BodyText']) for value in row])
     if values:
         available_width = landscape(letter)[0] - 40
-        table = Table(table_data, colWidths=[available_width / len(columns)] * len(columns), repeatRows=1)
+        table = Table(table_data, colWidths=_proportional_col_widths(columns, values, available_width), repeatRows=1)
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4f7bf7')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
@@ -978,12 +1224,14 @@ def download_range_report(current_user, report_type):
     cursor = conn.cursor()
     try:
         params = (end_date, start_date) if config.get('reverse_params') else (start_date, end_date)
-        cursor.execute(config['query'], params)
+        query_builder = config.get('query_builder')
+        query = query_builder(cursor) if query_builder else config['query']
+        cursor.execute(query, params)
         rows = cursor.fetchall()
     finally:
         cursor.close()
         return_connection(conn)
-    return _export_range_report(report_type, report_format, start_date.isoformat(), end_date.isoformat(), rows)
+    return _export_range_report(report_type, report_format, start_date, end_date, rows, config)
 
 @admin_bp.route('/field-visits/<int:field_visit_id>/tracking', methods=['GET'])
 @token_required

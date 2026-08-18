@@ -1,0 +1,172 @@
+/* Searchable manager picker for the Add/Edit Employee drawer. Colors are
+   literal to match EmployeeFormDrawer.css, which avoids depending on CSS
+   variables that may not be loaded when the drawer first renders. */
+
+.manager-select {
+  position: relative;
+  min-width: 0;
+}
+
+.manager-select__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #e5e7eb;
+  background: #f8f9fb;
+  border-radius: 9px;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: #8b929c;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.manager-select__trigger--filled {
+  color: #111827;
+}
+
+.manager-select__trigger:hover:not(:disabled) {
+  border-color: #cdd5e3;
+}
+
+.manager-select__trigger:focus-visible {
+  outline: none;
+  border-color: #4f7bf7;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px #eef3ff;
+}
+
+.manager-select__trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.manager-select__trigger-text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.manager-select__trigger-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manager-select__trigger-meta {
+  font-size: 11.5px;
+  color: #8b929c;
+  flex-shrink: 0;
+}
+
+.manager-select__arrow {
+  font-size: 9px;
+  color: #8b929c;
+  flex-shrink: 0;
+}
+
+.manager-select__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 14px 34px rgba(17, 44, 50, 0.16);
+  overflow: hidden;
+}
+
+.manager-select__search {
+  padding: 10px;
+  border-bottom: 1px solid #f0f2f6;
+}
+
+.manager-select__search input {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  background: #f8f9fb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #111827;
+  outline: none;
+}
+
+.manager-select__search input:focus {
+  border-color: #4f7bf7;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px #eef3ff;
+}
+
+.manager-select__list {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.manager-select__option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  border: none;
+  background: none;
+  border-radius: 7px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  color: #111827;
+  text-align: left;
+  cursor: pointer;
+}
+
+.manager-select__option--highlighted {
+  background: #f4f7ff;
+}
+
+.manager-select__option--active {
+  background: #eef3ff;
+  color: #2f5bd4;
+}
+
+.manager-select__option--clear {
+  color: #747b84;
+  font-size: 12.5px;
+}
+
+.manager-select__option-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.manager-select__option-meta {
+  font-size: 11.5px;
+  color: #8b929c;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.manager-select__empty {
+  margin: 0;
+  padding: 14px 10px;
+  font-size: 12.5px;
+  color: #8b929c;
+  text-align: center;
+}

@@ -1356,6 +1356,7 @@ function FawnixApp() {
               onSaveEmployee={handleSaveEmployee}
               onClose={closeEmployeePanel}
               shiftOptions={shiftOptions}
+              employees={employees}
             />
           ) : null}
           {employeeImportOpen ? (

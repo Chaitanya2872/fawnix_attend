@@ -1,4 +1,5 @@
 import type { EmployeeRow, ShiftOption } from '../../../types/admin'
+import ManagerSelect from './ManagerSelect'
 import './EmployeeFormDrawer.css'
 
 type NewEmployeeForm = {
@@ -32,6 +33,8 @@ type EmployeeFormDrawerProps = {
   onSaveEmployee: () => void
   onClose: () => void
   shiftOptions: ShiftOption[]
+  /** Directory used to pick a manager by name instead of typing a manager code. */
+  employees: EmployeeRow[]
 }
 
 const BLOOD_GROUP_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
@@ -60,7 +63,8 @@ export default function EmployeeFormDrawer({
   editStatus,
   onSaveEmployee,
   onClose,
-  shiftOptions
+  shiftOptions,
+  employees
 }: EmployeeFormDrawerProps) {
   const isAdd = mode === 'add'
 
@@ -197,12 +201,12 @@ export default function EmployeeFormDrawer({
                 </div>
               </div>
               <div className="emp-form-field emp-form-field--full">
-                <label htmlFor="new-emp-manager">Manager code</label>
-                <input
+                <label htmlFor="new-emp-manager">Manager</label>
+                <ManagerSelect
                   id="new-emp-manager"
                   value={newEmployee.emp_manager}
-                  onChange={(event) => updateNewEmployee('emp_manager', event.target.value)}
-                  placeholder="e.g. 2981"
+                  onChange={(empCode) => updateNewEmployee('emp_manager', empCode)}
+                  employees={employees}
                 />
               </div>
             </>
@@ -244,13 +248,13 @@ export default function EmployeeFormDrawer({
                   />
                 </div>
                 <div className="emp-form-field">
-                  <label htmlFor="edit-emp-manager">Manager code</label>
-                  <input
+                  <label htmlFor="edit-emp-manager">Manager</label>
+                  <ManagerSelect
                     id="edit-emp-manager"
-                    type="text"
                     value={editFormData.emp_manager || ''}
-                    onChange={(e) => setEditFormData({ ...editFormData, emp_manager: e.target.value })}
-                    placeholder="e.g. EMP001"
+                    onChange={(empCode) => setEditFormData({ ...editFormData, emp_manager: empCode })}
+                    employees={employees}
+                    excludeEmpCode={editingEmployee?.emp_code}
                   />
                 </div>
               </div>

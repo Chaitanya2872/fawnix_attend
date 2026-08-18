@@ -324,6 +324,15 @@ export default function EmployeeFormDrawer({
               </div>
               <div className="emp-form-row">
                 <div className="emp-form-field">
+                  <label htmlFor="edit-emp-joined">Joining date</label>
+                  <input
+                    id="edit-emp-joined"
+                    type="date"
+                    value={editFormData.emp_joined_date ? editFormData.emp_joined_date.slice(0, 10) : ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, emp_joined_date: e.target.value })}
+                  />
+                </div>
+                <div className="emp-form-field">
                   <label htmlFor="edit-emp-dob">Date of birth</label>
                   <input
                     id="edit-emp-dob"
@@ -332,19 +341,19 @@ export default function EmployeeFormDrawer({
                     onChange={(e) => setEditFormData({ ...editFormData, emp_date_of_birth: e.target.value })}
                   />
                 </div>
-                <div className="emp-form-field">
-                  <label htmlFor="edit-emp-blood-group">Blood group</label>
-                  <select
-                    id="edit-emp-blood-group"
-                    value={editFormData.emp_blood_group || ''}
-                    onChange={(e) => setEditFormData({ ...editFormData, emp_blood_group: e.target.value })}
-                  >
-                    <option value="">Select blood group</option>
-                    {BLOOD_GROUP_OPTIONS.map((group) => (
-                      <option key={group} value={group}>{group}</option>
-                    ))}
-                  </select>
-                </div>
+              </div>
+              <div className="emp-form-field emp-form-field--full">
+                <label htmlFor="edit-emp-blood-group">Blood group</label>
+                <select
+                  id="edit-emp-blood-group"
+                  value={editFormData.emp_blood_group || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, emp_blood_group: e.target.value })}
+                >
+                  <option value="">Select blood group</option>
+                  {BLOOD_GROUP_OPTIONS.map((group) => (
+                    <option key={group} value={group}>{group}</option>
+                  ))}
+                </select>
               </div>
             </>
           )}

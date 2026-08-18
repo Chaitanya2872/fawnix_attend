@@ -288,11 +288,19 @@ export function useEmployeesPanel({
       return
     }
 
+    // The code doubles as the record's identity, so an empty box would silently
+    // clear it rather than rename it.
+    if (editFormData.emp_code !== undefined && !String(editFormData.emp_code).trim()) {
+      setEditStatus('Employee ID cannot be empty.')
+      return
+    }
+
     setEditLoading(true)
     setEditStatus('Updating employee...')
 
     try {
       const allowedFields = new Set([
+        'emp_code',
         'emp_full_name',
         'emp_contact',
         'emp_email',

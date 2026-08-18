@@ -8,6 +8,7 @@ from flask import Blueprint, jsonify, Response, send_file
 from middleware.auth_middleware import token_required
 from middleware.admin_middleware import hr_or_devtester_required, api_log_viewer_required
 from services import admin_service
+from services import attendance_heatmap_service
 from services import employee_master_service
 from services import field_visit_service
 import csv
@@ -1265,6 +1266,53 @@ def get_all_day_summary(current_user):
 
     response, status_code = admin_service.get_all_day_summary(target_date)
 
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/attendance/heatmap', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_attendance_heatmap(current_user):
+    """
+    Monthly per-employee/per-day attendance status matrix for the Reports heatmap.
+
+    Query params:
+    - month (1-12, defaults to the current month)
+    - year (YYYY, defaults to the current year)
+    """
+    today = date.today()
+
+    try:
+        month = int(request.args.get('month') or today.month)
+        year = int(request.args.get('year') or today.year)
+    except (TypeError, ValueError):
+        return jsonify({
+            "success": False,
+            "message": "Invalid month or year. Use numeric values."
+        }), 400
+
+    response, status_code = attendance_heatmap_service.get_attendance_heatmap(month, year)
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/attendance/day', methods=['PATCH'])
+@token_required
+@hr_or_devtester_required
+def update_attendance_day(current_user):
+    """
+    Apply a manual attendance correction to a single employee-day.
+
+    Body: {"emp_code": "3051", "date": "2026-08-04", "status": "L"}
+    Status is one of P, S, WFH, A, L, H, O.
+    """
+    data = request.get_json(silent=True) or {}
+
+    response, status_code = attendance_heatmap_service.update_attendance_day(
+        emp_code=data.get('emp_code'),
+        target_date=data.get('date'),
+        status=data.get('status'),
+        updated_by_emp_code=current_user.get('emp_code'),
+    )
     return jsonify(response), status_code
 
 

@@ -214,7 +214,21 @@ export default function EmployeeFormDrawer({
             <>
               <div className="emp-form-field emp-form-field--full">
                 <label htmlFor="edit-emp-code">Employee ID</label>
-                <input id="edit-emp-code" type="text" value={editingEmployee?.emp_code || ''} disabled placeholder="Cannot change" />
+                <input
+                  id="edit-emp-code"
+                  type="text"
+                  value={editFormData.emp_code ?? editingEmployee?.emp_code ?? ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, emp_code: e.target.value })}
+                  placeholder="e.g. 3051"
+                />
+                {(editFormData.emp_code || '') !== (editingEmployee?.emp_code || '') ? (
+                  <p className="emp-form-hint emp-form-hint--warning">
+                    Changing the Employee ID renames it everywhere it is referenced — attendance, leaves,
+                    reporting lines and login. Letters, numbers, dots, dashes and underscores only.
+                  </p>
+                ) : (
+                  <p className="emp-form-hint">Used for login and across all linked records.</p>
+                )}
               </div>
               <div className="emp-form-field emp-form-field--full">
                 <label htmlFor="edit-emp-full-name">Full name</label>

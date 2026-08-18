@@ -806,3 +806,10 @@ export type AttendanceHeatmapApiResponse = {
   year?: number | string | null
   employees?: AttendanceHeatmapApiEmployee[] | null
 }
+
+/** Body returned by PATCH /api/admin/attendance/day. */
+export type AttendanceDayUpdateApiResponse = {
+  success?: boolean
+  message?: string | null
+  cell?: (AttendanceHeatmapApiCell & { emp_code?: string | null }) | null
+}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toDateInputValue } from '../../../utils/date/dateUtils'
 import type {
   AttendanceCellEditPayload,
+  AttendanceDayUpdateApiResponse,
   AttendanceCellSource,
   AttendanceHeatmapApiResponse,
   AttendanceHeatmapCell,
@@ -75,6 +76,33 @@ function normaliseHeatmapResponse(
     })
 
   return { month, year, dates, employees }
+}
+
+/**
+ * Reads a JSON body, but fails loudly when the response is not JSON at all —
+ * an unregistered API route falls through to the SPA shell, which would
+ * otherwise surface as "Unexpected token '<'".
+ */
+async function readJsonBody<T>(response: Response, endpointLabel: string): Promise<T> {
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.toLowerCase().includes('json')) {
+    throw new Error(`${endpointLabel} did not return JSON. Check that the backend route is available.`)
+  }
+  return (await response.json()) as T
+}
+
+/** Pulls a readable message out of an error response, ignoring HTML error pages. */
+async function readErrorMessage(response: Response, fallback: string) {
+  const raw = (await response.text()).trim()
+  if (!raw || raw.startsWith('<')) {
+    return fallback
+  }
+  try {
+    const parsed = JSON.parse(raw) as { message?: string }
+    return parsed.message || fallback
+  } catch {
+    return raw.slice(0, 200)
+  }
 }
 
 /** Returns a copy of the matrix with one cell replaced (or removed when cell is null). */
@@ -311,11 +339,10 @@ export function useReportsPanel({
       }
 
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(errorText || 'Failed to load attendance heatmap')
+        throw new Error(await readErrorMessage(response, 'Failed to load attendance heatmap'))
       }
 
-      const payload = (await response.json()) as AttendanceHeatmapApiResponse
+      const payload = await readJsonBody<AttendanceHeatmapApiResponse>(response, 'The attendance heatmap endpoint')
       if (heatmapRequestRef.current !== requestId) {
         return
       }
@@ -372,11 +399,23 @@ export function useReportsPanel({
       }
 
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(errorText || 'Failed to update attendance')
+        throw new Error(await readErrorMessage(response, 'Failed to update attendance'))
       }
 
-      setAttendanceHeatmapStatus('Attendance updated.')
+      // Repaint from the server's version of the cell so hours/remarks stay in sync.
+      const result = await readJsonBody<AttendanceDayUpdateApiResponse>(response, 'The attendance update endpoint')
+      const savedStatus = toStatusCode(result.cell?.status)
+      if (savedStatus) {
+        setAttendanceHeatmapData((current) => replaceHeatmapCell(current, employeeId, date, {
+          date,
+          status: savedStatus,
+          workingHours: toWorkingHours(result.cell?.working_hours),
+          source: toCellSource(result.cell?.source),
+          remarks: result.cell?.remarks ?? null
+        }))
+      }
+
+      setAttendanceHeatmapStatus(result.message || 'Attendance updated.')
       window.setTimeout(() => setAttendanceHeatmapStatus(''), 2500)
       return true
     } catch (error) {

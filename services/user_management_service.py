@@ -4,7 +4,13 @@ Handles employee create and delete operations.
 """
 
 import logging
+import re
 from datetime import datetime
+
+# pyrefly: ignore [missing-import]
+import psycopg2
+# pyrefly: ignore [missing-import]
+from psycopg2 import sql
 
 from config import UserRole
 from database.connection import get_db_connection, return_connection
@@ -40,6 +46,138 @@ def _serialize_row(row: dict) -> dict:
         if isinstance(value, datetime):
             row[key] = value.strftime("%Y-%m-%d %H:%M:%S")
     return row
+
+
+EMPLOYEE_CODE_PATTERN = re.compile(r'^[A-Za-z0-9._-]{1,50}$')
+
+# Some tables reference employees(emp_code) through a real foreign key (all of
+# them NO ACTION, none deferrable); others just hold the code in a plain VARCHAR.
+# The foreign keys are discovered from the catalog; these column names cover the
+# unconstrained ones, which no catalog can point us at.
+EMPLOYEE_CODE_REFERENCE_COLUMNS = (
+    'emp_code',
+    'manager_code',
+    'emp_manager',
+    'emp_informing_manager',
+    'approver_emp_code',
+    'assigned_to_emp_code',
+    'created_by_emp_code',
+    'updated_by_emp_code',
+    'reviewed_by',
+)
+
+# Append-only history keeps whatever code was current when the row was written.
+EMPLOYEE_CODE_RENAME_EXCLUDED_TABLES = {
+    'api_logs',
+    'database_audit_logs',
+    'schema_migrations',
+}
+
+
+def _find_employee_code_foreign_key_columns(cursor):
+    """Columns with a real foreign key onto employees(emp_code)."""
+    cursor.execute(
+        """
+        SELECT child.relname AS table_name, child_att.attname AS column_name
+        FROM pg_constraint con
+        JOIN pg_class child ON child.oid = con.conrelid
+        JOIN pg_class parent ON parent.oid = con.confrelid
+        JOIN pg_namespace ns ON ns.oid = child.relnamespace
+        JOIN LATERAL unnest(con.conkey, con.confkey) AS keys(child_attnum, parent_attnum) ON TRUE
+        JOIN pg_attribute child_att
+            ON child_att.attrelid = con.conrelid AND child_att.attnum = keys.child_attnum
+        JOIN pg_attribute parent_att
+            ON parent_att.attrelid = con.confrelid AND parent_att.attnum = keys.parent_attnum
+        WHERE con.contype = 'f'
+          AND ns.nspname = 'public'
+          AND parent.relname = 'employees'
+          AND parent_att.attname = 'emp_code'
+        """
+    )
+    return {(row['table_name'], row['column_name']) for row in cursor.fetchall()}
+
+
+def _find_employee_code_named_columns(cursor):
+    """Plain text columns that hold an employee code without a foreign key."""
+    cursor.execute(
+        """
+        SELECT c.table_name, c.column_name
+        FROM information_schema.columns c
+        JOIN information_schema.tables t
+            ON t.table_schema = c.table_schema
+           AND t.table_name = c.table_name
+        WHERE c.table_schema = 'public'
+          AND t.table_type = 'BASE TABLE'
+          AND c.column_name = ANY(%s)
+        """,
+        (list(EMPLOYEE_CODE_REFERENCE_COLUMNS),),
+    )
+
+    return {
+        (row['table_name'], row['column_name'])
+        for row in cursor.fetchall()
+        if row['table_name'] not in EMPLOYEE_CODE_RENAME_EXCLUDED_TABLES
+    }
+
+
+def _find_employee_code_reference_columns(cursor):
+    """
+    Every column that has to move when a code is renamed: declared foreign keys
+    plus the code-shaped columns that carry no constraint. employees.emp_code
+    itself is excluded - the primary key moves via the clone/delete dance in
+    _rename_employee_code.
+    """
+    references = _find_employee_code_foreign_key_columns(cursor) | _find_employee_code_named_columns(cursor)
+    references.discard(('employees', 'emp_code'))
+    return sorted(references)
+
+
+def _rename_employee_code(cursor, old_code: str, new_code: str):
+    """
+    Move an employee onto a new code, references and all.
+
+    Every foreign key onto employees(emp_code) is NO ACTION and non-deferrable,
+    so neither update order is legal on its own: repointing children first fails
+    because the new key does not exist yet, and moving the primary key first
+    orphans the children. So the row is cloned under the new code, references
+    are repointed while both keys exist, and the old row is dropped last.
+
+    Must run inside the caller's transaction - a partial rename would leave the
+    employee duplicated.
+    """
+    cursor.execute("SELECT * FROM employees WHERE emp_code = %s", (old_code,))
+    employee_row = cursor.fetchone()
+    if not employee_row:
+        raise ValueError(f"Employee {old_code} disappeared mid-rename")
+
+    columns = list(employee_row.keys())
+    values = [new_code if column == 'emp_code' else employee_row[column] for column in columns]
+
+    cursor.execute(
+        sql.SQL("INSERT INTO employees ({columns}) VALUES ({placeholders})").format(
+            columns=sql.SQL(', ').join(sql.Identifier(column) for column in columns),
+            placeholders=sql.SQL(', ').join(sql.Placeholder() for _ in columns),
+        ),
+        values,
+    )
+
+    renamed_counts = {}
+    for table_name, column_name in _find_employee_code_reference_columns(cursor):
+        cursor.execute(
+            sql.SQL("UPDATE {table} SET {column} = %s WHERE {column} = %s").format(
+                table=sql.Identifier(table_name),
+                column=sql.Identifier(column_name),
+            ),
+            (new_code, old_code),
+        )
+        if cursor.rowcount:
+            renamed_counts[f"{table_name}.{column_name}"] = cursor.rowcount
+
+    # Fails loudly if some reference was missed, rather than orphaning it.
+    cursor.execute("DELETE FROM employees WHERE emp_code = %s", (old_code,))
+    renamed_counts['employees.emp_code'] = 1
+
+    return renamed_counts
 
 
 def _get_employee_columns(cursor):
@@ -382,10 +520,37 @@ def update_employee(emp_code: str, payload: dict, updated_by_emp_code: str = Non
         # Prepare update fields
         update_fields = []
         update_values = []
-        
-        # Fields that should never be updated
-        protected_fields = {"emp_code"}
-        
+
+        # Renaming the employee code cascades to every table that references it.
+        requested_code = payload.get("emp_code")
+        new_emp_code = str(requested_code).strip() if requested_code is not None else ""
+        rename_requested = bool(new_emp_code) and new_emp_code != target_emp_code
+        renamed_counts = {}
+
+        if rename_requested:
+            if not EMPLOYEE_CODE_PATTERN.match(new_emp_code):
+                conn.rollback()
+                return {
+                    "success": False,
+                    "message": "Employee ID may only contain letters, numbers, dots, dashes or underscores (max 50)."
+                }, 400
+
+            cursor.execute(
+                "SELECT 1 FROM employees WHERE emp_code = %s",
+                (new_emp_code,)
+            )
+            if cursor.fetchone():
+                conn.rollback()
+                return {"success": False, "message": f"Employee ID '{new_emp_code}' is already in use"}, 409
+
+            cursor.execute(
+                "SELECT 1 FROM users WHERE emp_code = %s",
+                (new_emp_code,)
+            )
+            if cursor.fetchone():
+                conn.rollback()
+                return {"success": False, "message": f"Employee ID '{new_emp_code}' is already in use"}, 409
+
         # Check for email uniqueness if updating email
         if "emp_email" in payload:
             new_email = (payload.get("emp_email") or "").strip()
@@ -399,10 +564,9 @@ def update_employee(emp_code: str, payload: dict, updated_by_emp_code: str = Non
                     return {"success": False, "message": f"Email '{new_email}' is already in use"}, 409
         
         for key, value in payload.items():
-            if key in protected_fields:
-                conn.rollback()
-                return {"success": False, "message": f"Cannot update protected field: {key}"}, 400
-            
+            if key == "emp_code":
+                continue  # Handled by the rename path above.
+
             if key not in columns_meta:
                 continue  # Skip unknown fields
             
@@ -417,29 +581,56 @@ def update_employee(emp_code: str, payload: dict, updated_by_emp_code: str = Non
             update_fields.append(f"{key} = %s")
             update_values.append(value)
         
-        if not update_fields:
+        if not update_fields and not rename_requested:
             conn.rollback()
             return {"success": False, "message": "No valid fields to update"}, 400
-        
-        # Execute update
-        update_values.append(target_emp_code)
-        query = f"""
-            UPDATE employees
-            SET {', '.join(update_fields)}
-            WHERE emp_code = %s
-            RETURNING *
-        """
-        
-        cursor.execute(query, update_values)
-        updated_employee = cursor.fetchone()
+
+        if rename_requested:
+            try:
+                renamed_counts = _rename_employee_code(cursor, target_emp_code, new_emp_code)
+            except psycopg2.Error as db_error:
+                conn.rollback()
+                logger.error("Employee code rename failed: %s", db_error)
+                detail = str(db_error).strip().splitlines()[0]
+                return {
+                    "success": False,
+                    "message": f"Could not change the Employee ID: {detail}"
+                }, 409
+            target_emp_code = new_emp_code
+
+        if update_fields:
+            # Execute update
+            update_values.append(target_emp_code)
+            query = f"""
+                UPDATE employees
+                SET {', '.join(update_fields)}
+                WHERE emp_code = %s
+                RETURNING *
+            """
+
+            cursor.execute(query, update_values)
+            updated_employee = cursor.fetchone()
+        else:
+            cursor.execute("SELECT * FROM employees WHERE emp_code = %s", (target_emp_code,))
+            updated_employee = cursor.fetchone()
 
         conn.commit()
-        
-        return {
+
+        response = {
             "success": True,
             "message": "Employee updated successfully",
             "data": _serialize_row(updated_employee)
-        }, 200
+        }
+
+        if rename_requested:
+            response["message"] = f"Employee updated successfully. Employee ID changed to {new_emp_code}."
+            response["emp_code_renamed"] = {
+                "from": emp_code.strip(),
+                "to": new_emp_code,
+                "updated_references": renamed_counts,
+            }
+
+        return response, 200
     
     except Exception as e:
         conn.rollback()

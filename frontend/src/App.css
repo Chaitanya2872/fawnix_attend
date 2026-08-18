@@ -2223,6 +2223,17 @@ a {
   font-size: 12px;
 }
 
+/* Heatmap / weekly-trend switch inside the primary reports chart card. */
+.chart-view-switch {
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.chart-view-switch .dashboard-button {
+  padding: 6px 14px;
+  font-size: 12px;
+}
+
 .line-chart-shell {
   display: grid;
   gap: 14px;

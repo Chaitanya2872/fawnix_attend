@@ -1,5 +1,25 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { useEffect, useState } from 'react'
+import AttendanceHeatmap from './AttendanceHeatmap'
+import type { AttendanceHeatmapMatrix, AttendanceStatusCode } from '../../../types/admin'
+
 type Props = any
+
+/** Strictly typed slice of the (still loosely typed) page props used by the heatmap. */
+type ReportsHeatmapProps = {
+  attendanceHeatmapData: AttendanceHeatmapMatrix | null
+  attendanceHeatmapLoading: boolean
+  attendanceHeatmapStatus: string
+  attendanceHeatmapSavingCell: string | null
+  fetchAttendanceHeatmapData: (month: number, year: number) => Promise<void>
+  updateAttendanceCell: (employeeId: string, date: string, status: AttendanceStatusCode) => Promise<boolean>
+  canWriteAdminData: boolean
+}
+
+const MONTH_LABELS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+]
 
 export default function AdminReportsPage(props: Props) {
   const {
@@ -23,6 +43,26 @@ export default function AdminReportsPage(props: Props) {
     weeklyAttendanceTrend,
     weeklyTrendPoints
   } = props
+
+  const {
+    attendanceHeatmapData,
+    attendanceHeatmapLoading,
+    attendanceHeatmapStatus,
+    attendanceHeatmapSavingCell,
+    fetchAttendanceHeatmapData,
+    updateAttendanceCell,
+    canWriteAdminData
+  }: ReportsHeatmapProps = props
+
+  const [primaryView, setPrimaryView] = useState<'heatmap' | 'trend'>('heatmap')
+  const heatmapMonth = Number(attendanceReportMonth)
+  const heatmapYear = Number(attendanceReportYear)
+
+  useEffect(() => {
+    void fetchAttendanceHeatmapData(heatmapMonth, heatmapYear)
+  }, [fetchAttendanceHeatmapData, heatmapMonth, heatmapYear])
+
+  const heatmapMonthLabel = `${MONTH_LABELS[heatmapMonth - 1] || ''} ${heatmapYear}`.trim()
 
   return (
     <div className="admin-aligned-page admin-aligned-page--reports">
@@ -96,28 +136,60 @@ export default function AdminReportsPage(props: Props) {
         <div className="chart-card">
           <div className="chart-card-head">
             <div>
-              <strong>Weekly Attendance Trend</strong>
-              <span>Unique employee clock-ins across the last 7 days.</span>
+              <strong>{primaryView === 'heatmap' ? 'Attendance Heatmap' : 'Weekly Attendance Trend'}</strong>
+              <span>
+                {primaryView === 'heatmap'
+                  ? `Daily status per employee for ${heatmapMonthLabel}.${canWriteAdminData ? ' Click a cell to correct it.' : ''}`
+                  : 'Unique employee clock-ins across the last 7 days.'}
+              </span>
+            </div>
+            <div className="report-actions chart-view-switch">
+              <button
+                className={`${primaryView === 'heatmap' ? 'cta' : 'ghost'} dashboard-button`}
+                onClick={() => setPrimaryView('heatmap')}
+                type="button"
+              >
+                Heatmap
+              </button>
+              <button
+                className={`${primaryView === 'trend' ? 'cta' : 'ghost'} dashboard-button`}
+                onClick={() => setPrimaryView('trend')}
+                type="button"
+              >
+                Weekly Trend
+              </button>
             </div>
           </div>
-          <div className="line-chart-shell">
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="line-chart">
-              <polyline fill="none" stroke="#1fa7a4" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={weeklyTrendPoints} />
-              {weeklyAttendanceTrend.map((item: any, index: number) => {
-                const x = weeklyAttendanceTrend.length > 1 ? (index / (weeklyAttendanceTrend.length - 1)) * 100 : 50
-                const y = 100 - (item.count / maxWeeklyAttendance) * 100
-                return <circle key={item.dateKey} cx={x} cy={y} r="2.5" fill="#112c32" />
-              })}
-            </svg>
-            <div className="line-chart-labels">
-              {weeklyAttendanceTrend.map((item: any) => (
-                <div key={item.dateKey} className="chart-label-block">
-                  <strong>{item.count}</strong>
-                  <span>{item.label}</span>
-                </div>
-              ))}
+          {primaryView === 'heatmap' ? (
+            <AttendanceHeatmap
+              data={attendanceHeatmapData}
+              loading={attendanceHeatmapLoading}
+              statusMessage={attendanceHeatmapStatus}
+              savingCellKey={attendanceHeatmapSavingCell}
+              canEdit={canWriteAdminData}
+              onCellEdit={(employeeId, date, newStatus) => void updateAttendanceCell(employeeId, date, newStatus)}
+              onRefresh={() => void fetchAttendanceHeatmapData(heatmapMonth, heatmapYear)}
+            />
+          ) : (
+            <div className="line-chart-shell">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="line-chart">
+                <polyline fill="none" stroke="#1fa7a4" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={weeklyTrendPoints} />
+                {weeklyAttendanceTrend.map((item: any, index: number) => {
+                  const x = weeklyAttendanceTrend.length > 1 ? (index / (weeklyAttendanceTrend.length - 1)) * 100 : 50
+                  const y = 100 - (item.count / maxWeeklyAttendance) * 100
+                  return <circle key={item.dateKey} cx={x} cy={y} r="2.5" fill="#112c32" />
+                })}
+              </svg>
+              <div className="line-chart-labels">
+                {weeklyAttendanceTrend.map((item: any) => (
+                  <div key={item.dateKey} className="chart-label-block">
+                    <strong>{item.count}</strong>
+                    <span>{item.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
         <div className="chart-card">
           <div className="chart-card-head">

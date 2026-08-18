@@ -1,0 +1,345 @@
+/* Attendance heatmap grid used as the primary visual on the Reports page.
+   Colours stay inside the existing minimal/teal admin palette (#1fa7a4 brand,
+   #112c32 ink, #607076 muted, rgba(17, 44, 50, 0.08) hairlines). */
+
+.attendance-heatmap {
+  display: grid;
+  gap: 12px;
+}
+
+.attendance-heatmap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 11.5px;
+  color: #607076;
+}
+
+.attendance-heatmap-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.attendance-heatmap-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+/* ── Status scale ─────────────────────────────────────────────────────────── */
+.is-present { background: #2f9e70; }
+.is-site { background: #1fa7a4; }
+.is-wfh { background: #4a7fd4; }
+.is-absent { background: #d9534f; }
+.is-leave { background: #e0a53c; }
+.is-holiday { background: #9aa7ab; }
+.is-weekoff {
+  background: repeating-linear-gradient(
+    135deg,
+    #eef1f2,
+    #eef1f2 3px,
+    #dfe5e6 3px,
+    #dfe5e6 6px
+  );
+}
+
+.attendance-heatmap-scroll {
+  overflow: auto;
+  max-height: 560px;
+  border: 1px solid rgba(17, 44, 50, 0.08);
+  border-radius: 14px;
+  background: #fff;
+  transition: opacity 0.15s ease;
+}
+
+.attendance-heatmap-scroll.is-refreshing {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.attendance-heatmap-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+}
+
+/* ── Sticky header row + sticky employee column ───────────────────────────── */
+.attendance-heatmap-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f7f9f9;
+  border-bottom: 1px solid rgba(17, 44, 50, 0.08);
+}
+
+.attendance-heatmap-name-head,
+.attendance-heatmap-name-cell {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #fff;
+  text-align: left;
+  min-width: 180px;
+  max-width: 180px;
+  padding: 8px 12px;
+  border-right: 1px solid rgba(17, 44, 50, 0.08);
+}
+
+.attendance-heatmap-name-head {
+  z-index: 4;
+  background: #f7f9f9;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #607076;
+}
+
+.attendance-heatmap-name-cell {
+  font-weight: 400;
+  border-bottom: 1px solid rgba(17, 44, 50, 0.05);
+}
+
+.attendance-heatmap-name-cell strong {
+  display: block;
+  font-size: 12.5px;
+  color: #112c32;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attendance-heatmap-name-cell span {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #607076;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attendance-heatmap-day-head {
+  min-width: 26px;
+  padding: 6px 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #112c32;
+  line-height: 1.25;
+}
+
+.attendance-heatmap-day-head.is-weekend {
+  color: #94a2a6;
+}
+
+.attendance-heatmap-weekday {
+  display: block;
+  font-size: 9px;
+  font-weight: 500;
+  color: #94a2a6;
+}
+
+.attendance-heatmap-daynum {
+  display: block;
+}
+
+.attendance-heatmap-total-head,
+.attendance-heatmap-total-cell {
+  min-width: 56px;
+  padding: 6px 10px;
+  text-align: center;
+  font-size: 11.5px;
+  border-left: 1px solid rgba(17, 44, 50, 0.08);
+}
+
+.attendance-heatmap-total-head {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 10px;
+  color: #607076;
+}
+
+.attendance-heatmap-total-cell {
+  color: #112c32;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(17, 44, 50, 0.05);
+}
+
+.attendance-heatmap-cell-wrap {
+  padding: 2px;
+  border-bottom: 1px solid rgba(17, 44, 50, 0.05);
+}
+
+/* ── Cells ────────────────────────────────────────────────────────────────── */
+.attendance-heatmap-cell {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin: 0 auto;
+  border: none;
+  border-radius: 4px;
+  padding: 0;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.attendance-heatmap-cell.is-empty {
+  background: #f2f5f5;
+  border: 1px dashed rgba(17, 44, 50, 0.12);
+}
+
+.attendance-heatmap-cell.is-weekoff,
+.attendance-heatmap-cell.is-holiday {
+  color: #5c6b70;
+}
+
+.attendance-heatmap-cell.is-weekend-col:not(.is-manual) {
+  opacity: 0.92;
+}
+
+/* Manual corrections get a visible ring so audited cells stand out. */
+.attendance-heatmap-cell.is-manual {
+  box-shadow: inset 0 0 0 2px #112c32;
+}
+
+.attendance-heatmap-cell:hover:not(:disabled),
+.attendance-heatmap-cell:focus-visible {
+  outline: none;
+  transform: scale(1.18);
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px #1fa7a4;
+}
+
+.attendance-heatmap-cell.is-editing {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px #112c32;
+}
+
+.attendance-heatmap-cell.is-saving {
+  opacity: 0.5;
+}
+
+.attendance-heatmap-cell:disabled {
+  cursor: default;
+}
+
+.attendance-heatmap-status {
+  color: #607076;
+  font-size: 12px;
+}
+
+.attendance-heatmap-retry {
+  margin-left: 10px;
+}
+
+/* ── Hover tooltip ────────────────────────────────────────────────────────── */
+.attendance-heatmap-tooltip {
+  position: fixed;
+  z-index: 1200;
+  transform: translate(-50%, -100%);
+  display: grid;
+  gap: 2px;
+  min-width: 180px;
+  max-width: 260px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #112c32;
+  color: #fff;
+  font-size: 11.5px;
+  line-height: 1.45;
+  box-shadow: 0 12px 28px rgba(17, 44, 50, 0.28);
+  pointer-events: none;
+}
+
+.attendance-heatmap-tooltip strong {
+  font-size: 12.5px;
+}
+
+.attendance-heatmap-tooltip span {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.attendance-heatmap-tooltip-source {
+  margin-top: 4px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #7fd4d2 !important;
+}
+
+/* ── Inline status editor ─────────────────────────────────────────────────── */
+.attendance-heatmap-editor {
+  position: fixed;
+  z-index: 1201;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 2px;
+  min-width: 190px;
+  padding: 8px;
+  border: 1px solid rgba(17, 44, 50, 0.08);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 16px 36px rgba(17, 44, 50, 0.18);
+}
+
+.attendance-heatmap-editor-title {
+  margin: 2px 6px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #607076;
+}
+
+.attendance-heatmap-editor-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  padding: 7px 8px;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: #112c32;
+  text-align: left;
+  cursor: pointer;
+}
+
+.attendance-heatmap-editor-option:hover {
+  background: #f1f7f7;
+}
+
+.attendance-heatmap-editor-option.is-active {
+  background: #e6f4f4;
+  color: #12807e;
+  font-weight: 600;
+}
+
+/* ── Narrow viewports ─────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .attendance-heatmap-name-head,
+  .attendance-heatmap-name-cell {
+    min-width: 132px;
+    max-width: 132px;
+    padding: 8px;
+  }
+
+  .attendance-heatmap-scroll {
+    max-height: 440px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .attendance-heatmap-legend {
+    font-size: 11px;
+    gap: 4px 12px;
+  }
+}

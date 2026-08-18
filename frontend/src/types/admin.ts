@@ -738,3 +738,71 @@ export type FieldVisitTimelineItem = {
   trackedAt?: string
   trackingType?: string
 }
+
+/* ── Attendance heatmap ────────────────────────────────────────────────────
+   The monthly attendance summary is a per-employee / per-day status matrix
+   derived from raw login-logout logs. Cells can be corrected by hand, so each
+   one carries the source that produced it. */
+
+export type AttendanceStatusCode = 'P' | 'S' | 'WFH' | 'A' | 'L' | 'H' | 'O'
+
+export type AttendanceCellSource = 'auto' | 'manual'
+
+/** Normalised cell used by the UI (one employee, one day). */
+export type AttendanceHeatmapCell = {
+  date: string
+  status: AttendanceStatusCode
+  workingHours: number | null
+  source: AttendanceCellSource
+  remarks: string | null
+}
+
+export type AttendanceHeatmapEmployee = {
+  empCode: string
+  name: string
+  designation: string
+  department: string
+  /** Keyed by ISO date (yyyy-mm-dd); a missing key means "no data for that day". */
+  days: Record<string, AttendanceHeatmapCell>
+}
+
+export type AttendanceHeatmapMatrix = {
+  month: number
+  year: number
+  /** Every ISO date in the selected month, in order — the heatmap columns. */
+  dates: string[]
+  employees: AttendanceHeatmapEmployee[]
+}
+
+/** Body sent to PATCH /api/admin/attendance/day. */
+export type AttendanceCellEditPayload = {
+  emp_code: string
+  date: string
+  status: AttendanceStatusCode
+}
+
+/* Wire shapes returned by GET /api/admin/attendance/heatmap. Kept separate
+   from the normalised model above so the hook can defend against partial rows
+   without leaking optional fields into the component. */
+
+export type AttendanceHeatmapApiCell = {
+  date?: string | null
+  status?: string | null
+  working_hours?: number | string | null
+  source?: string | null
+  remarks?: string | null
+}
+
+export type AttendanceHeatmapApiEmployee = {
+  emp_code?: string | null
+  emp_full_name?: string | null
+  emp_designation?: string | null
+  emp_department?: string | null
+  days?: AttendanceHeatmapApiCell[] | null
+}
+
+export type AttendanceHeatmapApiResponse = {
+  month?: number | string | null
+  year?: number | string | null
+  employees?: AttendanceHeatmapApiEmployee[] | null
+}

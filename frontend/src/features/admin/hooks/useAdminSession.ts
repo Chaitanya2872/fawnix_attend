@@ -92,6 +92,48 @@ function parseTelemetryBody(body: BodyInit | null | undefined): unknown {
   return '[non-text body]'
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  if (!token) {
+    return null
+  }
+
+  try {
+    const payload = token.split('.')[1]
+    if (!payload) {
+      return null
+    }
+
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
+    const binary = atob(padded)
+    const decoded = decodeURIComponent(
+      Array.from(binary, (char) => `%${(`00${char.charCodeAt(0).toString(16)}`).slice(-2)}`).join('')
+    )
+    return JSON.parse(decoded) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function getAccessTokenExpiryMs(token: string): number | null {
+  const payload = decodeJwtPayload(token)
+  const expiresAt = payload?.exp
+  if (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt)) {
+    return null
+  }
+
+  return expiresAt * 1000
+}
+
+function isAccessTokenExpiringSoon(token: string, bufferMs = 60_000): boolean {
+  const expiryMs = getAccessTokenExpiryMs(token)
+  if (expiryMs == null) {
+    return false
+  }
+
+  return Date.now() >= expiryMs - bufferMs
+}
+
 function toFriendlyRequestSummary(method: string, path: string) {
   return `I called ${method.toUpperCase()} ${path}`
 }
@@ -267,7 +309,28 @@ export function useAdminSession({ onSessionCleared, onSessionExpired }: UseAdmin
     tokenOverride?: string,
     allowRetry = true
   ) => {
-    const token = tokenOverride || accessToken
+    let token = tokenOverride || accessToken
+
+    if (token && !tokenOverride && isAccessTokenExpiringSoon(token, 60_000)) {
+      try {
+        const freshToken = await refreshAccessToken()
+        if (freshToken) {
+          token = freshToken
+          options = {
+            ...options,
+            headers: {
+              ...(options.headers || {}),
+              Authorization: `Bearer ${freshToken}`
+            }
+          }
+        }
+      } catch {
+        clearSession()
+        onSessionExpired('Session expired. Please log in again.')
+        throw new Error('Session expired. Please log in again.')
+      }
+    }
+
     const headers = new Headers(options.headers || {})
     const method = (options.method || 'GET').toUpperCase()
     const requestPayload = parseTelemetryBody(options.body)

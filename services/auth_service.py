@@ -10,7 +10,7 @@ import hashlib
 import secrets
 import uuid
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from config import Config
 from database.connection import get_db_connection
 import logging
@@ -22,16 +22,39 @@ ACCESS_TOKEN_EXPIRE_MINUTES = Config.JWT_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = Config.REFRESH_TOKEN_EXPIRE_DAYS
 
 
+def _normalize_datetime(value):
+    """Coerce DB timestamps to UTC-aware datetimes before comparing expiry."""
+    if value is None:
+        return None
+
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+
+    return value
+
+
 def create_jwt_token(emp_code: str, role: str, email: str, user_id: int | None = None) -> str:
     """
     Create short-lived JWT access token (30 minutes)
     """
+    issued_at = datetime.now(timezone.utc)
     payload = {
         "sub": emp_code,
         "role": role,
         "email": email,
-        "iat": datetime.utcnow(),
-        "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        "iat": issued_at,
+        "exp": issued_at + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
         "type": "access"
     }
 
@@ -72,7 +95,7 @@ def create_refresh_token(emp_code: str, email: str, user_agent: str = None,
         token_family = str(uuid.uuid4())
         
         # Calculate expiration
-        issued_at = datetime.now()
+        issued_at = datetime.now(timezone.utc)
         expires_at = issued_at + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
         
         # FIX: Convert device_info to JSON string if present
@@ -159,8 +182,9 @@ def verify_refresh_token(token: str) -> dict:
             
             raise Exception(f"Token revoked: {reason}")
         
-        # Check if expired
-        if token_data['expires_at'] < datetime.now():
+        # Check if expired using timezone-aware comparisons to avoid false invalidation
+        expires_at = _normalize_datetime(token_data['expires_at'])
+        if expires_at is None or expires_at <= datetime.now(timezone.utc):
             logger.warning("⚠️  Refresh token expired")
             raise Exception("Refresh token expired")
         
@@ -244,7 +268,7 @@ def rotate_refresh_token(old_token: str, user_agent: str = None,
         new_refresh_token = secrets.token_urlsafe(64)
         new_token_hash = hashlib.sha256(new_refresh_token.encode()).hexdigest()
         
-        issued_at = datetime.now()
+        issued_at = datetime.now(timezone.utc)
         expires_at = issued_at + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
         
         # Store new refresh token with link to old one

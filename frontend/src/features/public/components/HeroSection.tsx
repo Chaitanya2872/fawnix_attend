@@ -1,22 +1,23 @@
 type HeroSectionProps = {
-  onGetStarted: () => void
-}
+  onGetStarted: () => void;
+  onViewTour: () => void;
+};
 
-export function HeroSection({ onGetStarted }: HeroSectionProps) {
+export function HeroSection({ onGetStarted, onViewTour }: HeroSectionProps) {
   return (
     <div className="hero-grid">
       <div className="hero-copy">
         <p className="eyebrow">Modern attendance and field operations</p>
         <h1>Make every workday traceable, compliant, and effortless.</h1>
         <p className="lead">
-          Fawnix unifies attendance, activities, approvals, and on-field tracking into a
-          single mobile-first experience for teams that move.
+          Fawnix unifies attendance, activities, approvals, and on-field
+          tracking into a single mobile-first experience for teams that move.
         </p>
         <div className="hero-actions">
           <button className="cta" onClick={onGetStarted} type="button">
             Get Started
           </button>
-          <button className="ghost" type="button">
+          <button className="ghost" onClick={onViewTour} type="button">
             View Product Tour
           </button>
         </div>
@@ -68,9 +69,11 @@ export function HeroSection({ onGetStarted }: HeroSectionProps) {
         </div>
         <div className="panel-card subtle">
           <h4>Built for mobile teams</h4>
-          <p>Works for sales, logistics, service crews, and retail operations.</p>
+          <p>
+            Works for sales, logistics, service crews, and retail operations.
+          </p>
         </div>
       </div>
     </div>
-  )
+  );
 }

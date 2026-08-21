@@ -1,20 +1,23 @@
-import { useNavigate } from 'react-router-dom'
-import { appRoutes } from '../../../app/config/routes'
-import { SectionHeader } from '../../../components/common/SectionHeader'
-import { SiteFooter } from '../../../components/layout/SiteFooter'
-import { MarketingNav } from '../../../components/navigation/MarketingNav'
-import { DeleteAccountCard } from '../components/DeleteAccountCard'
-import { HeroSection } from '../components/HeroSection'
-import { features, useCases, workflowSteps } from '../constants/publicContent'
+import { useNavigate } from "react-router-dom";
+import { appRoutes } from "../../../app/config/routes";
+import { SectionHeader } from "../../../components/common/SectionHeader";
+import { SiteFooter } from "../../../components/layout/SiteFooter";
+import { MarketingNav } from "../../../components/navigation/MarketingNav";
+import { DeleteAccountCard } from "../components/DeleteAccountCard";
+import { HeroSection } from "../components/HeroSection";
+import { features, useCases, workflowSteps } from "../constants/publicContent";
 
 export default function HomePage() {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
   return (
     <div className="page">
       <header className="hero" data-animate>
         <MarketingNav onRequestDemo={() => navigate(appRoutes.admin)} />
-        <HeroSection onGetStarted={() => navigate(appRoutes.admin)} />
+        <HeroSection
+          onGetStarted={() => navigate(appRoutes.admin)}
+          onViewTour={() => navigate(appRoutes.tour)}
+        />
       </header>
 
       <section id="use-cases" className="section" data-animate>
@@ -50,7 +53,10 @@ export default function HomePage() {
       </section>
 
       <section id="workflow" className="section" data-animate>
-        <SectionHeader eyebrow="Workflow" title="One simple flow for every workday." />
+        <SectionHeader
+          eyebrow="Workflow"
+          title="One simple flow for every workday."
+        />
         <div className="timeline">
           {workflowSteps.map((step, index) => (
             <div key={step.title} className="timeline-step">
@@ -79,8 +85,8 @@ export default function HomePage() {
           <div className="panel-card">
             <h3>Operational confidence</h3>
             <p>
-              Fawnix keeps compliance simple by capturing the right data automatically and
-              presenting it clearly for approvals.
+              Fawnix keeps compliance simple by capturing the right data
+              automatically and presenting it clearly for approvals.
             </p>
             <div className="chip-row">
               <span className="chip">Audit trail</span>
@@ -102,5 +108,5 @@ export default function HomePage() {
 
       <SiteFooter />
     </div>
-  )
+  );
 }

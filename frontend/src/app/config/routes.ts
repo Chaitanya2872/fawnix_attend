@@ -1,6 +1,7 @@
 export const appRoutes = {
-  home: '/',
-  admin: '/admin',
-  privacy: '/privacy-policy',
-  privacyAlias: '/privacy'
-} as const
+  home: "/",
+  tour: "/product-tour",
+  admin: "/admin",
+  privacy: "/privacy-policy",
+  privacyAlias: "/privacy",
+} as const;

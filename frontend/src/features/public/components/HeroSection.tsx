@@ -1,9 +1,20 @@
+import { usePublicStats } from "../hooks/usePublicStats";
+
 type HeroSectionProps = {
   onGetStarted: () => void;
   onViewTour: () => void;
 };
 
+/**
+ * Overview hero. The "Today at a glance" panel is wired to
+ * GET /api/public/stats, so the numbers a visitor sees are the same numbers the
+ * workspace is reporting right now. When the API is unreachable the hook hands
+ * back a neutral fallback so the layout never collapses.
+ */
 export function HeroSection({ onGetStarted, onViewTour }: HeroSectionProps) {
+  const stats = usePublicStats();
+  const peak = Math.max(...stats.rates, 1);
+
   return (
     <div className="hero-grid">
       <div className="hero-copy">
@@ -23,16 +34,16 @@ export function HeroSection({ onGetStarted, onViewTour }: HeroSectionProps) {
         </div>
         <div className="hero-stats">
           <div>
-            <span>99.9%</span>
-            <small>attendance integrity</small>
+            <span>{stats.rateLabel}</span>
+            <small>attendance today</small>
           </div>
           <div>
-            <span>1 app</span>
-            <small>for HR, managers, and teams</small>
+            <span>{stats.headcountLabel}</span>
+            <small>people on the roll</small>
           </div>
           <div>
-            <span>Realtime</span>
-            <small>location and activity logs</small>
+            <span>{stats.attendanceRecords.toLocaleString()}</span>
+            <small>records captured</small>
           </div>
         </div>
       </div>
@@ -40,29 +51,64 @@ export function HeroSection({ onGetStarted, onViewTour }: HeroSectionProps) {
         <div className="panel-card">
           <div className="panel-header">
             <h3>Today at a glance</h3>
-            <span className="status">Live</span>
+            <span className="status" data-live={stats.isLive || undefined}>
+              {stats.isLive ? "Live" : "Preview"}
+            </span>
           </div>
           <div className="panel-body">
             <div className="panel-row">
               <div>
-                <strong>128</strong>
+                <strong>{stats.presentLabel}</strong>
                 <span>checked in</span>
               </div>
               <div>
-                <strong>14</strong>
+                <strong>{stats.lateLabel}</strong>
                 <span>late arrivals</span>
               </div>
               <div>
-                <strong>9</strong>
+                <strong>{stats.approvalsLabel}</strong>
                 <span>pending approvals</span>
               </div>
             </div>
+
+            <div className="panel-spark">
+              <div className="panel-spark-head">
+                <p>Attendance, last 7 days</p>
+                <em data-dir={stats.weekDelta >= 0 ? "up" : "down"}>
+                  {stats.weekDelta >= 0 ? "▲" : "▼"} {stats.deltaLabel}
+                </em>
+              </div>
+              <div className="panel-spark-bars">
+                {stats.rates.map((rate, index) => (
+                  <i
+                    key={index}
+                    className={
+                      index === stats.rates.length - 1 ? "is-today" : undefined
+                    }
+                    style={
+                      {
+                        "--h": `${Math.max(8, (rate / peak) * 100)}%`,
+                      } as React.CSSProperties
+                    }
+                    title={`${stats.days[index]} · ${rate}%`}
+                  />
+                ))}
+              </div>
+              <div className="panel-spark-days">
+                {stats.days.map((day, index) => (
+                  <small key={`${day}-${index}`}>{day}</small>
+                ))}
+              </div>
+            </div>
+
             <div className="panel-activity">
-              <p>Field visits in progress</p>
+              <p>Happening right now</p>
               <div className="chip-row">
-                <span className="chip">Branch visit · 08:45</span>
-                <span className="chip">Lead demo · 09:20</span>
-                <span className="chip">Break · 10:10</span>
+                <span className="chip">
+                  {stats.inFieldLabel} field visits live
+                </span>
+                <span className="chip">{stats.avgHoursLabel} avg. hours</span>
+                <span className="chip">{stats.departments} departments</span>
               </div>
             </div>
           </div>

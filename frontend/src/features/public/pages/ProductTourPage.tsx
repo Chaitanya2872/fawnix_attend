@@ -1,586 +1,624 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { appRoutes } from "../../../app/config/routes";
 import { SiteFooter } from "../../../components/layout/SiteFooter";
 import fawnixBg from "../../../assets/fawnix_bg.png";
+import { TourHeroScene } from "../components/TourHeroScene";
+import { TourScene } from "../components/TourScenes";
+import {
+  tourCapabilities,
+  tourChapters,
+  tourDayLoop,
+  tourMetrics,
+  tourOutcomes,
+} from "../constants/tourContent";
+import {
+  useCarousel,
+  useCountUp,
+  usePointer3d,
+  useReveal,
+} from "../hooks/useMotion";
+import { usePublicStats, type PublicStatsView } from "../hooks/usePublicStats";
 
-type DemoKind =
-  | "overview"
-  | "people"
-  | "attendance"
-  | "approvals"
-  | "field"
-  | "reports";
-type TourStep = {
-  number: string;
-  short: string;
-  eyebrow: string;
-  title: string;
-  body: string;
-  tags: string[];
-  demo: DemoKind;
-};
+import "./ProductTourPage.css";
 
-const steps: TourStep[] = [
-  {
-    number: "01",
-    short: "Overview",
-    eyebrow: "The signal, first",
-    title: "A living view of the workday.",
-    body: "Fawnix brings attendance, field movement, approvals, and risk signals into one surface so the next decision is always close at hand.",
-    tags: ["Live attendance", "Exceptions", "Field activity"],
-    demo: "overview",
-  },
-  {
-    number: "02",
-    short: "People",
-    eyebrow: "People, organised",
-    title: "Every person in the right context.",
-    body: "Search the employee directory, understand reporting lines, and move from a record to an action without losing the thread.",
-    tags: ["Employee directory", "Profiles", "Departments"],
-    demo: "people",
-  },
-  {
-    number: "03",
-    short: "Attendance",
-    eyebrow: "Evidence, not guesswork",
-    title: "The daily picture, made reliable.",
-    body: "Clock-ins, late arrivals, working hours, missed logins, and location evidence come together in a workflow designed for speed.",
-    tags: ["Clock-ins", "Working hours", "Reminders"],
-    demo: "attendance",
-  },
-  {
-    number: "04",
-    short: "Approvals",
-    eyebrow: "Less chasing",
-    title: "Resolve what needs attention.",
-    body: "Prioritise pending leave and exceptions, inspect the story behind each request, and keep every decision connected to an audit trail.",
-    tags: ["Leave queue", "Exception review", "Audit trail"],
-    demo: "approvals",
-  },
-  {
-    number: "05",
-    short: "Field work",
-    eyebrow: "For teams that move",
-    title: "See the journey, not just the timestamp.",
-    body: "Visit progress, destinations, routes, distance, and duration form a visual record of work happening beyond the office.",
-    tags: ["Live visits", "Routes", "Location signals"],
-    demo: "field",
-  },
-  {
-    number: "06",
-    short: "Insights",
-    eyebrow: "Patterns into action",
-    title: "Data you can actually explain.",
-    body: "Compare trends, scan heatmaps, measure workforce efficiency, and export a view that makes the next conversation easier.",
-    tags: ["Heatmaps", "Trends", "Exports"],
-    demo: "reports",
-  },
-];
+/* ── small building blocks ────────────────────────────────────────────────── */
 
-function TourNav({ onEnter }: { onEnter: () => void }) {
+function Reveal({
+  children,
+  className = "",
+  delay = 0,
+  as: Tag = "div",
+}: {
+  children: ReactNode;
+  className?: string;
+  delay?: number;
+  as?: "div" | "section" | "header" | "footer";
+}) {
+  const { ref, visible } = useReveal<HTMLDivElement>();
   return (
-    <nav className="tour-nav">
-      <a className="tour-brand" href={appRoutes.home}>
-        <img src={fawnixBg} alt="Fawnix" />
+    <Tag
+      ref={ref as React.Ref<HTMLDivElement>}
+      className={`tr-reveal ${className}`.trim()}
+      data-visible={visible || undefined}
+      style={
+        delay ? ({ "--d": `${delay}ms` } as React.CSSProperties) : undefined
+      }
+    >
+      {children}
+    </Tag>
+  );
+}
+
+function MetricValue({
+  value,
+  suffix,
+  decimals,
+  active,
+  delay,
+}: {
+  value: number;
+  suffix: string;
+  decimals: number;
+  active: boolean;
+  delay: number;
+}) {
+  const shown = useCountUp(value, active, 1400 + delay);
+  return (
+    <strong>
+      {shown.toFixed(decimals)}
+      <span>{suffix}</span>
+    </strong>
+  );
+}
+
+/**
+ * The metrics band mirrors real workspace numbers when the API answers, and
+ * keeps the curated copy as a shape-compatible fallback otherwise.
+ */
+function buildLiveMetrics(stats: PublicStatsView) {
+  if (!stats.isLive) return tourMetrics;
+
+  return [
+    {
+      value: stats.attendanceRate,
+      suffix: "%",
+      decimals: 1,
+      label: "Attendance today",
+      note: `${stats.presentLabel} of ${stats.headcountLabel} verified in`,
+    },
+    {
+      value: stats.headcount,
+      suffix: "",
+      decimals: 0,
+      label: "People on the roll",
+      note: `${stats.departments} departments connected`,
+    },
+    {
+      value: stats.attendanceRecords,
+      suffix: "",
+      decimals: 0,
+      label: "Attendance records",
+      note: "Every clock-in retained",
+    },
+    {
+      value: stats.decisionsRecorded,
+      suffix: "",
+      decimals: 0,
+      label: "Decisions audited",
+      note: `${stats.approvalsLabel} awaiting review now`,
+    },
+  ];
+}
+
+/* ── top navigation ───────────────────────────────────────────────────────── */
+
+function TourNav({
+  onEnter,
+  stats,
+}: {
+  onEnter: () => void;
+  stats: PublicStatsView;
+}) {
+  const [lifted, setLifted] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setLifted(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  return (
+    <nav className="tr-nav" data-lifted={lifted || undefined}>
+      <a className="tr-nav-brand" href={appRoutes.home}>
+        <img src={fawnixBg} alt="" />
         <span>
           <strong>Fawnix</strong>
           <small>Product tour</small>
         </span>
       </a>
-      <div className="tour-nav-center">
-        <span>01</span>
-        <i />
-        <span>06</span>
-        <small>Connected workspace</small>
+
+      <div className="tr-nav-live" data-live={stats.isLive || undefined}>
+        <i aria-hidden="true" />
+        <span>
+          <b>{stats.rateLabel}</b> attendance today
+        </span>
+        <small>
+          {stats.presentLabel}/{stats.headcountLabel} in
+        </small>
       </div>
-      <div className="tour-nav-actions">
+
+      <div className="tr-nav-actions">
         <a href={appRoutes.home}>Overview</a>
-        <button className="tour-nav-enter" onClick={onEnter} type="button">
-          Enter workspace <b>↗</b>
+        <button className="tr-btn is-solid" onClick={onEnter} type="button">
+          Enter workspace
+          <svg viewBox="0 0 14 14" aria-hidden="true">
+            <path d="M3 11 11 3M5 3h6v6" />
+          </svg>
         </button>
       </div>
     </nav>
   );
 }
 
-function WindowChrome({
-  children,
-  label,
-}: {
-  children: ReactNode;
-  label: string;
-}) {
-  return (
-    <div className="tour-window">
-      <div className="tour-window-bar">
-        <span className="window-dots">
-          <i />
-          <i />
-          <i />
-        </span>
-        <small>{label}</small>
-        <b>•••</b>
-      </div>
-      {children}
-    </div>
-  );
-}
+/* ── page ─────────────────────────────────────────────────────────────────── */
 
-function DemoScreen({ type }: { type: DemoKind }) {
-  if (type === "overview")
-    return (
-      <WindowChrome label="overview / today">
-        <div className="demo-overview">
-          <aside className="demo-rail">
-            <img src={fawnixBg} alt="" />
-            <span className="rail-active" />
-            <span />
-            <span />
-            <span />
-            <em />
-          </aside>
-          <div className="demo-work">
-            <div className="demo-heading">
-              <div>
-                <small>Wednesday, 20 August</small>
-                <strong>Good morning, Admin</strong>
-              </div>
-              <button>Refresh ↻</button>
-            </div>
-            <div className="demo-stat-row">
-              <div>
-                <small>Attendance rate</small>
-                <strong>94.2%</strong>
-                <em>↗ 6.4%</em>
-              </div>
-              <div>
-                <small>Present today</small>
-                <strong>
-                  128 <sup>/ 136</sup>
-                </strong>
-                <em className="soft">Live now</em>
-              </div>
-              <div>
-                <small>Needs attention</small>
-                <strong>09</strong>
-                <em className="warm">4 pending</em>
-              </div>
-            </div>
-            <div className="demo-overview-lower">
-              <div className="demo-panel demo-bars">
-                <header>
-                  <strong>Attendance rhythm</strong>
-                  <small>
-                    Last 7 days · <b>Today</b>
-                  </small>
-                </header>
-                <div className="bars">
-                  {[52, 68, 58, 82, 71, 89, 96].map((height, index) => (
-                    <span key={height} style={{ height: `${height}%` }}>
-                      <i>{[108, 119, 112, 126, 121, 131, 128][index]}</i>
-                    </span>
-                  ))}
-                </div>
-                <footer>
-                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Today"].map(
-                    (day) => (
-                      <small key={day}>{day}</small>
-                    ),
-                  )}
-                </footer>
-              </div>
-              <div className="demo-panel demo-alerts">
-                <header>
-                  <strong>Live signals</strong>
-                  <small>View all</small>
-                </header>
-                <p>
-                  <i className="signal-red" />
-                  <b>Rohan Mehta</b>
-                  <span>late arrival · 12m</span>
-                </p>
-                <p>
-                  <i className="signal-blue" />
-                  <b>3 field visits</b>
-                  <span>in progress now</span>
-                </p>
-                <p>
-                  <i className="signal-amber" />
-                  <b>4 approvals</b>
-                  <span>waiting for review</span>
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </WindowChrome>
-    );
-  if (type === "people")
-    return (
-      <WindowChrome label="people / directory">
-        <div className="demo-window-content">
-          <div className="demo-heading demo-heading-line">
-            <div>
-              <small>Workforce</small>
-              <strong>Employee directory</strong>
-            </div>
-            <button className="demo-primary">+ Add employee</button>
-          </div>
-          <div className="demo-filter-row">
-            <span>⌕ Search people, teams, roles...</span>
-            <b>All departments⌄</b>
-            <b>Active⌄</b>
-          </div>
-          <div className="demo-people-grid">
-            {[
-              ["AK", "Anika Kapoor", "Operations"],
-              ["RM", "Rohan Mehta", "Sales"],
-              ["NS", "Nisha Shah", "Human Resources"],
-              ["VP", "Vikram Paul", "Field Team"],
-              ["SK", "Sara Khan", "Finance"],
-              ["DT", "Dev Thomas", "Technology"],
-            ].map(([initials, name, department], index) => (
-              <div className="demo-person-card" key={name}>
-                <b className={`demo-avatar demo-avatar-${index % 3}`}>
-                  {initials}
-                </b>
-                <div>
-                  <strong>{name}</strong>
-                  <small>{department}</small>
-                </div>
-                <i>•••</i>
-                <span className="person-active">Active</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </WindowChrome>
-    );
-  if (type === "attendance")
-    return (
-      <WindowChrome label="attendance / daily records">
-        <div className="demo-window-content">
-          <div className="demo-heading demo-heading-line">
-            <div>
-              <small>Operations · Wednesday, 20 August</small>
-              <strong>Attendance records</strong>
-            </div>
-            <button>Export ↓</button>
-          </div>
-          <div className="demo-attendance-kpis">
-            <span>
-              <b>128</b>Present
-            </span>
-            <span>
-              <b>04</b>Late arrivals
-            </span>
-            <span>
-              <b>03</b>Missed logins
-            </span>
-            <span>
-              <b>08h 24m</b>Avg. hours
-            </span>
-          </div>
-          <div className="demo-table">
-            <div className="demo-table-head">
-              <i>Employee</i>
-              <i>Clock in</i>
-              <i>Status</i>
-              <i>Hours</i>
-            </div>
-            {[
-              "Anika Kapoor",
-              "Rohan Mehta",
-              "Nisha Shah",
-              "Vikram Paul",
-              "Sara Khan",
-            ].map((name, index) => (
-              <div className="demo-table-row" key={name}>
-                <strong>
-                  <b className="mini-avatar">
-                    {name
-                      .split(" ")
-                      .map((part) => part[0])
-                      .join("")}
-                  </b>
-                  {name}
-                </strong>
-                <span>{index < 3 ? `09:0${index}` : "--:--"}</span>
-                <span className={index === 3 ? "demo-warning" : "demo-good"}>
-                  {index === 3 ? "Late" : index === 4 ? "Not in" : "Present"}
-                </span>
-                <small>{index < 4 ? "8h 42m" : "—"}</small>
-              </div>
-            ))}
-          </div>
-        </div>
-      </WindowChrome>
-    );
-  if (type === "approvals")
-    return (
-      <WindowChrome label="inbox / approvals">
-        <div className="demo-window-content">
-          <div className="demo-heading demo-heading-line">
-            <div>
-              <small>Workflows</small>
-              <strong>
-                Review centre <em>09</em>
-              </strong>
-            </div>
-            <button>Filter ≡</button>
-          </div>
-          <div className="demo-approval-layout">
-            <div className="approval-list">
-              {[
-                ["RM", "Rohan Mehta", "Casual leave · 12-13 Aug"],
-                ["NS", "Nisha Shah", "Late arrival · 10:24 AM"],
-                ["VP", "Vikram Paul", "Early leave · 4:30 PM"],
-              ].map(([initials, name, detail], index) => (
-                <button
-                  className={`approval-item ${index === 0 ? "selected" : ""}`}
-                  key={name}
-                >
-                  <b>{initials}</b>
-                  <span>
-                    <strong>{name}</strong>
-                    <small>{detail}</small>
-                  </span>
-                  <i>›</i>
-                </button>
-              ))}
-            </div>
-            <div className="approval-detail">
-              <small>LEAVE REQUEST · 01 OF 09</small>
-              <h3>Casual leave</h3>
-              <p>
-                Rohan Mehta <span>· Sales · RM-104</span>
-              </p>
-              <div className="approval-facts">
-                <b>
-                  <small>Requested dates</small>12 — 13 Aug 2026
-                </b>
-                <b>
-                  <small>Reporting manager</small>Priya Menon
-                </b>
-              </div>
-              <div className="approval-note">
-                “Family commitment. Work has been handed over to the regional
-                team.”
-              </div>
-              <div className="approval-actions">
-                <button>Decline</button>
-                <button className="demo-primary">Approve request</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </WindowChrome>
-    );
-  if (type === "field")
-    return (
-      <WindowChrome label="field work / live route">
-        <div className="demo-map">
-          <div className="map-streets" />
-          <div className="map-route" />
-          <b className="map-pin map-pin-a" />
-          <b className="map-pin map-pin-b" />
-          <div className="map-label map-label-a">Start · 09:20</div>
-          <div className="map-label map-label-b">Destination</div>
-          <div className="map-visit-card">
-            <span className="live-pill">
-              <i />
-              Live visit
-            </span>
-            <strong>Branch visit</strong>
-            <small>Vikram Paul · Retail team</small>
-            <div>
-              <b>12.4 km</b>
-              <b>2h 18m</b>
-              <b>4 stops</b>
-            </div>
-          </div>
-        </div>
-      </WindowChrome>
-    );
-  return (
-    <WindowChrome label="insights / reports">
-      <div className="demo-window-content">
-        <div className="demo-heading demo-heading-line">
-          <div>
-            <small>Insights · Attendance</small>
-            <strong>Performance, in perspective</strong>
-          </div>
-          <button>August 2026⌄</button>
-        </div>
-        <div className="report-tabs">
-          <b>Attendance</b>
-          <span>Efficiency</span>
-          <span>Exceptions</span>
-          <span>Leaves</span>
-        </div>
-        <div className="demo-report-chart">
-          <div className="chart-y">
-            <small>100%</small>
-            <small>75%</small>
-            <small>50%</small>
-            <small>25%</small>
-          </div>
-          <svg viewBox="0 0 600 180" aria-hidden="true">
-            <path d="M0 142 C60 120, 75 130, 125 108 S185 115, 230 74 S300 96, 352 62 S430 70, 480 42 S555 60, 600 20" />
-            <path
-              className="chart-fill"
-              d="M0 142 C60 120, 75 130, 125 108 S185 115, 230 74 S300 96, 352 62 S430 70, 480 42 S555 60, 600 20 V180 H0Z"
-            />
-          </svg>
-        </div>
-        <div className="demo-report-foot">
-          <b>
-            <strong>94.2%</strong>
-            <small>Average attendance</small>
-          </b>
-          <b>
-            <strong>+6.4%</strong>
-            <small>Compared to last week</small>
-          </b>
-          <b>
-            <strong>06</strong>
-            <small>Reports ready</small>
-          </b>
-        </div>
-      </div>
-    </WindowChrome>
-  );
-}
 export default function ProductTourPage() {
   const navigate = useNavigate();
-  const [active, setActive] = useState(0);
-  const step = steps[active];
+  const enter = () => navigate(appRoutes.admin);
+
+  /* live workspace numbers ------------------------------------------------ */
+  const stats = usePublicStats();
+  const metrics = buildLiveMetrics(stats);
+
+  /* chapter deck ---------------------------------------------------------- */
+  const deck = useCarousel(tourChapters.length, 9000);
+  const chapter = tourChapters[deck.index];
+  const deckReveal = useReveal<HTMLDivElement>(0.12);
+  const sceneTiltRef = usePointer3d<HTMLDivElement>(0.55);
+
+  /* metrics --------------------------------------------------------------- */
+  const metricsReveal = useReveal<HTMLDivElement>(0.3);
+
+  /* outcome slider -------------------------------------------------------- */
+  const outcomes = useCarousel(tourOutcomes.length, 6500);
+
+  /* keep the chapter strip scrolled to the active pill -------------------- */
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+    const active = strip.querySelector<HTMLElement>("[data-active='true']");
+    if (!active) return;
+    const offset =
+      active.offsetLeft - strip.clientWidth / 2 + active.clientWidth / 2;
+    strip.scrollTo({ left: Math.max(0, offset), behavior: "smooth" });
+  }, [deck.index]);
+
   return (
-    <div className="page tour-page">
-      <header className="tour-hero">
-        <TourNav onEnter={() => navigate(appRoutes.admin)} />
-        <div className="tour-hero-copy">
-          <p className="eyebrow">A guided look inside Fawnix</p>
-          <h1>Workforce operations, with a point of view.</h1>
-          <p className="lead">
-            Six connected moments. One calmer way to run the workday.
+    <div
+      className="page tour-page"
+      style={
+        {
+          "--accent": chapter.accent,
+          "--accent-soft": chapter.accentSoft,
+        } as React.CSSProperties
+      }
+    >
+      {/* ── hero ────────────────────────────────────────────────────────── */}
+      <header className="tr-hero">
+        <div className="tr-hero-aura" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+        <div className="tr-hero-grain" aria-hidden="true" />
+
+        <TourNav onEnter={enter} stats={stats} />
+
+        <div className="tr-hero-inner">
+          <div className="tr-hero-copy">
+            <span className="tr-eyebrow">
+              <i />A guided look inside Fawnix
+            </span>
+            <h1>
+              <span style={{ "--d": "0ms" } as React.CSSProperties}>
+                Workforce operations,
+              </span>
+              <span style={{ "--d": "110ms" } as React.CSSProperties}>
+                with a point of{" "}
+                <em>
+                  view
+                  <svg viewBox="0 0 200 12" aria-hidden="true">
+                    <path d="M2 8c46-7 104-8 196-4" />
+                  </svg>
+                </em>
+                .
+              </span>
+            </h1>
+            <p className="tr-hero-lead">
+              Six connected chapters. Attendance you can prove, approvals that
+              stop chasing, field work you can actually see — and one calmer way
+              to run the workday.
+            </p>
+            <div className="tr-hero-actions">
+              <button
+                className="tr-btn is-solid is-lg"
+                onClick={enter}
+                type="button"
+              >
+                Enter Fawnix
+                <svg viewBox="0 0 14 14" aria-hidden="true">
+                  <path d="M3 11 11 3M5 3h6v6" />
+                </svg>
+              </button>
+              <a className="tr-btn is-quiet is-lg" href="#chapters">
+                Start the tour
+                <svg viewBox="0 0 14 14" aria-hidden="true">
+                  <path d="M7 2v10M3 8l4 4 4-4" />
+                </svg>
+              </a>
+            </div>
+            <dl className="tr-hero-facts">
+              <div>
+                <dt>{stats.headcountLabel}</dt>
+                <dd>people on the roll</dd>
+              </div>
+              <div>
+                <dt>{stats.presentLabel}</dt>
+                <dd>verified in today</dd>
+              </div>
+              <div>
+                <dt>{stats.departments}</dt>
+                <dd>departments connected</dd>
+              </div>
+            </dl>
+          </div>
+
+          <TourHeroScene />
+        </div>
+
+        {/* capability marquee */}
+        <div className="tr-marquee" aria-hidden="true">
+          <div className="tr-marquee-track">
+            {[0, 1].map((copy) => (
+              <div className="tr-marquee-group" key={copy}>
+                {tourCapabilities.map((item) => (
+                  <span key={`${copy}-${item}`}>
+                    <i />
+                    {item}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      <main className="tr-main">
+        {/* ── metrics band ──────────────────────────────────────────────── */}
+        <section className="tr-metrics" ref={metricsReveal.ref}>
+          {metrics.map((metric, index) => (
+            <div
+              className="tr-metric"
+              key={metric.label}
+              data-visible={metricsReveal.visible || undefined}
+              style={{ "--d": `${index * 90}ms` } as React.CSSProperties}
+            >
+              <MetricValue
+                value={metric.value}
+                suffix={metric.suffix}
+                decimals={metric.decimals}
+                active={metricsReveal.visible}
+                delay={index * 90}
+              />
+              <b>{metric.label}</b>
+              <small>{metric.note}</small>
+            </div>
+          ))}
+        </section>
+
+        {/* ── chapter deck ──────────────────────────────────────────────── */}
+        <section className="tr-deck" id="chapters" ref={deckReveal.ref}>
+          <Reveal className="tr-section-head">
+            <span className="tr-eyebrow">
+              <i />
+              Explore the workspace
+            </span>
+            <h2>From signal to decision.</h2>
+            <p>
+              Drag, swipe, or use the arrow keys. Every screen below is a live
+              React composition of the real Fawnix workspace.
+            </p>
+          </Reveal>
+
+          <div className="tr-chapter-strip" ref={stripRef} role="tablist">
+            {tourChapters.map((item, index) => (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={deck.index === index}
+                data-active={deck.index === index}
+                onClick={() => deck.goTo(index)}
+                style={
+                  {
+                    "--pill-accent": item.accent,
+                  } as React.CSSProperties
+                }
+              >
+                <span>{item.number}</span>
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          <div
+            className="tr-deck-body"
+            data-visible={deckReveal.visible || undefined}
+          >
+            {/* narrative column */}
+            <div className="tr-deck-copy" key={chapter.id}>
+              <span className="tr-deck-number">{chapter.number}</span>
+              <span className="tr-eyebrow">
+                <i />
+                {chapter.eyebrow}
+              </span>
+              <h3>{chapter.title}</h3>
+              <p>{chapter.body}</p>
+
+              <ul className="tr-deck-highlights">
+                {chapter.highlights.map((item, index) => (
+                  <li
+                    key={item.term}
+                    style={
+                      { "--d": `${140 + index * 90}ms` } as React.CSSProperties
+                    }
+                  >
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                      <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
+                    </svg>
+                    <span>
+                      <strong>{item.term}</strong>
+                      {item.detail}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="tr-deck-tags">
+                {chapter.tags.map((tag) => (
+                  <span key={tag}>{tag}</span>
+                ))}
+              </div>
+
+              <div className="tr-deck-controls">
+                <button
+                  type="button"
+                  className="tr-round"
+                  onClick={deck.prev}
+                  aria-label="Previous chapter"
+                >
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M10 3 5 8l5 5" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className="tr-round"
+                  onClick={deck.next}
+                  aria-label="Next chapter"
+                >
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M6 3l5 5-5 5" />
+                  </svg>
+                </button>
+                <div className="tr-deck-count">
+                  <b>{chapter.number}</b>
+                  <i />
+                  <span>{String(tourChapters.length).padStart(2, "0")}</span>
+                </div>
+                <div className="tr-deck-dots">
+                  {tourChapters.map((item, index) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      aria-label={`Go to ${item.label}`}
+                      data-active={deck.index === index}
+                      onClick={() => deck.goTo(index)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* the sliding screens */}
+            <div
+              className="tr-deck-viewport"
+              ref={deck.viewportRef}
+              tabIndex={0}
+              role="group"
+              aria-label="Product screens"
+              onMouseEnter={() => deck.setPaused(true)}
+              onMouseLeave={() => deck.setPaused(false)}
+              {...deck.handlers}
+            >
+              <div className="tr-deck-tilt" ref={sceneTiltRef}>
+                <div
+                  className="tr-deck-track"
+                  data-dragging={deck.dragOffset !== 0 || undefined}
+                  style={{
+                    transform: `translate3d(calc(${-deck.index * 100}% + ${deck.dragOffset}%), 0, 0)`,
+                  }}
+                >
+                  {tourChapters.map((item, index) => (
+                    <div
+                      className="tr-deck-slide"
+                      key={item.id}
+                      data-active={deck.index === index}
+                      aria-hidden={deck.index !== index}
+                    >
+                      <TourScene scene={item.id} />
+                    </div>
+                  ))}
+                </div>
+                <span className="tr-deck-glow" aria-hidden="true" />
+              </div>
+              <span className="tr-deck-hint">drag to explore</span>
+            </div>
+          </div>
+        </section>
+
+        {/* ── the daily loop ────────────────────────────────────────────── */}
+        <section className="tr-loop">
+          <Reveal className="tr-section-head is-center">
+            <span className="tr-eyebrow">
+              <i />
+              One day, end to end
+            </span>
+            <h2>The loop that closes itself.</h2>
+            <p>
+              Four beats, no follow-up messages. Fawnix records the workday as
+              it happens and settles the numbers when it ends.
+            </p>
+          </Reveal>
+
+          <div className="tr-loop-rail">
+            <span className="tr-loop-line" aria-hidden="true" />
+            {tourDayLoop.map((step, index) => (
+              <Reveal
+                className="tr-loop-step"
+                key={step.title}
+                delay={index * 120}
+              >
+                <b>{step.time}</b>
+                <i aria-hidden="true">
+                  <em>{index + 1}</em>
+                </i>
+                <strong>{step.title}</strong>
+                <p>{step.detail}</p>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+
+        {/* ── outcome slider ────────────────────────────────────────────── */}
+        <section className="tr-outcomes">
+          <Reveal className="tr-section-head">
+            <span className="tr-eyebrow">
+              <i />
+              Built for how teams actually work
+            </span>
+            <h2>Four operating realities, one workspace.</h2>
+          </Reveal>
+
+          <div
+            className="tr-outcome-shell"
+            onMouseEnter={() => outcomes.setPaused(true)}
+            onMouseLeave={() => outcomes.setPaused(false)}
+          >
+            <div
+              className="tr-outcome-viewport"
+              ref={outcomes.viewportRef}
+              tabIndex={0}
+              role="group"
+              aria-label="Outcomes by team"
+              {...outcomes.handlers}
+            >
+              <div
+                className="tr-outcome-track"
+                style={{
+                  transform: `translate3d(calc(${-outcomes.index * 100}% + ${outcomes.dragOffset}%), 0, 0)`,
+                }}
+                data-dragging={outcomes.dragOffset !== 0 || undefined}
+              >
+                {tourOutcomes.map((item, index) => (
+                  <article
+                    className="tr-outcome"
+                    key={item.role}
+                    data-active={outcomes.index === index}
+                  >
+                    <header>
+                      <span>{item.role}</span>
+                      <small>{item.team}</small>
+                    </header>
+                    <blockquote>{item.quote}</blockquote>
+                    <footer>
+                      <strong>{item.metric}</strong>
+                      <small>{item.metricLabel}</small>
+                    </footer>
+                  </article>
+                ))}
+              </div>
+            </div>
+
+            <div className="tr-outcome-nav">
+              <button
+                type="button"
+                className="tr-round"
+                onClick={outcomes.prev}
+                aria-label="Previous outcome"
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M10 3 5 8l5 5" />
+                </svg>
+              </button>
+              <div className="tr-outcome-dots">
+                {tourOutcomes.map((item, index) => (
+                  <button
+                    key={item.role}
+                    type="button"
+                    aria-label={`Go to ${item.role}`}
+                    data-active={outcomes.index === index}
+                    onClick={() => outcomes.goTo(index)}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                className="tr-round"
+                onClick={outcomes.next}
+                aria-label="Next outcome"
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M6 3l5 5-5 5" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ── closing call to action ────────────────────────────────────── */}
+        <Reveal className="tr-cta" as="section">
+          <div className="tr-cta-glow" aria-hidden="true" />
+          <span className="tr-eyebrow is-light">
+            <i />
+            Ready when you are
+          </span>
+          <h2>Make the workday easier to see.</h2>
+          <p>
+            Bring attendance, approvals, field activity and reporting into one
+            confident rhythm — and give every decision a record worth keeping.
           </p>
-          <div className="hero-actions">
+          <div className="tr-cta-actions">
             <button
-              className="cta"
-              onClick={() => navigate(appRoutes.admin)}
+              className="tr-btn is-lime is-lg"
+              onClick={enter}
               type="button"
             >
-              Enter Fawnix <span>↗</span>
+              Get started with Fawnix
+              <svg viewBox="0 0 14 14" aria-hidden="true">
+                <path d="M3 11 11 3M5 3h6v6" />
+              </svg>
             </button>
-            <a className="ghost tour-back-link" href={appRoutes.home}>
+            <a className="tr-btn is-outline-light is-lg" href={appRoutes.home}>
               Read the overview
             </a>
           </div>
-        </div>
-        <div className="tour-hero-orbit">
-          <span />
-          <span />
-          <span />
-        </div>
-      </header>
-      <main className="tour-story">
-        <div className="tour-intro">
-          <div>
-            <span>Explore the workspace</span>
-            <strong>From signal to decision.</strong>
-          </div>
-          <p>
-            Select a chapter or scroll through the full story. The screens below
-            are editable React demo components, ready to be replaced with real
-            product screenshots later.
-          </p>
-        </div>
-        <div className="tour-chapters">
-          {steps.map((item, index) => (
-            <button
-              className={active === index ? "active" : ""}
-              onClick={() => setActive(index)}
-              key={item.number}
-              type="button"
-            >
-              <span>{item.number}</span>
-              {item.short}
-              <i />
-            </button>
-          ))}
-        </div>
-        <section className="tour-feature">
-          <div className="tour-feature-copy">
-            <span className="tour-number">{step.number}</span>
-            <p className="eyebrow">{step.eyebrow}</p>
-            <h2>{step.title}</h2>
-            <p>{step.body}</p>
-            <div className="tour-tags">
-              {step.tags.map((tag) => (
-                <span key={tag}>{tag}</span>
-              ))}
-            </div>
-            <div className="tour-feature-controls">
-              <button
-                className="tour-arrow"
-                disabled={active === 0}
-                onClick={() => setActive((value) => value - 1)}
-                type="button"
-              >
-                ←
-              </button>
-              <button
-                className="tour-arrow"
-                disabled={active === steps.length - 1}
-                onClick={() => setActive((value) => value + 1)}
-                type="button"
-              >
-                →
-              </button>
-              <small>{String(active + 1).padStart(2, "0")} / 06</small>
-            </div>
-          </div>
-          <div className="tour-feature-visual">
-            <DemoScreen type={step.demo} />
-            <span className="tour-frame-glow" />
-          </div>
-        </section>
-        <section className="tour-strip">
-          <div>
-            <small>Built for motion</small>
-            <strong>One source of truth for teams that move.</strong>
-          </div>
-          <div>
-            <b>01</b>
-            <span>Attendance with evidence</span>
-          </div>
-          <div>
-            <b>02</b>
-            <span>Approvals without the chase</span>
-          </div>
-          <div>
-            <b>03</b>
-            <span>Insights into action</span>
-          </div>
-        </section>
-        <section className="tour-cta">
-          <p className="eyebrow">Ready when you are</p>
-          <h2>Make the workday easier to see.</h2>
-          <p>
-            Bring attendance, approvals, field activity, and reporting into one
-            confident rhythm.
-          </p>
-          <button
-            className="cta"
-            onClick={() => navigate(appRoutes.admin)}
-            type="button"
-          >
-            Get started with Fawnix <span>↗</span>
-          </button>
-        </section>
+        </Reveal>
       </main>
+
       <SiteFooter />
     </div>
   );

@@ -1,0 +1,331 @@
+/* ── Tour · daily loop, outcome slider, closing call to action ─────────────── */
+
+/* ── the daily loop ──────────────────────────────────────────────────────── */
+
+.tr-loop-rail {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(18px, 2.4vw, 32px);
+}
+
+.tr-loop-line {
+  position: absolute;
+  top: 62px;
+  left: 6%;
+  right: 6%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(15, 73, 56, 0.16) 12%,
+    rgba(15, 73, 56, 0.16) 88%,
+    transparent
+  );
+}
+
+.tr-loop-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--lime), #7fe0c8);
+  transform-origin: left center;
+  animation: trLoopFill 3.4s var(--ease) 0.3s backwards;
+}
+
+@keyframes trLoopFill {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+.tr-loop-step {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.tr-loop-step b {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+  color: #2f7d63;
+}
+
+.tr-loop-step > i {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin: 6px 0 4px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(10, 43, 33, 0.08);
+  transition:
+    transform 0.4s var(--ease),
+    border-color 0.4s var(--ease-soft),
+    box-shadow 0.4s var(--ease);
+}
+
+.tr-loop-step > i em {
+  font-size: 16px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.tr-loop-step:hover > i {
+  transform: translateY(-3px);
+  border-color: rgba(15, 73, 56, 0.28);
+  box-shadow: 0 16px 32px rgba(10, 43, 33, 0.12);
+}
+
+.tr-loop-step strong {
+  font-size: 17px;
+  font-weight: 680;
+  letter-spacing: -0.015em;
+}
+
+.tr-loop-step p {
+  margin: 0;
+  max-width: 260px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── outcome slider ──────────────────────────────────────────────────────── */
+
+.tr-outcome-shell {
+  position: relative;
+  display: grid;
+  gap: 22px;
+}
+
+.tr-outcome-viewport {
+  overflow: hidden;
+  border-radius: 22px;
+  touch-action: pan-y;
+  cursor: grab;
+}
+
+.tr-outcome-viewport:active {
+  cursor: grabbing;
+}
+
+.tr-outcome-track {
+  display: flex;
+  transition: transform 0.8s var(--ease);
+  will-change: transform;
+}
+
+.tr-outcome-track[data-dragging] {
+  transition: none;
+}
+
+.tr-outcome {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  flex: 0 0 100%;
+  min-width: 0;
+  padding: clamp(26px, 3.4vw, 46px);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: linear-gradient(150deg, #ffffff, #fbfdf6);
+  opacity: 0.4;
+  transform: scale(0.97);
+  transition:
+    opacity 0.6s var(--ease-soft),
+    transform 0.8s var(--ease);
+}
+
+.tr-outcome[data-active="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+.tr-outcome > header {
+  display: grid;
+  gap: 3px;
+}
+
+.tr-outcome > header span {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #2f7d63;
+}
+
+.tr-outcome > header small {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.tr-outcome blockquote {
+  margin: 0;
+  max-width: 780px;
+  font-size: clamp(19px, 2.2vw, 27px);
+  line-height: 1.42;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.tr-outcome blockquote::before {
+  content: "“";
+  margin-right: 2px;
+  color: rgba(15, 73, 56, 0.24);
+}
+
+.tr-outcome blockquote::after {
+  content: "”";
+  color: rgba(15, 73, 56, 0.24);
+}
+
+.tr-outcome > footer {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.tr-outcome > footer strong {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.tr-outcome > footer small {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.tr-outcome-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.tr-outcome-dots {
+  display: flex;
+  gap: 6px;
+}
+
+/* ── closing call to action ──────────────────────────────────────────────── */
+
+.tr-cta {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  overflow: hidden;
+  padding: clamp(46px, 6vw, 88px) clamp(24px, 4vw, 64px);
+  border-radius: 28px;
+  text-align: center;
+  color: #f2f8ec;
+  background:
+    radial-gradient(
+      ellipse 60% 70% at 82% 8%,
+      rgba(200, 244, 95, 0.2),
+      transparent 60%
+    ),
+    linear-gradient(150deg, #0f4938 0%, #0a2b21 62%, #07201a 100%);
+  box-shadow: 0 30px 70px -30px rgba(10, 43, 33, 0.6);
+}
+
+.tr-cta-glow {
+  position: absolute;
+  top: -30%;
+  left: 50%;
+  width: 620px;
+  aspect-ratio: 1;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    rgba(200, 244, 95, 0.22),
+    transparent 62%
+  );
+  animation: trCtaGlow 12s var(--ease-soft) infinite alternate;
+}
+
+@keyframes trCtaGlow {
+  from {
+    transform: translate3d(-50%, 0, 0) scale(1);
+    opacity: 0.75;
+  }
+  to {
+    transform: translate3d(-46%, 26px, 0) scale(1.14);
+    opacity: 1;
+  }
+}
+
+.tr-cta h2 {
+  position: relative;
+  margin: 0;
+  max-width: 720px;
+  font-size: clamp(28px, 4vw, 50px);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+}
+
+.tr-cta p {
+  position: relative;
+  margin: 0;
+  max-width: 620px;
+  font-size: 16.5px;
+  line-height: 1.62;
+  color: rgba(255, 255, 255, 0.74);
+}
+
+.tr-cta-actions {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+/* ── responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 1080px) {
+  .tr-loop-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 30px;
+  }
+
+  .tr-loop-line {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .tr-loop-rail {
+    grid-template-columns: 1fr;
+  }
+
+  .tr-outcome {
+    padding: 24px;
+  }
+
+  .tr-outcome > footer {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .tr-cta {
+    border-radius: 22px;
+  }
+}

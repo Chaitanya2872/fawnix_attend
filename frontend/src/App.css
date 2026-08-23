@@ -10858,14 +10858,18 @@ textarea:focus,
 }
 .login-v3-otp-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(6, clamp(38px, 8.4vw, 46px));
+  justify-content: start;
   gap: 8px;
   margin-top: 8px;
 }
 .login-v3-otp-grid input {
-  height: clamp(42px, 6.6vh, 56px);
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  height: clamp(40px, 5.4vh, 46px);
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: 12px;
   background: var(--paper-2);
   color: var(--ink);
   font-size: clamp(16px, 2.4vh, 19px);
@@ -11089,9 +11093,12 @@ textarea:focus,
     display: none;
   }
   .login-v3-otp-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    justify-content: stretch;
     gap: 6px;
   }
   .login-v3-otp-grid input {
+    height: 44px;
     border-radius: 11px;
   }
   .login-v3-card {

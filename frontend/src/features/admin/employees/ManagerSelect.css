@@ -35,9 +35,9 @@
 
 .manager-select__trigger:focus-visible {
   outline: none;
-  border-color: #4f7bf7;
+  border-color: var(--a-accent);
   background: #ffffff;
-  box-shadow: 0 0 0 3px #eef3ff;
+  box-shadow: 0 0 0 3px var(--a-accent-soft);
 }
 
 .manager-select__trigger:disabled {
@@ -101,9 +101,9 @@
 }
 
 .manager-select__search input:focus {
-  border-color: #4f7bf7;
+  border-color: var(--a-accent);
   background: #ffffff;
-  box-shadow: 0 0 0 3px #eef3ff;
+  box-shadow: 0 0 0 3px var(--a-accent-soft);
 }
 
 .manager-select__list {
@@ -137,8 +137,8 @@
 }
 
 .manager-select__option--active {
-  background: #eef3ff;
-  color: #2f5bd4;
+  background: var(--a-accent-soft);
+  color: var(--a-accent-active);
 }
 
 .manager-select__option--clear {

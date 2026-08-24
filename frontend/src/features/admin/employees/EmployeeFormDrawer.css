@@ -1,4 +1,4 @@
-/* Self-contained styles for the Add/Edit Employee drawer — kept as a
+/* Self-contained styles for the Add/Edit Employee drawer â€” kept as a
    right-side slide-in panel (matching the app's existing drawer pattern)
    but restyled to the blue admin design system used by AdminEmployeesPage,
    with a centered icon+title header and grouped field rows. Colors are
@@ -53,8 +53,8 @@
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background: #eef3ff;
-  color: #4f7bf7;
+  background: var(--a-accent-soft);
+  color: var(--a-accent);
   display: grid;
   place-items: center;
   margin-bottom: 6px;
@@ -118,9 +118,9 @@
 
 .emp-form-field input:focus,
 .emp-form-field select:focus {
-  border-color: #4f7bf7;
+  border-color: var(--a-accent);
   background: #ffffff;
-  box-shadow: 0 0 0 3px #eef3ff;
+  box-shadow: 0 0 0 3px var(--a-accent-soft);
 }
 
 .emp-form-hint {
@@ -176,14 +176,14 @@
 }
 
 .emp-form-btn--primary {
-  border: 1px solid #4f7bf7;
-  background: #4f7bf7;
+  border: 1px solid var(--a-accent);
+  background: var(--a-accent);
   color: #ffffff;
 }
 
 .emp-form-btn--primary:hover:not(:disabled) {
-  background: #416ce7;
-  border-color: #416ce7;
+  background: var(--a-accent-hover);
+  border-color: var(--a-accent-hover);
 }
 
 .emp-form-btn:disabled {
@@ -194,7 +194,7 @@
 .emp-form-status {
   margin: 12px 0 0;
   font-size: 12.5px;
-  color: #4f7bf7;
+  color: var(--a-accent);
   text-align: center;
 }
 

@@ -70,7 +70,7 @@
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #eef3ff, #dce6ff);
+  background: linear-gradient(135deg, var(--a-accent-soft), var(--a-accent-soft-2));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -80,7 +80,7 @@
 .employee-drawer-avatar-text {
   font-size: 20px;
   font-weight: 700;
-  color: #4f7bf7;
+  color: var(--a-accent);
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
@@ -313,14 +313,14 @@
 }
 
 .employee-drawer-btn-primary {
-  background: #4f7bf7;
+  background: var(--a-accent);
   color: #ffffff;
-  border-color: #4f7bf7;
+  border-color: var(--a-accent);
 }
 
 .employee-drawer-btn-primary:hover {
-  background: #416ce7;
-  border-color: #416ce7;
+  background: var(--a-accent-hover);
+  border-color: var(--a-accent-hover);
   transform: translateY(-1px);
   box-shadow: 0 4px 16px rgba(79, 123, 247, 0.25);
 }

@@ -8,9 +8,9 @@
   --adm-text: #111827;
   --adm-text-soft: #747b84;
   --adm-text-muted: #8b929c;
-  --adm-blue: #4f7bf7;
-  --adm-blue-hover: #416ce7;
-  --adm-blue-soft: #eef3ff;
+  --adm-blue: var(--a-accent);
+  --adm-blue-hover: var(--a-accent-hover);
+  --adm-blue-soft: var(--a-accent-soft);
   --adm-success: #22c55e;
   --adm-success-soft: #eafbea;
   --adm-warning: #b98900;
@@ -882,7 +882,7 @@
 }
 
 .adm-custom-select::after {
-  content: "▾";
+  content: "â–¾";
   position: absolute;
   right: 10px;
   top: 50%;

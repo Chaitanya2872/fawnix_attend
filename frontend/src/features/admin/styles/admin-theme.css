@@ -1,0 +1,626 @@
+/* ============================================================================
+   FAWNIX — ADMIN THEME UNIFICATION LAYER
+   ----------------------------------------------------------------------------
+   THE SINGLE SOURCE OF TRUTH for every colour inside the internal application.
+
+   Why this file exists
+   --------------------
+   The admin app had grown five competing accent palettes, hardcoded per
+   feature, none of which agreed with each other:
+
+     A  #2f7fe0 / #1b5fb0   exceptions, leaves, overtime, filters
+     B  #4f7bf7 / #416ce7   employees, employee-master, drawers
+     C  #2563eb / #1d4fd8   sidebar, employee import
+     D  #35544a / #d79a55   legacy App.css sidebar (dark green + tan)
+     E  #106b52             the *intended* evergreen brand token set
+
+   Result: half the product read blue, half read green, and the sidebar was
+   literally both at once (two stylesheets styling the same class names).
+
+   How this file fixes it
+   ----------------------
+   Rather than hand-editing thousands of declarations across 23 stylesheets,
+   we exploit the fact that nearly every feature routes its colours through
+   its own CSS custom properties (--exc-primary, --adm-blue, --sb-accent …).
+   Re-pointing those variables at the canonical tokens re-themes every rule
+   that consumes them, instantly and without touching those files.
+
+   Anything that bypassed its own variables and hardcoded a hex is corrected
+   in the "legacy neutralisation" section at the bottom.
+
+   SCOPING CONTRACT — read before editing
+   --------------------------------------
+   Everything here is scoped to `.admin-shell:not(.admin-shell-login)` or to
+   class prefixes that exist *only* in the admin bundle. The marketing site,
+   the product tour and the login screen are deliberately out of reach and
+   must stay that way.
+
+   Specificity note: overrides are written with a `.admin-shell…` ancestor or
+   a doubled class (`.foo.foo`) so they win on specificity rather than on
+   source order. That keeps the result stable no matter how the bundler ends
+   up ordering stylesheets.
+   ========================================================================= */
+
+/* ============================================================================
+   1 · CANONICAL PALETTE
+   ----------------------------------------------------------------------------
+   One accent family. Four semantic states. Nothing else.
+
+   The accent is the brand evergreen, so the internal app now reads as the
+   same product as the login screen. The "info" role is teal rather than blue
+   — it sits next to evergreen on the colour wheel, so charts and secondary
+   metrics can still be distinguished without reintroducing a second brand.
+   ========================================================================= */
+
+.admin-shell:not(.admin-shell-login) {
+  /* ── accent: evergreen ─────────────────────────────────────────── */
+  --a-accent: #106b52;
+  --a-accent-hover: #0d5a45;
+  --a-accent-active: #0b4f3c;
+  --a-accent-ink: #0b4f3c;
+  --a-accent-soft: #e9f4f0;
+  --a-accent-soft-2: #d7ebe3;
+  --a-accent-border: #b6d9cb;
+
+  /* ── info: teal (the old "blue" role, harmonised) ──────────────── */
+  --a-info: #0f766e;
+  --a-info-ink: #115e59;
+  --a-info-soft: #e6f4f2;
+  --a-info-border: #b9dcd7;
+
+  /* ── warning: warm ochre ──────────────────────────────────────── */
+  --a-warn: #a16207;
+  --a-warn-ink: #854d0e;
+  --a-warn-soft: #fdf3e3;
+  --a-warn-border: #ecd9b0;
+
+  /* ── danger: muted rose ───────────────────────────────────────── */
+  --a-danger: #b3261e;
+  --a-danger-ink: #8c1d18;
+  --a-danger-soft: #fbecec;
+  --a-danger-border: #eecccc;
+
+  /* ── positive: green, distinct from accent so deltas read clearly ─ */
+  --a-positive: #15803d;
+  --a-positive-soft: #e7f5ec;
+
+  /* ── neutrals ─────────────────────────────────────────────────── */
+  --a-canvas: #f4f7f5;
+  --a-surface: #ffffff;
+  --a-surface-2: #f8fbf9;
+  --a-sunken: #f1f5f2;
+  --a-line: #e5ebe7;
+  --a-line-strong: #d4ded8;
+  --a-line-soft: #eef3f0;
+
+  --a-ink: #12201c;
+  --a-ink-2: #3d4a45;
+  --a-ink-3: #5a6a63;
+  --a-ink-4: #88958f;
+
+  /* ── interaction ──────────────────────────────────────────────── */
+  --a-hover: #f2f7f4;
+  --a-active: #e9f4f0;
+  --a-ring: rgba(16, 107, 82, 0.24);
+  --a-glass: rgba(255, 255, 255, 0.72);
+
+  /* ── deep ink, for the dashboard hero and dark chrome ─────────── */
+  --a-deep: #0d2b23;
+  --a-deep-2: #123a2f;
+}
+
+/* ============================================================================
+   2 · SHARED TOKEN MAPPING
+   ----------------------------------------------------------------------------
+   The generic token names that feature stylesheets already consume. Pointing
+   them at the palette above is what re-themes the bulk of the application.
+   ========================================================================= */
+
+.admin-shell:not(.admin-shell-login) {
+  --theme-evergreen: var(--a-accent);
+  --theme-evergreen-deep: var(--a-accent-active);
+  --theme-evergreen-soft: var(--a-accent-soft);
+  --theme-lime: var(--a-accent-soft-2);
+  --theme-lime-soft: var(--a-accent-soft);
+  --theme-canvas: var(--a-canvas);
+  --theme-surface: var(--a-surface);
+  --theme-surface-muted: var(--a-surface-2);
+  --theme-border: var(--a-line);
+  --theme-text: var(--a-ink);
+  --theme-muted: var(--a-ink-4);
+
+  --surface-1: var(--a-surface-2);
+  --surface-2: var(--a-surface);
+  --surface-sunken: var(--a-sunken);
+
+  --border: var(--a-line);
+  --border-strong: var(--a-line-strong);
+  --border-accent: var(--a-accent);
+
+  --text-primary: var(--a-ink);
+  --text-secondary: var(--a-ink-3);
+  --text-muted: var(--a-ink-4);
+  --text-accent: var(--a-accent);
+
+  --bg-accent: var(--a-accent-soft);
+  --bg-success: var(--a-positive-soft);
+  --text-success: var(--a-positive);
+  --bg-warning: var(--a-warn-soft);
+  --text-warning: var(--a-warn-ink);
+  --bg-danger: var(--a-danger-soft);
+  --text-danger: var(--a-danger-ink);
+  --bg-info: var(--a-info-soft);
+  --text-info: var(--a-info-ink);
+
+  --hover-tint: var(--a-hover);
+  --active-tint: var(--a-active);
+  --focus-ring: var(--a-ring);
+  --scrim: rgba(9, 26, 21, 0.36);
+  --glass: var(--a-glass);
+  --radius: 10px;
+}
+
+/* ============================================================================
+   3 · PER-FEATURE VARIABLE REMAP
+   ----------------------------------------------------------------------------
+   Each feature invented its own private palette. We keep the variable names
+   (so none of those stylesheets need editing) and simply re-point them.
+
+   Scoped one level deeper than the feature's own `:root`-like block so these
+   always win, regardless of stylesheet order.
+   ========================================================================= */
+
+/* ── Employees + Employee master (palette B: #4f7bf7) ───────────── */
+.admin-shell:not(.admin-shell-login) .admin-aligned-page,
+.admin-shell:not(.admin-shell-login) [class*="admin-aligned-page--"] {
+  --adm-blue: var(--a-accent);
+  --adm-blue-hover: var(--a-accent-hover);
+  --adm-blue-soft: var(--a-accent-soft);
+  --adm-success: var(--a-positive);
+  --adm-text-muted: var(--a-ink-4);
+
+  --em-blue: var(--a-accent);
+  --em-blue-hover: var(--a-accent-hover);
+  --em-blue-soft: var(--a-accent-soft);
+  --em-success: var(--a-positive);
+  --em-text-muted: var(--a-ink-4);
+}
+
+/* ── Attendance exceptions (palette A: #2f7fe0) ─────────────────── */
+.admin-shell:not(.admin-shell-login)
+  .admin-aligned-page--attendance-exceptions {
+  --exc-ink: var(--a-ink);
+  --exc-ink-2: var(--a-ink-2);
+  --exc-muted: var(--a-ink-4);
+  --exc-muted-2: var(--a-ink-3);
+  --exc-soft: var(--a-ink-4);
+  --exc-body: var(--a-ink-3);
+  --exc-canvas: transparent;
+  --exc-surface: var(--a-surface);
+  --exc-line: var(--a-line);
+  --exc-line-2: var(--a-line-strong);
+  --exc-line-3: var(--a-line);
+  --exc-line-4: var(--a-line-soft);
+  --exc-tint: var(--a-surface-2);
+  --exc-primary: var(--a-accent);
+  --exc-primary-hover: var(--a-accent-hover);
+  --exc-primary-ink: var(--a-accent-ink);
+}
+
+/* ── Leaves (palette A) ─────────────────────────────────────────── */
+.admin-shell:not(.admin-shell-login) .admin-aligned-page--leaves {
+  --lv-ink: var(--a-ink);
+  --lv-ink-2: var(--a-ink-2);
+  --lv-muted: var(--a-ink-4);
+  --lv-muted-2: var(--a-ink-3);
+  --lv-soft: var(--a-ink-4);
+  --lv-body: var(--a-ink-3);
+  --lv-canvas: transparent;
+  --lv-surface: var(--a-surface);
+  --lv-line: var(--a-line);
+  --lv-line-2: var(--a-line-strong);
+  --lv-line-3: var(--a-line);
+  --lv-line-4: var(--a-line-soft);
+  --lv-tint: var(--a-surface-2);
+  --lv-primary: var(--a-accent);
+  --lv-primary-hover: var(--a-accent-hover);
+  --lv-primary-ink: var(--a-accent-ink);
+}
+
+/* ── Overtime records (palette A) ───────────────────────────────── */
+.admin-shell:not(.admin-shell-login) .admin-aligned-page--overtime-records {
+  --otr-ink: var(--a-ink);
+  --otr-ink-2: var(--a-ink-2);
+  --otr-muted: var(--a-ink-4);
+  --otr-muted-2: var(--a-ink-3);
+  --otr-soft: var(--a-ink-4);
+  --otr-body: var(--a-ink-3);
+  --otr-canvas: transparent;
+  --otr-surface: var(--a-surface);
+  --otr-line: var(--a-line);
+  --otr-line-2: var(--a-line-strong);
+  --otr-line-3: var(--a-line);
+  --otr-line-4: var(--a-line-soft);
+  --otr-tint: var(--a-surface-2);
+  --otr-primary: var(--a-accent);
+  --otr-primary-hover: var(--a-accent-hover);
+  --otr-primary-ink: var(--a-accent-ink);
+  --otr-success: var(--a-positive);
+}
+
+/* Feature pages must not paint their own page background — the shell owns the
+   canvas, otherwise each page shows a slightly different shade of off-white. */
+.admin-shell:not(.admin-shell-login) [class*="admin-aligned-page--"] {
+  background: transparent;
+  color: var(--a-ink);
+  font-family: inherit;
+}
+
+/* ============================================================================
+   4 · SIDEBAR
+   ----------------------------------------------------------------------------
+   The sidebar was styled by two stylesheets at once (legacy dark-green rules
+   in App.css, electric-blue rules in AdminSidebar.css). We take authority
+   here: remap its private variables, then correct the handful of hardcoded
+   gradients that bypassed them.
+   ========================================================================= */
+
+.admin-shell:not(.admin-shell-login) .sidebar {
+  --sb-bg: var(--a-surface);
+  --sb-bg-app: var(--a-hover);
+  --sb-border: var(--a-line);
+  --sb-border-soft: var(--a-line-soft);
+  --sb-text: var(--a-ink);
+  --sb-text-secondary: var(--a-ink-3);
+  --sb-text-tertiary: var(--a-ink-4);
+  --sb-accent: var(--a-accent);
+  --sb-accent-soft: var(--a-accent-soft);
+  --sb-accent-soft-border: var(--a-accent-border);
+  --sb-danger: var(--a-danger);
+  --sb-danger-soft: var(--a-danger-soft);
+  --sb-radius-sm: 9px;
+  --sb-font: inherit;
+
+  /* Neutralise the legacy App.css sidebar treatment (dark gradient, tan
+     accents, sticky padding) — the panel child owns the surface now. */
+  background: transparent;
+  border-right: 0;
+  padding: 0;
+  gap: 0;
+  color: var(--a-ink);
+  font-family: inherit;
+}
+
+/* Brand mark — evergreen, not blue. */
+.admin-shell:not(.admin-shell-login) .sidebar .sidebar-logo {
+  background: linear-gradient(155deg, var(--a-accent) 0%, var(--a-deep) 100%);
+  color: #fff;
+  box-shadow: 0 4px 10px -4px rgba(16, 107, 82, 0.5);
+}
+
+/* Profile avatar — was slate; align to the accent family. */
+.admin-shell:not(.admin-shell-login) .sidebar .sidebar-avatar {
+  background: linear-gradient(155deg, var(--a-accent) 0%, var(--a-deep) 100%);
+  color: #fff;
+  box-shadow: none;
+}
+
+/* Legacy App.css styled these for a dark sidebar (white / tan on green).
+   Reset them for the light panel. */
+.admin-shell:not(.admin-shell-login) .sidebar .brand-name {
+  color: var(--a-ink);
+}
+
+.admin-shell:not(.admin-shell-login) .sidebar .brand-subtitle {
+  color: var(--a-ink-4);
+}
+
+.admin-shell:not(.admin-shell-login) .sidebar .sidebar-profile-info strong {
+  color: var(--a-ink);
+}
+
+.admin-shell:not(.admin-shell-login) .sidebar .sidebar-profile-info span {
+  color: var(--a-ink-4);
+}
+
+/* Active row: a soft accent wash plus the glide rail. The legacy stylesheet
+   also drew a ::before pseudo-bar here, which double-marked the active item. */
+.admin-shell:not(.admin-shell-login) .sidebar .sidebar-link.active {
+  background: var(--a-accent-soft);
+  color: var(--a-accent-ink);
+}
+
+.admin-shell:not(.admin-shell-login) .sidebar .sidebar-link.active::before {
+  content: none;
+}
+
+.admin-shell:not(.admin-shell-login)
+  .sidebar
+  .sidebar-link.active
+  .sidebar-link-icon {
+  color: var(--a-accent);
+}
+
+.admin-shell:not(.admin-shell-login)
+  .sidebar
+  .sidebar-link.active
+  .sidebar-link-badge {
+  background: var(--a-accent-soft-2);
+  color: var(--a-accent-ink);
+}
+
+/* The nested-row guide line must stay a hairline, not the old tan bar. */
+.admin-shell:not(.admin-shell-login) .sidebar .sidebar-link--nested::before {
+  content: "";
+  background: var(--a-line);
+}
+
+.admin-shell:not(.admin-shell-login)
+  .sidebar
+  .sidebar-link--nested:hover::before {
+  background: var(--a-line-strong);
+}
+
+.admin-shell:not(.admin-shell-login)
+  .sidebar
+  .sidebar-link--nested.active::before {
+  background: var(--a-accent);
+}
+
+.admin-shell:not(.admin-shell-login) .sidebar .sidebar-section-label {
+  color: var(--a-ink-4);
+}
+
+.admin-shell:not(.admin-shell-login) .sidebar .sidebar-search:hover {
+  border-color: var(--a-line-strong);
+  background: var(--a-surface);
+}
+
+.admin-shell:not(.admin-shell-login) .sidebar .sidebar-nav {
+  scrollbar-color: var(--a-line-strong) transparent;
+}
+
+.admin-shell:not(.admin-shell-login)
+  .sidebar
+  .sidebar-nav::-webkit-scrollbar-thumb {
+  background: var(--a-line-strong);
+}
+
+.admin-shell:not(.admin-shell-login) .sidebar .sidebar-live-dot {
+  background: var(--a-positive);
+}
+
+/* Rail-mode tooltip should use the ink colour, not pure black. */
+.admin-shell:not(.admin-shell-login) .sidebar--rail [data-tip]:hover::after {
+  background: var(--a-deep);
+}
+
+/* ============================================================================
+   5 · SHELL LAYOUT
+   ----------------------------------------------------------------------------
+   One canvas colour, one content rhythm, for every page.
+   ========================================================================= */
+
+.admin-shell:not(.admin-shell-login) {
+  background: var(--a-canvas);
+  color: var(--a-ink);
+}
+
+.admin-shell:not(.admin-shell-login) .dashboard-main {
+  background: var(--a-canvas);
+  color: var(--a-ink);
+}
+
+/* ============================================================================
+   6 · LEGACY BLUE NEUTRALISATION
+   ----------------------------------------------------------------------------
+   Rules below hardcoded a hex instead of going through a variable, so the
+   remap in section 3 cannot reach them. Each selector is reproduced verbatim
+   from its source stylesheet with the colour corrected.
+
+   The doubled-class form (`.foo.foo`) raises specificity just enough to win
+   without `!important`, and keeps working even for drawers that render
+   outside the `.admin-shell` subtree.
+   ========================================================================= */
+
+/* ── Employee form drawer (was #4f7bf7 / #eef3ff / #416ce7) ─────── */
+.emp-form-btn--primary.emp-form-btn--primary {
+  border-color: var(--a-accent, #106b52);
+  background: var(--a-accent, #106b52);
+  color: #fff;
+}
+
+.emp-form-btn--primary.emp-form-btn--primary:hover:not(:disabled) {
+  background: var(--a-accent-hover, #0d5a45);
+  border-color: var(--a-accent-hover, #0d5a45);
+}
+
+.emp-form-field.emp-form-field input:focus,
+.emp-form-field.emp-form-field select:focus,
+.emp-form-field.emp-form-field textarea:focus {
+  border-color: var(--a-accent, #106b52);
+  background: #fff;
+  box-shadow: 0 0 0 3px var(--a-ring, rgba(16, 107, 82, 0.24));
+}
+
+/* ── Employee view drawer (was #4f7bf7 + blue gradient avatar) ──── */
+.employee-drawer-btn-primary.employee-drawer-btn-primary {
+  background: var(--a-accent, #106b52);
+  border-color: var(--a-accent, #106b52);
+  color: #fff;
+}
+
+.employee-drawer-btn-primary.employee-drawer-btn-primary:hover {
+  background: var(--a-accent-hover, #0d5a45);
+  border-color: var(--a-accent-hover, #0d5a45);
+}
+
+/* ── Manager select (was #4f7bf7 / #eef3ff / #2f5bd4) ───────────── */
+.manager-select__trigger.manager-select__trigger:focus,
+.manager-select__search.manager-select__search input:focus {
+  border-color: var(--a-accent, #106b52);
+  background: #fff;
+  box-shadow: 0 0 0 3px var(--a-ring, rgba(16, 107, 82, 0.24));
+}
+
+.manager-select__option--active.manager-select__option--active {
+  background: var(--a-accent-soft, #e9f4f0);
+  color: var(--a-accent-ink, #0b4f3c);
+}
+
+/* ── Filter dropdown (palette A) ────────────────────────────────── */
+.filter-dropdown__trigger.filter-dropdown__trigger {
+  border-color: var(--a-line, #e5ebe7);
+  color: var(--a-ink-2, #3d4a45);
+}
+
+.filter-dropdown__trigger.filter-dropdown__trigger:hover,
+.filter-dropdown__trigger--compact.filter-dropdown__trigger--compact:hover {
+  border-color: var(--a-accent-border, #b6d9cb);
+  color: var(--a-accent-ink, #0b4f3c);
+}
+
+.filter-dropdown__menu.filter-dropdown__menu {
+  border-color: var(--a-line, #e5ebe7);
+}
+
+.filter-dropdown__option.filter-dropdown__option:hover {
+  background: var(--a-hover, #f2f7f4);
+  color: var(--a-ink, #12201c);
+}
+
+.filter-dropdown__radio.filter-dropdown__radio {
+  border-color: var(--a-line-strong, #d4ded8);
+}
+
+.filter-dropdown__radio--checked.filter-dropdown__radio--checked {
+  border-color: var(--a-accent, #106b52);
+  box-shadow:
+    inset 0 0 0 2.5px #fff,
+    inset 0 0 0 8px var(--a-accent, #106b52);
+}
+
+/* ── Column visibility selector (palette A) ─────────────────────── */
+.exc-col-trigger.exc-col-trigger {
+  border-color: var(--a-line, #e5ebe7);
+  color: var(--a-ink-2, #3d4a45);
+}
+
+.exc-col-trigger.exc-col-trigger:hover {
+  border-color: var(--a-accent-border, #b6d9cb);
+  color: var(--a-accent-ink, #0b4f3c);
+}
+
+.exc-col-badge.exc-col-badge {
+  background: var(--a-accent, #106b52);
+  color: #fff;
+}
+
+.exc-col-menu.exc-col-menu {
+  border-color: var(--a-line, #e5ebe7);
+}
+
+.exc-col-option.exc-col-option:hover,
+.exc-col-action.exc-col-action:hover {
+  background: var(--a-hover, #f2f7f4);
+  color: var(--a-accent-ink, #0b4f3c);
+}
+
+.exc-col-option.exc-col-option input,
+.exc-col-menu.exc-col-menu input[type="checkbox"] {
+  accent-color: var(--a-accent, #106b52);
+}
+
+/* ── Employee import drawer (palette C: #2563eb) ────────────────── */
+.empimp-btn--primary.empimp-btn--primary {
+  background: var(--a-accent, #106b52);
+  border-color: var(--a-accent, #106b52);
+  color: #fff;
+}
+
+.empimp-btn--primary.empimp-btn--primary:hover:not(:disabled) {
+  background: var(--a-accent-hover, #0d5a45);
+  border-color: var(--a-accent-hover, #0d5a45);
+}
+
+.empimp-btn.empimp-btn:focus-visible,
+.empimp-map-target.empimp-map-target select:focus-visible {
+  outline-color: var(--a-accent, #106b52);
+}
+
+.empimp-drop.empimp-drop:hover,
+.empimp-drop--active.empimp-drop--active {
+  border-color: var(--a-accent, #106b52);
+  background: var(--a-accent-soft, #e9f4f0);
+}
+
+.empimp-progress-fill.empimp-progress-fill,
+.empimp-steps-item--current.empimp-steps-item--current .empimp-steps-dot {
+  background: var(--a-accent, #106b52);
+}
+
+.empimp-toggle.empimp-toggle input {
+  accent-color: var(--a-accent, #106b52);
+}
+
+.empimp-alert--info.empimp-alert--info,
+.empimp-chip--update.empimp-chip--update,
+.empimp-badge--update.empimp-badge--update {
+  background: var(--a-info-soft, #e6f4f2);
+  color: var(--a-info-ink, #115e59);
+}
+
+.empimp-diff-to.empimp-diff-to {
+  color: var(--a-info-ink, #115e59);
+}
+
+.empimp-swatch--update.empimp-swatch--update {
+  background: var(--a-info-soft, #e6f4f2);
+  border-color: var(--a-info-border, #b9dcd7);
+}
+
+/* ── Shared table + control chrome that hardcoded blue tints ────── */
+.admin-shell:not(.admin-shell-login) .exc-btn:hover:not(:disabled),
+.admin-shell:not(.admin-shell-login) .exc-page-btn:hover:not(:disabled),
+.admin-shell:not(.admin-shell-login) .exc-kpi-card--clickable:focus-visible,
+.admin-shell:not(.admin-shell-login) .lv-kpi-card--clickable:focus-visible,
+.admin-shell:not(.admin-shell-login) .otr-btn:hover:not(:disabled),
+.admin-shell:not(.admin-shell-login) .otr-action-btn:hover,
+.admin-shell:not(.admin-shell-login)
+  .otr-filter-field
+  select:hover:not(:disabled) {
+  border-color: var(--a-accent-border);
+  background: var(--a-hover);
+}
+
+.admin-shell:not(.admin-shell-login) .table-pill.inactive {
+  background: var(--a-sunken);
+  color: var(--a-ink-3);
+}
+
+/* ============================================================================
+   7 · UNIVERSAL GUARDS
+   ----------------------------------------------------------------------------
+   A last safety net: any admin control still asking the browser for its
+   default accent gets the brand one, and focus rings are consistent.
+   ========================================================================= */
+
+.admin-shell:not(.admin-shell-login) input[type="checkbox"],
+.admin-shell:not(.admin-shell-login) input[type="radio"],
+.admin-shell:not(.admin-shell-login) input[type="range"],
+.admin-shell:not(.admin-shell-login) progress {
+  accent-color: var(--a-accent);
+}
+
+.admin-shell:not(.admin-shell-login) ::selection {
+  background: var(--a-accent-soft-2);
+  color: var(--a-accent-ink);
+}
+
+.admin-shell:not(.admin-shell-login)
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--a-surface),
+    0 0 0 4px var(--a-ring);
+}

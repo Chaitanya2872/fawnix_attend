@@ -1,4 +1,4 @@
-/* AdminSidebar — slate / electric-blue design system */
+/* AdminSidebar â€” slate / electric-blue design system */
 
 .sidebar {
   --sb-bg: #ffffff;
@@ -8,8 +8,8 @@
   --sb-text: #0f1b2d;
   --sb-text-secondary: #5b6779;
   --sb-text-tertiary: #97a1b0;
-  --sb-accent: #2563eb;
-  --sb-accent-soft: #eef3fe;
+  --sb-accent: var(--a-accent);
+  --sb-accent-soft: var(--a-accent-soft);
   --sb-accent-soft-border: #d3e3fd;
   --sb-danger: #e1443b;
   --sb-danger-soft: #fdecec;
@@ -73,7 +73,7 @@
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  background: linear-gradient(155deg, #2563eb, #1447c4);
+  background: linear-gradient(155deg, var(--a-accent), var(--a-deep));
   color: #fff;
   display: flex;
   align-items: center;

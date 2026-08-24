@@ -6,9 +6,9 @@
   --em-text: #111827;
   --em-text-soft: #747b84;
   --em-text-muted: #8b929c;
-  --em-blue: #4f7bf7;
-  --em-blue-hover: #416ce7;
-  --em-blue-soft: #eef3ff;
+  --em-blue: var(--a-accent);
+  --em-blue-hover: var(--a-accent-hover);
+  --em-blue-soft: var(--a-accent-soft);
   --em-success: #168a41;
   --em-success-soft: #eafbea;
   --em-danger: #ef4444;

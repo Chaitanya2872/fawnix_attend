@@ -1,0 +1,1128 @@
+/* ── Tour · mobile device wall ────────────────────────────────────────────────
+   A 3D orbit of handsets. All movement is driven by two custom properties
+   written per phone (`--off` signed slot distance, `--abs` its magnitude), so
+   dragging stays on the compositor and React only re-renders on index change.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.tw-wall {
+  --tw-radius: 30px;
+  --tw-phone-w: clamp(190px, 17vw, 244px);
+  --tw-slot: calc(var(--tw-phone-w) * 0.62);
+  --accent: var(--lime);
+
+  position: relative;
+  margin-top: clamp(56px, 7vw, 92px);
+  padding: clamp(26px, 3.4vw, 44px) clamp(20px, 3vw, 40px)
+    clamp(22px, 2.6vw, 32px);
+  border-radius: var(--tw-radius);
+  background:
+    radial-gradient(
+      120% 90% at 50% -10%,
+      rgba(255, 255, 255, 0.1),
+      transparent 60%
+    ),
+    linear-gradient(180deg, #0b2b22 0%, #061a15 100%);
+  color: #fff;
+  overflow: hidden;
+  opacity: 0;
+  transform: translate3d(0, 26px, 0);
+  transition:
+    opacity 0.85s var(--ease),
+    transform 0.85s var(--ease);
+}
+
+.tw-wall[data-visible] {
+  opacity: 1;
+  transform: none;
+}
+
+/* accent bloom that re-tints as the active screen changes */
+.tw-wall::before {
+  content: "";
+  position: absolute;
+  inset: -30% -10% auto;
+  height: 70%;
+  background: radial-gradient(
+    50% 60% at 50% 50%,
+    color-mix(in oklab, var(--accent) 26%, transparent),
+    transparent 70%
+  );
+  opacity: 0.7;
+  filter: blur(30px);
+  transition: background 0.9s var(--ease-soft);
+  pointer-events: none;
+}
+
+.tw-wall::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  pointer-events: none;
+}
+
+/* ── header ──────────────────────────────────────────────────────────────── */
+
+.tw-head {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  text-align: center;
+  max-width: 620px;
+  margin: 0 auto clamp(18px, 2.4vw, 30px);
+}
+
+.tw-head .tr-eyebrow {
+  color: color-mix(in oklab, var(--accent) 70%, #ffffff);
+}
+
+.tw-head h3 {
+  margin: 0;
+  font-size: clamp(24px, 2.8vw, 34px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+}
+
+.tw-head p {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+/* ── stage ───────────────────────────────────────────────────────────────── */
+
+.tw-stage {
+  position: relative;
+  height: clamp(360px, 46vh, 470px);
+  perspective: 1500px;
+  perspective-origin: 50% 42%;
+  cursor: grab;
+  touch-action: pan-y;
+  outline: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.tw-stage:active {
+  cursor: grabbing;
+}
+
+.tw-stage:focus-visible {
+  border-radius: 20px;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 60%, transparent);
+}
+
+.tw-stage-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(70% 60% at 50% 45%, #000, transparent 78%);
+  pointer-events: none;
+}
+
+/* floor pool of light under the active handset */
+.tw-stage-glow {
+  position: absolute;
+  left: 50%;
+  bottom: 6%;
+  width: min(560px, 78%);
+  height: 130px;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    50% 50% at 50% 50%,
+    color-mix(in oklab, var(--accent) 30%, transparent),
+    transparent 72%
+  );
+  filter: blur(22px);
+  opacity: 0.75;
+  transition: background 0.9s var(--ease-soft);
+  pointer-events: none;
+}
+
+.tw-orbit {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+
+/* ── handset ─────────────────────────────────────────────────────────────── */
+
+.tw-phone {
+  --lift: calc(var(--abs) * 8px);
+  --turn: calc(var(--off) * -21deg);
+
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--tw-phone-w);
+  aspect-ratio: 9 / 19.2;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  transform-style: preserve-3d;
+  /* The whole orbit position is one transform: slide out along the arc, push
+     back in Z with distance, rotate to face the centre, then settle. */
+  transform: translate3d(
+      calc(-50% + var(--off) * var(--tw-slot)),
+      calc(-50% + var(--lift)),
+      calc(var(--depth) * -132px)
+    )
+    rotateY(var(--turn)) scale(calc(1 - var(--abs) * 0.045));
+  transition:
+    transform 0.85s var(--ease),
+    opacity 0.6s var(--ease-soft),
+    filter 0.6s var(--ease-soft);
+}
+
+.tw-stage[data-dragging] .tw-phone {
+  /* Follow the hand 1:1 while dragging. */
+  transition: none;
+}
+
+.tw-phone {
+  opacity: clamp(0.18, calc(1 - var(--abs) * 0.26), 1);
+  filter: saturate(calc(1 - var(--abs) * 0.16))
+    brightness(calc(1 - var(--abs) * 0.07));
+}
+
+.tw-phone[data-active] {
+  opacity: 1;
+  filter: none;
+}
+
+/* Park anything deep in the stack so it never costs a paint. */
+.tw-phone[data-far] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tw-phone:focus-visible {
+  outline: none;
+}
+
+.tw-phone-body {
+  position: relative;
+  display: block;
+  height: 100%;
+  border-radius: clamp(20px, 2vw, 28px);
+  padding: 5px;
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.34),
+    rgba(255, 255, 255, 0.06) 40%,
+    rgba(0, 0, 0, 0.28)
+  );
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.32) inset,
+    0 24px 46px -18px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+}
+
+/* screen surface */
+.tw-phone-body::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: clamp(16px, 1.7vw, 24px);
+  background: #f7faf6;
+  z-index: 0;
+}
+
+.tw-phone-shot {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: clamp(16px, 1.7vw, 24px);
+  /* Crop from the top so headers and hero numbers always stay in frame. */
+  object-fit: cover;
+  object-position: top center;
+  background: #f7faf6;
+  -webkit-user-drag: none;
+}
+
+.tw-phone-notch {
+  position: absolute;
+  top: 11px;
+  left: 50%;
+  width: 30%;
+  height: 7px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(6, 20, 16, 0.5);
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* glass reflection, brightest on the phones angled away from centre */
+.tw-phone-sheen {
+  position: absolute;
+  inset: 5px;
+  border-radius: clamp(16px, 1.7vw, 24px);
+  background: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0.42) 0%,
+    rgba(255, 255, 255, 0.06) 34%,
+    transparent 52%
+  );
+  opacity: clamp(0.1, calc(var(--abs) * 0.38), 0.72);
+  transition: opacity 0.6s var(--ease-soft);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.tw-phone[data-side="right"] .tw-phone-sheen {
+  transform: scaleX(-1);
+}
+
+/* single scan sweep as a phone arrives at centre */
+.tw-phone-scan {
+  position: absolute;
+  inset: 5px;
+  border-radius: clamp(16px, 1.7vw, 24px);
+  overflow: hidden;
+  opacity: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.tw-phone-scan::after {
+  content: "";
+  position: absolute;
+  inset: -30% 0 auto;
+  height: 34%;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    color-mix(in oklab, var(--accent) 50%, transparent),
+    transparent
+  );
+}
+
+.tw-phone[data-active] .tw-phone-scan {
+  opacity: 1;
+  animation: twScan 1.5s var(--ease) 1;
+}
+
+@keyframes twScan {
+  from {
+    transform: translateY(0);
+    opacity: 0.9;
+  }
+  to {
+    transform: translateY(320%);
+    opacity: 0;
+  }
+}
+
+/* accent rim + contact shadow, strongest on the focused handset */
+.tw-phone-shadow {
+  position: absolute;
+  inset: -2px;
+  border-radius: clamp(22px, 2.2vw, 30px);
+  box-shadow: 0 0 0 1px transparent;
+  opacity: 0;
+  transition:
+    opacity 0.6s var(--ease-soft),
+    box-shadow 0.6s var(--ease-soft);
+  pointer-events: none;
+}
+
+.tw-phone[data-active] .tw-phone-shadow {
+  opacity: 1;
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--accent) 46%, transparent),
+    0 0 44px -6px color-mix(in oklab, var(--accent) 42%, transparent);
+}
+
+.tw-phone:not([data-active]):hover {
+  opacity: 1;
+  filter: none;
+}
+
+.tw-phone:not([data-active]):hover .tw-phone-shadow {
+  opacity: 0.7;
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 34%, transparent);
+}
+
+.tw-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  transform: translateX(-50%);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.34);
+  pointer-events: none;
+}
+
+/* ── readout ─────────────────────────────────────────────────────────────── */
+
+.tw-readout {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: clamp(14px, 1.8vw, 22px);
+  padding-top: clamp(16px, 2vw, 22px);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.tw-readout-copy {
+  display: grid;
+  gap: 7px;
+  max-width: 560px;
+  animation: twSwap 0.6s var(--ease) both;
+}
+
+@keyframes twSwap {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.tw-readout-meta {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--accent) 74%, #ffffff);
+}
+
+.tw-readout-copy strong {
+  font-size: clamp(17px, 1.9vw, 22px);
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.tw-readout-copy p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.62;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.tw-nav {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding-bottom: 12px;
+}
+
+.tw-nav button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  cursor: pointer;
+  transition:
+    background 0.3s var(--ease-soft),
+    border-color 0.3s var(--ease-soft),
+    transform 0.3s var(--ease);
+}
+
+.tw-nav button svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tw-nav button:hover {
+  background: color-mix(in oklab, var(--accent) 22%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 50%, transparent);
+  transform: translateY(-1px);
+}
+
+.tw-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.tw-count b {
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.tw-count i {
+  width: 14px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* autoplay dwell bar — restarts per screen, freezes while held */
+.tw-dwell {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 80%, transparent);
+  transform-origin: left center;
+  animation: twDwell 4.6s linear both;
+}
+
+.tw-dwell[data-hold] {
+  animation-play-state: paused;
+  opacity: 0.4;
+}
+
+@keyframes twDwell {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* ── rail ────────────────────────────────────────────────────────────────── */
+
+.tw-rail {
+  display: flex;
+  gap: 7px;
+  margin-top: clamp(14px, 1.8vw, 20px);
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.tw-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.tw-rail button {
+  flex: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 7px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.62);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.3s var(--ease-soft),
+    border-color 0.3s var(--ease-soft),
+    color 0.3s var(--ease-soft);
+}
+
+.tw-rail button:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.tw-rail button[data-active] {
+  background: color-mix(in oklab, var(--accent) 88%, #ffffff);
+  border-color: transparent;
+  color: #06231b;
+}
+
+/* ── mock screen bodies ──────────────────────────────────────────────────── */
+
+.tw-mock {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+  padding: 9px 10px 8px;
+  border-radius: clamp(16px, 1.7vw, 24px);
+  background: linear-gradient(180deg, #ffffff 0%, #f1f6f1 100%);
+  color: #0a2b21;
+  overflow: hidden;
+}
+
+.tw-mock-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 0;
+}
+
+.tw-mock-status b {
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.tw-mock-status em {
+  width: 16px;
+  height: 5px;
+  border-radius: 2px;
+  background: rgba(10, 43, 33, 0.32);
+}
+
+.tw-mock-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 2px 5px;
+}
+
+.tw-mock-head b {
+  flex: 1;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.tw-mock-back {
+  width: 7px;
+  height: 7px;
+  border-left: 1.6px solid rgba(10, 43, 33, 0.5);
+  border-bottom: 1.6px solid rgba(10, 43, 33, 0.5);
+  transform: rotate(45deg);
+}
+
+.tw-mock-avatar {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--accent) 55%, #dcece3);
+}
+
+/* hero number card */
+.tw-mock-hero {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: 10px 11px 12px;
+  border-radius: 12px;
+  background: linear-gradient(150deg, #0d3327, #0a2b21);
+  color: #fff;
+  overflow: hidden;
+}
+
+.tw-mock-hero b {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.tw-mock-hero em {
+  font-size: 8px;
+  font-style: normal;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.tw-mock-hero i {
+  position: absolute;
+  right: -14px;
+  top: -14px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--accent) 40%, transparent);
+  filter: blur(8px);
+  animation: twBreathe 4.6s var(--ease-soft) infinite;
+}
+
+@keyframes twBreathe {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.16);
+  }
+}
+
+.tw-mock-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 9px;
+  border-radius: 10px;
+  border: 1px solid rgba(10, 43, 33, 0.08);
+  background: #fff;
+  animation: twRowIn 0.6s var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 90ms + 160ms);
+}
+
+@keyframes twRowIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.tw-mock-row i {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--accent) 70%, #9fc3b3);
+}
+
+.tw-mock-row b {
+  flex: 1;
+  font-size: 8.5px;
+  font-weight: 600;
+  color: #123c2e;
+}
+
+.tw-mock-row em {
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 700;
+  color: #4d6b5f;
+}
+
+/* chat */
+.tw-mock-chat {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding-top: 2px;
+}
+
+.tw-bubble {
+  max-width: 84%;
+  padding: 7px 9px;
+  border-radius: 12px;
+  font-size: 8.5px;
+  line-height: 1.42;
+  animation: twRowIn 0.55s var(--ease) both;
+}
+
+.tw-bubble.is-them {
+  justify-self: end;
+  background: #0a2b21;
+  color: #fff;
+  border-bottom-right-radius: 4px;
+  animation-delay: 0.18s;
+}
+
+.tw-bubble.is-me {
+  justify-self: start;
+  background: color-mix(in oklab, var(--accent) 30%, #ffffff);
+  border: 1px solid rgba(10, 43, 33, 0.08);
+  border-bottom-left-radius: 4px;
+  animation-delay: 0.34s;
+}
+
+.tw-bubble.is-them:last-of-type {
+  animation-delay: 0.5s;
+}
+
+.tw-typing {
+  display: inline-flex;
+  gap: 3px;
+  padding: 7px 9px;
+  border-radius: 12px;
+  border-bottom-left-radius: 4px;
+  background: #fff;
+  border: 1px solid rgba(10, 43, 33, 0.08);
+  justify-self: start;
+}
+
+.tw-typing i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(10, 43, 33, 0.4);
+  animation: twType 1.3s var(--ease-soft) infinite;
+}
+
+.tw-typing i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.tw-typing i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes twType {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+/* calendar / roster grid */
+.tw-mock-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  padding: 4px 2px;
+}
+
+.tw-mock-grid i {
+  aspect-ratio: 1;
+  border-radius: 5px;
+  background: #e8f1ea;
+  animation: twCell 0.5s var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 22ms + 140ms);
+}
+
+.tw-mock-grid i[data-on] {
+  background: color-mix(in oklab, var(--accent) 70%, #ffffff);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 60%, transparent);
+}
+
+@keyframes twCell {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* explore menu */
+.tw-mock-menu {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.tw-mock-menu > span {
+  display: grid;
+  gap: 4px;
+  padding: 9px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(10, 43, 33, 0.08);
+  background: #fff;
+  animation: twRowIn 0.55s var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 70ms + 150ms);
+}
+
+.tw-mock-menu i {
+  width: 15px;
+  height: 15px;
+  border-radius: 5px;
+  background: color-mix(in oklab, var(--accent) 45%, #e4efe8);
+}
+
+.tw-mock-menu b {
+  width: 74%;
+  height: 4px;
+  border-radius: 3px;
+  background: rgba(10, 43, 33, 0.24);
+}
+
+.tw-mock-menu em {
+  width: 48%;
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(10, 43, 33, 0.12);
+}
+
+/* meeting-note sheet */
+.tw-mock-sheet {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  margin-top: auto;
+  padding: 11px 10px 12px;
+  border-radius: 14px 14px clamp(12px, 1.4vw, 20px) clamp(12px, 1.4vw, 20px);
+  background: #fff;
+  border: 1px solid rgba(10, 43, 33, 0.08);
+  box-shadow: 0 -8px 20px -12px rgba(10, 43, 33, 0.4);
+  animation: twSheetUp 0.7s var(--ease) both;
+  animation-delay: 0.16s;
+}
+
+@keyframes twSheetUp {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 28px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.tw-mock-sheet > b {
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.tw-mock-field {
+  position: relative;
+  padding: 8px 9px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in oklab, var(--accent) 40%, #dfeae3);
+  background: #f8fbf8;
+  font-size: 8.5px;
+  color: #123c2e;
+}
+
+.tw-mock-field i {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  width: 1px;
+  height: 10px;
+  transform: translateY(-50%);
+  background: #0a2b21;
+  animation: twCaret 1.1s steps(1) infinite;
+}
+
+@keyframes twCaret {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.tw-mock-wave {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 26px;
+}
+
+.tw-mock-wave i {
+  flex: 1;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--accent) 62%, #b9d2c6);
+  animation: twWave 1.5s var(--ease-soft) infinite;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+@keyframes twWave {
+  0%,
+  100% {
+    height: 22%;
+  }
+  50% {
+    height: 92%;
+  }
+}
+
+.tw-mock-cta {
+  padding: 8px;
+  border-radius: 999px;
+  background: #0a2b21;
+  color: #fff;
+  font-size: 8.5px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* leave-balance ring */
+.tw-mock-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin: 4px auto 6px;
+  width: 74px;
+  height: 74px;
+}
+
+.tw-mock-ring svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.tw-ring-track,
+.tw-ring-arc {
+  fill: none;
+  stroke-width: 7;
+  stroke-linecap: round;
+}
+
+.tw-ring-track {
+  stroke: #e5efe8;
+}
+
+.tw-ring-arc {
+  stroke: color-mix(in oklab, var(--accent) 78%, #2f7d63);
+  stroke-dasharray: 176;
+  animation: twArc 1.5s var(--ease) both;
+  animation-delay: 0.2s;
+}
+
+@keyframes twArc {
+  from {
+    stroke-dashoffset: 176;
+  }
+  to {
+    stroke-dashoffset: 46;
+  }
+}
+
+.tw-mock-ring b {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Fades the lower screen out rather than leaving dead space when a mock's
+   content is shorter than the handset. The sheet mock owns the bottom of the
+   screen itself, so it opts out. */
+.tw-mock::after {
+  content: "";
+  flex: 1;
+  min-height: 4px;
+  margin: 0 -10px;
+  background: linear-gradient(180deg, transparent, rgba(238, 245, 239, 0.85));
+}
+
+.tw-mock[data-kind="sheet"]::after {
+  display: none;
+}
+
+/* tab bar */
+.tw-mock-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 8px 4px 4px;
+  border-top: 1px solid rgba(10, 43, 33, 0.08);
+}
+
+.tw-mock-tabs i {
+  width: 13px;
+  height: 4px;
+  border-radius: 3px;
+  background: rgba(10, 43, 33, 0.16);
+}
+
+.tw-mock-tabs i[data-on] {
+  background: color-mix(in oklab, var(--accent) 72%, #2f7d63);
+}
+
+/* ── responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .tw-wall {
+    --tw-phone-w: clamp(158px, 40vw, 200px);
+    --tw-slot: calc(var(--tw-phone-w) * 0.56);
+  }
+
+  .tw-stage {
+    height: clamp(320px, 52vw, 400px);
+  }
+
+  .tw-readout {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .tw-nav {
+    justify-content: space-between;
+    padding-bottom: 10px;
+  }
+}
+
+@media (max-width: 560px) {
+  .tw-wall {
+    --tw-radius: 22px;
+    --tw-phone-w: clamp(140px, 52vw, 178px);
+    --tw-slot: calc(var(--tw-phone-w) * 0.5);
+  }
+
+  .tw-phone {
+    --turn: calc(var(--off) * -15deg);
+  }
+
+  .tw-head h3 {
+    font-size: 22px;
+  }
+}
+
+/* ── reduced motion ──────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .tw-wall,
+  .tw-readout-copy,
+  .tw-mock-row,
+  .tw-bubble,
+  .tw-mock-grid i,
+  .tw-mock-menu > span,
+  .tw-mock-sheet,
+  .tw-mock-hero i,
+  .tw-typing i,
+  .tw-mock-wave i,
+  .tw-mock-field i,
+  .tw-ring-arc,
+  .tw-phone[data-active] .tw-phone-scan,
+  .tw-dwell {
+    animation: none !important;
+  }
+
+  .tw-wall {
+    opacity: 1;
+    transform: none;
+  }
+
+  .tw-phone {
+    transition: none;
+  }
+
+  .tw-mock-wave i {
+    height: 55%;
+  }
+
+  .tw-ring-arc {
+    stroke-dashoffset: 46;
+  }
+
+  .tw-dwell {
+    display: none;
+  }
+}

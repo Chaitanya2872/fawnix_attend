@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import fawnixBg from "../../../assets/fawnix_bg.png";
 import { usePublicStats } from "../../public/hooks/usePublicStats";
 
@@ -28,6 +35,14 @@ const sceneCopy = {
   night: "Your workspace is ready when you are.",
 };
 
+/* Circumference of the dial arc (r = 46 in a 120x120 viewBox). Pre-computed so
+   the render path stays arithmetic-free. */
+const DIAL_C = 2 * Math.PI * 46;
+/* How long each signal holds the dial before it rotates to the next one. */
+const DIAL_DWELL = 4200;
+
+const clampPercent = (value: number) => Math.min(100, Math.max(4, value));
+
 export default function AdminLoginPage({
   adminEmpCode,
   adminOtp,
@@ -50,6 +65,71 @@ export default function AdminLoginPage({
   const isErr = /error|invalid|fail|denied|unauthorized/i.test(authStatus);
   const stats = usePublicStats();
   const peak = Math.max(...stats.rates, 1);
+
+  /* ---- live operations dial ------------------------------------------ */
+  const coreRef = useRef<HTMLDivElement | null>(null);
+  const [focus, setFocus] = useState(0);
+  const [held, setHeld] = useState(false);
+
+  /* Three real signals, each mapped onto the same 0..100 dial so switching
+     between them reads as one continuous instrument rather than three charts. */
+  const dials = useMemo(() => {
+    const roster = Math.max(stats.headcount, 1);
+    const onShift = Math.max(stats.present, 1);
+    return [
+      {
+        id: "attendance",
+        label: "Attendance",
+        value: stats.rateLabel,
+        caption: `${stats.presentLabel} of ${stats.headcountLabel} people are checked in right now.`,
+        percent: clampPercent(stats.attendanceRate),
+      },
+      {
+        id: "approvals",
+        label: "Approvals",
+        value: stats.approvalsLabel,
+        caption: `${stats.pendingLeaves} leave and ${stats.pendingExceptions} exception requests are waiting on a decision.`,
+        /* Inverted: a short queue should read as a full, healthy ring. */
+        percent: clampPercent(100 - (stats.pendingApprovals / roster) * 100),
+      },
+      {
+        id: "field",
+        label: "In the field",
+        value: stats.inFieldLabel,
+        caption: `${stats.inFieldLabel} teammates are on site, tracked live with distance and visit logs.`,
+        percent: clampPercent((stats.inField / onShift) * 100),
+      },
+    ];
+  }, [stats]);
+
+  const active = dials[focus] ?? dials[0];
+
+  /* The dial cycles on its own so the page always feels alive, and parks the
+     moment a visitor takes over with a pointer or the keyboard. */
+  useEffect(() => {
+    if (held) return;
+    const cycleId = window.setInterval(
+      () => setFocus((current) => (current + 1) % dials.length),
+      DIAL_DWELL,
+    );
+    return () => window.clearInterval(cycleId);
+  }, [held, dials.length]);
+
+  /* Feed the cursor position to CSS so the sheen can track the pointer without
+     a re-render per mouse move. */
+  const handleCorePointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const node = coreRef.current;
+    if (!node) return;
+    const box = node.getBoundingClientRect();
+    node.style.setProperty(
+      "--mx",
+      `${((event.clientX - box.left) / box.width) * 100}%`,
+    );
+    node.style.setProperty(
+      "--my",
+      `${((event.clientY - box.top) / box.height) * 100}%`,
+    );
+  };
 
   useEffect(() => {
     if (adminOtp) return;
@@ -120,24 +200,90 @@ export default function AdminLoginPage({
               </p>
             </div>
 
+            {/* Live operations core — an instrument, not a chart. The ring,
+                readout and ribbon all track one selected signal; hovering,
+                focusing or tabbing takes manual control of the rotation. */}
             <div
-              className="login-v3-preview"
+              className="login-v3-core"
+              ref={coreRef}
               data-live={stats.isLive || undefined}
+              data-signal={active.id}
+              onPointerMove={handleCorePointer}
+              onPointerEnter={() => setHeld(true)}
+              onPointerLeave={() => setHeld(false)}
             >
-              <div className="preview-top">
-                <span>Today at a glance</span>
-                <b>
-                  <i aria-hidden="true" /> {stats.isLive ? "Live" : "Preview"}
-                </b>
+              <span className="core-sheen" aria-hidden="true" />
+              <span className="core-grid" aria-hidden="true" />
+
+              <div className="core-head">
+                <span className="core-tag">
+                  <i aria-hidden="true" />
+                  {stats.isLive ? "Live signal" : "Preview signal"}
+                </span>
+                <span className="core-clock">{loginTimeLabel}</span>
               </div>
-              <div className="preview-value">
-                <strong>{stats.rateLabel}</strong>
-                <small>
-                  attendance rhythm · {stats.presentLabel}/
-                  {stats.headcountLabel} in
-                </small>
+
+              <div className="core-stage">
+                <div className="core-dial">
+                  <svg viewBox="0 0 120 120" aria-hidden="true">
+                    <circle
+                      className="core-dial-track"
+                      cx="60"
+                      cy="60"
+                      r="46"
+                    />
+                    <circle
+                      className="core-dial-arc"
+                      cx="60"
+                      cy="60"
+                      r="46"
+                      style={
+                        {
+                          strokeDasharray: DIAL_C,
+                          strokeDashoffset:
+                            DIAL_C - (DIAL_C * active.percent) / 100,
+                        } as CSSProperties
+                      }
+                    />
+                  </svg>
+                  <span className="core-dial-sweep" aria-hidden="true" />
+                  <div className="core-readout" key={active.id}>
+                    <strong>{active.value}</strong>
+                    <span>{active.label}</span>
+                  </div>
+                </div>
+
+                <p className="core-caption" key={`${active.id}-caption`}>
+                  {active.caption}
+                </p>
               </div>
-              <div className="preview-line">
+
+              <div
+                className="core-switch"
+                role="tablist"
+                aria-label="Live signals"
+              >
+                {dials.map((dial, index) => (
+                  <button
+                    key={dial.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={index === focus}
+                    className={index === focus ? "is-on" : undefined}
+                    onClick={() => setFocus(index)}
+                    onFocus={() => {
+                      setHeld(true);
+                      setFocus(index);
+                    }}
+                    onBlur={() => setHeld(false)}
+                  >
+                    {dial.label}
+                    <em aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+
+              <div className="core-ribbon" aria-hidden="true">
                 {stats.rates.map((rate, index) => (
                   <span
                     key={index}
@@ -146,29 +292,15 @@ export default function AdminLoginPage({
                     }
                     style={
                       {
-                        "--h": `${Math.max(12, (rate / peak) * 100)}%`,
+                        "--h": `${Math.max(14, (rate / peak) * 100)}%`,
                         "--i": index,
                       } as CSSProperties
                     }
                     title={`${stats.days[index]} · ${rate}%`}
-                  />
+                  >
+                    <i>{stats.days[index]}</i>
+                  </span>
                 ))}
-              </div>
-              <div className="preview-days">
-                {stats.days.map((day, index) => (
-                  <i key={`${day}-${index}`}>{day}</i>
-                ))}
-              </div>
-              <div className="preview-footer">
-                <span>
-                  <b>{stats.presentLabel}</b> present
-                </span>
-                <span>
-                  <b>{stats.approvalsLabel}</b> to review
-                </span>
-                <span>
-                  <b>{stats.inFieldLabel}</b> in field
-                </span>
               </div>
             </div>
           </aside>

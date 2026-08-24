@@ -1,0 +1,183 @@
+/* ============================================================
+   Fawnix — design tokens ("quiet precision")
+   Single source of truth for spacing, radii, elevation, type,
+   motion and z-index across the admin application.
+
+   Depth comes from hairlines + light, never from heavy shadows.
+   Colour tokens live alongside the theme mapping in App.css so
+   that existing feature stylesheets keep inheriting them.
+   ============================================================ */
+
+:root {
+  /* ── spacing: strict 4px rhythm ───────────────────────── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 28px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* ── radii: only four, ever ───────────────────────────── */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-pill: 999px;
+
+  /* ── elevation: only three, ever ──────────────────────── */
+  --e-1: 0 1px 2px rgba(16, 40, 33, 0.04);
+  --e-2:
+    0 4px 12px -4px rgba(16, 40, 33, 0.08), 0 1px 2px rgba(16, 40, 33, 0.04);
+  --e-3:
+    0 24px 48px -24px rgba(16, 40, 33, 0.18), 0 2px 6px rgba(16, 40, 33, 0.05);
+
+  /* inner hairline that makes white surfaces feel crisp */
+  --e-inset: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+
+  /* ── type scale ───────────────────────────────────────── */
+  --fs-micro: 10px;
+  --fs-caption: 11px;
+  --fs-sm: 12px;
+  --fs-body: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-title: 20px;
+  --fs-display: 28px;
+  --fs-hero: 36px;
+
+  --lh-tight: 1.15;
+  --lh-snug: 1.35;
+  --lh-normal: 1.55;
+
+  /* tracking */
+  --tr-tight: -0.02em;
+  --tr-tighter: -0.035em;
+  --tr-label: 0.08em;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+
+  /* ── motion: one easing, three speeds ─────────────────── */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+
+  /* ── z-index scale ────────────────────────────────────── */
+  --z-base: 1;
+  --z-sticky: 20;
+  --z-topbar: 30;
+  --z-sidebar: 40;
+  --z-dropdown: 60;
+  --z-scrim: 80;
+  --z-drawer: 90;
+  --z-modal: 100;
+  --z-toast: 120;
+
+  /* ── layout constants ─────────────────────────────────── */
+  --shell-sidebar-w: 266px;
+  --shell-topbar-h: 56px;
+  --page-max-w: 1560px;
+  --control-h: 34px;
+  --control-h-sm: 28px;
+}
+
+/* ============================================================
+   Global polish — applies app-wide
+   ============================================================ */
+
+/* Numbers should never jitter or misalign in a data product. */
+.dashboard-table td,
+.adm-table td,
+.kpi-value,
+.ov2-kpi-value,
+[class*="-value"],
+[class*="-count"],
+[class*="-metric"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* One consistent, visible focus ring everywhere. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: none;
+  border-radius: var(--r-xs);
+  box-shadow:
+    0 0 0 2px var(--surface-2, #fff),
+    0 0 0 4px var(--focus-ring, rgba(15, 107, 82, 0.32));
+}
+
+/* Slim, unobtrusive scrollbars that match the surface. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong, #d5ddd9) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--r-pill);
+  background-clip: content-box;
+  background-color: var(--border-strong, #d5ddd9);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted, #8a978f);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::selection {
+  background: var(--bg-accent, #e9f4f0);
+  color: var(--text-accent, #0f6b52);
+}
+
+/* Inputs should never render a browser-default look. */
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+input[type="search"]::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+/* Images and media never overflow their container. */
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+/* Honour the user's motion preference across the whole app. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

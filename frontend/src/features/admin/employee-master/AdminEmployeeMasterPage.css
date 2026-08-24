@@ -316,12 +316,33 @@
 
 .admin-aligned-page--employee-master .em-table-scroll {
   width: 100%;
-  overflow-x: auto;
+  max-height: clamp(280px, calc(100vh - 430px), 620px);
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.admin-aligned-page--employee-master .em-table-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.admin-aligned-page--employee-master .em-table-scroll::-webkit-scrollbar-track {
+  background: var(--em-surface-muted);
+}
+
+.admin-aligned-page--employee-master .em-table-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid var(--em-surface-muted);
+  border-radius: 999px;
+  background: #cfd6e3;
+}
+
+.admin-aligned-page--employee-master .em-table-scroll::-webkit-scrollbar-thumb:hover {
+  background: #b8c2d3;
 }
 
 .admin-aligned-page--employee-master .em-table {
-  width: 100%;
-  min-width: 920px;
+  width: max-content;
+  min-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
 }
@@ -337,6 +358,9 @@
   letter-spacing: 0;
   text-transform: uppercase;
   white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .admin-aligned-page--employee-master .em-table tbody td {
@@ -353,6 +377,33 @@
 
 .admin-aligned-page--employee-master .em-row:hover td {
   background: #fbfcff;
+}
+
+.admin-aligned-page--employee-master .em-row--message:hover td {
+  background: #ffffff;
+}
+
+.em-table-message {
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--em-text-soft);
+  text-align: center;
+}
+
+.em-table-message strong {
+  color: var(--em-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.em-table-message span {
+  max-width: 360px;
+  color: var(--em-text-soft);
+  font-size: 13px;
 }
 
 .admin-aligned-page--employee-master .adm-cell-primary {

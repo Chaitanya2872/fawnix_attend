@@ -11,6 +11,7 @@ import type {
 type ApiRequest = (path: string, options?: RequestInit, tokenOverride?: string) => Promise<any>
 
 const DEFAULT_PAGE_SIZE = 15
+const EMPLOYEE_MASTER_REQUEST_TIMEOUT_MS = 30_000
 
 export const EMPTY_EMPLOYEE_MASTER_FILTERS: EmployeeMasterFilterState = {
   search: '',
@@ -119,6 +120,17 @@ function ensureSuccessfulResponse(response: unknown, fallbackMessage: string) {
   }
 }
 
+function getLoadErrorMessage(loadError: unknown, fallbackMessage: string) {
+  if (
+    loadError instanceof DOMException &&
+    loadError.name === 'AbortError'
+  ) {
+    return 'Request timed out while loading employee master records.'
+  }
+
+  return loadError instanceof Error ? loadError.message : fallbackMessage
+}
+
 export function useEmployeeMasterResource({
   isActive,
   accessToken,
@@ -146,8 +158,17 @@ export function useEmployeeMasterResource({
       setLoading(true)
       setError('')
 
+      const controller = new AbortController()
+      const timeoutId = window.setTimeout(() => {
+        controller.abort()
+      }, EMPLOYEE_MASTER_REQUEST_TIMEOUT_MS)
+
       try {
-        const response = await apiRequest(buildListUrl(resource, requestFilters, requestPage), {}, accessToken)
+        const response = await apiRequest(
+          buildListUrl(resource, requestFilters, requestPage),
+          { signal: controller.signal },
+          accessToken
+        )
         ensureSuccessfulResponse(response, `Failed to load ${resource.title.toLowerCase()}`)
 
         const data = (response?.data || {}) as Record<string, unknown>
@@ -166,8 +187,9 @@ export function useEmployeeMasterResource({
           page: requestPage,
           has_previous: requestPage > 1,
         })
-        setError(loadError instanceof Error ? loadError.message : `Failed to load ${resource.title.toLowerCase()}`)
+        setError(getLoadErrorMessage(loadError, `Failed to load ${resource.title.toLowerCase()}`))
       } finally {
+        window.clearTimeout(timeoutId)
         setLoading(false)
       }
     },

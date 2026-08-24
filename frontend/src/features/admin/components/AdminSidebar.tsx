@@ -392,7 +392,7 @@ export default function AdminSidebar({
                           </span>
                           <span>{block.label}</span>
                         </span>
-                        {block.label === 'Organization units' ? (
+                        {block.label === 'Organization units' && onAddOrgUnit ? (
                           <span
                             className="sidebar-subgroup-plus"
                             role="button"

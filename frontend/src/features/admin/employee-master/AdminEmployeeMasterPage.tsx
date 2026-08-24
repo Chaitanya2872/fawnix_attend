@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { EMPLOYEE_MASTER_STATUS_OPTIONS } from './employeeMasterConfig'
 import './AdminEmployeeMasterPage.css'
 import type {
@@ -45,6 +45,7 @@ type AdminEmployeeMasterPageProps = {
     value: EmployeeMasterFilterState[K]
   ) => void
   updateRecord: (recordId: string | number, payload: Record<string, string>) => Promise<void>
+  createRequestId?: number
 }
 
 function stringifyValue(value: unknown) {
@@ -232,9 +233,11 @@ export default function AdminEmployeeMasterPage({
   refresh,
   updateFilter,
   updateRecord,
+  createRequestId = 0,
 }: AdminEmployeeMasterPageProps) {
   const [formPanel, setFormPanel] = useState<EmployeeMasterFormState | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<EmployeeMasterRecord | null>(null)
+  const handledCreateRequestId = useRef(0)
 
   const activeOnPage = records.filter(
     (record) => stringifyValue(record.status).toLowerCase() === 'active'
@@ -252,6 +255,7 @@ export default function AdminEmployeeMasterPage({
       getOptionsFromFilterData('statuses', filterOptions, records, 'status', EMPLOYEE_MASTER_STATUS_OPTIONS),
     [filterOptions, records]
   )
+  const tableColumnCount = resource.tableColumns.length + (canWriteAdminData ? 1 : 0)
 
   const openCreatePanel = () => {
     setFormPanel({
@@ -261,6 +265,24 @@ export default function AdminEmployeeMasterPage({
       errors: {},
     })
   }
+
+  useEffect(() => {
+    if (!createRequestId || handledCreateRequestId.current === createRequestId) {
+      return
+    }
+
+    handledCreateRequestId.current = createRequestId
+    if (!canWriteAdminData) {
+      return
+    }
+
+    setFormPanel({
+      mode: 'create',
+      record: null,
+      values: buildFormValues(resource),
+      errors: {},
+    })
+  }, [canWriteAdminData, createRequestId, resource])
 
   const openEditPanel = (record: EmployeeMasterRecord) => {
     setFormPanel({
@@ -314,6 +336,133 @@ export default function AdminEmployeeMasterPage({
     } catch {
       // The hook owns the user-facing action status.
     }
+  }
+
+  const renderTableBody = () => {
+    if (loading) {
+      return (
+        <tr className="adm-row em-row em-row--message">
+          <td colSpan={tableColumnCount}>
+            <div className="em-table-message">
+              <span className="em-spinner" aria-hidden="true" />
+              <strong>Loading {resource.title.toLowerCase()}</strong>
+              <span>Fetching the latest master records.</span>
+            </div>
+          </td>
+        </tr>
+      )
+    }
+
+    if (error) {
+      return (
+        <tr className="adm-row em-row em-row--message">
+          <td colSpan={tableColumnCount}>
+            <div className="em-table-message">
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="adm-empty__icon">
+                <path d="M12 9v4m0 4h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.72 3h16.92a2 2 0 0 0 1.72-3L13.7 3.86a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <strong>{resource.title} did not load.</strong>
+              <span>{error}</span>
+              <button className="adm-btn" type="button" onClick={refresh}>
+                Try again
+              </button>
+            </div>
+          </td>
+        </tr>
+      )
+    }
+
+    if (!records.length) {
+      return (
+        <tr className="adm-row em-row em-row--message">
+          <td colSpan={tableColumnCount}>
+            <div className="em-table-message">
+              <strong>No {resource.title.toLowerCase()} found</strong>
+              <span>Adjust filters or add a new {resource.singularLabel.toLowerCase()}.</span>
+            </div>
+          </td>
+        </tr>
+      )
+    }
+
+    return records.map((record, index) => {
+      const rowKey = stringifyValue(getRecordId(record, resource) ?? index)
+      const displayName = getDisplayName(record, resource)
+      return (
+        <tr className="adm-row em-row" key={rowKey}>
+          {resource.tableColumns.map((column) => {
+            const value = stringifyValue(record[column.key])
+
+            if (column.kind === 'primary') {
+              const code = stringifyValue(record[resource.codeField])
+              return (
+                <td key={column.key}>
+                  <span className="adm-cell-primary">{value || '--'}</span>
+                  <span className="adm-cell-meta">{code || 'Code unavailable'}</span>
+                </td>
+              )
+            }
+
+            if (column.kind === 'status') {
+              return (
+                <td key={column.key}>
+                  <span className={`adm-pill table-pill adm-pill--${getStatusTone(value)}`}>
+                    {formatStatusLabel(value)}
+                  </span>
+                </td>
+              )
+            }
+
+            if (column.kind === 'code') {
+              return (
+                <td key={column.key}>
+                  <span className="adm-code em-code">{value || '--'}</span>
+                </td>
+              )
+            }
+
+            return (
+              <td key={column.key} title={value}>
+                <span className="adm-cell-secondary">{truncate(value)}</span>
+              </td>
+            )
+          })}
+          {canWriteAdminData ? (
+            <td>
+              <div className="adm-actions em-actions">
+                <button
+                  className="adm-action-btn adm-action-btn--view"
+                  type="button"
+                  onClick={() => openEditPanel(record)}
+                  disabled={actionLoading}
+                  aria-label={`Edit ${displayName}`}
+                >
+                  Edit
+                </button>
+                <button
+                  className="adm-action-btn adm-action-btn--delete"
+                  type="button"
+                  onClick={() => setDeleteTarget(record)}
+                  disabled={actionLoading}
+                  aria-label={`Delete ${displayName}`}
+                >
+                  <svg className="adm-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      d="M5 7h14M9 7V5h6v2m-7 0 1 12h6l1-12M10 11v5m4-5v5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </td>
+          ) : null}
+        </tr>
+      )
+    })
   }
 
   const confirmDelete = async () => {
@@ -541,153 +690,45 @@ export default function AdminEmployeeMasterPage({
           </div>
         </div>
 
-        {loading ? (
-          <div className="adm-empty empty-state em-state">
-            <span className="em-spinner" aria-hidden="true" />
-            <strong>Loading {resource.title.toLowerCase()}</strong>
-            <span>Fetching the latest master records.</span>
-          </div>
-        ) : error ? (
-          <div className="adm-empty empty-state em-state">
-            <svg viewBox="0 0 24 24" aria-hidden="true" className="adm-empty__icon">
-              <path d="M12 9v4m0 4h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.72 3h16.92a2 2 0 0 0 1.72-3L13.7 3.86a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <strong>{resource.title} did not load.</strong>
-            <span>{error}</span>
-            <button className="adm-btn" type="button" onClick={refresh}>
-              Try again
+        <div className="adm-table-scroll table-scroll em-table-scroll">
+          <table className="adm-table dashboard-table em-table" aria-label={resource.title}>
+            <thead>
+              <tr>
+                {resource.tableColumns.map((column) => (
+                  <th key={column.key} style={column.minWidth ? { minWidth: column.minWidth } : undefined}>
+                    {column.label}
+                  </th>
+                ))}
+                {canWriteAdminData ? <th className="em-actions-th">Actions</th> : null}
+              </tr>
+            </thead>
+            <tbody>{renderTableBody()}</tbody>
+          </table>
+        </div>
+
+        <div className="em-pagination">
+          <strong>
+            Page {pagination.page.toLocaleString()} of {Math.max(pagination.total_pages, 1).toLocaleString()}
+          </strong>
+          <div className="em-pagination__actions">
+            <button
+              className="adm-btn"
+              type="button"
+              onClick={() => changePage(pagination.page - 1)}
+              disabled={!pagination.has_previous || loading}
+            >
+              Previous
+            </button>
+            <button
+              className="adm-btn"
+              type="button"
+              onClick={() => changePage(pagination.page + 1)}
+              disabled={!pagination.has_next || loading}
+            >
+              Next
             </button>
           </div>
-        ) : records.length ? (
-          <>
-            <div className="adm-table-scroll table-scroll em-table-scroll">
-              <table className="adm-table dashboard-table em-table" aria-label={resource.title}>
-                <thead>
-                  <tr>
-                    {resource.tableColumns.map((column) => (
-                      <th key={column.key} style={column.minWidth ? { minWidth: column.minWidth } : undefined}>
-                        {column.label}
-                      </th>
-                    ))}
-                    {canWriteAdminData ? <th className="em-actions-th">Actions</th> : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {records.map((record, index) => {
-                    const rowKey = stringifyValue(getRecordId(record, resource) ?? index)
-                    const displayName = getDisplayName(record, resource)
-                    return (
-                      <tr className="adm-row em-row" key={rowKey}>
-                        {resource.tableColumns.map((column) => {
-                          const value = stringifyValue(record[column.key])
-
-                          if (column.kind === 'primary') {
-                            const code = stringifyValue(record[resource.codeField])
-                            return (
-                              <td key={column.key}>
-                                <span className="adm-cell-primary">{value || '--'}</span>
-                                <span className="adm-cell-meta">{code || 'Code unavailable'}</span>
-                              </td>
-                            )
-                          }
-
-                          if (column.kind === 'status') {
-                            return (
-                              <td key={column.key}>
-                                <span className={`adm-pill table-pill adm-pill--${getStatusTone(value)}`}>
-                                  {formatStatusLabel(value)}
-                                </span>
-                              </td>
-                            )
-                          }
-
-                          if (column.kind === 'code') {
-                            return (
-                              <td key={column.key}>
-                                <span className="adm-code em-code">{value || '--'}</span>
-                              </td>
-                            )
-                          }
-
-                          return (
-                            <td key={column.key} title={value}>
-                              <span className="adm-cell-secondary">{truncate(value)}</span>
-                            </td>
-                          )
-                        })}
-                        {canWriteAdminData ? (
-                          <td>
-                            <div className="adm-actions em-actions">
-                              <button
-                                className="adm-action-btn adm-action-btn--view"
-                                type="button"
-                                onClick={() => openEditPanel(record)}
-                                disabled={actionLoading}
-                                aria-label={`Edit ${displayName}`}
-                              >
-                                Edit
-                              </button>
-                              <button
-                                className="adm-action-btn adm-action-btn--delete"
-                                type="button"
-                                onClick={() => setDeleteTarget(record)}
-                                disabled={actionLoading}
-                                aria-label={`Delete ${displayName}`}
-                              >
-                                <svg className="adm-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                  <path
-                                    d="M5 7h14M9 7V5h6v2m-7 0 1 12h6l1-12M10 11v5m4-5v5"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1.8"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  />
-                                </svg>
-                              </button>
-                            </div>
-                          </td>
-                        ) : null}
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="em-pagination">
-              <strong>
-                Page {pagination.page.toLocaleString()} of {Math.max(pagination.total_pages, 1).toLocaleString()}
-              </strong>
-              <div className="em-pagination__actions">
-                <button
-                  className="adm-btn"
-                  type="button"
-                  onClick={() => changePage(pagination.page - 1)}
-                  disabled={!pagination.has_previous || loading}
-                >
-                  Previous
-                </button>
-                <button
-                  className="adm-btn"
-                  type="button"
-                  onClick={() => changePage(pagination.page + 1)}
-                  disabled={!pagination.has_next || loading}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="adm-empty empty-state em-state">
-            <svg viewBox="0 0 24 24" aria-hidden="true" className="adm-empty__icon">
-              <path d="M4 19V7l8-4 8 4v12M4 11h16M9 19v-4h6v4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <strong>No {resource.title.toLowerCase()} found</strong>
-            <span>Adjust filters or add a new {resource.singularLabel.toLowerCase()}.</span>
-          </div>
-        )}
+        </div>
       </div>
 
       {formPanel ? (

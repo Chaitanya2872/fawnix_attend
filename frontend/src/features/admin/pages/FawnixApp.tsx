@@ -93,6 +93,11 @@ const adminPanelPathMap: Record<SidebarId, string> = {
   'api-telemetry': 'api-telemetry',
 }
 
+const organizationUnitPanels: SidebarId[] = [
+  'employee-master-working-units',
+  'employee-master-payroll-units',
+]
+
 function getAdminPanelPath(panel: SidebarId) {
   const slug = adminPanelPathMap[panel]
   return slug ? `${appRoutes.admin}/${slug}` : appRoutes.admin
@@ -292,6 +297,7 @@ function FawnixApp() {
   const location = useLocation()
   const navigate = useNavigate()
   const [activePanel, setActivePanel] = useState<SidebarId>(() => getAdminPanelFromPath(window.location.pathname))
+  const [employeeMasterCreateRequestId, setEmployeeMasterCreateRequestId] = useState(0)
   const clearAdminData = () => {
     resetDashboardData()
     resetLeavesPanel()
@@ -395,6 +401,16 @@ function FawnixApp() {
     apiRequest,
     resource: employeeMasterResource
   })
+
+  const handleAddOrgUnit = () => {
+    const targetPanel = organizationUnitPanels.includes(activePanel)
+      ? activePanel
+      : 'employee-master-working-units'
+
+    setActivePanel(targetPanel)
+    navigate(getAdminPanelPath(targetPanel))
+    setEmployeeMasterCreateRequestId((current) => current + 1)
+  }
 
   const {
     employeeSearch,
@@ -1020,6 +1036,7 @@ function FawnixApp() {
           refresh={refreshEmployeeMaster}
           updateFilter={updateEmployeeMasterFilter}
           updateRecord={updateEmployeeMasterRecord}
+          createRequestId={employeeMasterCreateRequestId}
         />
       )
     }
@@ -1296,6 +1313,7 @@ function FawnixApp() {
               navigate(getAdminPanelPath(id))
             }}
             onLogout={handleLogout}
+            onAddOrgUnit={canWriteAdminData ? handleAddOrgUnit : undefined}
           />
         ) : null}
 

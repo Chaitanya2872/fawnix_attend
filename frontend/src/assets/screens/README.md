@@ -1,9 +1,9 @@
 # App screenshots (product tour device wall)
 
-Drop the real mobile-app screenshots in **this folder** and they appear
+The ten real mobile-app captures live in **this folder** and appear
 automatically in the product tour, inside the _"Explore the workspace"_
 section. No code changes are needed — the gallery globs this directory at
-build time.
+build time, so replacing a file is enough to update the tour.
 
 ## Accepted files
 
@@ -28,7 +28,7 @@ works too.
 | 09  | `holiday`      | Holiday calendar                          |
 | 10  | `leave`        | Leaves + leave balance                    |
 
-Recommended: `01-clockout.png`, `02-assistant.png`, … `10-leave.png`.
+Currently shipped: `01-clockout.jpg`, `02-assistant.jpg`, … `10-leave.jpg`.
 
 ## Guidance
 
@@ -37,6 +37,8 @@ Recommended: `01-clockout.png`, `02-assistant.png`, … `10-leave.png`.
 - Screenshots that already include the phone status bar are fine — the mock
   status bar and notch are only drawn when no screenshot is present.
 - Keep each file under ~400 KB where possible; they ship in the bundle.
+- Replacing a screen is a straight file swap: keep the slug in the name and the
+  wall picks it up on the next build.
 
 Screens without a screenshot keep rendering their animated placeholder, so the
 tour always looks complete while files are being added one at a time.

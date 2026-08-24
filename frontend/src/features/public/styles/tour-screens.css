@@ -6,8 +6,15 @@
 
 .tw-wall {
   --tw-radius: 30px;
-  --tw-phone-w: clamp(190px, 17vw, 244px);
-  --tw-slot: calc(var(--tw-phone-w) * 0.62);
+  /* One handset drives the whole layout. The stage is sized from the phone
+     rather than from the viewport, so a screen can never bleed into the
+     heading, the drag hint, or the readout divider on short windows. */
+  --tw-phone-w: clamp(176px, 15.4vw, 230px);
+  --tw-phone-h: calc(var(--tw-phone-w) * 19.2 / 9);
+  --tw-gutter: clamp(54px, 5vw, 78px);
+  /* Wide enough that neighbouring handsets read as separate devices instead of
+     a stack of overlapping screenshots. */
+  --tw-slot: calc(var(--tw-phone-w) * 0.78);
   --accent: var(--lime);
 
   position: relative;
@@ -97,7 +104,9 @@
 
 .tw-stage {
   position: relative;
-  height: clamp(360px, 46vh, 470px);
+  /* Exactly one handset tall, plus room for the downward lift of the angled
+     neighbours and the hint that sits under them. */
+  height: calc(var(--tw-phone-h) + var(--tw-gutter));
   perspective: 1500px;
   perspective-origin: 50% 42%;
   cursor: grab;
@@ -162,7 +171,7 @@
   top: 50%;
   left: 50%;
   width: var(--tw-phone-w);
-  aspect-ratio: 9 / 19.2;
+  height: var(--tw-phone-h);
   margin: 0;
   padding: 0;
   border: 0;
@@ -188,10 +197,12 @@
   transition: none;
 }
 
+/* Depth cues: the further from centre, the fainter, flatter and softer. The
+   blur is what stops the receding screenshots from competing for attention. */
 .tw-phone {
-  opacity: clamp(0.18, calc(1 - var(--abs) * 0.26), 1);
-  filter: saturate(calc(1 - var(--abs) * 0.16))
-    brightness(calc(1 - var(--abs) * 0.07));
+  opacity: clamp(0.14, calc(1 - var(--abs) * 0.34), 1);
+  filter: saturate(calc(1 - var(--abs) * 0.3))
+    brightness(calc(1 - var(--abs) * 0.12)) blur(calc(var(--abs) * 1.1px));
 }
 
 .tw-phone[data-active] {
@@ -511,17 +522,14 @@
 
 /* ── rail ────────────────────────────────────────────────────────────────── */
 
+/* Wraps rather than scrolls: the panel clips its overflow, so a scrolling rail
+   would silently hide the last few screens. */
 .tw-rail {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 7px;
   margin-top: clamp(14px, 1.8vw, 20px);
-  overflow-x: auto;
-  scrollbar-width: none;
-  padding-bottom: 2px;
-}
-
-.tw-rail::-webkit-scrollbar {
-  display: none;
 }
 
 .tw-rail button {
@@ -1049,12 +1057,9 @@
 
 @media (max-width: 900px) {
   .tw-wall {
-    --tw-phone-w: clamp(158px, 40vw, 200px);
-    --tw-slot: calc(var(--tw-phone-w) * 0.56);
-  }
-
-  .tw-stage {
-    height: clamp(320px, 52vw, 400px);
+    --tw-phone-w: clamp(158px, 34vw, 196px);
+    --tw-gutter: clamp(44px, 6vw, 62px);
+    --tw-slot: calc(var(--tw-phone-w) * 0.72);
   }
 
   .tw-readout {
@@ -1072,8 +1077,9 @@
 @media (max-width: 560px) {
   .tw-wall {
     --tw-radius: 22px;
-    --tw-phone-w: clamp(140px, 52vw, 178px);
-    --tw-slot: calc(var(--tw-phone-w) * 0.5);
+    --tw-phone-w: clamp(136px, 46vw, 172px);
+    --tw-gutter: 40px;
+    --tw-slot: calc(var(--tw-phone-w) * 0.66);
   }
 
   .tw-phone {

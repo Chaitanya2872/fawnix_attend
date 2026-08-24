@@ -394,7 +394,11 @@ export function TourScreenWall() {
                   ) : (
                     <ScreenMock screen={screen} />
                   )}
-                  <span className="tw-phone-notch" aria-hidden="true" />
+                  {/* Real captures already contain the device status bar, so
+                      drawing our own notch on top would double it up. */}
+                  {!screen.src && (
+                    <span className="tw-phone-notch" aria-hidden="true" />
+                  )}
                   <span className="tw-phone-sheen" aria-hidden="true" />
                   <span className="tw-phone-scan" aria-hidden="true" />
                 </span>

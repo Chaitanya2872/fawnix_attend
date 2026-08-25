@@ -7799,14 +7799,24 @@ textarea:focus,
   }
 
   .page .nav {
+    flex-direction: row;
     align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 56px;
   }
 
   .page .nav-links {
-    width: 100%;
-    gap: 16px;
-    overflow-x: auto;
-    padding: 4px 0;
+    display: none;
+  }
+
+  .page .brand-tag {
+    display: none;
+  }
+
+  .page .nav > .cta {
+    min-height: 40px;
+    padding: 0 16px;
   }
 
   .page .hero-grid {
@@ -10976,10 +10986,17 @@ textarea:focus,
   );
   overflow: hidden;
 }
-.login-v3-icon img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.login-v3-card-head .login-v3-icon span {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border-radius: 9px;
+  background: var(--evergreen);
+  color: #f6f8f2;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
 }
 .login-v3-card-head span {
   display: block;

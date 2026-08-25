@@ -309,7 +309,7 @@ export default function AdminLoginPage({
             <div className="login-v3-card">
               <div className="login-v3-card-head">
                 <div className="login-v3-icon">
-                  <img src={fawnixBg} alt="" />
+                  <span aria-hidden="true">ID</span>
                 </div>
                 <div>
                   <span>Secure access</span>

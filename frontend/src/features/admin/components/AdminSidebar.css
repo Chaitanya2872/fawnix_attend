@@ -10,7 +10,7 @@
   --sb-text-tertiary: #97a1b0;
   --sb-accent: var(--a-accent);
   --sb-accent-soft: var(--a-accent-soft);
-  --sb-accent-soft-border: #d3e3fd;
+  --sb-accent-soft-border: var(--a-accent-soft);
   --sb-danger: #e1443b;
   --sb-danger-soft: #fdecec;
   --sb-radius-sm: 9px;
@@ -278,6 +278,8 @@
 .sidebar-link {
   position: relative;
   display: flex;
+  /* Nav rows are anchors now; utility rows are still buttons. */
+  text-decoration: none;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -392,126 +394,6 @@
   100% {
     box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
   }
-}
-
-/* ---------- Collapsible subgroups ---------- */
-.sidebar-subgroup {
-  margin-top: 2px;
-}
-
-.sidebar-subgroup-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  border: none;
-  background: transparent;
-  padding: 7px 10px 5px 10px;
-  border-radius: var(--sb-radius-sm);
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 0.16s var(--sb-ease);
-}
-.sidebar-subgroup-head:hover {
-  background: var(--sb-bg-app);
-}
-.sidebar-subgroup-head:hover .sidebar-subgroup-head-label {
-  color: var(--sb-text-secondary);
-}
-.sidebar-subgroup-head-label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 12.5px;
-  font-weight: 500;
-  letter-spacing: -0.005em;
-  color: var(--sb-text-secondary);
-  transition: color 0.16s var(--sb-ease);
-}
-/* 18px box + 10px gap keeps the group label on the same x-axis as sibling nav labels. */
-.sidebar-subgroup-chevron {
-  width: 18px;
-  height: 18px;
-  color: var(--sb-text-tertiary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.24s var(--sb-ease);
-  flex-shrink: 0;
-}
-.sidebar-subgroup-chevron svg {
-  width: 13px;
-  height: 13px;
-}
-.sidebar-subgroup.open .sidebar-subgroup-chevron {
-  transform: rotate(90deg);
-}
-
-.sidebar-subgroup-plus {
-  width: 16px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--sb-text-tertiary);
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background 0.16s var(--sb-ease), color 0.16s var(--sb-ease);
-}
-.sidebar-subgroup-plus:hover {
-  background: var(--sb-border-soft);
-  color: var(--sb-accent);
-}
-.sidebar-subgroup-plus svg {
-  width: 11px;
-  height: 11px;
-}
-
-.sidebar-subgroup-items {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.28s var(--sb-ease);
-}
-.sidebar-subgroup.open .sidebar-subgroup-items {
-  grid-template-rows: 1fr;
-}
-.sidebar-subgroup-items-inner {
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-top: 2px;
-}
-
-/* Nested rows indent under the parent chevron and share one guide line. */
-.sidebar-link--nested {
-  padding-left: 29px;
-  font-size: 13px;
-}
-.sidebar-link--nested::before {
-  content: '';
-  position: absolute;
-  left: 18px;
-  top: 2px;
-  bottom: 2px;
-  width: 1.5px;
-  border-radius: 2px;
-  background: var(--sb-border);
-  transition: background 0.16s var(--sb-ease);
-}
-.sidebar-link--nested:hover::before {
-  background: #cfd8e4;
-}
-.sidebar-link--nested.active::before {
-  background: var(--sb-accent);
-}
-
-.sidebar--rail .sidebar-subgroup-head,
-.sidebar--rail .sidebar-subgroup-items {
-  display: none;
-}
-.sidebar--rail .sidebar-link--nested::before {
-  display: none;
 }
 
 /* ---------- Utility row + footer ---------- */
@@ -780,8 +662,6 @@
   .sidebar-link,
   .sidebar-link-icon,
   .sidebar-active-rail,
-  .sidebar-subgroup-chevron,
-  .sidebar-subgroup-items,
   .sidebar-profile-info,
   .sidebar-logout-btn,
   .sidebar-live-dot {
@@ -789,3 +669,44 @@
     animation: none !important;
   }
 }
+
+/* Row wrapper: lets the "+" sit beside the nav button instead of inside it. */
+.sidebar-link-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.sidebar-link-row--has-action .sidebar-link {
+  padding-right: 34px;
+}
+
+/* Inline "+" on a nav row (Organization), replacing the old group-header one. */
+.sidebar-link-plus {
+  position: absolute;
+  right: 8px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 5px;
+  color: var(--sb-text-tertiary);
+  opacity: 0;
+  transition: background 0.16s var(--sb-ease), color 0.16s var(--sb-ease), opacity 0.16s var(--sb-ease);
+}
+.sidebar-link:hover .sidebar-link-plus,
+.sidebar-link.active .sidebar-link-plus,
+.sidebar-link-plus:focus-visible {
+  opacity: 1;
+}
+.sidebar-link-plus:hover {
+  background: var(--a-accent-soft);
+  color: var(--sb-accent);
+}
+.sidebar-link-plus svg { width: 11px; height: 11px; }
+.sidebar--rail .sidebar-link-plus { display: none; }

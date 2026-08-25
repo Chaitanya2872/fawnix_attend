@@ -167,6 +167,8 @@ export type EmployeeMasterResourceConfig = {
   tableColumns: EmployeeMasterTableColumnConfig[]
   formFields: EmployeeMasterFormFieldConfig[]
   filters: EmployeeMasterFilterConfig[]
+  /** Renders the OpenStreetMap picker that fills latitude/longitude. */
+  hasLocationPicker?: boolean
 }
 
 export type AdminProfile = {

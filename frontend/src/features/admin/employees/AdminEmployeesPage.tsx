@@ -226,17 +226,6 @@ export default function AdminEmployeesPage(props: Props) {
       <div className="adm-header dashboard-section-head">
         <div className="adm-header__title">
           <h1 className="adm-heading">Employee List</h1>
-          <div className="adm-tabs" role="tablist" aria-label="Employee views">
-            <button className="adm-tab adm-tab--active" type="button" role="tab" aria-selected="true">
-              Employee List
-            </button>
-            <button className="adm-tab" type="button" role="tab" aria-selected="false">
-              Organization Chart
-            </button>
-            <button className="adm-tab" type="button" role="tab" aria-selected="false">
-              Employee Profiles
-            </button>
-          </div>
         </div>
 
         <div className="adm-header__actions">

@@ -14,6 +14,7 @@ import type { ImportFieldKey } from './importFields'
 import { buildCreatePayload, buildImportPlan, buildUpdatePayload, existingValue } from './importPlan'
 import type { PlannedRow, RowStatus } from './importPlan'
 import type { EmployeeRow } from '../../../../types/admin'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 import './EmployeeImportDrawer.css'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -92,15 +93,15 @@ export default function EmployeeImportDrawer({
   const [running, setRunning] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
   const cancelledRef = useRef(false)
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !running) onClose()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [onClose, running])
+  useDialogFocus({
+    containerRef: panelRef,
+    open: true,
+    // Escape must not abandon an import that is mid-flight.
+    onClose: running ? undefined : onClose,
+  })
 
   // Stops in-flight writes if the wizard unmounts mid-import. The flag is reset
   // on mount because StrictMode/HMR run the cleanup of a throwaway first mount.
@@ -502,7 +503,7 @@ export default function EmployeeImportDrawer({
   return (
     <div className="empimp-overlay" role="dialog" aria-modal="true" aria-label="Import employees">
       <button className="empimp-scrim" type="button" aria-label="Close import" onClick={() => !running && onClose()} />
-      <div className="empimp-panel">
+      <div className="empimp-panel" ref={panelRef}>
         <header className="empimp-head">
           <div className="empimp-head-title">
             <h2>Import Employees</h2>

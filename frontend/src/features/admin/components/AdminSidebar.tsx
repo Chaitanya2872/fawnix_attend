@@ -1,6 +1,7 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import SidebarIcon from './navigation/SidebarIcon'
+import { getAdminPanelPath } from '../config/adminPanelPaths'
 import { API_TELEMETRY_EMP_CODE, SIDEBAR_LIVE_ITEM_IDS, sidebarSections } from '../config/sidebar'
 import type { AdminProfile, SidebarId } from '../../../types/admin'
 import './AdminSidebar.css'
@@ -104,28 +105,6 @@ function SidebarChromeIcon({ name }: { name: SidebarChromeIconName }) {
 
 type SidebarNavItem = (typeof sidebarSections)[number]['items'][number]
 
-type SectionBlock =
-  | { type: 'item'; item: SidebarNavItem }
-  | { type: 'group'; label: string; items: SidebarNavItem[] }
-
-/** Collapses a flat item list into standalone items and grouped runs sharing the same groupLabel. */
-function groupSectionItems(items: SidebarNavItem[]): SectionBlock[] {
-  const blocks: SectionBlock[] = []
-  for (const item of items) {
-    if (!item.groupLabel) {
-      blocks.push({ type: 'item', item })
-      continue
-    }
-    const last = blocks[blocks.length - 1]
-    if (last && last.type === 'group' && last.label === item.groupLabel) {
-      last.items.push(item)
-    } else {
-      blocks.push({ type: 'group', label: item.groupLabel, items: [item] })
-    }
-  }
-  return blocks
-}
-
 function getInitials(name?: string | null) {
   const parts = (name || 'Admin').trim().split(/\s+/).filter(Boolean)
   if (parts.length === 0) return 'A'
@@ -152,7 +131,7 @@ export default function AdminSidebar({
   const [indicator, setIndicator] = useState({ top: 0, height: 0, visible: false })
 
   const navRef = useRef<HTMLDivElement | null>(null)
-  const linkRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
+  const linkRefs = useRef<Map<string, HTMLAnchorElement>>(new Map())
 
   const visibleSections = sidebarSections
     .map((section) => ({
@@ -163,24 +142,13 @@ export default function AdminSidebar({
     }))
     .filter((section) => section.items.length > 0)
   const visibleItems = visibleSections.flatMap((section) => section.items)
-  const activeItem = visibleItems.find((item) => item.id === activePanel)
-  const activeSection = visibleSections.find((section) =>
-    section.items.some((item) => item.id === activePanel)
-  )
+  /** An entry owns the active panel if it is that panel, or lists it in matchIds. */
+  const ownsActivePanel = (item: SidebarNavItem) =>
+    item.id === activePanel || Boolean(item.matchIds?.includes(activePanel))
+  const activeItem = visibleItems.find(ownsActivePanel)
+  const activeSection = visibleSections.find((section) => section.items.some(ownsActivePanel))
 
-  const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
-    const groups = new Set<string>()
-    if (activeItem?.groupLabel) groups.add(activeItem.groupLabel)
-    return groups
-  })
 
-  // Keep the containing subgroup open whenever the active panel lands inside a collapsed one.
-  useEffect(() => {
-    if (activeItem?.groupLabel && !openGroups.has(activeItem.groupLabel)) {
-      setOpenGroups((prev) => new Set(prev).add(activeItem.groupLabel as string))
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePanel])
 
   useEffect(() => {
     window.localStorage.setItem(COLLAPSE_STORAGE_KEY, collapsed ? '1' : '0')
@@ -189,7 +157,7 @@ export default function AdminSidebar({
   // Glide the active-state rail to whichever nav button is currently active.
   useLayoutEffect(() => {
     const navEl = navRef.current
-    const activeEl = linkRefs.current.get(activePanel)
+    const activeEl = activeItem ? linkRefs.current.get(activeItem.id) : undefined
     if (navEl && activeEl) {
       const navRect = navEl.getBoundingClientRect()
       const elRect = activeEl.getBoundingClientRect()
@@ -201,16 +169,8 @@ export default function AdminSidebar({
     } else {
       setIndicator((prev) => ({ ...prev, visible: false }))
     }
-  }, [activePanel, mobileMenuOpen, collapsed, openGroups, visibleItems.length])
+  }, [activePanel, activeItem, mobileMenuOpen, collapsed, visibleItems.length])
 
-  const toggleGroup = (label: string) => {
-    setOpenGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(label)) next.delete(label)
-      else next.add(label)
-      return next
-    })
-  }
 
   const handleSelectPanel = (id: SidebarId) => {
     onSelectPanel(id)
@@ -334,25 +294,41 @@ export default function AdminSidebar({
             >
               {section.title ? <div className="sidebar-section-label">{section.title}</div> : null}
               <div className="sidebar-group">
-                {groupSectionItems(section.items).map((block) => {
-                  const renderLink = (item: (typeof section.items)[number], nested: boolean) => {
-                    const isLive = SIDEBAR_LIVE_ITEM_IDS.includes(item.id)
-                    const badgeCount = badgeCounts?.[item.id]
-                    const linkClassName = [
-                      'sidebar-link',
-                      nested ? 'sidebar-link--nested' : '',
-                      activePanel === item.id ? 'active' : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')
+                {section.items.map((item) => {
+                  const isLive = SIDEBAR_LIVE_ITEM_IDS.includes(item.id)
+                  const badgeCount = badgeCounts?.[item.id]
+                  const showAddAction = Boolean(item.hasAddAction && onAddOrgUnit)
 
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className={linkClassName}
+                  return (
+                    // The row exists so the "+" can be a sibling button rather
+                    // than nested inside the nav button -- interactive content
+                    // inside a <button> is invalid and reads unpredictably to
+                    // assistive tech.
+                    <div
+                      className={`sidebar-link-row${showAddAction ? ' sidebar-link-row--has-action' : ''}`}
+                      key={item.id}
+                    >
+                      <a
+                        href={getAdminPanelPath(item.id)}
+                        className={`sidebar-link${ownsActivePanel(item) ? ' active' : ''}`}
                         data-tip={item.label}
-                        onClick={() => handleSelectPanel(item.id)}
+                        aria-current={ownsActivePanel(item) ? 'page' : undefined}
+                        onClick={(event) => {
+                          // Let the browser handle new-tab/new-window intents;
+                          // only take over for a plain left click.
+                          if (
+                            event.defaultPrevented ||
+                            event.button !== 0 ||
+                            event.metaKey ||
+                            event.ctrlKey ||
+                            event.shiftKey ||
+                            event.altKey
+                          ) {
+                            return
+                          }
+                          event.preventDefault()
+                          handleSelectPanel(item.id)
+                        }}
                         ref={(el) => {
                           if (el) linkRefs.current.set(item.id, el)
                           else linkRefs.current.delete(item.id)
@@ -369,55 +345,17 @@ export default function AdminSidebar({
                         ) : badgeCount ? (
                           <span className="sidebar-link-badge">{badgeCount}</span>
                         ) : null}
-                      </button>
-                    )
-                  }
-
-                  if (block.type === 'item') {
-                    return <Fragment key={block.item.id}>{renderLink(block.item, false)}</Fragment>
-                  }
-
-                  const isOpen = openGroups.has(block.label)
-                  return (
-                    <div className={`sidebar-subgroup${isOpen ? ' open' : ''}`} key={block.label}>
-                      <button
-                        type="button"
-                        className="sidebar-subgroup-head"
-                        onClick={() => toggleGroup(block.label)}
-                        aria-expanded={isOpen}
-                      >
-                        <span className="sidebar-subgroup-head-label">
-                          <span className="sidebar-subgroup-chevron">
-                            <SidebarChromeIcon name="chevron-right" />
-                          </span>
-                          <span>{block.label}</span>
-                        </span>
-                        {block.label === 'Organization units' && onAddOrgUnit ? (
-                          <span
-                            className="sidebar-subgroup-plus"
-                            role="button"
-                            tabIndex={0}
-                            aria-label="Add organization unit"
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              onAddOrgUnit?.()
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter' || event.key === ' ') {
-                                event.stopPropagation()
-                                onAddOrgUnit?.()
-                              }
-                            }}
-                          >
-                            <SidebarChromeIcon name="plus" />
-                          </span>
-                        ) : null}
-                      </button>
-                      <div className="sidebar-subgroup-items">
-                        <div className="sidebar-subgroup-items-inner">
-                          {block.items.map((item) => renderLink(item, true))}
-                        </div>
-                      </div>
+                      </a>
+                      {showAddAction ? (
+                        <button
+                          type="button"
+                          className="sidebar-link-plus"
+                          aria-label={`Add ${item.label.toLowerCase()} record`}
+                          onClick={() => onAddOrgUnit?.()}
+                        >
+                          <SidebarChromeIcon name="plus" />
+                        </button>
+                      ) : null}
                     </div>
                   )
                 })}

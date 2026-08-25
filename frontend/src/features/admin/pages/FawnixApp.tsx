@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { appRoutes } from "../../../app/config/routes";
 import "../../../App.css";
+import {
+  getAdminPanelFromPath,
+  getAdminPanelPath,
+} from "../config/adminPanelPaths";
 import { API_TELEMETRY_EMP_CODE } from "../config/sidebar";
 import { useAdminLoginExperience } from "../hooks/useAdminLoginExperience";
 import { useAdminAuth } from "../hooks/useAdminAuth";
@@ -45,6 +49,7 @@ import AdminReportsPage from "../reports/AdminReportsPage";
 import "../styles/admin-theme.css";
 import {
   employeeMasterResourceConfigs,
+  employeeMasterResources,
   getEmployeeMasterResourceByPanel,
   isEmployeeMasterSidebarId,
 } from "../employee-master/employeeMasterConfig";
@@ -74,54 +79,6 @@ import type {
   LeaveRow,
   SidebarId,
 } from "../../../types/admin";
-
-const adminPanelPathMap: Record<SidebarId, string> = {
-  dashboard: "",
-  employees: "employees",
-  "employee-master-working-units": "employee-master/working-units",
-  "employee-master-payroll-units": "employee-master/payroll-units",
-  "employee-master-designations": "employee-master/designations",
-  "employee-master-departments": "employee-master/departments",
-  attendance: "attendance",
-  "attendance-records": "attendance-records",
-  "attendance-exceptions": "attendance-exceptions",
-  "overtime-records": "overtime-records",
-  inbox: "inbox",
-  calendar: "calendar",
-  reports: "reports",
-  leaves: "leaves",
-  activities: "activities",
-  "field-visits": "field-visits",
-  "api-telemetry": "api-telemetry",
-};
-
-const organizationUnitPanels: SidebarId[] = [
-  "employee-master-working-units",
-  "employee-master-payroll-units",
-];
-
-function getAdminPanelPath(panel: SidebarId) {
-  const slug = adminPanelPathMap[panel];
-  return slug ? `${appRoutes.admin}/${slug}` : appRoutes.admin;
-}
-
-function getAdminPanelFromPath(pathname: string): SidebarId {
-  const normalizedPath = pathname.replace(/\/+$/, "");
-  if (normalizedPath === appRoutes.admin) {
-    return "dashboard";
-  }
-
-  const prefix = `${appRoutes.admin}/`;
-  if (!normalizedPath.startsWith(prefix)) {
-    return "dashboard";
-  }
-
-  const slug = normalizedPath.slice(prefix.length);
-  const matched = Object.entries(adminPanelPathMap).find(
-    ([, value]) => value === slug,
-  );
-  return (matched?.[0] as SidebarId | undefined) || "dashboard";
-}
 
 function getExceptionDateValue(row: AttendanceExceptionRow) {
   return row.exception_date || row.attendance_date || row.requested_at;
@@ -414,6 +371,7 @@ function FawnixApp() {
   const employeeMasterIsActive = isEmployeeMasterSidebarId(activePanel);
   const {
     filters: employeeMasterFilters,
+    appliedFilters: employeeMasterAppliedFilters,
     records: employeeMasterRecords,
     filterOptions: employeeMasterFilterOptions,
     pagination: employeeMasterPagination,
@@ -439,7 +397,7 @@ function FawnixApp() {
   });
 
   const handleAddOrgUnit = () => {
-    const targetPanel = organizationUnitPanels.includes(activePanel)
+    const targetPanel = isEmployeeMasterSidebarId(activePanel)
       ? activePanel
       : "employee-master-working-units";
 
@@ -1142,11 +1100,17 @@ function FawnixApp() {
           error={employeeMasterError}
           filterOptions={employeeMasterFilterOptions}
           filters={employeeMasterFilters}
+          appliedFilters={employeeMasterAppliedFilters}
           lastSyncedAt={employeeMasterLastSyncedAt}
           loading={employeeMasterLoading}
           pagination={employeeMasterPagination}
           records={employeeMasterRecords}
           resource={employeeMasterResource}
+          resources={employeeMasterResources}
+          onSelectResource={(sidebarId) => {
+            setActivePanel(sidebarId);
+            navigate(getAdminPanelPath(sidebarId));
+          }}
           applyFilters={applyEmployeeMasterFilters}
           changePage={changeEmployeeMasterPage}
           clearFilters={clearEmployeeMasterFilters}

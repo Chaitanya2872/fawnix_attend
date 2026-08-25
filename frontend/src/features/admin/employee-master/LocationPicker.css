@@ -1,0 +1,138 @@
+/* OpenStreetMap picker embedded in the work-location form. */
+
+.em-locpick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.em-locpick-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.em-locpick-search {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  min-width: 240px;
+}
+
+.em-locpick-search input {
+  flex: 1;
+  min-width: 0;
+}
+
+.em-locpick-here {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.em-locpick-here svg {
+  width: 15px;
+  height: 15px;
+}
+
+.em-locpick-error {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--em-danger, #ef4444);
+}
+
+.em-locpick-results {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 170px;
+  overflow-y: auto;
+  border: 1px solid var(--em-border, #e5e7eb);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.em-locpick-results li + li {
+  border-top: 1px solid var(--em-border, #e5e7eb);
+}
+
+.em-locpick-results button {
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 8px 11px;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--em-text, #111827);
+  text-align: left;
+  cursor: pointer;
+}
+
+.em-locpick-results button:hover {
+  background: var(--em-surface-muted, #f8f9fb);
+}
+
+.em-locpick-map {
+  height: 280px;
+  border: 1px solid var(--em-border, #e5e7eb);
+  border-radius: 10px;
+  overflow: hidden;
+  /* Leaflet panes stack above form controls without this. */
+  z-index: 0;
+}
+
+/* The drawer sits at a high z-index; keep Leaflet's chrome underneath it. */
+.em-locpick-map .leaflet-pane,
+.em-locpick-map .leaflet-top,
+.em-locpick-map .leaflet-bottom {
+  z-index: 1;
+}
+
+.em-locpick-map .leaflet-container {
+  font-family: inherit;
+}
+
+.em-locpick-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-height: 20px;
+  font-size: 12.5px;
+  color: var(--em-text-soft, #747b84);
+}
+
+.em-locpick-coords b {
+  font-weight: 600;
+  color: var(--em-text, #111827);
+  font-variant-numeric: tabular-nums;
+}
+
+.em-locpick-clear {
+  border: none;
+  background: none;
+  padding: 0;
+  margin-left: auto;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--em-danger, #ef4444);
+  cursor: pointer;
+}
+
+.em-locpick-clear:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.em-locpick-clear:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .em-locpick-map {
+    height: 220px;
+  }
+}

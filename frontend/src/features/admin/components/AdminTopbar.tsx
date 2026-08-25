@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./AdminTopbar.css";
-import { sidebarItems, sidebarSections } from "../config/sidebar";
+import { findSidebarItem, sidebarItems, sidebarSections } from "../config/sidebar";
 import type { SidebarId } from "../../../types/admin";
 
 type AdminTopbarProps = {
@@ -43,14 +43,16 @@ export function AdminTopbar({
     const map = new Map<string, string>();
     sidebarSections.forEach((section) => {
       if (!section.title) return;
-      section.items.forEach((item) =>
-        map.set(item.id, section.title as string),
-      );
+      section.items.forEach((item) => {
+        map.set(item.id, section.title as string);
+        // Panels that share a nav entry share its section too.
+        item.matchIds?.forEach((id) => map.set(id, section.title as string));
+      });
     });
     return map;
   }, []);
 
-  const activeItem = sidebarItems.find((item) => item.id === activePanel);
+  const activeItem = findSidebarItem(activePanel);
   const pageTitle = activeItem?.label ?? prettifyPanelId(String(activePanel));
   const pageSection = sectionById.get(String(activePanel)) ?? "Workspace";
 

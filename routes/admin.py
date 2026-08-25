@@ -191,11 +191,17 @@ def get_employee_master_record(current_user, resource, record_id):
     return jsonify(response), status_code
 
 
-@admin_bp.route('/employee-master/<resource>/<int:record_id>', methods=['PUT'])
+@admin_bp.route('/employee-master/<resource>/<int:record_id>', methods=['PATCH', 'PUT'])
 @token_required
 @hr_or_devtester_required
 def update_employee_master_record(current_user, resource, record_id):
-    """Update an employee master record."""
+    """
+    Partially update an employee master record.
+
+    PATCH is the accurate method: only the fields present in the body are
+    written, everything else is left as-is. PUT stays registered so existing
+    callers keep working, but it behaves identically (it is not a replace).
+    """
     payload = request.get_json() or {}
     response, status_code = employee_master_service.update_master_record(resource, record_id, payload)
     return jsonify(response), status_code

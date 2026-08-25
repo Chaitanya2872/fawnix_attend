@@ -1,43 +1,7 @@
 import type { SidebarItemDefinition, SidebarSectionDefinition, LeaveFilterState } from '../types/sidebar'
+import type { SidebarId } from '../../../types/admin'
 
 export const API_TELEMETRY_EMP_CODE = '8888'
-
-export const sidebarItems: SidebarItemDefinition[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: 'home' },
-  { id: 'attendance', label: "Today's activity", icon: 'pulse' },
-  { id: 'attendance-records', label: 'Attendance log', icon: 'list' },
-  { id: 'attendance-exceptions', label: 'Exceptions', icon: 'alert' },
-  { id: 'field-visits', label: 'Field visits', icon: 'pin' },
-  { id: 'leaves', label: 'Leave requests', icon: 'leaf' },
-  { id: 'overtime-records', label: 'Overtime log', icon: 'clock' },
-  { id: 'employees', label: 'Employee directory', icon: 'users' },
-  {
-    id: 'employee-master-working-units',
-    label: 'Work locations',
-    icon: 'building',
-    groupLabel: 'Organization units',
-  },
-  {
-    id: 'employee-master-payroll-units',
-    label: 'Payroll units',
-    icon: 'wallet',
-    groupLabel: 'Organization units',
-  },
-  {
-    id: 'employee-master-designations',
-    label: 'Designations',
-    icon: 'badge',
-    groupLabel: 'Profiles',
-  },
-  {
-    id: 'employee-master-departments',
-    label: 'Departments',
-    icon: 'layers',
-    groupLabel: 'Profiles',
-  },
-  { id: 'reports', label: 'Insights & reports', icon: 'chart' },
-  { id: 'inbox', label: 'Inbox', icon: 'inbox' }
-]
 
 export const sidebarSections: SidebarSectionDefinition[] = [
   {
@@ -60,33 +24,35 @@ export const sidebarSections: SidebarSectionDefinition[] = [
       { id: 'employees', label: 'Employee directory', icon: 'users' },
       {
         id: 'employee-master-working-units',
-        label: 'Work locations',
+        label: 'Organization',
         icon: 'building',
-        groupLabel: 'Organization units',
-      },
-      {
-        id: 'employee-master-payroll-units',
-        label: 'Payroll units',
-        icon: 'wallet',
-        groupLabel: 'Organization units',
-      },
-      {
-        id: 'employee-master-designations',
-        label: 'Designations',
-        icon: 'badge',
-        groupLabel: 'Profiles',
-      },
-      {
-        id: 'employee-master-departments',
-        label: 'Departments',
-        icon: 'layers',
-        groupLabel: 'Profiles',
+        matchIds: [
+          'employee-master-payroll-units',
+          'employee-master-designations',
+          'employee-master-departments',
+        ],
+        hasAddAction: true,
       },
       { id: 'reports', label: 'Insights & reports', icon: 'chart' },
       { id: 'inbox', label: 'Inbox', icon: 'inbox' }
     ]
   }
 ]
+
+/** Flat view of every nav item, derived so the two lists cannot drift apart. */
+export const sidebarItems: SidebarItemDefinition[] = sidebarSections.flatMap(
+  (section) => section.items
+)
+
+/**
+ * Resolves a panel to the nav entry that represents it, following `matchIds`
+ * so the Organization entry answers for all of its tabs.
+ */
+export function findSidebarItem(panel: SidebarId): SidebarItemDefinition | undefined {
+  return sidebarItems.find(
+    (item) => item.id === panel || Boolean(item.matchIds?.includes(panel))
+  )
+}
 
 // Item ids that should show a live/pulsing status dot instead of a count badge.
 export const SIDEBAR_LIVE_ITEM_IDS = ['attendance']

@@ -551,10 +551,11 @@
   }
 }
 
-/* ---------- Mobile (< 960px): restore original off-canvas behaviour ---------- */
-@media (max-width: 960px) {
+/* ---------- Mobile/tablet: restore original off-canvas behaviour ---------- */
+@media (max-width: 980px) {
   .sidebar {
-    width: 0;
+    width: 100%;
+    min-height: auto;
   }
 
   .sidebar-mobile-bar {
@@ -618,6 +619,45 @@
   .sidebar--rail .sidebar-panel {
     width: min(300px, 86vw);
   }
+  .sidebar--rail .sidebar-panel-head {
+    justify-content: space-between;
+    padding: 14px 12px 14px 16px;
+  }
+  .sidebar--rail .sidebar-brand-text,
+  .sidebar--rail .sidebar-profile-info {
+    width: auto;
+    opacity: 1;
+  }
+  .sidebar--rail .sidebar-search-wrap {
+    padding: 12px 14px 12px 8px;
+  }
+  .sidebar--rail .sidebar-search {
+    justify-content: flex-start;
+    padding: 8px 10px;
+  }
+  .sidebar--rail .sidebar-search-placeholder,
+  .sidebar--rail .sidebar-search kbd,
+  .sidebar--rail .sidebar-link-label,
+  .sidebar--rail .sidebar-link-badge,
+  .sidebar--rail .sidebar-live-dot,
+  .sidebar--rail .sidebar-logout-btn {
+    display: flex;
+  }
+  .sidebar--rail .sidebar-search-placeholder,
+  .sidebar--rail .sidebar-link-label {
+    flex: 1;
+    min-width: 0;
+  }
+  .sidebar--rail .sidebar-link {
+    justify-content: flex-start;
+    padding: 8.5px 10px;
+  }
+  .sidebar--rail .sidebar-section-label {
+    opacity: 1;
+  }
+  .sidebar--rail .sidebar-link-plus {
+    display: inline-flex;
+  }
   .sidebar-collapse-btn {
     display: none;
   }
@@ -679,6 +719,9 @@
 .sidebar-link-row--has-action .sidebar-link {
   padding-right: 34px;
 }
+.sidebar--rail .sidebar-link-row--has-action .sidebar-link {
+  padding-right: 9px;
+}
 
 /* Inline "+" on a nav row (Organization), replacing the old group-header one. */
 .sidebar-link-plus {
@@ -699,8 +742,9 @@
   opacity: 0;
   transition: background 0.16s var(--sb-ease), color 0.16s var(--sb-ease), opacity 0.16s var(--sb-ease);
 }
-.sidebar-link:hover .sidebar-link-plus,
-.sidebar-link.active .sidebar-link-plus,
+.sidebar-link-row:hover .sidebar-link-plus,
+.sidebar-link-row:focus-within .sidebar-link-plus,
+.sidebar-link.active + .sidebar-link-plus,
 .sidebar-link-plus:focus-visible {
   opacity: 1;
 }
@@ -710,3 +754,13 @@
 }
 .sidebar-link-plus svg { width: 11px; height: 11px; }
 .sidebar--rail .sidebar-link-plus { display: none; }
+
+@media (max-width: 980px) {
+  .sidebar.sidebar--rail .sidebar-link-row--has-action .sidebar-link {
+    padding-right: 34px;
+  }
+
+  .sidebar.sidebar--rail .sidebar-link-plus {
+    display: inline-flex;
+  }
+}

@@ -131,6 +131,8 @@ export default function AdminSidebar({
     if (typeof window === 'undefined') return false
     return window.localStorage.getItem(COLLAPSE_STORAGE_KEY) === '1'
   })
+  const [railPreviewEnabled, setRailPreviewEnabled] = useState(true)
+  const [railPreviewOpen, setRailPreviewOpen] = useState(false)
   const [indicator, setIndicator] = useState({ top: 0, height: 0, visible: false })
 
   const navRef = useRef<HTMLDivElement | null>(null)
@@ -184,11 +186,46 @@ export default function AdminSidebar({
     setMobileMenuOpen(false)
     onLogout()
   }
+  const handleCollapseToggle = () => {
+    if (collapsed) {
+      setCollapsed(false)
+      setRailPreviewOpen(false)
+      setRailPreviewEnabled(true)
+      return
+    }
+
+    // Keep the newly collapsed rail compact until the pointer leaves it once.
+    setCollapsed(true)
+    setRailPreviewOpen(false)
+    setRailPreviewEnabled(false)
+  }
+  const handleRailPointerEnter = () => {
+    if (collapsed && railPreviewEnabled) setRailPreviewOpen(true)
+  }
+  const handleRailPointerLeave = () => {
+    if (!collapsed) return
+    setRailPreviewOpen(false)
+    setRailPreviewEnabled(true)
+  }
+  const handleRailFocus = () => {
+    if (collapsed && railPreviewEnabled) setRailPreviewOpen(true)
+  }
+  const handleRailBlur = (event: React.FocusEvent<HTMLElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setRailPreviewOpen(false)
+    }
+  }
   const profileName = profile?.emp_full_name || 'Admin'
   const profileSubtext = profile?.emp_email || profile?.emp_designation || profile?.role || 'Administrator'
 
   return (
-    <aside className={`sidebar${mobileMenuOpen ? ' sidebar--mobile-open' : ''}${collapsed ? ' sidebar--rail' : ''}`}>
+    <aside
+      className={`sidebar${mobileMenuOpen ? ' sidebar--mobile-open' : ''}${collapsed ? ' sidebar--rail' : ''}${railPreviewOpen ? ' sidebar--rail-preview' : ''}`}
+      onPointerEnter={handleRailPointerEnter}
+      onPointerLeave={handleRailPointerLeave}
+      onFocusCapture={handleRailFocus}
+      onBlurCapture={handleRailBlur}
+    >
       <div className="sidebar-mobile-bar">
         <div className="sidebar-mobile-brand">
           <div className="sidebar-logo" aria-hidden="true">HR</div>
@@ -243,7 +280,7 @@ export default function AdminSidebar({
             className="sidebar-collapse-btn"
             type="button"
             aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-            onClick={() => setCollapsed((prev) => !prev)}
+            onClick={handleCollapseToggle}
           >
             <SidebarChromeIcon name="collapse" />
           </button>

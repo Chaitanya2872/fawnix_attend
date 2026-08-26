@@ -107,6 +107,13 @@
   /* ── deep ink, for the dashboard hero and dark chrome ─────────── */
   --a-deep: #0d2b23;
   --a-deep-2: #123a2f;
+
+  /* Motion is intentionally quiet and shared across the whole console. */
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 280ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 /* ============================================================================
@@ -280,6 +287,7 @@
   --sb-danger-soft: var(--a-danger-soft);
   --sb-radius-sm: 9px;
   --sb-font: inherit;
+  --sb-ease: var(--ease-out);
 
   /* Neutralise the legacy App.css sidebar treatment (dark gradient, tan
      accents, sticky padding) — the panel child owns the surface now. */
@@ -696,13 +704,242 @@
    ========================================================================= */
 
 .admin-shell:not(.admin-shell-login) {
-  --admin-sidebar-w: 266px;
+  --admin-sidebar-expanded-w: 266px;
+  --admin-sidebar-rail-w: 76px;
+  --admin-sidebar-w: var(--admin-sidebar-expanded-w);
   grid-template-columns: var(--admin-sidebar-w) minmax(0, 1fr);
-  transition: grid-template-columns 220ms var(--ease-out, ease);
+  transition: grid-template-columns var(--dur-base) var(--ease-out);
 }
 
 .admin-shell.admin-shell-sidebar-rail:not(.admin-shell-login) {
-  --admin-sidebar-w: 76px;
+  --admin-sidebar-w: var(--admin-sidebar-rail-w);
+}
+
+@media (min-width: 981px) {
+  .admin-shell:not(.admin-shell-login) > .sidebar {
+    width: var(--admin-sidebar-w);
+  }
+
+  .admin-shell:not(.admin-shell-login) > .sidebar .sidebar-panel {
+    transition: width var(--dur-base) var(--ease-out);
+    backface-visibility: hidden;
+  }
+
+  .admin-shell:not(.admin-shell-login) > .sidebar.sidebar--rail {
+    width: var(--admin-sidebar-rail-w);
+    overflow: visible;
+    z-index: var(--z-sidebar, 40);
+  }
+
+  .admin-shell:not(.admin-shell-login) > .sidebar.sidebar--rail .sidebar-panel {
+    width: var(--admin-sidebar-rail-w);
+  }
+
+  .admin-shell:not(.admin-shell-login) > .sidebar.sidebar--rail-preview .sidebar-panel {
+    width: var(--admin-sidebar-expanded-w);
+    box-shadow: 18px 0 44px -28px rgba(9, 34, 27, 0.36);
+  }
+
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-panel-head {
+    justify-content: flex-start;
+    padding: 16px 14px 14px;
+  }
+
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-brand-text,
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-profile-info {
+    width: auto;
+    opacity: 1;
+  }
+
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-collapse-btn {
+    margin-left: auto;
+  }
+
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-search-wrap {
+    padding: 12px 14px 12px 8px;
+  }
+
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-search {
+    justify-content: flex-start;
+    padding: 8px 10px;
+  }
+
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-search-placeholder,
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-search kbd,
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-link-label,
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-link-badge,
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-live-dot,
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-logout-btn {
+    display: flex;
+  }
+
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-search-placeholder,
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-link-label {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-link {
+    justify-content: flex-start;
+    padding: 8.5px 10px;
+  }
+
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-link-row--has-action .sidebar-link {
+    padding-right: 34px;
+  }
+
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-link-plus {
+    display: inline-flex;
+  }
+
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview .sidebar-section-label {
+    opacity: 1;
+  }
+
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview :is(
+    .sidebar-brand-text,
+    .sidebar-search-placeholder,
+    .sidebar-search kbd,
+    .sidebar-link-label,
+    .sidebar-link-badge,
+    .sidebar-live-dot,
+    .sidebar-profile-info,
+    .sidebar-logout-btn,
+    .sidebar-link-plus,
+    .sidebar-section-label
+  ) {
+    animation: admin-sidebar-content-in var(--dur-fast) var(--ease-out) 45ms both;
+  }
+
+  .admin-shell:not(.admin-shell-login) .sidebar--rail-preview [data-tip]::after {
+    display: none;
+  }
+}
+
+/* =========================================================================
+   9 · Motion polish
+   -------------------------------------------------------------------------
+   Only stateful surfaces move. Transform and opacity keep those transitions
+   stable while data-heavy page content remains still and easy to scan.
+   ========================================================================= */
+
+@keyframes admin-sidebar-content-in {
+  from {
+    opacity: 0;
+    transform: translateX(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes admin-surface-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes admin-drawer-in {
+  from {
+    opacity: 0;
+    transform: translate3d(20px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes admin-dialog-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.admin-shell:not(.admin-shell-login) :is(
+  .side-panel-scrim,
+  .map-dialog-backdrop,
+  .otr-modal-overlay
+) {
+  animation: admin-surface-fade-in var(--dur-base) var(--ease-out) both;
+}
+
+.admin-shell:not(.admin-shell-login) :is(
+  .field-visit-panel,
+  .emp-form-panel
+) {
+  animation: admin-drawer-in var(--dur-slow) var(--ease-out) both;
+  backface-visibility: hidden;
+}
+
+.admin-shell:not(.admin-shell-login) :is(.map-dialog, .otr-modal) {
+  animation: admin-dialog-in var(--dur-base) var(--ease-out) both;
+  backface-visibility: hidden;
+}
+
+.admin-shell:not(.admin-shell-login) :is(
+  .exc-drawer,
+  .lv-drawer,
+  .otr-drawer
+) {
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--dur-slow);
+  backface-visibility: hidden;
+}
+
+.admin-shell:not(.admin-shell-login) :is(
+  .exc-drawer-overlay,
+  .lv-drawer-overlay,
+  .otr-drawer-overlay
+) {
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--dur-base);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-shell:not(.admin-shell-login),
+  .admin-shell:not(.admin-shell-login) * {
+    scroll-behavior: auto !important;
+  }
+
+  .admin-shell:not(.admin-shell-login),
+  .admin-shell:not(.admin-shell-login) :is(
+    .exc-drawer,
+    .lv-drawer,
+    .otr-drawer,
+    .exc-drawer-overlay,
+    .lv-drawer-overlay,
+    .otr-drawer-overlay
+  ) {
+    transition: none !important;
+  }
+
+  .admin-shell:not(.admin-shell-login) :is(
+    .side-panel-scrim,
+    .map-dialog-backdrop,
+    .otr-modal-overlay,
+    .field-visit-panel,
+    .emp-form-panel,
+    .map-dialog,
+    .otr-modal,
+    .sidebar--rail-preview .sidebar-brand-text,
+    .sidebar--rail-preview .sidebar-search-placeholder,
+    .sidebar--rail-preview .sidebar-search kbd,
+    .sidebar--rail-preview .sidebar-link-label,
+    .sidebar--rail-preview .sidebar-link-badge,
+    .sidebar--rail-preview .sidebar-live-dot,
+    .sidebar--rail-preview .sidebar-profile-info,
+    .sidebar--rail-preview .sidebar-logout-btn,
+    .sidebar--rail-preview .sidebar-link-plus,
+    .sidebar--rail-preview .sidebar-section-label
+  ) {
+    animation: none !important;
+  }
 }
 
 @media (max-width: 980px) {

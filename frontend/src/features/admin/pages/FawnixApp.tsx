@@ -80,6 +80,8 @@ import type {
   SidebarId,
 } from "../../../types/admin";
 
+const SIDEBAR_COLLAPSE_STORAGE_KEY = "admin-sidebar-collapsed";
+
 function getExceptionDateValue(row: AttendanceExceptionRow) {
   return row.exception_date || row.attendance_date || row.requested_at;
 }
@@ -275,6 +277,9 @@ function FawnixApp() {
   const navigate = useNavigate();
   const [activePanel, setActivePanel] = useState<SidebarId>(() =>
     getAdminPanelFromPath(window.location.pathname),
+  );
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
+    window.localStorage.getItem(SIDEBAR_COLLAPSE_STORAGE_KEY) === "1",
   );
   const [employeeMasterCreateRequestId, setEmployeeMasterCreateRequestId] =
     useState(0);
@@ -1392,7 +1397,11 @@ function FawnixApp() {
   const loginSceneMode = getLoginSceneMode(loginSceneTime);
 
   return (
-    <div className={`admin-shell${showAdminLogin ? " admin-shell-login" : ""}`}>
+    <div
+      className={`admin-shell${showAdminLogin ? " admin-shell-login" : ""}${
+        !showAdminLogin && sidebarCollapsed ? " admin-shell-sidebar-rail" : ""
+      }`}
+    >
       {!showAdminLogin ? (
         <AdminSidebar
           profile={profile}
@@ -1402,6 +1411,10 @@ function FawnixApp() {
             navigate(getAdminPanelPath(id));
           }}
           onAddOrgUnit={canWriteAdminData ? handleAddOrgUnit : undefined}
+          onCollapsedChange={setSidebarCollapsed}
+          onSearchClick={() =>
+            window.dispatchEvent(new Event("fawnix:open-admin-jump"))
+          }
           onLogout={handleLogout}
         />
       ) : null}

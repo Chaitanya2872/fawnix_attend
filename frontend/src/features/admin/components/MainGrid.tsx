@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { AttendanceTrendChart } from './Attendancetrendchart'
 import { UpcomingBirthdaysPanel } from './UpcomingBirthdaysPanel'
 import type { UpcomingBirthday } from './UpcomingBirthdaysPanel'

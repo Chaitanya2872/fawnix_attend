@@ -17,6 +17,8 @@ type AdminSidebarProps = {
   badgeCounts?: Partial<Record<SidebarId, number>>
   /** Called when the search field is activated. Falls back to a no-op if omitted. */
   onSearchClick?: () => void
+  /** Keeps the parent shell grid in sync with the sidebar rail width. */
+  onCollapsedChange?: (collapsed: boolean) => void
   /** Called when the "+" affordance next to "Organization units" is clicked. */
   onAddOrgUnit?: () => void
 }
@@ -121,6 +123,7 @@ export default function AdminSidebar({
   onLogout,
   badgeCounts,
   onSearchClick,
+  onCollapsedChange,
   onAddOrgUnit,
 }: AdminSidebarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -152,7 +155,8 @@ export default function AdminSidebar({
 
   useEffect(() => {
     window.localStorage.setItem(COLLAPSE_STORAGE_KEY, collapsed ? '1' : '0')
-  }, [collapsed])
+    onCollapsedChange?.(collapsed)
+  }, [collapsed, onCollapsedChange])
 
   // Glide the active-state rail to whichever nav button is currently active.
   useLayoutEffect(() => {

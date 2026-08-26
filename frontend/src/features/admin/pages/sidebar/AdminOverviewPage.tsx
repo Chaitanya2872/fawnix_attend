@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/preserve-manual-memoization */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useMemo } from "react";
 import "./AdminOverviewPage.css";
@@ -269,6 +270,17 @@ export default function AdminOverviewPage({
     );
 
   // ── Department entries ─────────────────────────────
+  const attendancePct = totalEmployees
+    ? Math.round((presentToday / totalEmployees) * 100)
+    : 0;
+  const attendanceHealthLabel =
+    attendancePct >= 90
+      ? "Optimal"
+      : attendancePct >= 72
+        ? "Stable"
+        : "Needs attention";
+  const activeLeaveCount = selectedDateLeaves.length;
+
   const deptEntries = useMemo(() => {
     const map: Record<string, { head: number; present: number }> = {};
     const employeeByEmail = new Map<string, any>(
@@ -311,12 +323,30 @@ export default function AdminOverviewPage({
         {/* ── Page header ── */}
         <div className="ov2-page-header">
           <div>
+            <span className="ov2-page-kicker">
+              <i aria-hidden="true" />
+              Live workspace
+            </span>
             {/* The shell topbar owns the page-level <h1>, so this is an h2. */}
             <h2 className="ov2-page-title">{greeting}, Admin</h2>
             <p className="ov2-page-sub">
               {presentToday} of {totalEmployees} present &middot; {fieldActive}{" "}
-              in the field
+              in the field &middot; {activeLeaveCount} leave signals
             </p>
+          </div>
+          <div className="ov2-header-metrics" aria-label="Dashboard summary">
+            <span>
+              <b>{attendancePct}%</b>
+              attendance
+            </span>
+            <span>
+              <b>{attendanceHealthLabel}</b>
+              health
+            </span>
+            <span>
+              <b>{weekLabel}</b>
+              window
+            </span>
           </div>
         </div>
 

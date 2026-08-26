@@ -97,7 +97,7 @@ export function useAttendancePanel({
     return () => {
       cancelled = true
     }
-  }, [accessToken, isActive, attendanceDateFilter])
+  }, [accessToken, isActive, attendanceDateFilter, apiRequest])
 
   useEffect(() => {
     setAlertTriggerStatus('')

@@ -688,3 +688,26 @@
   border-bottom-color: var(--a-accent);
   font-weight: 600;
 }
+
+/* =========================================================================
+   8 · Shell layout sync
+   -------------------------------------------------------------------------
+   Keep the parent app grid aligned with the sidebar's expanded and rail modes.
+   ========================================================================= */
+
+.admin-shell:not(.admin-shell-login) {
+  --admin-sidebar-w: 266px;
+  grid-template-columns: var(--admin-sidebar-w) minmax(0, 1fr);
+  transition: grid-template-columns 220ms var(--ease-out, ease);
+}
+
+.admin-shell.admin-shell-sidebar-rail:not(.admin-shell-login) {
+  --admin-sidebar-w: 76px;
+}
+
+@media (max-width: 980px) {
+  .admin-shell:not(.admin-shell-login),
+  .admin-shell.admin-shell-sidebar-rail:not(.admin-shell-login) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

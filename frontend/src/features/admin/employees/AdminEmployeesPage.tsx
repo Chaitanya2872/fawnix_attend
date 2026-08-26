@@ -133,13 +133,8 @@ export default function AdminEmployeesPage(props: Props) {
   const filteredRows = filteredEmployees as any[]
   const pageSize = 10
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
-  const pageRows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
-  useEffect(() => {
-    setCurrentPage((page) => Math.min(page, totalPages))
-  }, [totalPages])
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [employeeSearch, employeeKpiFilter])
+  const visiblePage = Math.min(currentPage, totalPages)
+  const pageRows = filteredRows.slice((visiblePage - 1) * pageSize, visiblePage * pageSize)
   const now = new Date()
   const activeCount = employeeRows.filter((employee) => employee.is_active).length
   const inactiveCount = employeeRows.length - activeCount
@@ -394,14 +389,20 @@ export default function AdminEmployeesPage(props: Props) {
                 type="text"
                 className="adm-search-wrap__input"
                 value={employeeSearch}
-                onChange={(e) => setEmployeeSearch(e.target.value)}
+                onChange={(e) => {
+                  setCurrentPage(1)
+                  setEmployeeSearch(e.target.value)
+                }}
                 placeholder="Search employees..."
               />
               {employeeSearch && (
                 <button
                   className="adm-search-wrap__clear"
                   type="button"
-                  onClick={() => setEmployeeSearch('')}
+                  onClick={() => {
+                    setCurrentPage(1)
+                    setEmployeeSearch('')
+                  }}
                   aria-label="Clear search"
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true" className="adm-icon">
@@ -417,7 +418,10 @@ export default function AdminEmployeesPage(props: Props) {
                   key={opt.id}
                   type="button"
                   className={`adm-chip${employeeKpiFilter === opt.id ? ' adm-chip--on' : ''}`}
-                  onClick={() => applyEmployeeKpiFilter(opt.id)}
+                  onClick={() => {
+                    setCurrentPage(1)
+                    applyEmployeeKpiFilter(opt.id)
+                  }}
                 >
                   {opt.label}
                 </button>
@@ -587,7 +591,7 @@ export default function AdminEmployeesPage(props: Props) {
             <span>Try adjusting your search or filter.</span>
           </div>
         )}
-        <ClientPagination page={currentPage} pageSize={pageSize} total={filteredRows.length} onPageChange={setCurrentPage} />
+        <ClientPagination page={visiblePage} pageSize={pageSize} total={filteredRows.length} onPageChange={setCurrentPage} />
       </div>
     </div>
   )

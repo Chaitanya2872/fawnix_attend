@@ -304,12 +304,16 @@ export default function AdminEmployeeMasterPage({
       return
     }
 
-    setFormPanel({
-      mode: 'create',
-      record: null,
-      values: buildFormValues(resource),
-      errors: {},
-    })
+    const timer = window.setTimeout(() => {
+      setFormPanel({
+        mode: 'create',
+        record: null,
+        values: buildFormValues(resource),
+        errors: {},
+      })
+    }, 0)
+
+    return () => window.clearTimeout(timer)
   }, [canWriteAdminData, createRequestId, resource])
 
   const openEditPanel = (record: EmployeeMasterRecord) => {

@@ -20,6 +20,7 @@
   -webkit-backdrop-filter: saturate(160%) blur(12px);
   border-bottom: 0.5px solid var(--border, #e5ebe7);
   box-sizing: border-box;
+  overflow: visible;
 }
 
 /* ── Breadcrumb ─────────────────────────────────────────────────── */
@@ -70,12 +71,17 @@
 /* ── Jump-to field (a real navigator, not decoration) ───────────── */
 .shell-jump {
   position: relative;
+  z-index: 1;
   flex: 1 1 auto;
   min-width: 0;
   max-width: 340px;
   margin-inline: auto;
   display: flex;
   align-items: center;
+}
+
+.shell-jump.is-open {
+  z-index: var(--z-popover, 140);
 }
 
 .shell-jump-icon {
@@ -143,27 +149,29 @@
 .shell-jump-menu {
   position: absolute;
   top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  z-index: var(--z-dropdown, 60);
+  left: 50%;
+  right: auto;
+  z-index: var(--z-popover, 140);
+  width: min(440px, calc(100vw - 32px));
   padding: var(--sp-1, 4px);
   border: 0.5px solid var(--border, #e5ebe7);
   border-radius: var(--r-sm, 10px);
   background: var(--surface-2, #fff);
   box-shadow: var(--e-2, 0 8px 24px rgba(15, 34, 28, 0.08));
-  max-height: 328px;
+  max-height: min(328px, calc(100vh - var(--shell-topbar-h, 56px) - 24px));
   overflow-y: auto;
+  transform: translateX(-50%);
   animation: shell-jump-in var(--dur-fast, 120ms) var(--ease-out);
 }
 
 @keyframes shell-jump-in {
   from {
     opacity: 0;
-    transform: translateY(-3px);
+    transform: translateX(-50%) translateY(-3px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(-50%) translateY(0);
   }
 }
 
@@ -367,6 +375,14 @@
 
   .shell-jump {
     max-width: none;
+  }
+
+  .shell-jump-menu {
+    left: 0;
+    right: 0;
+    width: auto;
+    transform: none;
+    animation: none;
   }
 
   .shell-refresh span {

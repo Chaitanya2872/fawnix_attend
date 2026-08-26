@@ -81,15 +81,22 @@ export function AdminTopbar({
 
   // ── Ctrl/Cmd + K focuses the jump field ──
   useEffect(() => {
+    const openJump = () => {
+      inputRef.current?.focus();
+      setOpen(true);
+    };
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        inputRef.current?.focus();
-        setOpen(true);
+        openJump();
       }
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("fawnix:open-admin-jump", openJump);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("fawnix:open-admin-jump", openJump);
+    };
   }, []);
 
   useEffect(() => {

@@ -117,20 +117,25 @@ export function useAdminAuth({ onSessionCleared }: UseAdminAuthOptions) {
     }
   }
 
-  const handleLogout = async () => {
-    try {
-      if (accessToken && refreshToken) {
-        await apiRequest('/api/auth/logout', {
-          method: 'POST',
-          body: JSON.stringify({ refresh_token: refreshToken })
-        })
-      }
-    } catch {
-      // Ignore logout failures and clear local session anyway.
-    } finally {
-      clearSession()
-      setShowAdminLogin(true)
-      setAuthStatus('')
+  const handleLogout = () => {
+    const logoutAccessToken = accessToken
+    const logoutRefreshToken = refreshToken
+
+    // Local logout must never wait for a slow or unavailable API.
+    clearSession()
+    setShowAdminLogin(true)
+    setAuthStatus('')
+
+    if (logoutAccessToken && logoutRefreshToken) {
+      void fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${logoutAccessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ refresh_token: logoutRefreshToken }),
+        keepalive: true
+      }).catch(() => undefined)
     }
   }
 

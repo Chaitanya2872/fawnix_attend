@@ -6,7 +6,7 @@ import { API_TELEMETRY_EMP_CODE, SIDEBAR_LIVE_ITEM_IDS, sidebarSections } from '
 import type { AdminProfile, SidebarId } from '../../../types/admin'
 import './AdminSidebar.css'
 
-type SidebarChromeIconName = 'search' | 'collapse' | 'chevron-right' | 'plus' | 'settings' | 'help' | 'logout'
+type SidebarChromeIconName = 'search' | 'collapse' | 'chevron-right' | 'plus' | 'logout'
 
 type AdminSidebarProps = {
   profile: AdminProfile | null
@@ -64,26 +64,6 @@ function SidebarChromeIcon({ name }: { name: SidebarChromeIconName }) {
         stroke="currentColor"
         strokeWidth="1.8"
         strokeLinecap="round"
-      />
-    ),
-    settings: (
-      <path
-        d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.36a1.7 1.7 0 0 0-1 .64l-.03.08a2 2 0 0 1-3.94 0L10 20a1.7 1.7 0 0 0-1-.64 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.64 15a1.7 1.7 0 0 0-.64-1l-.08-.03a2 2 0 0 1 0-3.94L4 10a1.7 1.7 0 0 0 .64-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.64a1.7 1.7 0 0 0 1-.64l.03-.08a2 2 0 0 1 3.94 0L14 4a1.7 1.7 0 0 0 1 .64 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.36 9c.13.37.35.7.64 1l.08.03a2 2 0 0 1 0 3.94L20 14c-.29.3-.51.63-.64 1Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.45"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    ),
-    help: (
-      <path
-        d="M9.2 9a3 3 0 1 1 5.1 2.14c-.82.78-1.55 1.23-1.93 2.24M12 17h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
       />
     ),
     logout: (
@@ -404,25 +384,6 @@ export default function AdminSidebar({
             </div>
           ))}
         </nav>
-
-        <div className="sidebar-support" aria-label="Sidebar utilities">
-          <button type="button" className="sidebar-link sidebar-link--utility" data-tip="Settings">
-            <span className="sidebar-link-main">
-              <span className="sidebar-link-icon">
-                <SidebarChromeIcon name="settings" />
-              </span>
-              <span className="sidebar-link-label">Settings</span>
-            </span>
-          </button>
-          <button type="button" className="sidebar-link sidebar-link--utility" data-tip="Help & support">
-            <span className="sidebar-link-main">
-              <span className="sidebar-link-icon">
-                <SidebarChromeIcon name="help" />
-              </span>
-              <span className="sidebar-link-label">Help &amp; support</span>
-            </span>
-          </button>
-        </div>
 
         <div className="sidebar-foot">
           <div className="sidebar-profile">

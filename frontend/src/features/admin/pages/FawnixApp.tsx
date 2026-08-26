@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { appRoutes } from "../../../app/config/routes";
 import "../../../App.css";
@@ -314,6 +314,10 @@ function FawnixApp() {
   } = useAdminAuth({
     onSessionCleared: clearAdminData,
   });
+  const handleSessionExpiredRef = useRef(handleSessionExpired);
+  useEffect(() => {
+    handleSessionExpiredRef.current = handleSessionExpired;
+  }, [handleSessionExpired]);
   const {
     employees,
     employeeAuditLogs,
@@ -347,7 +351,7 @@ function FawnixApp() {
       (dashboardError.toLowerCase().includes("expired") ||
         dashboardError.toLowerCase().includes("token"))
     ) {
-      handleSessionExpired();
+      handleSessionExpiredRef.current();
     }
   }, [dashboardError]);
 

@@ -11549,3 +11549,1037 @@ textarea:focus,
     padding-inline: 8px;
   }
 }
+
+/* Login story cinema: scoped to the left-side instrument only. */
+.login-flow-story {
+  position: relative;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: linear-gradient(
+    165deg,
+    color-mix(in oklab, var(--paper-2) 94%, transparent),
+    color-mix(in oklab, var(--accent-3) 17%, var(--paper-2))
+  );
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.76) inset,
+    0 22px 48px -34px rgba(10, 43, 33, 0.5);
+  overflow: hidden;
+}
+
+.login-flow-story::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(15, 73, 56, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 73, 56, 0.045) 1px, transparent 1px);
+  background-size: 25px 25px;
+  mask-image: linear-gradient(180deg, #000, transparent 88%);
+  pointer-events: none;
+}
+
+.login-flow-head {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.login-flow-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.login-flow-head > span i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #1f9d6d;
+  box-shadow: 0 0 0 4px rgba(31, 157, 109, 0.12);
+}
+
+.login-flow-head time {
+  color: var(--ink-2);
+  font-size: 10px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.login-flow-cinema {
+  position: relative;
+  z-index: 2;
+  height: 164px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.login-story-scene {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s var(--ease), clip-path 0.7s var(--ease);
+}
+
+.login-story-employee {
+  clip-path: inset(0 0 0 0);
+}
+
+.login-flow-story[data-stage="approach"] .login-story-employee,
+.login-flow-story[data-stage="check-in"] .login-story-employee,
+.login-flow-story[data-stage="review"] .login-story-admin,
+.login-flow-story[data-stage="record"] .login-story-record {
+  opacity: 1;
+}
+
+.login-story-sun {
+  position: absolute;
+  top: 15px;
+  left: 8%;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--amber) 55%, var(--paper-2));
+  box-shadow: 0 0 0 8px color-mix(in oklab, var(--amber) 12%, transparent);
+}
+
+.login-story-building {
+  position: absolute;
+  right: 7%;
+  bottom: 20px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  width: 146px;
+  height: 116px;
+  padding: 17px 15px 0;
+  border: 1px solid color-mix(in oklab, var(--evergreen) 18%, transparent);
+  border-radius: 8px 8px 0 0;
+  background: color-mix(in oklab, var(--paper-2) 92%, var(--accent-3));
+  box-shadow: 0 12px 25px -20px rgba(10, 43, 33, 0.6);
+}
+
+.login-story-building::after {
+  content: "";
+  position: absolute;
+  right: 13px;
+  bottom: 0;
+  width: 32px;
+  height: 50px;
+  border: 1px solid color-mix(in oklab, var(--evergreen) 22%, transparent);
+  border-bottom: 0;
+  background: color-mix(in oklab, var(--sky) 17%, var(--paper-2));
+}
+
+.login-story-building > span {
+  position: absolute;
+  top: 6px;
+  left: 12px;
+  color: var(--evergreen);
+  font-size: 6px;
+  font-weight: 800;
+}
+
+.login-story-building > i {
+  height: 28px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--sky) 21%, var(--paper-2));
+  box-shadow: inset 0 0 0 1px rgba(15, 73, 56, 0.07);
+}
+
+.login-story-ground {
+  position: absolute;
+  right: 2%;
+  bottom: 19px;
+  left: 2%;
+  height: 1px;
+  background: color-mix(in oklab, var(--evergreen) 22%, transparent);
+}
+
+.login-story-ground::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  left: 0;
+  top: 7px;
+  height: 14px;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 35px,
+    color-mix(in oklab, var(--evergreen) 12%, transparent) 35px 55px
+  );
+}
+
+.login-story-worker {
+  position: absolute;
+  z-index: 3;
+  left: 10%;
+  bottom: 17px;
+  width: 54px;
+  height: 102px;
+}
+
+.worker-shadow {
+  position: absolute;
+  left: 4px;
+  bottom: -2px;
+  width: 47px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(10, 43, 33, 0.12);
+  filter: blur(2px);
+}
+
+.worker-head {
+  position: absolute;
+  z-index: 5;
+  left: 17px;
+  top: 0;
+  width: 20px;
+  height: 22px;
+  border-radius: 48% 48% 46% 46%;
+  background: #b87855;
+  transform: rotate(7deg);
+}
+
+.worker-head::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  top: 10px;
+  width: 3px;
+  height: 2px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.worker-head > i {
+  position: absolute;
+  inset: -2px 2px 11px -1px;
+  border-radius: 55% 55% 30% 25%;
+  background: #26352f;
+}
+
+.worker-body {
+  position: absolute;
+  z-index: 3;
+  left: 13px;
+  top: 21px;
+  width: 29px;
+  height: 43px;
+  border-radius: 12px 12px 7px 7px;
+  background: var(--evergreen);
+  transform: skewX(-3deg);
+}
+
+.worker-body > i {
+  position: absolute;
+  right: 5px;
+  top: 8px;
+  width: 7px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.worker-arm-back,
+.worker-arm-phone,
+.worker-leg {
+  position: absolute;
+  transform-origin: top center;
+}
+
+.worker-arm-back {
+  z-index: 2;
+  left: 13px;
+  top: 27px;
+  width: 8px;
+  height: 39px;
+  border-radius: 5px;
+  background: #b87855;
+  transform: rotate(20deg);
+}
+
+.worker-arm-phone {
+  z-index: 6;
+  left: 36px;
+  top: 27px;
+  width: 8px;
+  height: 36px;
+  border-radius: 5px;
+  background: #b87855;
+  transform: rotate(-40deg);
+}
+
+.worker-arm-phone > i {
+  position: absolute;
+  left: -2px;
+  bottom: -8px;
+  width: 11px;
+  height: 17px;
+  border: 2px solid #26352f;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--sky) 24%, var(--paper-2));
+  transform: rotate(28deg);
+}
+
+.worker-leg {
+  z-index: 1;
+  top: 59px;
+  width: 10px;
+  height: 40px;
+  border-radius: 5px;
+  background: #273a34;
+}
+
+.worker-leg::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -3px;
+  width: 16px;
+  height: 6px;
+  border-radius: 5px 7px 3px 3px;
+  background: #13231e;
+}
+
+.worker-leg-back { left: 17px; }
+.worker-leg-front { left: 30px; }
+
+.login-flow-story[data-stage="approach"] .login-story-worker {
+  animation: loginStoryWalkAcross 3.35s linear both;
+}
+
+.login-flow-story[data-stage="approach"] .worker-body,
+.login-flow-story[data-stage="approach"] .worker-head {
+  animation: loginStoryWalkBob 0.62s ease-in-out infinite alternate;
+}
+
+.login-flow-story[data-stage="approach"] .worker-leg-back {
+  animation: loginStoryLegBack 0.62s ease-in-out infinite alternate;
+}
+
+.login-flow-story[data-stage="approach"] .worker-leg-front {
+  animation: loginStoryLegFront 0.62s ease-in-out infinite alternate;
+}
+
+.login-flow-story[data-stage="approach"] .worker-arm-back {
+  animation: loginStoryArm 0.62s ease-in-out infinite alternate;
+}
+
+.login-flow-story[data-stage="check-in"] .login-story-worker {
+  left: 41%;
+  transform: translateX(-50%);
+}
+
+.login-story-phone-card {
+  position: absolute;
+  z-index: 5;
+  right: 5%;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 150px;
+  height: 138px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in oklab, var(--evergreen) 25%, transparent);
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--paper-2) 95%, var(--accent-3));
+  box-shadow: 0 18px 32px -20px rgba(10, 43, 33, 0.66);
+  opacity: 0;
+  transform: translateX(18px) scale(0.92);
+}
+
+.phone-card-top {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 6px;
+}
+
+.phone-card-top i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-2);
+}
+
+.phone-card-person {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  margin-top: 8px;
+  border-radius: 50%;
+  background: var(--paper-2);
+  color: var(--evergreen);
+}
+
+.phone-card-person svg { width: 14px; height: 14px; }
+.login-story-phone-card strong { margin-top: 4px; color: var(--ink); font-size: 7px; }
+.login-story-phone-card small { margin-top: 2px; color: var(--muted); font-size: 6px; }
+
+.phone-card-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 94px;
+  height: 25px;
+  margin-top: 9px;
+  border-radius: 7px;
+  background: var(--evergreen);
+  color: #fff;
+  font-size: 7px;
+  font-weight: 750;
+}
+
+.phone-card-action svg { width: 10px; height: 10px; }
+
+.phone-card-tap {
+  position: absolute;
+  right: 27px;
+  bottom: 17px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.login-flow-story[data-stage="check-in"] .login-story-building {
+  opacity: 0.28;
+}
+
+.login-flow-story[data-stage="check-in"] .login-story-phone-card {
+  animation: loginStoryPhoneIn 0.55s var(--ease) both;
+}
+
+.login-flow-story[data-stage="check-in"] .phone-card-tap {
+  animation: loginStoryTap 1.5s 0.65s var(--ease) infinite;
+}
+
+.login-story-verified {
+  position: absolute;
+  z-index: 6;
+  right: 7%;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in oklab, #1f9d6d 32%, transparent);
+  border-radius: 8px;
+  background: #eefaf3;
+  color: #14603f;
+  opacity: 0;
+}
+
+.login-story-verified > span {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #1f9d6d;
+  color: #fff;
+}
+
+.login-story-verified svg { width: 12px; height: 12px; }
+.login-story-verified strong,
+.login-story-verified small { display: block; }
+.login-story-verified strong { font-size: 7px; }
+.login-story-verified small { margin-top: 1px; font-size: 5.5px; }
+
+.login-flow-story[data-stage="check-in"] .login-story-verified {
+  animation: loginStoryVerified 3.2s var(--ease) both;
+}
+
+.login-story-admin {
+  clip-path: inset(0 0 0 100%);
+  background: color-mix(in oklab, var(--accent-3) 8%, transparent);
+}
+
+.login-flow-story[data-stage="review"] .login-story-admin {
+  clip-path: inset(0 0 0 0);
+}
+
+.admin-story-wall {
+  position: absolute;
+  inset: 12px 12px 28px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--paper-2) 78%, transparent);
+}
+
+.admin-story-wall > span {
+  position: absolute;
+  left: 10px;
+  top: 8px;
+  color: var(--muted);
+  font-size: 6px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.admin-story-wall > i {
+  position: relative;
+  display: inline-block;
+  width: 30px;
+  height: 21px;
+  margin: 24px 0 0 10px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--sky) 15%, var(--paper-2));
+}
+
+.admin-story-person {
+  position: absolute;
+  z-index: 3;
+  left: 10%;
+  bottom: 22px;
+  width: 66px;
+  height: 102px;
+}
+
+.admin-head {
+  position: absolute;
+  left: 25px;
+  top: 5px;
+  width: 22px;
+  height: 24px;
+  border-radius: 50%;
+  background: #a9694f;
+}
+
+.admin-head > i {
+  position: absolute;
+  inset: -2px 1px 12px -2px;
+  border-radius: 60% 55% 30% 20%;
+  background: #273a34;
+}
+
+.admin-body {
+  position: absolute;
+  left: 17px;
+  top: 28px;
+  width: 38px;
+  height: 55px;
+  border-radius: 16px 16px 8px 8px;
+  background: var(--evergreen);
+}
+
+.admin-arm {
+  position: absolute;
+  z-index: 4;
+  left: 49px;
+  top: 39px;
+  width: 9px;
+  height: 46px;
+  border-radius: 7px;
+  background: #a9694f;
+  transform: rotate(-42deg);
+  transform-origin: top;
+}
+
+.admin-story-chair {
+  position: absolute;
+  z-index: 2;
+  left: 7%;
+  bottom: 18px;
+  width: 68px;
+  height: 60px;
+  border-radius: 22px 22px 8px 8px;
+  background: color-mix(in oklab, var(--evergreen) 14%, var(--paper-2));
+}
+
+.admin-story-desk {
+  position: absolute;
+  z-index: 4;
+  right: 4%;
+  bottom: 21px;
+  width: 65%;
+  height: 8px;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--evergreen) 34%, var(--paper-2));
+}
+
+.admin-story-monitor {
+  position: absolute;
+  z-index: 5;
+  right: 7%;
+  top: 16px;
+  width: 57%;
+  height: 111px;
+  padding: 8px;
+  border: 1px solid color-mix(in oklab, var(--evergreen) 25%, transparent);
+  border-radius: 8px;
+  background: var(--paper-2);
+  box-shadow: 0 14px 30px -22px rgba(10, 43, 33, 0.7);
+}
+
+.admin-monitor-bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 6px;
+  font-weight: 750;
+}
+
+.admin-monitor-bar i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-2);
+}
+
+.admin-request-card {
+  display: grid;
+  grid-template-columns: 25px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  margin-top: 9px;
+  padding: 8px;
+  border: 1px solid color-mix(in oklab, var(--amber) 42%, transparent);
+  border-radius: 7px;
+  background: color-mix(in oklab, var(--amber) 9%, var(--paper-2));
+  transform: translateX(18px);
+  opacity: 0;
+}
+
+.admin-request-card > span {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: var(--accent-3);
+  color: var(--evergreen-deep);
+  font-size: 6px;
+  font-weight: 800;
+}
+
+.admin-request-card div { min-width: 0; }
+.admin-request-card strong,
+.admin-request-card small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-request-card strong { color: var(--ink); font-size: 6.5px; }
+.admin-request-card small { margin-top: 2px; color: var(--muted); font-size: 5.5px; }
+.admin-request-card em { color: var(--amber); font-size: 5.5px; font-style: normal; font-weight: 750; }
+
+.admin-approve-button {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 21px;
+  border-radius: 6px;
+  background: var(--evergreen);
+  color: #fff;
+  font-size: 6px;
+  font-weight: 750;
+}
+
+.admin-approved-state {
+  position: absolute;
+  inset: 28px 8px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 7px;
+  background: #eefaf3;
+  color: #14603f;
+  font-size: 8px;
+  font-weight: 750;
+  opacity: 0;
+  transform: scale(0.94);
+}
+
+.admin-approved-state svg { width: 19px; height: 19px; }
+
+.admin-story-cursor {
+  position: absolute;
+  right: 22px;
+  bottom: 12px;
+  width: 8px;
+  height: 11px;
+  border-left: 6px solid var(--ink);
+  border-top: 8px solid transparent;
+  opacity: 0;
+  transform: translate(18px, 15px) rotate(-18deg);
+}
+
+.admin-monitor-stand {
+  position: absolute;
+  z-index: 4;
+  right: 29%;
+  bottom: 21px;
+  width: 8px;
+  height: 18px;
+  background: color-mix(in oklab, var(--evergreen) 30%, var(--paper-2));
+}
+
+.login-flow-story[data-stage="review"] .admin-request-card {
+  animation: loginStoryRequestIn 0.7s 0.4s var(--ease) both;
+}
+
+.login-flow-story[data-stage="review"] .admin-story-cursor {
+  animation: loginStoryAdminClick 2.6s 0.75s var(--ease) both;
+}
+
+.login-flow-story[data-stage="review"] .admin-approved-state {
+  animation: loginStoryAdminApproved 3.2s var(--ease) both;
+}
+
+.login-story-record {
+  padding: 14px 5% 10px;
+  background: color-mix(in oklab, var(--accent-3) 9%, transparent);
+  clip-path: circle(0 at 77% 72%);
+}
+
+.login-flow-story[data-stage="record"] .login-story-record {
+  clip-path: circle(120% at 77% 72%);
+}
+
+.record-story-head {
+  display: grid;
+  grid-template-columns: 29px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.record-story-head > span {
+  display: grid;
+  place-items: center;
+  width: 29px;
+  height: 29px;
+  border-radius: 8px;
+  background: var(--evergreen);
+  color: #fff;
+}
+
+.record-story-head svg { width: 15px; height: 15px; }
+.record-story-head strong,
+.record-story-head small { display: block; }
+.record-story-head strong { color: var(--ink); font-size: 8px; }
+.record-story-head small { margin-top: 2px; color: var(--muted); font-size: 6px; }
+.record-story-head em {
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #e4f7ec;
+  color: #14603f;
+  font-size: 6px;
+  font-style: normal;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.record-story-line {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 75%;
+  margin: 23px auto 0;
+}
+
+.record-story-line::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--line);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.record-story-line i {
+  position: relative;
+  z-index: 2;
+  width: 12px;
+  height: 12px;
+  border: 3px solid var(--paper-2);
+  border-radius: 50%;
+  background: var(--evergreen);
+  box-shadow: 0 0 0 1px var(--evergreen);
+  opacity: 0;
+}
+
+.record-story-events {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: 88%;
+  margin: 7px auto 0;
+  text-align: center;
+}
+
+.record-story-events span { opacity: 0; transform: translateY(5px); }
+.record-story-events b,
+.record-story-events small { display: block; }
+.record-story-events b { color: var(--ink); font-size: 7px; font-variant-numeric: tabular-nums; }
+.record-story-events small { margin-top: 2px; color: var(--muted); font-size: 5.5px; }
+
+.record-story-seal {
+  position: absolute;
+  right: 5%;
+  bottom: 7px;
+  display: grid;
+  grid-template-columns: 24px auto;
+  align-items: center;
+  gap: 2px 7px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in oklab, #1f9d6d 28%, transparent);
+  border-radius: 8px;
+  background: #eefaf3;
+  color: #14603f;
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.record-story-seal svg { grid-row: 1 / 3; width: 21px; height: 21px; }
+.record-story-seal strong { font-size: 6.5px; }
+.record-story-seal small { font-size: 5.5px; }
+
+.login-flow-story[data-stage="record"] .record-story-line::before {
+  animation: loginStoryLine 1.2s 0.35s var(--ease) both;
+}
+
+.login-flow-story[data-stage="record"] .record-story-line i,
+.login-flow-story[data-stage="record"] .record-story-events span {
+  animation: loginStoryEvent 0.45s var(--ease) both;
+}
+
+.login-flow-story[data-stage="record"] .record-story-line i:nth-child(1),
+.login-flow-story[data-stage="record"] .record-story-events span:nth-child(1) { animation-delay: 0.55s; }
+.login-flow-story[data-stage="record"] .record-story-line i:nth-child(2),
+.login-flow-story[data-stage="record"] .record-story-events span:nth-child(2) { animation-delay: 1.05s; }
+.login-flow-story[data-stage="record"] .record-story-line i:nth-child(3),
+.login-flow-story[data-stage="record"] .record-story-events span:nth-child(3) { animation-delay: 1.55s; }
+
+.login-flow-story[data-stage="record"] .record-story-seal {
+  animation: loginStorySeal 0.6s 2.15s var(--ease) both;
+}
+
+.login-story-cut {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  background: var(--paper-2);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.login-flow-story[data-stage="review"] .login-story-cut,
+.login-flow-story[data-stage="record"] .login-story-cut {
+  animation: loginStoryCut 0.62s var(--ease) both;
+}
+
+.login-flow-copy {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 43px;
+  padding-top: 8px;
+  animation: loginFlowCopy 0.45s var(--ease) both;
+}
+
+.login-flow-copy > span {
+  color: var(--evergreen);
+  font-size: 10px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.login-flow-copy strong {
+  display: block;
+  color: var(--ink);
+  font-size: 10px;
+}
+
+.login-flow-copy p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.login-flow-steps {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.login-flow-steps button {
+  position: relative;
+  min-width: 0;
+  padding: 5px 4px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--evergreen) 5%, transparent);
+  color: var(--muted);
+  font: inherit;
+  font-size: 7px;
+  font-weight: 700;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.login-flow-steps button.is-active {
+  background: color-mix(in oklab, var(--accent) 16%, transparent);
+  color: var(--evergreen-deep);
+}
+
+.login-flow-steps button i {
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  background: var(--evergreen);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.login-flow-steps button.is-active i {
+  animation: loginFlowDwell 3.6s linear both;
+}
+
+@keyframes loginStoryWalkAcross {
+  from { transform: translateX(0); }
+  to { transform: translateX(350%); }
+}
+
+@keyframes loginStoryWalkBob {
+  from { translate: 0 0; }
+  to { translate: 0 -3px; }
+}
+
+@keyframes loginStoryLegBack {
+  from { transform: rotate(24deg); }
+  to { transform: rotate(-24deg); }
+}
+
+@keyframes loginStoryLegFront {
+  from { transform: rotate(-24deg); }
+  to { transform: rotate(24deg); }
+}
+
+@keyframes loginStoryArm {
+  from { transform: rotate(18deg); }
+  to { transform: rotate(-18deg); }
+}
+
+@keyframes loginStoryPhoneIn {
+  from { opacity: 0; transform: translateX(18px) scale(0.92); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes loginStoryTap {
+  0%, 18% { opacity: 0; transform: scale(0.45); }
+  38% { opacity: 0.9; transform: scale(1); }
+  70%, 100% { opacity: 0; transform: scale(2.6); }
+}
+
+@keyframes loginStoryVerified {
+  0%, 50% { opacity: 0; transform: translateY(8px); }
+  68%, 100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes loginStoryRequestIn {
+  from { opacity: 0; transform: translateX(18px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes loginStoryAdminClick {
+  0%, 12% { opacity: 0; transform: translate(18px, 15px) rotate(-18deg); }
+  42%, 70% { opacity: 1; transform: translate(0, 0) rotate(-18deg); }
+  86%, 100% { opacity: 0; transform: translate(0, 0) rotate(-18deg); }
+}
+
+@keyframes loginStoryAdminApproved {
+  0%, 69% { opacity: 0; transform: scale(0.94); }
+  84%, 100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes loginStoryLine {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes loginStoryEvent {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes loginStorySeal {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes loginStoryCut {
+  0% { opacity: 0; transform: translateX(-105%); }
+  42% { opacity: 0.82; }
+  100% { opacity: 0; transform: translateX(105%); }
+}
+
+@keyframes loginFlowCopy {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes loginFlowDwell {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@media (max-width: 1080px) {
+  .login-story-building { right: 3%; }
+  .login-story-phone-card { right: 2%; }
+  .admin-story-monitor { right: 3%; width: 61%; }
+}
+
+@media (max-width: 940px) {
+  .login-flow-story { display: none; }
+}
+
+@media (max-height: 720px) and (min-width: 941px) {
+  .login-flow-cinema { height: 132px; }
+  .login-story-scene { transform: scale(0.84); transform-origin: center bottom; inset: -8% -9% 0; }
+  .login-flow-copy p { display: none; }
+}
+
+@media (max-height: 600px) {
+  .login-flow-story { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-flow-story *,
+  .login-flow-story *::before,
+  .login-flow-story *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .login-story-worker {
+    transform: translateX(170%);
+  }
+}

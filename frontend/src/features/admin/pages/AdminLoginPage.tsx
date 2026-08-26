@@ -1,12 +1,6 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 import fawnixBg from "../../../assets/fawnix_bg.png";
+import SidebarIcon from "../components/navigation/SidebarIcon";
 import { usePublicStats } from "../../public/hooks/usePublicStats";
 
 type AdminLoginPageProps = {
@@ -35,13 +29,33 @@ const sceneCopy = {
   night: "Your workspace is ready when you are.",
 };
 
-/* Circumference of the dial arc (r = 46 in a 120x120 viewBox). Pre-computed so
-   the render path stays arithmetic-free. */
-const DIAL_C = 2 * Math.PI * 46;
-/* How long each signal holds the dial before it rotates to the next one. */
-const DIAL_DWELL = 4200;
-
-const clampPercent = (value: number) => Math.min(100, Math.max(4, value));
+const FLOW_DWELL = 3600;
+const flowSteps = [
+  {
+    id: "approach",
+    label: "Arrive",
+    title: "The workday walks in with them.",
+    caption: "A team member approaches the workplace with Fawnix ready on mobile.",
+  },
+  {
+    id: "check-in",
+    label: "Check in",
+    title: "One tap verifies their arrival.",
+    caption: "Time, identity and the approved location become one attendance event.",
+  },
+  {
+    id: "review",
+    label: "Approve",
+    title: "The scene moves to the admin.",
+    caption: "The verified request arrives with enough context for a confident decision.",
+  },
+  {
+    id: "record",
+    label: "Record",
+    title: "Approval becomes a trusted record.",
+    caption: "The employee timeline, attendance register and operations view update together.",
+  },
+] as const;
 
 export default function AdminLoginPage({
   adminEmpCode,
@@ -64,72 +78,21 @@ export default function AdminLoginPage({
   const digitRefs = useRef<(HTMLInputElement | null)[]>([]);
   const isErr = /error|invalid|fail|denied|unauthorized/i.test(authStatus);
   const stats = usePublicStats();
-  const peak = Math.max(...stats.rates, 1);
+  const [flowStep, setFlowStep] = useState(0);
+  const [flowHeld, setFlowHeld] = useState(false);
+  const activeFlow = flowSteps[flowStep] ?? flowSteps[0];
 
-  /* ---- live operations dial ------------------------------------------ */
-  const coreRef = useRef<HTMLDivElement | null>(null);
-  const [focus, setFocus] = useState(0);
-  const [held, setHeld] = useState(false);
-
-  /* Three real signals, each mapped onto the same 0..100 dial so switching
-     between them reads as one continuous instrument rather than three charts. */
-  const dials = useMemo(() => {
-    const roster = Math.max(stats.headcount, 1);
-    const onShift = Math.max(stats.present, 1);
-    return [
-      {
-        id: "attendance",
-        label: "Attendance",
-        value: stats.rateLabel,
-        caption: `${stats.presentLabel} of ${stats.headcountLabel} people are checked in right now.`,
-        percent: clampPercent(stats.attendanceRate),
-      },
-      {
-        id: "approvals",
-        label: "Approvals",
-        value: stats.approvalsLabel,
-        caption: `${stats.pendingLeaves} leave and ${stats.pendingExceptions} exception requests are waiting on a decision.`,
-        /* Inverted: a short queue should read as a full, healthy ring. */
-        percent: clampPercent(100 - (stats.pendingApprovals / roster) * 100),
-      },
-      {
-        id: "field",
-        label: "In the field",
-        value: stats.inFieldLabel,
-        caption: `${stats.inFieldLabel} teammates are on site, tracked live with distance and visit logs.`,
-        percent: clampPercent((stats.inField / onShift) * 100),
-      },
-    ];
-  }, [stats]);
-
-  const active = dials[focus] ?? dials[0];
-
-  /* The dial cycles on its own so the page always feels alive, and parks the
-     moment a visitor takes over with a pointer or the keyboard. */
   useEffect(() => {
-    if (held) return;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (flowHeld || reduceMotion) return;
     const cycleId = window.setInterval(
-      () => setFocus((current) => (current + 1) % dials.length),
-      DIAL_DWELL,
+      () => setFlowStep((current) => (current + 1) % flowSteps.length),
+      FLOW_DWELL,
     );
     return () => window.clearInterval(cycleId);
-  }, [held, dials.length]);
-
-  /* Feed the cursor position to CSS so the sheen can track the pointer without
-     a re-render per mouse move. */
-  const handleCorePointer = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const node = coreRef.current;
-    if (!node) return;
-    const box = node.getBoundingClientRect();
-    node.style.setProperty(
-      "--mx",
-      `${((event.clientX - box.left) / box.width) * 100}%`,
-    );
-    node.style.setProperty(
-      "--my",
-      `${((event.clientY - box.top) / box.height) * 100}%`,
-    );
-  };
+  }, [flowHeld]);
 
   useEffect(() => {
     if (adminOtp) return;
@@ -200,106 +163,136 @@ export default function AdminLoginPage({
               </p>
             </div>
 
-            {/* Live operations core — an instrument, not a chart. The ring,
-                readout and ribbon all track one selected signal; hovering,
-                focusing or tabbing takes manual control of the rotation. */}
             <div
-              className="login-v3-core"
-              ref={coreRef}
-              data-live={stats.isLive || undefined}
-              data-signal={active.id}
-              onPointerMove={handleCorePointer}
-              onPointerEnter={() => setHeld(true)}
-              onPointerLeave={() => setHeld(false)}
+              className="login-flow-story"
+              data-stage={activeFlow.id}
+              onPointerEnter={() => setFlowHeld(true)}
+              onPointerLeave={() => setFlowHeld(false)}
+              onFocusCapture={() => setFlowHeld(true)}
+              onBlurCapture={() => setFlowHeld(false)}
             >
-              <span className="core-sheen" aria-hidden="true" />
-              <span className="core-grid" aria-hidden="true" />
-
-              <div className="core-head">
-                <span className="core-tag">
+              <div className="login-flow-head">
+                <span>
                   <i aria-hidden="true" />
-                  {stats.isLive ? "Live signal" : "Preview signal"}
+                  One connected workday
                 </span>
-                <span className="core-clock">{loginTimeLabel}</span>
+                <time>{loginTimeLabel}</time>
               </div>
 
-              <div className="core-stage">
-                <div className="core-dial">
-                  <svg viewBox="0 0 120 120" aria-hidden="true">
-                    <circle
-                      className="core-dial-track"
-                      cx="60"
-                      cy="60"
-                      r="46"
-                    />
-                    <circle
-                      className="core-dial-arc"
-                      cx="60"
-                      cy="60"
-                      r="46"
-                      style={
-                        {
-                          strokeDasharray: DIAL_C,
-                          strokeDashoffset:
-                            DIAL_C - (DIAL_C * active.percent) / 100,
-                        } as CSSProperties
-                      }
-                    />
-                  </svg>
-                  <span className="core-dial-sweep" aria-hidden="true" />
-                  <div className="core-readout" key={active.id}>
-                    <strong>{active.value}</strong>
-                    <span>{active.label}</span>
+              <div className="login-flow-cinema" aria-hidden="true">
+                <div className="login-story-scene login-story-employee">
+                  <span className="login-story-sun" />
+                  <div className="login-story-building">
+                    <span>FAWNIX</span>
+                    <i />
+                    <i />
+                    <i />
+                  </div>
+                  <span className="login-story-ground" />
+                  <div className="login-story-worker">
+                    <span className="worker-shadow" />
+                    <span className="worker-head"><i /></span>
+                    <span className="worker-body"><i /></span>
+                    <span className="worker-arm-back" />
+                    <span className="worker-arm-phone"><i /></span>
+                    <span className="worker-leg worker-leg-back" />
+                    <span className="worker-leg worker-leg-front" />
+                  </div>
+                  <div className="login-story-phone-card">
+                    <span className="phone-card-top">
+                      <i /> Fawnix Attend
+                    </span>
+                    <span className="phone-card-person">
+                      <SidebarIcon name="users" />
+                    </span>
+                    <strong>Good morning, Aarav</strong>
+                    <small>Main office / 08:55</small>
+                    <span className="phone-card-action">
+                      <SidebarIcon name="clock" /> Check in
+                    </span>
+                    <i className="phone-card-tap" />
+                  </div>
+                  <div className="login-story-verified">
+                    <span><SidebarIcon name="pin" /></span>
+                    <div><strong>Arrival verified</strong><small>Time and place matched</small></div>
                   </div>
                 </div>
 
-                <p className="core-caption" key={`${active.id}-caption`}>
-                  {active.caption}
-                </p>
+                <div className="login-story-scene login-story-admin">
+                  <div className="admin-story-wall">
+                    <span>Operations</span>
+                    <i /><i /><i />
+                  </div>
+                  <div className="admin-story-person">
+                    <span className="admin-head"><i /></span>
+                    <span className="admin-body" />
+                    <span className="admin-arm" />
+                  </div>
+                  <span className="admin-story-chair" />
+                  <span className="admin-story-desk" />
+                  <div className="admin-story-monitor">
+                    <span className="admin-monitor-bar"><i /> Attendance inbox</span>
+                    <div className="admin-request-card">
+                      <span>AS</span>
+                      <div><strong>Aarav Sharma</strong><small>08:55 / Main office / Verified</small></div>
+                      <em>Pending</em>
+                    </div>
+                    <span className="admin-approve-button">Approve</span>
+                    <span className="admin-approved-state">
+                      <SidebarIcon name="badge" /> Approved
+                    </span>
+                    <i className="admin-story-cursor" />
+                  </div>
+                  <span className="admin-monitor-stand" />
+                </div>
+
+                <div className="login-story-scene login-story-record">
+                  <div className="record-story-head">
+                    <span><SidebarIcon name="activity" /></span>
+                    <div><strong>Attendance timeline</strong><small>Aarav Sharma / Today</small></div>
+                    <em>Complete</em>
+                  </div>
+                  <div className="record-story-line"><i /><i /><i /></div>
+                  <div className="record-story-events">
+                    <span><b>08:55</b><small>Mobile check-in</small></span>
+                    <span><b>08:55</b><small>Location verified</small></span>
+                    <span><b>08:56</b><small>Admin approved</small></span>
+                  </div>
+                  <div className="record-story-seal">
+                    <SidebarIcon name="badge" />
+                    <strong>Recorded across Fawnix</strong>
+                    <small>Employee / Attendance / Operations</small>
+                  </div>
+                </div>
+
+                <span className="login-story-cut" />
+              </div>
+
+              <div className="login-flow-copy" key={activeFlow.id}>
+                <span>0{flowStep + 1}</span>
+                <div>
+                  <strong>{activeFlow.title}</strong>
+                  <p>{activeFlow.caption}</p>
+                </div>
               </div>
 
               <div
-                className="core-switch"
+                className="login-flow-steps"
                 role="tablist"
-                aria-label="Live signals"
+                aria-label="Workday story"
               >
-                {dials.map((dial, index) => (
+                {flowSteps.map((step, index) => (
                   <button
-                    key={dial.id}
                     type="button"
                     role="tab"
-                    aria-selected={index === focus}
-                    className={index === focus ? "is-on" : undefined}
-                    onClick={() => setFocus(index)}
-                    onFocus={() => {
-                      setHeld(true);
-                      setFocus(index);
-                    }}
-                    onBlur={() => setHeld(false)}
+                    aria-selected={index === flowStep}
+                    className={index === flowStep ? "is-active" : undefined}
+                    key={step.id}
+                    onClick={() => setFlowStep(index)}
                   >
-                    {dial.label}
-                    <em aria-hidden="true" />
+                    <span>{step.label}</span>
+                    <i aria-hidden="true" />
                   </button>
-                ))}
-              </div>
-
-              <div className="core-ribbon" aria-hidden="true">
-                {stats.rates.map((rate, index) => (
-                  <span
-                    key={index}
-                    className={
-                      index === stats.rates.length - 1 ? "is-today" : undefined
-                    }
-                    style={
-                      {
-                        "--h": `${Math.max(14, (rate / peak) * 100)}%`,
-                        "--i": index,
-                      } as CSSProperties
-                    }
-                    title={`${stats.days[index]} · ${rate}%`}
-                  >
-                    <i>{stats.days[index]}</i>
-                  </span>
                 ))}
               </div>
             </div>

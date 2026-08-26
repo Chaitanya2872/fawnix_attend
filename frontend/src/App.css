@@ -11857,7 +11857,7 @@ textarea:focus,
 .worker-leg-front { left: 30px; }
 
 .login-flow-story[data-stage="approach"] .login-story-worker {
-  animation: loginStoryWalkAcross 3.35s linear both;
+  animation: loginStoryWalkAcross 3.6s linear both;
 }
 
 .login-flow-story[data-stage="approach"] .worker-body,

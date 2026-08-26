@@ -42,7 +42,7 @@ export function UpcomingBirthdaysPanel({ birthdays }: Props) {
                 <span className="ov2-exc-name">{name}</span>
                 <span className="ov2-exc-desc">{employee.emp_department || employee.emp_designation || 'Employee'}</span>
               </div>
-              <div className="ov2-approval-copy">
+              <div className="ov2-approval-copy ov2-birthday-date">
                 <strong>{DATE_FORMATTER.format(date)}</strong>
                 <span>{timingLabel(daysUntil)}</span>
               </div>

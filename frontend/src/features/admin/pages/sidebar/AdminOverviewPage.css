@@ -644,11 +644,22 @@
   min-height: 316px;
 }
 
+.ov2-chart-card .ov2-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.ov2-chart-card .ov2-card-head > :first-child {
+  min-width: 0;
+}
+
 .ov2-chart-stats {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 18px;
-  flex-wrap: wrap;
+  min-width: max-content;
 }
 
 .ov2-chart-stat {
@@ -1011,6 +1022,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+.ov2-birthday-date {
+  flex: 0 0 84px;
+  align-items: flex-end;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ov2-birthday-date strong,
+.ov2-birthday-date span {
+  width: 100%;
+}
+
 .ov2-empty {
   display: flex;
   align-items: center;
@@ -1309,7 +1332,12 @@
   }
 
   .ov2-chart-stats {
+    justify-content: flex-start;
     gap: 12px;
+  }
+
+  .ov2-chart-card .ov2-card-head {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

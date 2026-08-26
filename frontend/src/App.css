@@ -11121,7 +11121,7 @@ textarea:focus,
   min-width: 0;
   padding: 0;
   height: clamp(40px, 5.4vh, 46px);
-  border: 1px solid var(--line);
+  border: 1px solid color-mix(in oklab, var(--evergreen) 28%, var(--line));
   border-radius: 12px;
   background: var(--paper-2);
   color: var(--ink);
@@ -11882,17 +11882,26 @@ textarea:focus,
   transform: translateX(-50%);
 }
 
+.login-flow-story[data-stage="check-in"] .worker-arm-phone {
+  animation: loginStoryRaisePhone 0.7s 0.12s var(--ease) both;
+}
+
+.login-flow-story[data-stage="check-in"] .worker-arm-phone > i {
+  width: 14px;
+  height: 21px;
+}
+
 .login-story-phone-card {
   position: absolute;
   z-index: 5;
-  right: 5%;
-  top: 12px;
+  right: 4%;
+  top: 7px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 150px;
-  height: 138px;
-  padding: 8px 10px;
+  width: 164px;
+  height: 146px;
+  padding: 9px 11px;
   border: 1px solid color-mix(in oklab, var(--evergreen) 25%, transparent);
   border-radius: 14px;
   background: color-mix(in oklab, var(--paper-2) 95%, var(--accent-3));
@@ -11907,7 +11916,7 @@ textarea:focus,
   align-items: center;
   gap: 4px;
   color: var(--muted);
-  font-size: 6px;
+  font-size: 7px;
 }
 
 .phone-card-top i {
@@ -11920,30 +11929,30 @@ textarea:focus,
 .phone-card-person {
   display: grid;
   place-items: center;
-  width: 27px;
-  height: 27px;
-  margin-top: 8px;
+  width: 30px;
+  height: 30px;
+  margin-top: 7px;
   border-radius: 50%;
   background: var(--paper-2);
   color: var(--evergreen);
 }
 
-.phone-card-person svg { width: 14px; height: 14px; }
-.login-story-phone-card strong { margin-top: 4px; color: var(--ink); font-size: 7px; }
-.login-story-phone-card small { margin-top: 2px; color: var(--muted); font-size: 6px; }
+.phone-card-person svg { width: 16px; height: 16px; }
+.login-story-phone-card strong { margin-top: 4px; color: var(--ink); font-size: 8px; }
+.login-story-phone-card small { margin-top: 2px; color: var(--muted); font-size: 7px; }
 
 .phone-card-action {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  width: 94px;
-  height: 25px;
-  margin-top: 9px;
+  width: 104px;
+  height: 27px;
+  margin-top: 8px;
   border-radius: 7px;
   background: var(--evergreen);
   color: #fff;
-  font-size: 7px;
+  font-size: 8px;
   font-weight: 750;
 }
 
@@ -12486,6 +12495,11 @@ textarea:focus,
 @keyframes loginStoryArm {
   from { transform: rotate(18deg); }
   to { transform: rotate(-18deg); }
+}
+
+@keyframes loginStoryRaisePhone {
+  from { transform: rotate(-40deg); }
+  to { transform: rotate(-96deg); }
 }
 
 @keyframes loginStoryPhoneIn {

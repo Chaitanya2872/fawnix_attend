@@ -79,20 +79,19 @@ export default function AdminLoginPage({
   const isErr = /error|invalid|fail|denied|unauthorized/i.test(authStatus);
   const stats = usePublicStats();
   const [flowStep, setFlowStep] = useState(0);
-  const [flowHeld, setFlowHeld] = useState(false);
   const activeFlow = flowSteps[flowStep] ?? flowSteps[0];
 
   useEffect(() => {
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
-    if (flowHeld || reduceMotion) return;
+    if (reduceMotion) return;
     const cycleId = window.setInterval(
       () => setFlowStep((current) => (current + 1) % flowSteps.length),
       FLOW_DWELL,
     );
     return () => window.clearInterval(cycleId);
-  }, [flowHeld]);
+  }, []);
 
   useEffect(() => {
     if (adminOtp) return;
@@ -166,10 +165,6 @@ export default function AdminLoginPage({
             <div
               className="login-flow-story"
               data-stage={activeFlow.id}
-              onPointerEnter={() => setFlowHeld(true)}
-              onPointerLeave={() => setFlowHeld(false)}
-              onFocusCapture={() => setFlowHeld(true)}
-              onBlurCapture={() => setFlowHeld(false)}
             >
               <div className="login-flow-head">
                 <span>

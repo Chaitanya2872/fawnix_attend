@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { toDateInputValue } from '../../../utils/date/dateUtils'
 import type {
   AttendanceCellEditPayload,
@@ -164,10 +164,10 @@ export function useReportsPanel({
 
   // fetchAttendanceHeatmapData is consumed from an effect, so it has to stay
   // referentially stable — the auth handles live in refs instead of deps.
+  // Keep the ref current during render so child effects that fetch immediately
+  // after login don't see an old empty token.
   const authRef = useRef({ accessToken, refreshAccessToken })
-  useEffect(() => {
-    authRef.current = { accessToken, refreshAccessToken }
-  })
+  authRef.current = { accessToken, refreshAccessToken }
   /** Guards against an older month's response landing after a newer one. */
   const heatmapRequestRef = useRef(0)
 

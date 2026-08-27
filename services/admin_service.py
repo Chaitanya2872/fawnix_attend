@@ -19,6 +19,80 @@ from services.CompLeaveService import (
 )
 
 
+AUDIT_LOG_EXCLUDED_TABLES = ("api_logs",)
+
+AUDIT_OPERATION_LABELS = {
+    "INSERT": "Created",
+    "UPDATE": "Updated",
+    "DELETE": "Deleted",
+}
+
+AUDIT_MASTER_TABLES = {
+    "working_units": "Working unit",
+    "payroll_units": "Payroll unit",
+    "designations": "Designation",
+    "departments": "Department",
+}
+
+AUDIT_TABLE_MODULES = {
+    "employees": "Employee",
+    "users": "Admin Access",
+    "admin_permissions": "Admin Access",
+    "attendance": "Attendance",
+    "attendance_day_overrides": "Attendance",
+    "attendance_exceptions": "Attendance",
+    "leaves": "Leave",
+    "overtime_records": "Overtime",
+    "activities": "Field Visits",
+    "field_visits": "Field Visits",
+    "activity_tracking": "Field Visits",
+    "field_visit_tracking": "Field Visits",
+    **{table_name: "Master Data" for table_name in AUDIT_MASTER_TABLES},
+}
+
+AUDIT_RECORD_LABEL_FIELDS = {
+    "employees": ("emp_full_name", "emp_code", "emp_email"),
+    "users": ("emp_code", "email", "id"),
+    "admin_permissions": ("emp_code", "id"),
+    "attendance": ("employee_email", "emp_code", "date", "id"),
+    "attendance_day_overrides": ("emp_code", "override_date", "id"),
+    "attendance_exceptions": ("emp_name", "emp_code", "exception_type", "id"),
+    "leaves": ("emp_code", "leave_type", "id"),
+    "overtime_records": ("emp_name", "emp_code", "work_date", "id"),
+    "activities": ("employee_name", "employee_email", "activity_type", "id"),
+    "field_visits": ("purpose", "visit_type", "id"),
+    "activity_tracking": ("activity_id", "id"),
+    "field_visit_tracking": ("field_visit_id", "id"),
+    "working_units": ("unit_name", "unit_code", "id"),
+    "payroll_units": ("unit_name", "unit_code", "id"),
+    "designations": ("designation_name", "designation_code", "id"),
+    "departments": ("department_name", "department_code", "id"),
+}
+
+AUDIT_SUMMARY_IGNORED_FIELDS = {
+    "created_at",
+    "created_date",
+    "updated_at",
+    "updated_date",
+    "modified_at",
+    "last_modified",
+}
+
+AUDIT_ACTOR_FIELDS = {
+    "employees": ("updated_by_emp_code", "created_by_emp_code"),
+    "attendance": ("updated_by", "emp_code", "employee_email"),
+    "attendance_day_overrides": ("updated_by_emp_code", "emp_code"),
+    "attendance_exceptions": ("reviewed_by", "approved_by", "manager_code", "emp_code"),
+    "leaves": ("reviewed_by", "approved_by", "created_by_emp_code", "emp_code"),
+    "overtime_records": ("updated_by_emp_code", "created_by_emp_code", "emp_code"),
+    "field_visits": ("updated_by_emp_code", "created_by_emp_code", "emp_code"),
+    "activities": ("updated_by_emp_code", "created_by_emp_code", "employee_email"),
+    "working_units": ("created_by",),
+    "payroll_units": ("created_by",),
+    "teams": ("updated_by", "created_by"),
+    "project_teams": ("updated_by", "created_by"),
+}
+
 
 def get_admin_stats():
     conn = get_db_connection()
@@ -104,6 +178,195 @@ def get_all_employees():
         conn.close()
 
 
+def _audit_dict(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _audit_changed_fields(value):
+    if isinstance(value, (list, tuple)):
+        return [str(field) for field in value if str(field or "").strip()]
+    return []
+
+
+def _audit_title_case(value):
+    text = str(value or "").replace("_", " ").replace("-", " ").strip()
+    return " ".join(word[:1].upper() + word[1:] for word in text.split()) or "Record"
+
+
+def _audit_format_field_name(value):
+    text = str(value or "").replace("emp_", "").replace("_", " ").strip()
+    return text or "field"
+
+
+def _audit_first_value(snapshot, fields):
+    for field in fields:
+        value = snapshot.get(field)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return ""
+
+
+def _audit_status(row):
+    old_data = _audit_dict(row.get("old_data"))
+    new_data = _audit_dict(row.get("new_data"))
+    return (
+        str(old_data.get("status") or "").strip().lower(),
+        str(new_data.get("status") or "").strip().lower(),
+    )
+
+
+def _audit_record_label(table_name, row):
+    old_data = _audit_dict(row.get("old_data"))
+    new_data = _audit_dict(row.get("new_data"))
+    snapshot = new_data or old_data
+    record_id = str(row.get("record_id") or "").strip()
+
+    if table_name == "leaves":
+        emp_code = str(snapshot.get("emp_code") or "").strip()
+        leave_type = str(snapshot.get("leave_type") or "").strip()
+        if emp_code and leave_type:
+            return f"{_audit_title_case(leave_type)} leave for {emp_code}"
+
+    if table_name == "attendance":
+        employee = str(snapshot.get("emp_code") or snapshot.get("employee_email") or "").strip()
+        attendance_date = str(snapshot.get("date") or "").strip()
+        if employee and attendance_date:
+            return f"{employee} on {attendance_date}"
+
+    if table_name == "attendance_day_overrides":
+        employee = str(snapshot.get("emp_code") or "").strip()
+        attendance_date = str(snapshot.get("override_date") or "").strip()
+        if employee and attendance_date:
+            return f"{employee} on {attendance_date}"
+
+    if table_name == "attendance_exceptions":
+        employee = str(snapshot.get("emp_name") or snapshot.get("emp_code") or "").strip()
+        exception_type = str(snapshot.get("exception_type") or "").strip()
+        if employee and exception_type:
+            return f"{employee} - {_audit_title_case(exception_type)}"
+
+    if table_name == "field_visits":
+        purpose = str(snapshot.get("purpose") or "").strip()
+        visit_type = str(snapshot.get("visit_type") or "").strip()
+        if purpose and visit_type:
+            return f"{purpose} ({_audit_title_case(visit_type)})"
+
+    fields = AUDIT_RECORD_LABEL_FIELDS.get(table_name, ("name", "code", "id"))
+    primary = _audit_first_value(snapshot, fields[:1])
+    secondary = _audit_first_value(snapshot, fields[1:])
+    if primary and secondary and primary != secondary:
+        return f"{primary} ({secondary})"
+    if primary:
+        return primary
+    if secondary:
+        return secondary
+    return record_id or "Record unavailable"
+
+
+def _audit_changed_field_summary(row):
+    fields = [
+        field for field in _audit_changed_fields(row.get("changed_fields"))
+        if field not in AUDIT_SUMMARY_IGNORED_FIELDS
+    ]
+    if not fields:
+        return "Record details changed"
+
+    label = ", ".join(_audit_format_field_name(field) for field in fields[:3])
+    if len(fields) > 3:
+        label = f"{label} +{len(fields) - 3} more"
+    return f"{label} changed"
+
+
+def _audit_actor(table_name, row):
+    old_data = _audit_dict(row.get("old_data"))
+    new_data = _audit_dict(row.get("new_data"))
+    snapshot = new_data or old_data
+    for field in AUDIT_ACTOR_FIELDS.get(table_name, ()):
+        value = snapshot.get(field)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return row.get("changed_by") or "System"
+
+
+def _audit_activity_action(table_name, row):
+    operation = str(row.get("operation") or "UPDATE").strip().upper()
+    _, new_status = _audit_status(row)
+
+    if operation == "UPDATE" and "status" in _audit_changed_fields(row.get("changed_fields")):
+        if table_name == "leaves" and new_status in {"approved", "rejected", "cancelled"}:
+            return f"{_audit_title_case(new_status)} leave request"
+        if table_name == "attendance_exceptions" and new_status in {"approved", "rejected", "resolved", "cancelled"}:
+            return f"{_audit_title_case(new_status)} attendance exception"
+        if table_name == "overtime_records" and new_status in {"approved", "rejected", "utilized", "expired"}:
+            return f"{_audit_title_case(new_status)} overtime record"
+        if table_name == "field_visits" and new_status in {"completed", "closed"}:
+            return "Completed field visit"
+
+    if table_name == "employees":
+        return f"{AUDIT_OPERATION_LABELS.get(operation, 'Updated')} employee"
+
+    if table_name in {"attendance", "attendance_day_overrides"}:
+        return "Edited attendance record" if operation == "UPDATE" else f"{AUDIT_OPERATION_LABELS.get(operation, 'Updated')} attendance record"
+
+    if table_name == "leaves":
+        return "Edited leave request" if operation == "UPDATE" else f"{AUDIT_OPERATION_LABELS.get(operation, 'Updated')} leave request"
+
+    if table_name == "attendance_exceptions":
+        return "Edited attendance exception" if operation == "UPDATE" else f"{AUDIT_OPERATION_LABELS.get(operation, 'Updated')} attendance exception"
+
+    if table_name == "admin_permissions":
+        return {
+            "INSERT": "Granted admin permissions",
+            "UPDATE": "Updated admin permissions",
+            "DELETE": "Revoked admin permissions",
+        }.get(operation, "Updated admin permissions")
+
+    if table_name == "users":
+        changed_fields = set(_audit_changed_fields(row.get("changed_fields")))
+        if "role" in changed_fields:
+            return "Updated user role"
+        if "is_active" in changed_fields:
+            return "Updated account access"
+        return f"{AUDIT_OPERATION_LABELS.get(operation, 'Updated')} user account"
+
+    if table_name in AUDIT_MASTER_TABLES:
+        return f"{AUDIT_OPERATION_LABELS.get(operation, 'Updated')} {AUDIT_MASTER_TABLES[table_name].lower()}"
+
+    if table_name == "field_visits":
+        return "Updated field visit" if operation == "UPDATE" else f"{AUDIT_OPERATION_LABELS.get(operation, 'Updated')} field visit"
+
+    if table_name == "activities":
+        snapshot = _audit_dict(row.get("new_data")) or _audit_dict(row.get("old_data"))
+        activity_type = str(snapshot.get("activity_type") or "").strip().lower()
+        if activity_type in {"field_visit", "branch_visit"} or snapshot.get("field_visit_id"):
+            return "Updated field visit activity" if operation == "UPDATE" else f"{AUDIT_OPERATION_LABELS.get(operation, 'Updated')} field visit activity"
+        return f"{AUDIT_OPERATION_LABELS.get(operation, 'Updated')} activity"
+
+    if table_name in {"activity_tracking", "field_visit_tracking"}:
+        return "Recorded field visit location"
+
+    table_label = _audit_title_case(table_name)
+    return f"{AUDIT_OPERATION_LABELS.get(operation, 'Updated')} {table_label.lower()}"
+
+
+def _build_audit_activity(row):
+    activity = dict(row)
+    table_name = str(row.get("table_name") or "").strip().lower()
+    action = _audit_activity_action(table_name, row)
+    module = AUDIT_TABLE_MODULES.get(table_name, _audit_title_case(table_name))
+    record_label = _audit_record_label(table_name, row)
+
+    activity.update({
+        "action": action,
+        "module": module,
+        "record_label": record_label,
+        "performed_by": _audit_actor(table_name, row),
+        "occurred_at": row.get("changed_at"),
+        "summary": _audit_changed_field_summary(row),
+    })
+    return activity
+
+
 def get_database_audit_logs(limit=20):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -124,11 +387,12 @@ def get_database_audit_logs(limit=20):
         cursor.execute("""
             SELECT l.*
             FROM database_audit_logs l
+            WHERE lower(l.table_name) <> ALL(%s)
             ORDER BY changed_at DESC, id DESC
             LIMIT %s
-        """, (max(1, min(int(limit or 20), 100)),))
+        """, (list(AUDIT_LOG_EXCLUDED_TABLES), max(1, min(int(limit or 20), 100))))
         conn.commit()
-        return cursor.fetchall()
+        return [_build_audit_activity(row) for row in (cursor.fetchall() or [])]
     finally:
         cursor.close()
         conn.close()

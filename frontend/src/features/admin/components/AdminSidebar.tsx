@@ -1,11 +1,12 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import SidebarIcon from './navigation/SidebarIcon'
+import { getAdminPanelPath } from '../config/adminPanelPaths'
 import { API_TELEMETRY_EMP_CODE, SIDEBAR_LIVE_ITEM_IDS, sidebarSections } from '../config/sidebar'
 import type { AdminProfile, SidebarId } from '../../../types/admin'
 import './AdminSidebar.css'
 
-type SidebarChromeIconName = 'search' | 'collapse' | 'chevron-right' | 'plus' | 'settings' | 'help' | 'logout'
+type SidebarChromeIconName = 'search' | 'collapse' | 'chevron-right' | 'plus' | 'logout'
 
 type AdminSidebarProps = {
   profile: AdminProfile | null
@@ -16,6 +17,8 @@ type AdminSidebarProps = {
   badgeCounts?: Partial<Record<SidebarId, number>>
   /** Called when the search field is activated. Falls back to a no-op if omitted. */
   onSearchClick?: () => void
+  /** Keeps the parent shell grid in sync with the sidebar rail width. */
+  onCollapsedChange?: (collapsed: boolean) => void
   /** Called when the "+" affordance next to "Organization units" is clicked. */
   onAddOrgUnit?: () => void
 }
@@ -63,26 +66,6 @@ function SidebarChromeIcon({ name }: { name: SidebarChromeIconName }) {
         strokeLinecap="round"
       />
     ),
-    settings: (
-      <path
-        d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.36a1.7 1.7 0 0 0-1 .64l-.03.08a2 2 0 0 1-3.94 0L10 20a1.7 1.7 0 0 0-1-.64 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.64 15a1.7 1.7 0 0 0-.64-1l-.08-.03a2 2 0 0 1 0-3.94L4 10a1.7 1.7 0 0 0 .64-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.64a1.7 1.7 0 0 0 1-.64l.03-.08a2 2 0 0 1 3.94 0L14 4a1.7 1.7 0 0 0 1 .64 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.36 9c.13.37.35.7.64 1l.08.03a2 2 0 0 1 0 3.94L20 14c-.29.3-.51.63-.64 1Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.45"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    ),
-    help: (
-      <path
-        d="M9.2 9a3 3 0 1 1 5.1 2.14c-.82.78-1.55 1.23-1.93 2.24M12 17h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    ),
     logout: (
       <path
         d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"
@@ -104,28 +87,6 @@ function SidebarChromeIcon({ name }: { name: SidebarChromeIconName }) {
 
 type SidebarNavItem = (typeof sidebarSections)[number]['items'][number]
 
-type SectionBlock =
-  | { type: 'item'; item: SidebarNavItem }
-  | { type: 'group'; label: string; items: SidebarNavItem[] }
-
-/** Collapses a flat item list into standalone items and grouped runs sharing the same groupLabel. */
-function groupSectionItems(items: SidebarNavItem[]): SectionBlock[] {
-  const blocks: SectionBlock[] = []
-  for (const item of items) {
-    if (!item.groupLabel) {
-      blocks.push({ type: 'item', item })
-      continue
-    }
-    const last = blocks[blocks.length - 1]
-    if (last && last.type === 'group' && last.label === item.groupLabel) {
-      last.items.push(item)
-    } else {
-      blocks.push({ type: 'group', label: item.groupLabel, items: [item] })
-    }
-  }
-  return blocks
-}
-
 function getInitials(name?: string | null) {
   const parts = (name || 'Admin').trim().split(/\s+/).filter(Boolean)
   if (parts.length === 0) return 'A'
@@ -142,6 +103,7 @@ export default function AdminSidebar({
   onLogout,
   badgeCounts,
   onSearchClick,
+  onCollapsedChange,
   onAddOrgUnit,
 }: AdminSidebarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -149,10 +111,12 @@ export default function AdminSidebar({
     if (typeof window === 'undefined') return false
     return window.localStorage.getItem(COLLAPSE_STORAGE_KEY) === '1'
   })
+  const [railPreviewEnabled, setRailPreviewEnabled] = useState(true)
+  const [railPreviewOpen, setRailPreviewOpen] = useState(false)
   const [indicator, setIndicator] = useState({ top: 0, height: 0, visible: false })
 
   const navRef = useRef<HTMLDivElement | null>(null)
-  const linkRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
+  const linkRefs = useRef<Map<string, HTMLAnchorElement>>(new Map())
 
   const visibleSections = sidebarSections
     .map((section) => ({
@@ -163,33 +127,23 @@ export default function AdminSidebar({
     }))
     .filter((section) => section.items.length > 0)
   const visibleItems = visibleSections.flatMap((section) => section.items)
-  const activeItem = visibleItems.find((item) => item.id === activePanel)
-  const activeSection = visibleSections.find((section) =>
-    section.items.some((item) => item.id === activePanel)
-  )
+  /** An entry owns the active panel if it is that panel, or lists it in matchIds. */
+  const ownsActivePanel = (item: SidebarNavItem) =>
+    item.id === activePanel || Boolean(item.matchIds?.includes(activePanel))
+  const activeItem = visibleItems.find(ownsActivePanel)
+  const activeSection = visibleSections.find((section) => section.items.some(ownsActivePanel))
 
-  const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
-    const groups = new Set<string>()
-    if (activeItem?.groupLabel) groups.add(activeItem.groupLabel)
-    return groups
-  })
 
-  // Keep the containing subgroup open whenever the active panel lands inside a collapsed one.
-  useEffect(() => {
-    if (activeItem?.groupLabel && !openGroups.has(activeItem.groupLabel)) {
-      setOpenGroups((prev) => new Set(prev).add(activeItem.groupLabel as string))
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePanel])
 
   useEffect(() => {
     window.localStorage.setItem(COLLAPSE_STORAGE_KEY, collapsed ? '1' : '0')
-  }, [collapsed])
+    onCollapsedChange?.(collapsed)
+  }, [collapsed, onCollapsedChange])
 
   // Glide the active-state rail to whichever nav button is currently active.
   useLayoutEffect(() => {
     const navEl = navRef.current
-    const activeEl = linkRefs.current.get(activePanel)
+    const activeEl = activeItem ? linkRefs.current.get(activeItem.id) : undefined
     if (navEl && activeEl) {
       const navRect = navEl.getBoundingClientRect()
       const elRect = activeEl.getBoundingClientRect()
@@ -201,16 +155,8 @@ export default function AdminSidebar({
     } else {
       setIndicator((prev) => ({ ...prev, visible: false }))
     }
-  }, [activePanel, mobileMenuOpen, collapsed, openGroups, visibleItems.length])
+  }, [activePanel, activeItem, mobileMenuOpen, collapsed, visibleItems.length])
 
-  const toggleGroup = (label: string) => {
-    setOpenGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(label)) next.delete(label)
-      else next.add(label)
-      return next
-    })
-  }
 
   const handleSelectPanel = (id: SidebarId) => {
     onSelectPanel(id)
@@ -220,11 +166,46 @@ export default function AdminSidebar({
     setMobileMenuOpen(false)
     onLogout()
   }
+  const handleCollapseToggle = () => {
+    if (collapsed) {
+      setCollapsed(false)
+      setRailPreviewOpen(false)
+      setRailPreviewEnabled(true)
+      return
+    }
+
+    // Keep the newly collapsed rail compact until the pointer leaves it once.
+    setCollapsed(true)
+    setRailPreviewOpen(false)
+    setRailPreviewEnabled(false)
+  }
+  const handleRailPointerEnter = () => {
+    if (collapsed && railPreviewEnabled) setRailPreviewOpen(true)
+  }
+  const handleRailPointerLeave = () => {
+    if (!collapsed) return
+    setRailPreviewOpen(false)
+    setRailPreviewEnabled(true)
+  }
+  const handleRailFocus = () => {
+    if (collapsed && railPreviewEnabled) setRailPreviewOpen(true)
+  }
+  const handleRailBlur = (event: React.FocusEvent<HTMLElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setRailPreviewOpen(false)
+    }
+  }
   const profileName = profile?.emp_full_name || 'Admin'
   const profileSubtext = profile?.emp_email || profile?.emp_designation || profile?.role || 'Administrator'
 
   return (
-    <aside className={`sidebar${mobileMenuOpen ? ' sidebar--mobile-open' : ''}${collapsed ? ' sidebar--rail' : ''}`}>
+    <aside
+      className={`sidebar${mobileMenuOpen ? ' sidebar--mobile-open' : ''}${collapsed ? ' sidebar--rail' : ''}${railPreviewOpen ? ' sidebar--rail-preview' : ''}`}
+      onPointerEnter={handleRailPointerEnter}
+      onPointerLeave={handleRailPointerLeave}
+      onFocusCapture={handleRailFocus}
+      onBlurCapture={handleRailBlur}
+    >
       <div className="sidebar-mobile-bar">
         <div className="sidebar-mobile-brand">
           <div className="sidebar-logo" aria-hidden="true">HR</div>
@@ -279,7 +260,7 @@ export default function AdminSidebar({
             className="sidebar-collapse-btn"
             type="button"
             aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-            onClick={() => setCollapsed((prev) => !prev)}
+            onClick={handleCollapseToggle}
           >
             <SidebarChromeIcon name="collapse" />
           </button>
@@ -334,25 +315,41 @@ export default function AdminSidebar({
             >
               {section.title ? <div className="sidebar-section-label">{section.title}</div> : null}
               <div className="sidebar-group">
-                {groupSectionItems(section.items).map((block) => {
-                  const renderLink = (item: (typeof section.items)[number], nested: boolean) => {
-                    const isLive = SIDEBAR_LIVE_ITEM_IDS.includes(item.id)
-                    const badgeCount = badgeCounts?.[item.id]
-                    const linkClassName = [
-                      'sidebar-link',
-                      nested ? 'sidebar-link--nested' : '',
-                      activePanel === item.id ? 'active' : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')
+                {section.items.map((item) => {
+                  const isLive = SIDEBAR_LIVE_ITEM_IDS.includes(item.id)
+                  const badgeCount = badgeCounts?.[item.id]
+                  const showAddAction = Boolean(item.hasAddAction && onAddOrgUnit)
 
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className={linkClassName}
+                  return (
+                    // The row exists so the "+" can be a sibling button rather
+                    // than nested inside the nav button -- interactive content
+                    // inside a <button> is invalid and reads unpredictably to
+                    // assistive tech.
+                    <div
+                      className={`sidebar-link-row${showAddAction ? ' sidebar-link-row--has-action' : ''}`}
+                      key={item.id}
+                    >
+                      <a
+                        href={getAdminPanelPath(item.id)}
+                        className={`sidebar-link${ownsActivePanel(item) ? ' active' : ''}`}
                         data-tip={item.label}
-                        onClick={() => handleSelectPanel(item.id)}
+                        aria-current={ownsActivePanel(item) ? 'page' : undefined}
+                        onClick={(event) => {
+                          // Let the browser handle new-tab/new-window intents;
+                          // only take over for a plain left click.
+                          if (
+                            event.defaultPrevented ||
+                            event.button !== 0 ||
+                            event.metaKey ||
+                            event.ctrlKey ||
+                            event.shiftKey ||
+                            event.altKey
+                          ) {
+                            return
+                          }
+                          event.preventDefault()
+                          handleSelectPanel(item.id)
+                        }}
                         ref={(el) => {
                           if (el) linkRefs.current.set(item.id, el)
                           else linkRefs.current.delete(item.id)
@@ -369,55 +366,17 @@ export default function AdminSidebar({
                         ) : badgeCount ? (
                           <span className="sidebar-link-badge">{badgeCount}</span>
                         ) : null}
-                      </button>
-                    )
-                  }
-
-                  if (block.type === 'item') {
-                    return <Fragment key={block.item.id}>{renderLink(block.item, false)}</Fragment>
-                  }
-
-                  const isOpen = openGroups.has(block.label)
-                  return (
-                    <div className={`sidebar-subgroup${isOpen ? ' open' : ''}`} key={block.label}>
-                      <button
-                        type="button"
-                        className="sidebar-subgroup-head"
-                        onClick={() => toggleGroup(block.label)}
-                        aria-expanded={isOpen}
-                      >
-                        <span className="sidebar-subgroup-head-label">
-                          <span className="sidebar-subgroup-chevron">
-                            <SidebarChromeIcon name="chevron-right" />
-                          </span>
-                          <span>{block.label}</span>
-                        </span>
-                        {block.label === 'Organization units' && onAddOrgUnit ? (
-                          <span
-                            className="sidebar-subgroup-plus"
-                            role="button"
-                            tabIndex={0}
-                            aria-label="Add organization unit"
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              onAddOrgUnit?.()
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter' || event.key === ' ') {
-                                event.stopPropagation()
-                                onAddOrgUnit?.()
-                              }
-                            }}
-                          >
-                            <SidebarChromeIcon name="plus" />
-                          </span>
-                        ) : null}
-                      </button>
-                      <div className="sidebar-subgroup-items">
-                        <div className="sidebar-subgroup-items-inner">
-                          {block.items.map((item) => renderLink(item, true))}
-                        </div>
-                      </div>
+                      </a>
+                      {showAddAction ? (
+                        <button
+                          type="button"
+                          className="sidebar-link-plus"
+                          aria-label={`Add ${item.label.toLowerCase()} record`}
+                          onClick={() => onAddOrgUnit?.()}
+                        >
+                          <SidebarChromeIcon name="plus" />
+                        </button>
+                      ) : null}
                     </div>
                   )
                 })}
@@ -425,25 +384,6 @@ export default function AdminSidebar({
             </div>
           ))}
         </nav>
-
-        <div className="sidebar-support" aria-label="Sidebar utilities">
-          <button type="button" className="sidebar-link sidebar-link--utility" data-tip="Settings">
-            <span className="sidebar-link-main">
-              <span className="sidebar-link-icon">
-                <SidebarChromeIcon name="settings" />
-              </span>
-              <span className="sidebar-link-label">Settings</span>
-            </span>
-          </button>
-          <button type="button" className="sidebar-link sidebar-link--utility" data-tip="Help & support">
-            <span className="sidebar-link-main">
-              <span className="sidebar-link-icon">
-                <SidebarChromeIcon name="help" />
-              </span>
-              <span className="sidebar-link-label">Help &amp; support</span>
-            </span>
-          </button>
-        </div>
 
         <div className="sidebar-foot">
           <div className="sidebar-profile">

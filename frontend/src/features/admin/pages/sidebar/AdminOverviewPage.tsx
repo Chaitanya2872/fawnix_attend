@@ -1,6 +1,7 @@
+/* eslint-disable react-hooks/preserve-manual-memoization */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useMemo } from 'react'
-import './AdminOverviewPage.css'
+import { useMemo } from "react";
+import "./AdminOverviewPage.css";
 import {
   toMonthKey,
   getPrevMonthKey,
@@ -8,120 +9,124 @@ import {
   getMonthAvgRate,
   getWeekRangeLabel,
   getGreeting,
-} from '../../utils/Utils'
-import { DashboardTopbar } from '../../components/Dashboardtopbar'
-import { KpiStrip } from '../../components/Kpistrip'
-import { MainGrid } from '../../components/MainGrid'
-import { DepartmentsPanel } from '../../components/Departmentspanel'
-import { EmployeeAuditPanel } from '../../components/EmployeeAuditPanel'
-import type { UpcomingBirthday } from '../../components/UpcomingBirthdaysPanel'
+} from "../../utils/Utils";
+import { KpiStrip } from "../../components/Kpistrip";
+import { MainGrid } from "../../components/MainGrid";
+import { DepartmentsPanel } from "../../components/Departmentspanel";
+import { EmployeeAuditPanel } from "../../components/EmployeeAuditPanel";
+import type { UpcomingBirthday } from "../../components/UpcomingBirthdaysPanel";
 
-type Props = any
+type Props = any;
 
-const LEAVE_SPARK_BUCKETS = 15
+const LEAVE_SPARK_BUCKETS = 15;
 
 function parseOverviewDate(value?: string) {
-  const rawValue = (value || '').trim()
+  const rawValue = (value || "").trim();
   if (!rawValue) {
-    return null
+    return null;
   }
 
-  const dateMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  const dateMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (dateMatch) {
-    const [, year, month, day] = dateMatch
-    const parsed = new Date(Number(year), Number(month) - 1, Number(day))
-    return Number.isNaN(parsed.getTime()) ? null : parsed
+    const [, year, month, day] = dateMatch;
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
-  const parsed = new Date(rawValue)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
+  const parsed = new Date(rawValue);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 function getMonthBounds(monthKey: string) {
-  const [year, month] = monthKey.split('-').map(Number)
+  const [year, month] = monthKey.split("-").map(Number);
   if (!year || !month) {
-    return null
+    return null;
   }
 
   return {
     start: new Date(year, month - 1, 1),
-    end: new Date(year, month, 0)
-  }
+    end: new Date(year, month, 0),
+  };
 }
 
 function getMonthKeyFromDate(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function getLeaveDateRange(row: any) {
-  const fromDate = parseOverviewDate(row.from_date)
-  const toDate = parseOverviewDate(row.to_date)
-  const start = fromDate || toDate
-  const end = toDate || fromDate
+  const fromDate = parseOverviewDate(row.from_date);
+  const toDate = parseOverviewDate(row.to_date);
+  const start = fromDate || toDate;
+  const end = toDate || fromDate;
 
   if (!start || !end) {
-    return null
+    return null;
   }
 
-  return start <= end ? { start, end } : { start: end, end: start }
+  return start <= end ? { start, end } : { start: end, end: start };
 }
 
 function leaveOverlapsMonth(row: any, monthKey: string) {
-  const range = getLeaveDateRange(row)
-  const bounds = getMonthBounds(monthKey)
+  const range = getLeaveDateRange(row);
+  const bounds = getMonthBounds(monthKey);
 
   if (!range || !bounds) {
-    return false
+    return false;
   }
 
-  return range.start <= bounds.end && range.end >= bounds.start
+  return range.start <= bounds.end && range.end >= bounds.start;
 }
 
 function countLeavesInMonth(rows: any[], monthKey: string) {
-  return rows.filter((row) => leaveOverlapsMonth(row, monthKey)).length
+  return rows.filter((row) => leaveOverlapsMonth(row, monthKey)).length;
 }
 
 function formatOverviewMonthLabel(monthKey: string) {
-  const bounds = getMonthBounds(monthKey)
+  const bounds = getMonthBounds(monthKey);
   if (!bounds) {
-    return 'Selected month'
+    return "Selected month";
   }
 
-  return bounds.start.toLocaleDateString('en-IN', {
-    month: 'long',
-    year: 'numeric',
-  })
+  return bounds.start.toLocaleDateString("en-IN", {
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function buildLeaveSparkData(rows: any[], monthKey: string) {
-  const bounds = getMonthBounds(monthKey)
-  const buckets = Array.from({ length: LEAVE_SPARK_BUCKETS }, () => 0)
+  const bounds = getMonthBounds(monthKey);
+  const buckets = Array.from({ length: LEAVE_SPARK_BUCKETS }, () => 0);
   if (!bounds) {
-    return buckets.map(() => 4)
+    return buckets.map(() => 4);
   }
 
-  const daysInMonth = bounds.end.getDate()
+  const daysInMonth = bounds.end.getDate();
   rows.forEach((row) => {
-    const range = getLeaveDateRange(row)
+    const range = getLeaveDateRange(row);
     if (!range || range.start > bounds.end || range.end < bounds.start) {
-      return
+      return;
     }
 
-    const markerTime = Math.max(bounds.start.getTime(), Math.min(range.start.getTime(), bounds.end.getTime()))
-    const markerDate = new Date(markerTime)
+    const markerTime = Math.max(
+      bounds.start.getTime(),
+      Math.min(range.start.getTime(), bounds.end.getTime()),
+    );
+    const markerDate = new Date(markerTime);
     const bucketIndex = Math.min(
       buckets.length - 1,
-      Math.floor(((markerDate.getDate() - 1) / daysInMonth) * buckets.length)
-    )
-    buckets[bucketIndex] += 1
-  })
+      Math.floor(((markerDate.getDate() - 1) / daysInMonth) * buckets.length),
+    );
+    buckets[bucketIndex] += 1;
+  });
 
-  const maxBucket = Math.max(...buckets, 0)
+  const maxBucket = Math.max(...buckets, 0);
   if (!maxBucket) {
-    return buckets.map(() => 4)
+    return buckets.map(() => 4);
   }
 
-  return buckets.map((count) => (count ? Math.max(Math.round((count / maxBucket) * 100), 18) : 4))
+  return buckets.map((count) =>
+    count ? Math.max(Math.round((count / maxBucket) * 100), 18) : 4,
+  );
 }
 
 export default function AdminOverviewPage({
@@ -133,62 +138,88 @@ export default function AdminOverviewPage({
   fieldVisitRows,
   firstClockInRows,
   leaveRows,
-  loadDashboard,
   selectedDateLeaves,
   weeklyAttendanceTrend,
 }: Props) {
   // ── Derived counts ─────────────────────────────────
-  const activeEmployees = employees.filter((e: any) => e.is_active !== false).length
-  const totalEmployees = activeEmployees || employees.length
-  const presentToday = firstClockInRows.length
+  const activeEmployees = employees.filter(
+    (e: any) => e.is_active !== false,
+  ).length;
+  const totalEmployees = activeEmployees || employees.length;
+  const presentToday = firstClockInRows.length;
   const fieldActive = fieldVisitRows.filter((r: any) => {
-    const s = `${r?.status || r?.visitStatus || ''}`.toLowerCase()
-    return s ? !s.includes('complete') && !s.includes('closed') : true
-  }).length
+    const s = `${r?.status || r?.visitStatus || ""}`.toLowerCase();
+    return s ? !s.includes("complete") && !s.includes("closed") : true;
+  }).length;
   const upcomingBirthdays = useMemo<UpcomingBirthday[]>(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     return employees
       .map((employee: any) => {
-        const dob = parseOverviewDate(employee.emp_date_of_birth)
-        if (!dob) return null
+        const dob = parseOverviewDate(employee.emp_date_of_birth);
+        if (!dob) return null;
 
-        let next = new Date(today.getFullYear(), dob.getMonth(), dob.getDate())
-        if (next < today) next = new Date(today.getFullYear() + 1, dob.getMonth(), dob.getDate())
-        const daysUntil = Math.round((next.getTime() - today.getTime()) / 86400000)
-        return { employee, date: next, daysUntil }
+        let next = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
+        if (next < today)
+          next = new Date(
+            today.getFullYear() + 1,
+            dob.getMonth(),
+            dob.getDate(),
+          );
+        const daysUntil = Math.round(
+          (next.getTime() - today.getTime()) / 86400000,
+        );
+        return { employee, date: next, daysUntil };
       })
-      .filter((item: UpcomingBirthday | null): item is UpcomingBirthday => item !== null && item.daysUntil <= 30)
-      .sort((a: UpcomingBirthday, b: UpcomingBirthday) => a.daysUntil - b.daysUntil)
-  }, [employees])
+      .filter(
+        (item: UpcomingBirthday | null): item is UpcomingBirthday =>
+          item !== null && item.daysUntil <= 30,
+      )
+      .sort(
+        (a: UpcomingBirthday, b: UpcomingBirthday) => a.daysUntil - b.daysUntil,
+      );
+  }, [employees]);
   // ── Date / label helpers ───────────────────────────
-  const weekLabel = getWeekRangeLabel(attendanceDateFilter)
-  const selectedDateLabel = new Date(`${attendanceDateFilter}T00:00:00`).toLocaleDateString(
-    'en-IN',
-    { weekday: 'short', day: 'numeric', month: 'short' }
-  )
-  const monthKey = toMonthKey(attendanceDateFilter)
-  const prevMonthKey = getPrevMonthKey(monthKey)
-  const prevMonthLabel = getPrevMonthLabel(monthKey)
+  const weekLabel = getWeekRangeLabel(attendanceDateFilter);
+  const selectedDateLabel = new Date(
+    `${attendanceDateFilter}T00:00:00`,
+  ).toLocaleDateString("en-IN", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+  const monthKey = toMonthKey(attendanceDateFilter);
+  const prevMonthKey = getPrevMonthKey(monthKey);
+  const prevMonthLabel = getPrevMonthLabel(monthKey);
 
   // ── KPI values ─────────────────────────────────────
   const leaveKpi = useMemo(() => {
-    const selectedMonthHasLeaves = countLeavesInMonth(leaveRows, monthKey) > 0
-    const latestLeaveMonthKey = leaveRows.reduce((latestMonth: string, row: any) => {
-      const range = getLeaveDateRange(row)
-      if (!range) {
-        return latestMonth
-      }
+    const selectedMonthHasLeaves = countLeavesInMonth(leaveRows, monthKey) > 0;
+    const latestLeaveMonthKey = leaveRows.reduce(
+      (latestMonth: string, row: any) => {
+        const range = getLeaveDateRange(row);
+        if (!range) {
+          return latestMonth;
+        }
 
-      const rowMonthKey = getMonthKeyFromDate(range.end)
-      return !latestMonth || rowMonthKey > latestMonth ? rowMonthKey : latestMonth
-    }, '')
-    const activeMonthKey = selectedMonthHasLeaves ? monthKey : latestLeaveMonthKey || monthKey
-    const previousMonthKey = getPrevMonthKey(activeMonthKey)
-    const currentCount = countLeavesInMonth(leaveRows, activeMonthKey)
-    const previousCount = countLeavesInMonth(leaveRows, previousMonthKey)
-    const delta = currentCount > 0 || previousCount > 0 ? currentCount - previousCount : null
+        const rowMonthKey = getMonthKeyFromDate(range.end);
+        return !latestMonth || rowMonthKey > latestMonth
+          ? rowMonthKey
+          : latestMonth;
+      },
+      "",
+    );
+    const activeMonthKey = selectedMonthHasLeaves
+      ? monthKey
+      : latestLeaveMonthKey || monthKey;
+    const previousMonthKey = getPrevMonthKey(activeMonthKey);
+    const currentCount = countLeavesInMonth(leaveRows, activeMonthKey);
+    const previousCount = countLeavesInMonth(leaveRows, previousMonthKey);
+    const delta =
+      currentCount > 0 || previousCount > 0
+        ? currentCount - previousCount
+        : null;
 
     return {
       currentCount,
@@ -196,84 +227,126 @@ export default function AdminOverviewPage({
       delta,
       monthLabel: formatOverviewMonthLabel(activeMonthKey),
       previousMonthLabel: getPrevMonthLabel(activeMonthKey),
-      sparkData: buildLeaveSparkData(leaveRows, activeMonthKey)
-    }
-  }, [leaveRows, monthKey])
-  const maxWeekly = Math.max(...weeklyAttendanceTrend.map((i: any) => i.count), 1)
+      sparkData: buildLeaveSparkData(leaveRows, activeMonthKey),
+    };
+  }, [leaveRows, monthKey]);
+  const maxWeekly = Math.max(
+    ...weeklyAttendanceTrend.map((i: any) => i.count),
+    1,
+  );
 
   const averageWeeklyAttendance = weeklyAttendanceTrend.length
     ? Math.round(
         (weeklyAttendanceTrend.reduce((s: number, i: any) => s + i.count, 0) /
           weeklyAttendanceTrend.length /
           Math.max(totalEmployees, 1)) *
-          100
+          100,
       )
-    : 0
+    : 0;
 
   // ── Month-over-month deltas ────────────────────────
-  const thisMonthAttRate = getMonthAvgRate(attendanceCountByDate, monthKey, totalEmployees)
-  const prevMonthAttRate = getMonthAvgRate(attendanceCountByDate, prevMonthKey, totalEmployees)
+  const thisMonthAttRate = getMonthAvgRate(
+    attendanceCountByDate,
+    monthKey,
+    totalEmployees,
+  );
+  const prevMonthAttRate = getMonthAvgRate(
+    attendanceCountByDate,
+    prevMonthKey,
+    totalEmployees,
+  );
   const attendanceDelta =
     thisMonthAttRate !== null && prevMonthAttRate !== null
       ? thisMonthAttRate - prevMonthAttRate
-      : null
+      : null;
 
   // ── Spark data (shared between attendance + on-time cards) ──
-  const sparkData = weeklyAttendanceTrend.slice(-7).map((item: any) =>
-    maxWeekly > 0 ? Math.max(Math.round((item.count / maxWeekly) * 100), 4) : 4
-  )
+  const sparkData = weeklyAttendanceTrend
+    .slice(-7)
+    .map((item: any) =>
+      maxWeekly > 0
+        ? Math.max(Math.round((item.count / maxWeekly) * 100), 4)
+        : 4,
+    );
 
   // ── Department entries ─────────────────────────────
+  const attendancePct = totalEmployees
+    ? Math.round((presentToday / totalEmployees) * 100)
+    : 0;
+  const attendanceHealthLabel =
+    attendancePct >= 90
+      ? "Optimal"
+      : attendancePct >= 72
+        ? "Stable"
+        : "Needs attention";
+  const activeLeaveCount = selectedDateLeaves.length;
+
   const deptEntries = useMemo(() => {
-    const map: Record<string, { head: number; present: number }> = {}
+    const map: Record<string, { head: number; present: number }> = {};
     const employeeByEmail = new Map<string, any>(
       employees
         .filter((e: any) => e.emp_email)
-        .map((e: any) => [String(e.emp_email).toLowerCase(), e])
-    )
+        .map((e: any) => [String(e.emp_email).toLowerCase(), e]),
+    );
 
     employees.forEach((e: any) => {
-      const dept = (e.emp_department || 'Unassigned').trim()
-      if (!map[dept]) map[dept] = { head: 0, present: 0 }
-      map[dept].head += 1
-    })
+      const dept = (e.emp_department || "Unassigned").trim();
+      if (!map[dept]) map[dept] = { head: 0, present: 0 };
+      map[dept].head += 1;
+    });
 
     firstClockInRows.forEach((r: any) => {
-      const employee =
-        r.employee_email ? employeeByEmail.get(String(r.employee_email).toLowerCase()) : undefined
+      const employee = r.employee_email
+        ? employeeByEmail.get(String(r.employee_email).toLowerCase())
+        : undefined;
       const dept = (
         r.emp_department ||
         employee?.emp_department ||
         r.emp_designation ||
         employee?.emp_designation ||
-        'Unassigned'
-      ).trim()
-      if (!map[dept]) map[dept] = { head: 0, present: 0 }
-      map[dept].present += 1
-    })
+        "Unassigned"
+      ).trim();
+      if (!map[dept]) map[dept] = { head: 0, present: 0 };
+      map[dept].present += 1;
+    });
 
     return Object.entries(map)
       .sort((a, b) => b[1].head - a[1].head)
-      .slice(0, 6)
-  }, [employees, firstClockInRows])
+      .slice(0, 6);
+  }, [employees, firstClockInRows]);
 
-  const greeting = getGreeting()
+  const greeting = getGreeting();
 
   return (
     <div className="ov2-shell admin-aligned-page admin-aligned-page--overview">
-      <DashboardTopbar
-        onRefresh={loadDashboard}
-        syncDeps={[attendanceDateFilter, presentToday, leaveKpi.currentCount, fieldActive, upcomingBirthdays.length]}
-      />
-
       <div className="ov2-content">
         {/* ── Page header ── */}
         <div className="ov2-page-header">
           <div>
-            <h1 className="ov2-page-title">{greeting}, Admin</h1>
+            <span className="ov2-page-kicker">
+              <i aria-hidden="true" />
+              Live workspace
+            </span>
+            {/* The shell topbar owns the page-level <h1>, so this is an h2. */}
+            <h2 className="ov2-page-title">{greeting}, Admin</h2>
             <p className="ov2-page-sub">
-              {presentToday} of {totalEmployees} present &middot; {fieldActive} in the field
+              {presentToday} of {totalEmployees} present &middot; {fieldActive}{" "}
+              in the field &middot; {activeLeaveCount} leave signals
             </p>
+          </div>
+          <div className="ov2-header-metrics" aria-label="Dashboard summary">
+            <span>
+              <b>{attendancePct}%</b>
+              attendance
+            </span>
+            <span>
+              <b>{attendanceHealthLabel}</b>
+              health
+            </span>
+            <span>
+              <b>{weekLabel}</b>
+              window
+            </span>
           </div>
         </div>
 
@@ -285,7 +358,9 @@ export default function AdminOverviewPage({
           weekLabel={weekLabel}
           attendanceDelta={attendanceDelta}
           sparkData={sparkData}
-          missedLoginEmployeeName={String(missedLoginLeader?.emp_full_name || '')}
+          missedLoginEmployeeName={String(
+            missedLoginLeader?.emp_full_name || "",
+          )}
           missedLoginCount={Number(missedLoginLeader?.missed_logins || 0)}
           monthlyLeaveRequests={leaveKpi.currentCount}
           previousMonthLeaveRequests={leaveKpi.previousCount}
@@ -294,7 +369,7 @@ export default function AdminOverviewPage({
           leaveSparkData={leaveKpi.sparkData}
           leavePrevMonthLabel={leaveKpi.previousMonthLabel}
           upcomingBirthdayCount={upcomingBirthdays.length}
-          nextBirthdayName={upcomingBirthdays[0]?.employee.emp_full_name || ''}
+          nextBirthdayName={upcomingBirthdays[0]?.employee.emp_full_name || ""}
           prevMonthLabel={prevMonthLabel}
         />
 
@@ -321,5 +396,5 @@ export default function AdminOverviewPage({
         </div>
       </div>
     </div>
-  )
+  );
 }

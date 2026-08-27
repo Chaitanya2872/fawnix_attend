@@ -116,11 +116,34 @@ export function useAdminLeavesData({ isActive, accessToken, apiRequest }: UseAdm
         if (!response?.success) {
           throw new Error(response?.message || 'Failed to load leave requests')
         }
-        const data = response.data
-        setRows(data.records ?? [])
-        setKpis(data.kpis ?? EMPTY_KPIS)
-        setFilterOptions(data.filter_options ?? EMPTY_FILTER_OPTIONS)
-        setPagination(data.pagination ?? EMPTY_PAGINATION)
+        const data = response.data ?? {}
+        const records = Array.isArray(data.records) ? data.records : []
+        const paginationData = data.pagination ?? {}
+        const kpiData = data.kpis ?? {}
+        const filterData = data.filter_options ?? {}
+
+        setRows(records)
+        setKpis({
+          ...EMPTY_KPIS,
+          ...kpiData,
+          daily_trend: Array.isArray(kpiData.daily_trend) ? kpiData.daily_trend : [],
+          age_buckets: {
+            ...EMPTY_KPIS.age_buckets,
+            ...(kpiData.age_buckets ?? {}),
+          },
+          top_leave_days: Array.isArray(kpiData.top_leave_days) ? kpiData.top_leave_days : [],
+        })
+        setFilterOptions({
+          ...EMPTY_FILTER_OPTIONS,
+          ...filterData,
+          departments: Array.isArray(filterData.departments) ? filterData.departments : [],
+          managers: Array.isArray(filterData.managers) ? filterData.managers : [],
+        })
+        setPagination({
+          ...EMPTY_PAGINATION,
+          ...paginationData,
+          total_records: paginationData.total_records ?? paginationData.total ?? records.length,
+        })
         setLastSyncedAt(new Date())
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load leave requests')

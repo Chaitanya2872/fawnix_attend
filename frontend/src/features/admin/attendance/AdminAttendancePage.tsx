@@ -1,6 +1,5 @@
 /* eslint-disable react-hooks/static-components */
-/* eslint-disable react-hooks/preserve-manual-memoization */
-import { useState, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import AttendanceDatePicker from './AttendanceDatePicker'
 import './AdminAttendancePage.css'
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -159,7 +158,10 @@ export default function AdminAttendancePage(props: Props) {
   }, [filteredAttendanceRows, selectedDateLeaves, exceptionRows])
 
   const hasDepts = allDepts.length > 0
-  const deptMatch = (row: any) => deptFilter === 'all' || !hasDepts || row.emp_department === deptFilter
+  const deptMatch = useCallback(
+    (row: any) => deptFilter === 'all' || !hasDepts || row.emp_department === deptFilter,
+    [deptFilter, hasDepts]
+  )
 
   const filteredLeaves = useMemo(() => {
     const base = normalizedSearch
@@ -168,7 +170,7 @@ export default function AdminAttendancePage(props: Props) {
             .filter(Boolean).join(' ').toLowerCase().includes(normalizedSearch))
       : selectedDateLeaves
     return base.filter(deptMatch)
-  }, [selectedDateLeaves, normalizedSearch, deptFilter])
+  }, [selectedDateLeaves, normalizedSearch, deptMatch])
 
   const filteredExceptionRows = useMemo(() => {
     const base = normalizedSearch
@@ -177,7 +179,7 @@ export default function AdminAttendancePage(props: Props) {
             .filter(Boolean).join(' ').toLowerCase().includes(normalizedSearch))
       : exceptionRows
     return base.filter(deptMatch)
-  }, [exceptionRows, normalizedSearch, deptFilter])
+  }, [exceptionRows, normalizedSearch, deptMatch])
 
   const filteredMissedLoginEmployees = useMemo(() => {
     const base = normalizedSearch
@@ -186,11 +188,11 @@ export default function AdminAttendancePage(props: Props) {
             .filter(Boolean).join(' ').toLowerCase().includes(normalizedSearch))
       : missedLoginEmployees
     return deptFilter === 'all' || !hasDepts ? base : base.filter((e: any) => e.emp_department === deptFilter)
-  }, [missedLoginEmployees, normalizedSearch, deptFilter])
+  }, [missedLoginEmployees, normalizedSearch, deptFilter, hasDepts])
 
   const deptFilteredAttendanceRows = useMemo(
     () => filteredAttendanceRows.filter(deptMatch),
-    [filteredAttendanceRows, deptFilter]
+    [filteredAttendanceRows, deptMatch]
   )
 
   function cycleSort(current: SortConfig, col: string, set: (s: SortConfig) => void) {

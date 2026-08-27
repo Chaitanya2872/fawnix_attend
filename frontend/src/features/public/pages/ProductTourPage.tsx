@@ -5,6 +5,7 @@ import { SiteFooter } from "../../../components/layout/SiteFooter";
 import fawnixBg from "../../../assets/fawnix_bg.png";
 import { TourHeroScene } from "../components/TourHeroScene";
 import { TourScene } from "../components/TourScenes";
+import { TourScreenWall } from "../components/TourScreenWall";
 import {
   tourCapabilities,
   tourChapters,
@@ -328,8 +329,8 @@ export default function ProductTourPage() {
             </span>
             <h2>From signal to decision.</h2>
             <p>
-              Drag, swipe, or use the arrow keys. Every screen below is a live
-              React composition of the real Fawnix workspace.
+              Drag, swipe, or use the arrow keys — first the admin workspace,
+              then the same modules as they ship on the phone.
             </p>
           </Reveal>
 
@@ -468,6 +469,10 @@ export default function ProductTourPage() {
               <span className="tr-deck-hint">drag to explore</span>
             </div>
           </div>
+
+          {/* The same modules, as shipped on the phone. Screenshots bind
+              themselves from src/assets/screens — see that folder's README. */}
+          <TourScreenWall />
         </section>
 
         {/* ── the daily loop ────────────────────────────────────────────── */}

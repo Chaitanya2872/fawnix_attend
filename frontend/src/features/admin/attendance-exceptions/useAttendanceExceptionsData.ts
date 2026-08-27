@@ -117,11 +117,34 @@ export function useAttendanceExceptionsData({
         if (!response?.success) {
           throw new Error(response?.message || 'Failed to load attendance exceptions')
         }
-        const data = response.data
-        setRows(data.records ?? [])
-        setKpis(data.kpis ?? EMPTY_KPIS)
-        setFilterOptions(data.filter_options ?? EMPTY_FILTER_OPTIONS)
-        setPagination(data.pagination ?? EMPTY_PAGINATION)
+        const data = response.data ?? {}
+        const records = Array.isArray(data.records) ? data.records : []
+        const paginationData = data.pagination ?? {}
+        const kpiData = data.kpis ?? {}
+
+        setRows(records)
+        setKpis({
+          ...EMPTY_KPIS,
+          ...kpiData,
+          daily_trend: Array.isArray(kpiData.daily_trend) ? kpiData.daily_trend : [],
+          repeat_offenders: {
+            ...EMPTY_KPIS.repeat_offenders,
+            ...(kpiData.repeat_offenders ?? {}),
+          },
+          top_short_hours: Array.isArray(kpiData.top_short_hours) ? kpiData.top_short_hours : [],
+        })
+        setFilterOptions({
+          ...EMPTY_FILTER_OPTIONS,
+          ...(data.filter_options ?? {}),
+          departments: Array.isArray(data.filter_options?.departments)
+            ? data.filter_options.departments
+            : [],
+        })
+        setPagination({
+          ...EMPTY_PAGINATION,
+          ...paginationData,
+          total_records: paginationData.total_records ?? paginationData.total ?? records.length,
+        })
         setLastSyncedAt(new Date())
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load attendance exceptions')

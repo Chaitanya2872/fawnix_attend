@@ -8,9 +8,9 @@
   --adm-text: #111827;
   --adm-text-soft: #747b84;
   --adm-text-muted: #8b929c;
-  --adm-blue: #4f7bf7;
-  --adm-blue-hover: #416ce7;
-  --adm-blue-soft: #eef3ff;
+  --adm-blue: var(--a-accent);
+  --adm-blue-hover: var(--a-accent-hover);
+  --adm-blue-soft: var(--a-accent-soft);
   --adm-success: #22c55e;
   --adm-success-soft: #eafbea;
   --adm-warning: #b98900;
@@ -64,37 +64,6 @@
 }
 
 /* ===== TABS ===== */
-.adm-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  margin-top: 10px;
-  padding-bottom: 1px;
-}
-
-.adm-tab {
-  height: 30px;
-  padding: 0 12px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: transparent;
-  color: var(--adm-text-soft);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease;
-}
-
-.adm-tab:hover {
-  color: var(--adm-text);
-}
-
-.adm-tab--active {
-  color: var(--adm-blue);
-  border-bottom-color: var(--adm-blue);
-}
-
 /* ===== HEADER ACTIONS ===== */
 .admin-aligned-page--employees .adm-header__actions {
   display: flex;
@@ -156,17 +125,6 @@
   opacity: 0.58;
 }
 
-.admin-aligned-page--employees .adm-btn--primary {
-  border-color: var(--adm-blue);
-  background: var(--adm-blue);
-  color: #ffffff;
-}
-
-.admin-aligned-page--employees .adm-btn--primary:hover:not(:disabled) {
-  border-color: var(--adm-blue-hover);
-  background: var(--adm-blue-hover);
-  box-shadow: 0 4px 12px rgba(79, 123, 247, 0.25);
-}
 
 .admin-aligned-page--employees .adm-btn--icon {
   width: 34px;
@@ -882,7 +840,7 @@
 }
 
 .adm-custom-select::after {
-  content: "▾";
+  content: "â–¾";
   position: absolute;
   right: 10px;
   top: 50%;

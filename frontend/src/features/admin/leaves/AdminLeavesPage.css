@@ -1,4 +1,4 @@
-﻿@import url('https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -7,9 +7,9 @@
    (matches the Attendance Exceptions admin page)
    â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    ink        #14243a   surface      #ffffff
-   muted      #57708f   canvas       #eef4fb
+   muted      #57708f   canvas       var(--a-accent-soft)
    soft       #6d85a3   line         #dbe7f5 / #e8f0f9 / #f1f6fc
-   primary    #2f7fe0   primary-ink  #1b5fb0
+   primary    var(--a-accent)   primary-ink  var(--a-accent-ink)
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .admin-aligned-page--leaves {
@@ -19,15 +19,15 @@
   --lv-muted-2: #5d7590;
   --lv-soft: #6d85a3;
   --lv-body: #4c6484;
-  --lv-canvas: #eef4fb;
+  --lv-canvas: var(--a-accent-soft);
   --lv-line: #dbe7f5;
   --lv-line-2: #cfe0f2;
   --lv-line-3: #e8f0f9;
   --lv-line-4: #f1f6fc;
   --lv-tint: #f6faff;
-  --lv-primary: #2f7fe0;
-  --lv-primary-hover: #2570ca;
-  --lv-primary-ink: #1b5fb0;
+  --lv-primary: var(--a-accent);
+  --lv-primary-hover: var(--a-accent-hover);
+  --lv-primary-ink: var(--a-accent-ink);
 
   background: var(--lv-canvas);
   color: var(--lv-ink);
@@ -87,7 +87,7 @@
 
 .lv-kpi-card--clickable:hover,
 .lv-kpi-card--clickable:focus-visible {
-  border-color: #9dc2e8;
+  border-color: var(--a-accent-border);
   outline: none;
 }
 
@@ -614,7 +614,7 @@
 
 .admin-aligned-page--leaves .table-pill.accent {
   background: #eaf2fd;
-  color: #1b5fb0;
+  color: var(--a-accent-ink);
 }
 
 .admin-aligned-page--leaves .table-pill.active {
@@ -628,7 +628,7 @@
 }
 
 .admin-aligned-page--leaves .table-pill.inactive {
-  background: #eef4fb;
+  background: var(--a-accent-soft);
   color: #57708f;
 }
 
@@ -649,7 +649,7 @@
 
 .lv-action-btn:hover:not(:disabled) {
   background: #f0f7ff;
-  border-color: #9dc2e8;
+  border-color: var(--a-accent-border);
 }
 
 .lv-action-btn--alert {

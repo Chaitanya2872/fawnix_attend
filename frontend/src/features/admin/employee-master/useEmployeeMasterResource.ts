@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   EmployeeMasterFilterOptions,
   EmployeeMasterFilterState,
@@ -149,27 +149,52 @@ export function useEmployeeMasterResource({
   const [actionStatus, setActionStatus] = useState('')
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null)
 
+  // apiRequest is rebuilt on every render of the session hook, and `resource`/
+  // page/filters change independently of a fetch. Holding them in a ref keeps
+  // `load` referentially stable, so the effect below fires only when something
+  // that should actually trigger a request changes -- without this the effect
+  // re-ran on every render and the page refetched in a loop.
+  const latestRef = useRef({ apiRequest, resource, page, appliedFilters, accessToken, isActive })
+  latestRef.current = { apiRequest, resource, page, appliedFilters, accessToken, isActive }
+
+  /** Cancels a superseded request and lets us ignore its late response. */
+  const inFlightRef = useRef<{ controller: AbortController; superseded: boolean } | null>(null)
+  const hasAccessToken = Boolean(accessToken)
+
   const load = useCallback(
-    async (requestPage = page, requestFilters = appliedFilters) => {
-      if (!accessToken || !isActive) {
+    async (requestPage?: number, requestFilters?: EmployeeMasterFilterState) => {
+      const { apiRequest: request, resource: activeResource, accessToken: token, isActive: active } =
+        latestRef.current
+
+      if (!token || !active) {
         return
       }
+
+      const targetPage = requestPage ?? latestRef.current.page
+      const targetFilters = requestFilters ?? latestRef.current.appliedFilters
 
       setLoading(true)
       setError('')
 
+      if (inFlightRef.current) {
+        inFlightRef.current.superseded = true
+        inFlightRef.current.controller.abort()
+      }
+
       const controller = new AbortController()
+      const pending = { controller, superseded: false }
+      inFlightRef.current = pending
       const timeoutId = window.setTimeout(() => {
         controller.abort()
       }, EMPLOYEE_MASTER_REQUEST_TIMEOUT_MS)
 
       try {
-        const response = await apiRequest(
-          buildListUrl(resource, requestFilters, requestPage),
+        const response = await request(
+          buildListUrl(activeResource, targetFilters, targetPage),
           { signal: controller.signal },
-          accessToken
+          token
         )
-        ensureSuccessfulResponse(response, `Failed to load ${resource.title.toLowerCase()}`)
+        ensureSuccessfulResponse(response, `Failed to load ${activeResource.title.toLowerCase()}`)
 
         const data = (response?.data || {}) as Record<string, unknown>
         const nextRecords = Array.isArray(data.records)
@@ -178,25 +203,36 @@ export function useEmployeeMasterResource({
 
         setRecords(nextRecords)
         setFilterOptions((data.filter_options || {}) as EmployeeMasterFilterOptions)
-        setPagination(normalizePagination(data, nextRecords, requestPage, getPageSize(requestFilters)))
+        setPagination(normalizePagination(data, nextRecords, targetPage, getPageSize(targetFilters)))
         setLastSyncedAt(new Date())
       } catch (loadError) {
+        if (pending.superseded) {
+          return
+        }
         setRecords([])
         setPagination({
           ...EMPTY_PAGINATION,
-          page: requestPage,
-          has_previous: requestPage > 1,
+          page: targetPage,
+          has_previous: targetPage > 1,
         })
-        setError(getLoadErrorMessage(loadError, `Failed to load ${resource.title.toLowerCase()}`))
+        setError(getLoadErrorMessage(loadError, `Failed to load ${activeResource.title.toLowerCase()}`))
       } finally {
         window.clearTimeout(timeoutId)
-        setLoading(false)
+        if (inFlightRef.current === pending) {
+          inFlightRef.current = null
+          setLoading(false)
+        }
       }
     },
-    [accessToken, apiRequest, appliedFilters, isActive, page, resource]
+    []
   )
 
-  useEffect(() => {
+  // Switching resource clears the panel during render rather than in an effect,
+  // so the fetch below runs once with the new resource's blank filters instead
+  // of firing a stale request first and a corrected one straight after.
+  const [activeResourceKey, setActiveResourceKey] = useState(resource.key)
+  if (activeResourceKey !== resource.key) {
+    setActiveResourceKey(resource.key)
     setFilters(cloneEmptyFilters())
     setAppliedFilters(cloneEmptyFilters())
     setRecords([])
@@ -206,15 +242,15 @@ export function useEmployeeMasterResource({
     setError('')
     setActionStatus('')
     setLastSyncedAt(null)
-  }, [resource.key])
+  }
 
   useEffect(() => {
-    if (!accessToken || !isActive) {
+    if (!hasAccessToken || !isActive) {
       return
     }
 
     void load(page, appliedFilters)
-  }, [accessToken, appliedFilters, isActive, load, page, resource.key])
+  }, [hasAccessToken, appliedFilters, isActive, load, page, resource.key])
 
   const updateFilter = useCallback(
     <K extends keyof EmployeeMasterFilterState>(key: K, value: EmployeeMasterFilterState[K]) => {
@@ -242,8 +278,8 @@ export function useEmployeeMasterResource({
   }, [])
 
   const refresh = useCallback(() => {
-    void load(page, appliedFilters)
-  }, [appliedFilters, load, page])
+    void load()
+  }, [load])
 
   const createRecord = useCallback(
     async (payload: Record<string, string>) => {
@@ -261,7 +297,7 @@ export function useEmployeeMasterResource({
         )
         ensureSuccessfulResponse(response, `Failed to create ${resource.singularLabel.toLowerCase()}`)
         setActionStatus(`${resource.singularLabel} created.`)
-        await load(page, appliedFilters)
+        await load()
       } catch (mutationError) {
         setActionStatus(
           mutationError instanceof Error
@@ -273,7 +309,7 @@ export function useEmployeeMasterResource({
         setActionLoading(false)
       }
     },
-    [accessToken, apiRequest, appliedFilters, load, page, resource]
+    [accessToken, apiRequest, load, resource]
   )
 
   const updateRecord = useCallback(
@@ -285,14 +321,15 @@ export function useEmployeeMasterResource({
         const response = await apiRequest(
           `${resource.endpoint}/${encodeURIComponent(String(recordId))}`,
           {
-            method: 'PUT',
+            // PATCH, not PUT: only the supplied fields are written.
+            method: 'PATCH',
             body: JSON.stringify(payload),
           },
           accessToken
         )
         ensureSuccessfulResponse(response, `Failed to update ${resource.singularLabel.toLowerCase()}`)
         setActionStatus(`${resource.singularLabel} updated.`)
-        await load(page, appliedFilters)
+        await load()
       } catch (mutationError) {
         setActionStatus(
           mutationError instanceof Error
@@ -304,7 +341,7 @@ export function useEmployeeMasterResource({
         setActionLoading(false)
       }
     },
-    [accessToken, apiRequest, appliedFilters, load, page, resource]
+    [accessToken, apiRequest, load, resource]
   )
 
   const deleteRecord = useCallback(
@@ -324,7 +361,7 @@ export function useEmployeeMasterResource({
         if (nextPage !== page) {
           setPage(nextPage)
         }
-        await load(nextPage, appliedFilters)
+        await load(nextPage)
       } catch (mutationError) {
         setActionStatus(
           mutationError instanceof Error
@@ -336,7 +373,7 @@ export function useEmployeeMasterResource({
         setActionLoading(false)
       }
     },
-    [accessToken, apiRequest, appliedFilters, load, page, records.length, resource]
+    [accessToken, apiRequest, load, page, records.length, resource]
   )
 
   const reset = useCallback(() => {
@@ -354,6 +391,8 @@ export function useEmployeeMasterResource({
 
   return {
     filters,
+    /** What the current rows were actually fetched with (not the draft form). */
+    appliedFilters,
     records,
     filterOptions,
     pagination,

@@ -1,282 +1,261 @@
-import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { appRoutes } from '../../../app/config/routes'
-import '../../../App.css'
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { appRoutes } from "../../../app/config/routes";
+import "../../../App.css";
 import {
-  API_TELEMETRY_EMP_CODE
-} from '../config/sidebar'
-import { useAdminLoginExperience } from '../hooks/useAdminLoginExperience'
-import { useAdminAuth } from '../hooks/useAdminAuth'
-import { useDashboardData } from '../hooks/useDashboardData'
-import { useEmployeesPanel } from '../employees/useEmployeesPanel'
-import { useAttendancePanel } from '../attendance/useAttendancePanel'
-import { useAttendanceExceptionsData } from '../attendance-exceptions/useAttendanceExceptionsData'
-import { useOvertimeRecordsData } from '../overtime-records/useOvertimeRecordsData'
-import { useLeavesPanel } from '../leaves/useLeavesPanel'
-import { useAdminLeavesData } from '../leaves/useAdminLeavesData'
-import { useActivitiesPanel } from '../activities/useActivitiesPanel'
-import { useFieldVisitsPanel } from '../field-visits/useFieldVisitsPanel'
-import { useCalendarPanel } from '../calendar/useCalendarPanel'
-import { useReportsPanel } from '../reports/useReportsPanel'
-import { useApiTelemetryPanel } from '../api-telemetry/useApiTelemetryPanel'
-import { useEmployeeMasterResource } from '../employee-master/useEmployeeMasterResource'
-import AdminLoginPage from './AdminLoginPage'
-import AdminSidebar from '../components/AdminSidebar'
-import DeleteEmployeeModal from '../employees/DeleteEmployeeModal'
-import EmployeeFormDrawer from '../employees/EmployeeFormDrawer'
-import EmployeeImportDrawer from '../employees/import/EmployeeImportDrawer'
-import EmployeeViewDrawer from '../employees/EmployeeViewDrawer'
-import FieldVisitDetailDrawer from '../field-visits/FieldVisitDetailDrawer'
-import MapDialog from '../field-visits/MapDialog'
-import AdminActivitiesPage from '../activities/AdminActivitiesPage'
-import AdminApiTelemetryPage from '../api-telemetry/AdminApiTelemetryPage'
-import AdminAttendancePage from '../attendance/AdminAttendancePage'
-import AdminAttendanceRecordsPage from '../attendance/AdminAttendanceRecordsPage'
-import AdminAttendanceExceptionsPage from '../attendance-exceptions/AdminAttendanceExceptionsPage'
-import AdminCalendarPage from '../calendar/AdminCalendarPage'
-import AdminEmployeesPage from '../employees/AdminEmployeesPage'
-import AdminFieldVisitsPage from '../field-visits/AdminFieldVisitsPage'
-import AdminLeavesPage from '../leaves/AdminLeavesPage'
-import AdminOvertimeRecordsPage from '../overtime-records/AdminOvertimeRecordsPage'
-import AdminEmployeeMasterPage from '../employee-master/AdminEmployeeMasterPage'
-import AdminOverviewPage from './sidebar/AdminOverviewPage'
-import AdminReportsPage from '../reports/AdminReportsPage'
+  getAdminPanelFromPath,
+  getAdminPanelPath,
+} from "../config/adminPanelPaths";
+import { API_TELEMETRY_EMP_CODE } from "../config/sidebar";
+import { useAdminLoginExperience } from "../hooks/useAdminLoginExperience";
+import { useAdminAuth } from "../hooks/useAdminAuth";
+import { useDashboardData } from "../hooks/useDashboardData";
+import { useEmployeesPanel } from "../employees/useEmployeesPanel";
+import { useAttendancePanel } from "../attendance/useAttendancePanel";
+import { useAttendanceExceptionsData } from "../attendance-exceptions/useAttendanceExceptionsData";
+import { useOvertimeRecordsData } from "../overtime-records/useOvertimeRecordsData";
+import { useLeavesPanel } from "../leaves/useLeavesPanel";
+import { useAdminLeavesData } from "../leaves/useAdminLeavesData";
+import { useActivitiesPanel } from "../activities/useActivitiesPanel";
+import { useFieldVisitsPanel } from "../field-visits/useFieldVisitsPanel";
+import { useCalendarPanel } from "../calendar/useCalendarPanel";
+import { useReportsPanel } from "../reports/useReportsPanel";
+import { useApiTelemetryPanel } from "../api-telemetry/useApiTelemetryPanel";
+import { useEmployeeMasterResource } from "../employee-master/useEmployeeMasterResource";
+import AdminLoginPage from "./AdminLoginPage";
+import AdminSidebar from "../components/AdminSidebar";
+import AdminTopbar from "../components/AdminTopbar";
+import DeleteEmployeeModal from "../employees/DeleteEmployeeModal";
+import EmployeeFormDrawer from "../employees/EmployeeFormDrawer";
+import EmployeeImportDrawer from "../employees/import/EmployeeImportDrawer";
+import EmployeeViewDrawer from "../employees/EmployeeViewDrawer";
+import FieldVisitDetailDrawer from "../field-visits/FieldVisitDetailDrawer";
+import MapDialog from "../field-visits/MapDialog";
+import AdminActivitiesPage from "../activities/AdminActivitiesPage";
+import AdminApiTelemetryPage from "../api-telemetry/AdminApiTelemetryPage";
+import AdminAttendancePage from "../attendance/AdminAttendancePage";
+import AdminAttendanceRecordsPage from "../attendance/AdminAttendanceRecordsPage";
+import AdminAttendanceExceptionsPage from "../attendance-exceptions/AdminAttendanceExceptionsPage";
+import AdminCalendarPage from "../calendar/AdminCalendarPage";
+import AdminEmployeesPage from "../employees/AdminEmployeesPage";
+import AdminFieldVisitsPage from "../field-visits/AdminFieldVisitsPage";
+import AdminLeavesPage from "../leaves/AdminLeavesPage";
+import AdminOvertimeRecordsPage from "../overtime-records/AdminOvertimeRecordsPage";
+import AdminEmployeeMasterPage from "../employee-master/AdminEmployeeMasterPage";
+import AdminOverviewPage from "./sidebar/AdminOverviewPage";
+import AdminReportsPage from "../reports/AdminReportsPage";
+/* Unified internal-application theme. Imported last so it wins on source
+   order as well as specificity, normalising every admin page onto one palette. */
+import "../styles/admin-theme.css";
 import {
   employeeMasterResourceConfigs,
+  employeeMasterResources,
   getEmployeeMasterResourceByPanel,
-  isEmployeeMasterSidebarId
-} from '../employee-master/employeeMasterConfig'
+  isEmployeeMasterSidebarId,
+} from "../employee-master/employeeMasterConfig";
 import {
   formatDistanceKm,
   formatEmployeeGrade,
   formatLeaveTypeLabel,
   formatWorkingHours,
-  getLeaveApproverLabel
-} from '../utils/formatters'
+  getLeaveApproverLabel,
+} from "../utils/formatters";
 import {
   formatVisitDuration,
-  resolveVisitDurationMinutes
-} from '../utils/fieldVisits'
-import { hasWriteAccess } from '../utils/permissions'
+  resolveVisitDurationMinutes,
+} from "../utils/fieldVisits";
+import { hasWriteAccess } from "../utils/permissions";
 import {
   formatDate,
   formatDateOnly,
   formatDateTime,
   isSameDate,
-  toDateInputValue
-} from '../../../utils/date/dateUtils'
+  toDateInputValue,
+} from "../../../utils/date/dateUtils";
 import type {
   AttendanceExceptionRow,
   AttendanceRow,
   EmployeeRow,
   LeaveRow,
-  SidebarId
-} from '../../../types/admin'
+  SidebarId,
+} from "../../../types/admin";
 
-const adminPanelPathMap: Record<SidebarId, string> = {
-  dashboard: '',
-  employees: 'employees',
-  'employee-master-working-units': 'employee-master/working-units',
-  'employee-master-payroll-units': 'employee-master/payroll-units',
-  'employee-master-designations': 'employee-master/designations',
-  'employee-master-departments': 'employee-master/departments',
-  attendance: 'attendance',
-  'attendance-records': 'attendance-records',
-  'attendance-exceptions': 'attendance-exceptions',
-  'overtime-records': 'overtime-records',
-  inbox: 'inbox',
-  calendar: 'calendar',
-  reports: 'reports',
-  leaves: 'leaves',
-  activities: 'activities',
-  'field-visits': 'field-visits',
-  'api-telemetry': 'api-telemetry',
-}
-
-const organizationUnitPanels: SidebarId[] = [
-  'employee-master-working-units',
-  'employee-master-payroll-units',
-]
-
-function getAdminPanelPath(panel: SidebarId) {
-  const slug = adminPanelPathMap[panel]
-  return slug ? `${appRoutes.admin}/${slug}` : appRoutes.admin
-}
-
-function getAdminPanelFromPath(pathname: string): SidebarId {
-  const normalizedPath = pathname.replace(/\/+$/, '')
-  if (normalizedPath === appRoutes.admin) {
-    return 'dashboard'
-  }
-
-  const prefix = `${appRoutes.admin}/`
-  if (!normalizedPath.startsWith(prefix)) {
-    return 'dashboard'
-  }
-
-  const slug = normalizedPath.slice(prefix.length)
-  const matched = Object.entries(adminPanelPathMap).find(([, value]) => value === slug)
-  return (matched?.[0] as SidebarId | undefined) || 'dashboard'
-}
+const SIDEBAR_COLLAPSE_STORAGE_KEY = "admin-sidebar-collapsed";
 
 function getExceptionDateValue(row: AttendanceExceptionRow) {
-  return row.exception_date || row.attendance_date || row.requested_at
+  return row.exception_date || row.attendance_date || row.requested_at;
 }
 
 function getSortTime(row: AttendanceExceptionRow): number {
   const times = [
     row.actual_login_time,
-    row.exception_time, 
-    row.requested_at
-  ].filter(Boolean) as string[]
-  
-  if (times.length === 0) return 0
-  
-  const earliest = times.map(time => new Date(time).getTime()).reduce((a, b) => Math.min(a, b))
-  return earliest
+    row.exception_time,
+    row.requested_at,
+  ].filter(Boolean) as string[];
+
+  if (times.length === 0) return 0;
+
+  const earliest = times
+    .map((time) => new Date(time).getTime())
+    .reduce((a, b) => Math.min(a, b));
+  return earliest;
 }
 
 function isDateWithinRange(
   targetDate: string,
   startDate?: string,
-  endDate?: string
+  endDate?: string,
 ) {
   if (!targetDate || !startDate || !endDate) {
-    return false
+    return false;
   }
 
-  return targetDate >= startDate.slice(0, 10) && targetDate <= endDate.slice(0, 10)
+  return (
+    targetDate >= startDate.slice(0, 10) && targetDate <= endDate.slice(0, 10)
+  );
 }
 
-function buildWeeklyAttendanceTrend(rows: AttendanceRow[], endDateValue: string) {
-  const endDate = new Date(`${endDateValue}T00:00:00`)
+function buildWeeklyAttendanceTrend(
+  rows: AttendanceRow[],
+  endDateValue: string,
+) {
+  const endDate = new Date(`${endDateValue}T00:00:00`);
   if (Number.isNaN(endDate.getTime())) {
-    return []
+    return [];
   }
 
-  const uniqueLogins = new Set<string>()
+  const uniqueLogins = new Set<string>();
   rows.forEach((row) => {
     if (!row.login_time) {
-      return
+      return;
     }
-    const loginDate = new Date(row.login_time)
+    const loginDate = new Date(row.login_time);
     if (Number.isNaN(loginDate.getTime())) {
-      return
+      return;
     }
-    const dateKey = toDateInputValue(loginDate)
-    const employeeKey = (row.employee_email || row.employee_name || row.id || '').toString().toLowerCase()
-    uniqueLogins.add(`${dateKey}-${employeeKey}`)
-  })
+    const dateKey = toDateInputValue(loginDate);
+    const employeeKey = (
+      row.employee_email ||
+      row.employee_name ||
+      row.id ||
+      ""
+    )
+      .toString()
+      .toLowerCase();
+    uniqueLogins.add(`${dateKey}-${employeeKey}`);
+  });
 
   return Array.from({ length: 7 }, (_, index) => {
-    const currentDate = new Date(endDate)
-    currentDate.setDate(endDate.getDate() - (6 - index))
-    const dateKey = toDateInputValue(currentDate)
-    let count = 0
+    const currentDate = new Date(endDate);
+    currentDate.setDate(endDate.getDate() - (6 - index));
+    const dateKey = toDateInputValue(currentDate);
+    let count = 0;
 
     uniqueLogins.forEach((entry) => {
       if (entry.startsWith(`${dateKey}-`)) {
-        count += 1
+        count += 1;
       }
-    })
+    });
 
     return {
       dateKey,
       count,
-      label: currentDate.toLocaleDateString('en-IN', { weekday: 'short' })
-    }
-  })
+      label: currentDate.toLocaleDateString("en-IN", { weekday: "short" }),
+    };
+  });
 }
 
 function buildAttendanceEfficiencyScores(
   employees: EmployeeRow[],
   rows: AttendanceRow[],
-  endDateValue: string
+  endDateValue: string,
 ) {
-  const weeklyTrend = buildWeeklyAttendanceTrend(rows, endDateValue)
-  const rangeDays = Math.max(weeklyTrend.length, 1)
-  const allowedDates = new Set(weeklyTrend.map((item) => item.dateKey))
-  const attendanceByEmployee = new Map<string, Set<string>>()
+  const weeklyTrend = buildWeeklyAttendanceTrend(rows, endDateValue);
+  const rangeDays = Math.max(weeklyTrend.length, 1);
+  const allowedDates = new Set(weeklyTrend.map((item) => item.dateKey));
+  const attendanceByEmployee = new Map<string, Set<string>>();
 
   rows.forEach((row) => {
     if (!row.login_time) {
-      return
+      return;
     }
-    const loginDate = new Date(row.login_time)
+    const loginDate = new Date(row.login_time);
     if (Number.isNaN(loginDate.getTime())) {
-      return
+      return;
     }
-    const dateKey = toDateInputValue(loginDate)
+    const dateKey = toDateInputValue(loginDate);
     if (!allowedDates.has(dateKey)) {
-      return
+      return;
     }
-    const employeeKey = (row.employee_email || '').toLowerCase()
+    const employeeKey = (row.employee_email || "").toLowerCase();
     if (!employeeKey) {
-      return
+      return;
     }
     if (!attendanceByEmployee.has(employeeKey)) {
-      attendanceByEmployee.set(employeeKey, new Set<string>())
+      attendanceByEmployee.set(employeeKey, new Set<string>());
     }
-    attendanceByEmployee.get(employeeKey)!.add(dateKey)
-  })
+    attendanceByEmployee.get(employeeKey)!.add(dateKey);
+  });
 
   return employees
     .map((employee) => {
-      const employeeKey = (employee.emp_email || '').toLowerCase()
-      const presentDays = employeeKey ? attendanceByEmployee.get(employeeKey)?.size || 0 : 0
-      const score = Math.round((presentDays / rangeDays) * 100)
+      const employeeKey = (employee.emp_email || "").toLowerCase();
+      const presentDays = employeeKey
+        ? attendanceByEmployee.get(employeeKey)?.size || 0
+        : 0;
+      const score = Math.round((presentDays / rangeDays) * 100);
       return {
-        empCode: employee.emp_code || '',
-        name: employee.emp_full_name || employee.emp_code || 'Unknown',
+        empCode: employee.emp_code || "",
+        name: employee.emp_full_name || employee.emp_code || "Unknown",
         score,
-        presentDays
-      }
+        presentDays,
+      };
     })
     .sort((left, right) => {
       if (right.score !== left.score) {
-        return right.score - left.score
+        return right.score - left.score;
       }
-      return left.name.localeCompare(right.name)
-    })
+      return left.name.localeCompare(right.name);
+    });
 }
 
-type LoginSceneMode = 'dawn' | 'day' | 'dusk' | 'night'
+type LoginSceneMode = "dawn" | "day" | "dusk" | "night";
 
 function getLoginSceneMode(value: Date): LoginSceneMode {
-  const hour = value.getHours()
+  const hour = value.getHours();
 
   if (hour >= 5 && hour < 10) {
-    return 'dawn'
+    return "dawn";
   }
 
   if (hour >= 10 && hour < 17) {
-    return 'day'
+    return "day";
   }
 
   if (hour >= 17 && hour < 20) {
-    return 'dusk'
+    return "dusk";
   }
 
-  return 'night'
+  return "night";
 }
 
 function formatTimeZoneLabel(timeZone: string) {
   if (!timeZone) {
-    return 'Device Time'
+    return "Device Time";
   }
 
-  const parts = timeZone.split('/')
-  return parts[parts.length - 1].replace(/_/g, ' ')
+  const parts = timeZone.split("/");
+  return parts[parts.length - 1].replace(/_/g, " ");
 }
 
 function AdminEmptyPanel({
   eyebrow,
   title,
-  message
+  message,
 }: {
-  eyebrow: string
-  title: string
-  message: string
+  eyebrow: string;
+  title: string;
+  message: string;
 }) {
   return (
     <div className="admin-aligned-page">
@@ -290,23 +269,29 @@ function AdminEmptyPanel({
         <strong>{message}</strong>
       </div>
     </div>
-  )
+  );
 }
 
 function FawnixApp() {
-  const location = useLocation()
-  const navigate = useNavigate()
-  const [activePanel, setActivePanel] = useState<SidebarId>(() => getAdminPanelFromPath(window.location.pathname))
-  const [employeeMasterCreateRequestId, setEmployeeMasterCreateRequestId] = useState(0)
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [activePanel, setActivePanel] = useState<SidebarId>(() =>
+    getAdminPanelFromPath(window.location.pathname),
+  );
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
+    window.localStorage.getItem(SIDEBAR_COLLAPSE_STORAGE_KEY) === "1",
+  );
+  const [employeeMasterCreateRequestId, setEmployeeMasterCreateRequestId] =
+    useState(0);
   const clearAdminData = () => {
-    resetDashboardData()
-    resetLeavesPanel()
-    resetAttendanceExceptionsPanel()
-    resetOvertimeRecordsPanel()
-    resetApiTelemetryPanel()
-    resetEmployeeMasterPanel()
-    resetAttendancePanel()
-  }
+    resetDashboardData();
+    resetLeavesPanel();
+    resetAttendanceExceptionsPanel();
+    resetOvertimeRecordsPanel();
+    resetApiTelemetryPanel();
+    resetEmployeeMasterPanel();
+    resetAttendancePanel();
+  };
   const {
     accessToken,
     profile,
@@ -325,10 +310,14 @@ function FawnixApp() {
     handleAdminRequestOtp,
     handleAdminLogin,
     handleLogout,
-    handleSessionExpired
+    handleSessionExpired,
   } = useAdminAuth({
-    onSessionCleared: clearAdminData
-  })
+    onSessionCleared: clearAdminData,
+  });
+  const handleSessionExpiredRef = useRef(handleSessionExpired);
+  useEffect(() => {
+    handleSessionExpiredRef.current = handleSessionExpired;
+  }, [handleSessionExpired]);
   const {
     employees,
     employeeAuditLogs,
@@ -344,40 +333,54 @@ function FawnixApp() {
     attendanceDateFilter,
     setAttendanceDateFilter,
     loadDashboard,
-    resetDashboardData
-  } = useDashboardData(showAdminLogin ? '' : accessToken, apiRequest)
-  const { loginSceneTime, loginLocationDetails } = useAdminLoginExperience(showAdminLogin)
+    resetDashboardData,
+  } = useDashboardData(showAdminLogin ? "" : accessToken, apiRequest);
+  const { loginSceneTime, loginLocationDetails } =
+    useAdminLoginExperience(showAdminLogin);
 
   useEffect(() => {
-    const nextPanel = getAdminPanelFromPath(location.pathname)
-    setActivePanel((currentPanel) => (currentPanel === nextPanel ? currentPanel : nextPanel))
-  }, [location.pathname])
+    const nextPanel = getAdminPanelFromPath(location.pathname);
+    setActivePanel((currentPanel) =>
+      currentPanel === nextPanel ? currentPanel : nextPanel,
+    );
+  }, [location.pathname]);
 
   useEffect(() => {
-    if (dashboardError && (dashboardError.toLowerCase().includes('expired') || dashboardError.toLowerCase().includes('token'))) {
-      handleSessionExpired()
+    if (
+      dashboardError &&
+      (dashboardError.toLowerCase().includes("expired") ||
+        dashboardError.toLowerCase().includes("token"))
+    ) {
+      handleSessionExpiredRef.current();
     }
-  }, [dashboardError])
+  }, [dashboardError]);
 
-  const resolveDownloadFilename = (response: Response, fallbackFilename: string) => {
-    const disposition = response.headers.get('Content-Disposition') || ''
-    const filenameMatch = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i)
+  const resolveDownloadFilename = (
+    response: Response,
+    fallbackFilename: string,
+  ) => {
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const filenameMatch = disposition.match(
+      /filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i,
+    );
     if (!filenameMatch?.[1]) {
-      return fallbackFilename
+      return fallbackFilename;
     }
     try {
-      return decodeURIComponent(filenameMatch[1])
+      return decodeURIComponent(filenameMatch[1]);
     } catch {
-      return filenameMatch[1]
+      return filenameMatch[1];
     }
-  }
+  };
 
-  const canWriteAdminData = hasWriteAccess(profile)
+  const canWriteAdminData = hasWriteAccess(profile);
   const employeeMasterResource =
-    getEmployeeMasterResourceByPanel(activePanel) || employeeMasterResourceConfigs.workingUnits
-  const employeeMasterIsActive = isEmployeeMasterSidebarId(activePanel)
+    getEmployeeMasterResourceByPanel(activePanel) ||
+    employeeMasterResourceConfigs.workingUnits;
+  const employeeMasterIsActive = isEmployeeMasterSidebarId(activePanel);
   const {
     filters: employeeMasterFilters,
+    appliedFilters: employeeMasterAppliedFilters,
     records: employeeMasterRecords,
     filterOptions: employeeMasterFilterOptions,
     pagination: employeeMasterPagination,
@@ -394,23 +397,23 @@ function FawnixApp() {
     createRecord: createEmployeeMasterRecord,
     updateRecord: updateEmployeeMasterRecord,
     deleteRecord: deleteEmployeeMasterRecord,
-    reset: resetEmployeeMasterPanel
+    reset: resetEmployeeMasterPanel,
   } = useEmployeeMasterResource({
     isActive: employeeMasterIsActive,
     accessToken,
     apiRequest,
-    resource: employeeMasterResource
-  })
+    resource: employeeMasterResource,
+  });
 
   const handleAddOrgUnit = () => {
-    const targetPanel = organizationUnitPanels.includes(activePanel)
+    const targetPanel = isEmployeeMasterSidebarId(activePanel)
       ? activePanel
-      : 'employee-master-working-units'
+      : "employee-master-working-units";
 
-    setActivePanel(targetPanel)
-    navigate(getAdminPanelPath(targetPanel))
-    setEmployeeMasterCreateRequestId((current) => current + 1)
-  }
+    setActivePanel(targetPanel);
+    navigate(getAdminPanelPath(targetPanel));
+    setEmployeeMasterCreateRequestId((current) => current + 1);
+  };
 
   const {
     employeeSearch,
@@ -457,7 +460,7 @@ function FawnixApp() {
     handleSaveEmployee,
     requestDeleteEmployee,
     handleDeleteEmployee,
-    downloadEmployeesReport
+    downloadEmployeesReport,
   } = useEmployeesPanel({
     employees,
     canWriteAdminData,
@@ -465,8 +468,8 @@ function FawnixApp() {
     accessToken,
     refreshAccessToken,
     loadDashboard,
-    resolveDownloadFilename
-  })
+    resolveDownloadFilename,
+  });
 
   const {
     apiLogFilters,
@@ -479,134 +482,170 @@ function FawnixApp() {
     applyApiLogFilters,
     clearApiLogFilters,
     loadApiLogs,
-    resetApiTelemetryPanel
+    resetApiTelemetryPanel,
   } = useApiTelemetryPanel({
-    isActive: activePanel === 'api-telemetry',
+    isActive: activePanel === "api-telemetry",
     accessToken,
     profile,
-    apiRequest
-  })
+    apiRequest,
+  });
 
   const alertLeaveManager = async (leave: LeaveRow) => {
     const matchedManager =
-      employees.find((employee) => employee.emp_code && employee.emp_code === leave.manager_code) ||
-      employees.find((employee) => employee.emp_email && employee.emp_email === leave.manager_email)
-    const managerEmail = (leave.manager_email || matchedManager?.emp_email || '').trim()
-    const managerName = matchedManager?.emp_full_name || getLeaveApproverLabel(leave, employees)
+      employees.find(
+        (employee) =>
+          employee.emp_code && employee.emp_code === leave.manager_code,
+      ) ||
+      employees.find(
+        (employee) =>
+          employee.emp_email && employee.emp_email === leave.manager_email,
+      );
+    const managerEmail = (
+      leave.manager_email ||
+      matchedManager?.emp_email ||
+      ""
+    ).trim();
+    const managerName =
+      matchedManager?.emp_full_name || getLeaveApproverLabel(leave, employees);
 
     if (!managerEmail) {
-      throw new Error('Manager email is unavailable for this leave request.')
+      throw new Error("Manager email is unavailable for this leave request.");
     }
 
-    const employeeName = leave.emp_full_name || leave.emp_code || 'An employee'
-    const leaveType = formatLeaveTypeLabel(leave)
-    const leaveDateRange = `${formatDate(leave.from_date)} - ${formatDate(leave.to_date)}`
+    const employeeName = leave.emp_full_name || leave.emp_code || "An employee";
+    const leaveType = formatLeaveTypeLabel(leave);
+    const leaveDateRange = `${formatDate(leave.from_date)} - ${formatDate(leave.to_date)}`;
 
-    await apiRequest('/api/notifications/send', {
-      method: 'POST',
+    await apiRequest("/api/notifications/send", {
+      method: "POST",
       body: JSON.stringify({
-        module: 'admin_dashboard',
-        eventType: 'leave_pending_manager_alert',
+        module: "admin_dashboard",
+        eventType: "leave_pending_manager_alert",
         recipients: [
           {
             email: managerEmail,
-            name: managerName
-          }
+            name: managerName,
+          },
         ],
-        channels: ['email'],
+        channels: ["email"],
         content: {
-          title: 'Pending leave approval reminder',
-          bodyText: `${employeeName} has a pending ${leaveType} request for ${leaveDateRange}. Please review it from the admin dashboard.`
+          title: "Pending leave approval reminder",
+          bodyText: `${employeeName} has a pending ${leaveType} request for ${leaveDateRange}. Please review it from the admin dashboard.`,
         },
         deeplinkUrl: `${window.location.origin}${appRoutes.admin}`,
-        priority: 'normal',
-        idempotencyKey: `leave-manager-alert-${leave.id || leave.emp_code || 'request'}-${Date.now()}`
-      })
-    })
+        priority: "normal",
+        idempotencyKey: `leave-manager-alert-${leave.id || leave.emp_code || "request"}-${Date.now()}`,
+      }),
+    });
 
-    return `Alert sent to ${managerName || managerEmail}.`
-  }
+    return `Alert sent to ${managerName || managerEmail}.`;
+  };
 
-  const selectedAttendanceDate = attendanceDateFilter || toDateInputValue(new Date())
+  const selectedAttendanceDate =
+    attendanceDateFilter || toDateInputValue(new Date());
   const selectedDateAttendanceRows = attendanceRows.filter((row) =>
-    isSameDate(row.login_time || row.date, selectedAttendanceDate)
-  )
+    isSameDate(row.login_time || row.date, selectedAttendanceDate),
+  );
 
   const firstClockInRows = Array.from(
-    selectedDateAttendanceRows.reduce((map, row) => {
-      const employeeKey = (row.employee_email || row.employee_name || row.id || '').toString().toLowerCase()
-      const existingRow = map.get(employeeKey)
-      const currentTime = row.login_time ? new Date(row.login_time).getTime() : Number.MAX_SAFE_INTEGER
-      const existingTime = existingRow?.login_time ? new Date(existingRow.login_time).getTime() : Number.MAX_SAFE_INTEGER
+    selectedDateAttendanceRows
+      .reduce((map, row) => {
+        const employeeKey = (
+          row.employee_email ||
+          row.employee_name ||
+          row.id ||
+          ""
+        )
+          .toString()
+          .toLowerCase();
+        const existingRow = map.get(employeeKey);
+        const currentTime = row.login_time
+          ? new Date(row.login_time).getTime()
+          : Number.MAX_SAFE_INTEGER;
+        const existingTime = existingRow?.login_time
+          ? new Date(existingRow.login_time).getTime()
+          : Number.MAX_SAFE_INTEGER;
 
-      if (!existingRow || currentTime < existingTime) {
-        map.set(employeeKey, row)
-      }
+        if (!existingRow || currentTime < existingTime) {
+          map.set(employeeKey, row);
+        }
 
-      return map
-    }, new Map<string, AttendanceRow>()).values()
+        return map;
+      }, new Map<string, AttendanceRow>())
+      .values(),
   ).sort((left, right) => {
-    const leftTime = left.login_time ? new Date(left.login_time).getTime() : 0
-    const rightTime = right.login_time ? new Date(right.login_time).getTime() : 0
-    return rightTime - leftTime
-  })
+    const leftTime = left.login_time ? new Date(left.login_time).getTime() : 0;
+    const rightTime = right.login_time
+      ? new Date(right.login_time).getTime()
+      : 0;
+    return rightTime - leftTime;
+  });
 
-  const lateLoginCutoff = new Date(`${selectedAttendanceDate}T10:00:00`)
+  const lateLoginCutoff = new Date(`${selectedAttendanceDate}T10:00:00`);
   const employeeByEmail = new Map(
     employees
       .filter((employee) => employee.emp_email)
-      .map((employee) => [employee.emp_email!.toLowerCase(), employee])
-  )
+      .map((employee) => [employee.emp_email!.toLowerCase(), employee]),
+  );
   const employeeEmailByCode = new Map(
     employees
       .filter((employee) => employee.emp_code && employee.emp_email)
-      .map((employee) => [employee.emp_code!, employee.emp_email!.toLowerCase()])
-  )
+      .map((employee) => [
+        employee.emp_code!,
+        employee.emp_email!.toLowerCase(),
+      ]),
+  );
   const exceptionLateArrivals = attendanceExceptions.filter(
-    (item) => item.exception_type === 'late_arrival' && isSameDate(getExceptionDateValue(item), selectedAttendanceDate)
-  )
+    (item) =>
+      item.exception_type === "late_arrival" &&
+      isSameDate(getExceptionDateValue(item), selectedAttendanceDate),
+  );
   const lateArrivalsFromAttendance = firstClockInRows
     .filter((row) => {
       if (row.late_arrival?.is_late || row.late_arrival?.informed) {
-        return true
+        return true;
       }
       if (!row.login_time) {
-        return false
+        return false;
       }
       if (!isSameDate(row.login_time, selectedAttendanceDate)) {
-        return false
+        return false;
       }
-      const loginDate = new Date(row.login_time)
-      return !Number.isNaN(loginDate.getTime()) && loginDate > lateLoginCutoff
+      const loginDate = new Date(row.login_time);
+      return !Number.isNaN(loginDate.getTime()) && loginDate > lateLoginCutoff;
     })
     .map((row) => {
-      const loginDate = new Date(row.login_time as string)
+      const loginDate = new Date(row.login_time as string);
       const lateByMinutes = Math.max(
         Math.floor((loginDate.getTime() - lateLoginCutoff.getTime()) / 60000),
-        0
-      )
-      const employee =
-        row.employee_email ? employeeByEmail.get(row.employee_email.toLowerCase()) : undefined
-      const lateArrival = row.late_arrival
+        0,
+      );
+      const employee = row.employee_email
+        ? employeeByEmail.get(row.employee_email.toLowerCase())
+        : undefined;
+      const lateArrival = row.late_arrival;
       return {
         id: row.id,
         emp_code: employee?.emp_code,
-        emp_name: row.employee_name || employee?.emp_full_name || row.employee_email,
-        exception_type: 'late_arrival',
+        emp_name:
+          row.employee_name || employee?.emp_full_name || row.employee_email,
+        exception_type: "late_arrival",
         exception_date: selectedAttendanceDate,
         actual_login_time: lateArrival?.actual_login_time || row.login_time,
         exception_time: lateArrival?.planned_arrival_time || undefined,
         late_by_minutes: lateArrival?.late_by_minutes ?? lateByMinutes,
         reason: lateArrival?.reason || undefined,
-        status: lateArrival?.status || 'not_informed',
-        requested_at: lateArrival?.requested_at || row.login_time
-      } as AttendanceExceptionRow
-    })
+        status: lateArrival?.status || "not_informed",
+        requested_at: lateArrival?.requested_at || row.login_time,
+      } as AttendanceExceptionRow;
+    });
 
   const selectedDateLateArrivals = (() => {
-    const merged = new Map<string, AttendanceExceptionRow>()
+    const merged = new Map<string, AttendanceExceptionRow>();
     const getKey = (row: AttendanceExceptionRow) => {
-      const emailFromCode = row.emp_code ? employeeEmailByCode.get(row.emp_code) : undefined
+      const emailFromCode = row.emp_code
+        ? employeeEmailByCode.get(row.emp_code)
+        : undefined;
       const rawKey =
         emailFromCode ||
         row.emp_code ||
@@ -614,61 +653,72 @@ function FawnixApp() {
         row.actual_login_time ||
         row.exception_time ||
         row.requested_at ||
-        ''
-      return rawKey.toString().toLowerCase()
-    }
+        "";
+      return rawKey.toString().toLowerCase();
+    };
 
     exceptionLateArrivals.forEach((row) => {
-      const key = getKey(row)
-      merged.set(key, row)
-    })
+      const key = getKey(row);
+      merged.set(key, row);
+    });
     lateArrivalsFromAttendance.forEach((row) => {
-      const key = getKey(row)
+      const key = getKey(row);
       if (!merged.has(key)) {
-        merged.set(key, row)
+        merged.set(key, row);
       }
-    })
+    });
 
     return Array.from(merged.values()).sort((left, right) => {
-      const leftInformed = (left.status || '').toLowerCase() !== 'not_informed'
-      const rightInformed = (right.status || '').toLowerCase() !== 'not_informed'
+      const leftInformed = (left.status || "").toLowerCase() !== "not_informed";
+      const rightInformed =
+        (right.status || "").toLowerCase() !== "not_informed";
       if (leftInformed !== rightInformed) {
-        return leftInformed ? -1 : 1
+        return leftInformed ? -1 : 1;
       }
-      const leftTime = getSortTime(left)
-      const rightTime = getSortTime(right)
-      return leftTime - rightTime
-    })
-  })()
+      const leftTime = getSortTime(left);
+      const rightTime = getSortTime(right);
+      return leftTime - rightTime;
+    });
+  })();
   const exceptionEarlyLeaves = attendanceExceptions.filter(
-    (item) => item.exception_type === 'early_leave' && isSameDate(getExceptionDateValue(item), selectedAttendanceDate)
-  )
+    (item) =>
+      item.exception_type === "early_leave" &&
+      isSameDate(getExceptionDateValue(item), selectedAttendanceDate),
+  );
   const earlyLeavesFromAttendance = selectedDateAttendanceRows
     .filter((row) => {
-      return Boolean(row.early_leave?.is_early_departure || row.early_leave?.requested)
+      return Boolean(
+        row.early_leave?.is_early_departure || row.early_leave?.requested,
+      );
     })
     .map((row) => {
-      const employee =
-        row.employee_email ? employeeByEmail.get(row.employee_email.toLowerCase()) : undefined
-      const earlyLeave = row.early_leave
+      const employee = row.employee_email
+        ? employeeByEmail.get(row.employee_email.toLowerCase())
+        : undefined;
+      const earlyLeave = row.early_leave;
       return {
         id: row.id,
         emp_code: employee?.emp_code,
-        emp_name: row.employee_name || employee?.emp_full_name || row.employee_email,
-        exception_type: 'early_leave',
+        emp_name:
+          row.employee_name || employee?.emp_full_name || row.employee_email,
+        exception_type: "early_leave",
         exception_date: selectedAttendanceDate,
         planned_leave_time: earlyLeave?.planned_leave_time || undefined,
         actual_logout_time: earlyLeave?.actual_logout_time || row.logout_time,
         early_by_minutes: earlyLeave?.early_by_minutes ?? undefined,
         reason: earlyLeave?.reason || undefined,
-        status: earlyLeave?.status || (earlyLeave?.requested ? 'pending' : 'not_requested'),
-        requested_at: earlyLeave?.requested_at || row.logout_time
-      } as AttendanceExceptionRow
-    })
+        status:
+          earlyLeave?.status ||
+          (earlyLeave?.requested ? "pending" : "not_requested"),
+        requested_at: earlyLeave?.requested_at || row.logout_time,
+      } as AttendanceExceptionRow;
+    });
   const selectedDateEarlyLeaves = (() => {
-    const merged = new Map<string, AttendanceExceptionRow>()
+    const merged = new Map<string, AttendanceExceptionRow>();
     const getKey = (row: AttendanceExceptionRow) => {
-      const emailFromCode = row.emp_code ? employeeEmailByCode.get(row.emp_code) : undefined
+      const emailFromCode = row.emp_code
+        ? employeeEmailByCode.get(row.emp_code)
+        : undefined;
       const rawKey =
         emailFromCode ||
         row.emp_code ||
@@ -676,41 +726,57 @@ function FawnixApp() {
         row.actual_logout_time ||
         row.planned_leave_time ||
         row.requested_at ||
-        ''
-      return rawKey.toString().toLowerCase()
-    }
+        "";
+      return rawKey.toString().toLowerCase();
+    };
 
     exceptionEarlyLeaves.forEach((row) => {
-      merged.set(getKey(row), row)
-    })
+      merged.set(getKey(row), row);
+    });
     earlyLeavesFromAttendance.forEach((row) => {
-      const key = getKey(row)
+      const key = getKey(row);
       if (!merged.has(key)) {
-        merged.set(key, row)
+        merged.set(key, row);
       }
-    })
+    });
 
     return Array.from(merged.values()).sort((left, right) => {
-      const leftRequested = !['not_requested', ''].includes((left.status || '').toLowerCase())
-      const rightRequested = !['not_requested', ''].includes((right.status || '').toLowerCase())
+      const leftRequested = !["not_requested", ""].includes(
+        (left.status || "").toLowerCase(),
+      );
+      const rightRequested = !["not_requested", ""].includes(
+        (right.status || "").toLowerCase(),
+      );
       if (leftRequested !== rightRequested) {
-        return leftRequested ? -1 : 1
+        return leftRequested ? -1 : 1;
       }
-      const leftTime = new Date(left.requested_at || left.actual_logout_time || left.exception_date || '').getTime() || 0
-      const rightTime = new Date(right.requested_at || right.actual_logout_time || right.exception_date || '').getTime() || 0
-      return leftTime - rightTime
-    })
-  })()
+      const leftTime =
+        new Date(
+          left.requested_at ||
+            left.actual_logout_time ||
+            left.exception_date ||
+            "",
+        ).getTime() || 0;
+      const rightTime =
+        new Date(
+          right.requested_at ||
+            right.actual_logout_time ||
+            right.exception_date ||
+            "",
+        ).getTime() || 0;
+      return leftTime - rightTime;
+    });
+  })();
   const selectedDateExceptions = [
     ...selectedDateLateArrivals.map((row) => ({
       ...row,
-      exceptionKind: 'late_arrival' as const
+      exceptionKind: "late_arrival" as const,
     })),
     ...selectedDateEarlyLeaves.map((row) => ({
       ...row,
-      exceptionKind: 'early_leave' as const
-    }))
-  ].sort((left, right) => getSortTime(right) - getSortTime(left))
+      exceptionKind: "early_leave" as const,
+    })),
+  ].sort((left, right) => getSortTime(right) - getSortTime(left));
 
   const {
     attendanceView,
@@ -739,17 +805,17 @@ function FawnixApp() {
     reminderTargetDate,
     exceptionRows,
     triggerAttendanceReminder,
-    resetAttendancePanel
+    resetAttendancePanel,
   } = useAttendancePanel({
-    isActive: activePanel === 'attendance',
+    isActive: activePanel === "attendance",
     accessToken,
     apiRequest,
     attendanceDateFilter,
     employees,
     firstClockInRows,
     selectedDateLateArrivals,
-    selectedDateEarlyLeaves
-  })
+    selectedDateEarlyLeaves,
+  });
 
   const {
     filters: attendanceExceptionFilters,
@@ -766,12 +832,12 @@ function FawnixApp() {
     refresh: loadAttendanceExceptions,
     setSort: setAttendanceExceptionSort,
     applyPreset: presetAttendanceExceptionFilter,
-    reset: resetAttendanceExceptionsPanel
+    reset: resetAttendanceExceptionsPanel,
   } = useAttendanceExceptionsData({
-    isActive: activePanel === 'attendance-exceptions',
+    isActive: activePanel === "attendance-exceptions",
     accessToken,
-    apiRequest
-  })
+    apiRequest,
+  });
 
   const {
     filters: overtimeRecordFilters,
@@ -793,12 +859,12 @@ function FawnixApp() {
     deleteRecord: deleteOvertimeRecord,
     updateStatus: updateOvertimeRecordStatus,
     approveRecord: approveOvertimeRecord,
-    reset: resetOvertimeRecordsPanel
+    reset: resetOvertimeRecordsPanel,
   } = useOvertimeRecordsData({
-    isActive: activePanel === 'overtime-records',
+    isActive: activePanel === "overtime-records",
     accessToken,
-    apiRequest
-  })
+    apiRequest,
+  });
 
   // Only resetLeavesPanel is consumed here (on logout) - the rest of this
   // hook's filter/refresh surface was exclusive to the legacy Leaves admin
@@ -810,8 +876,8 @@ function FawnixApp() {
     apiRequest,
     accessToken,
     refreshAccessToken,
-    setLeaveRows
-  })
+    setLeaveRows,
+  });
 
   const {
     filters: adminLeaveFilters,
@@ -827,16 +893,17 @@ function FawnixApp() {
     clearFilters: clearAdminLeaveFilters,
     refresh: refreshAdminLeaves,
     setSort: setAdminLeaveSort,
-    applyPreset: presetAdminLeaveFilter
+    applyPreset: presetAdminLeaveFilter,
   } = useAdminLeavesData({
-    isActive: activePanel === 'leaves',
+    isActive: activePanel === "leaves",
     accessToken,
-    apiRequest
-  })
+    apiRequest,
+  });
 
-  const { showTodayActivities, setShowTodayActivities, filteredActivities } = useActivitiesPanel({
-    activityRows
-  })
+  const { showTodayActivities, setShowTodayActivities, filteredActivities } =
+    useActivitiesPanel({
+      activityRows,
+    });
 
   const {
     fieldVisitDurationTick,
@@ -861,40 +928,56 @@ function FawnixApp() {
     fieldPointCount,
     activityPointCount,
     startPoint,
-    endPoint
+    endPoint,
   } = useFieldVisitsPanel({
     showAdminLogin,
     fieldVisitRows,
-    apiRequest
-  })
+    apiRequest,
+  });
 
-  const attendanceCountByDate = attendanceRows.reduce<Record<string, number>>((accumulator, row) => {
-    const key = row.login_time ? toDateInputValue(new Date(row.login_time)) : row.date?.slice(0, 10)
+  const attendanceCountByDate = attendanceRows.reduce<Record<string, number>>(
+    (accumulator, row) => {
+      const key = row.login_time
+        ? toDateInputValue(new Date(row.login_time))
+        : row.date?.slice(0, 10);
+      if (key) {
+        accumulator[key] = (accumulator[key] || 0) + 1;
+      }
+      return accumulator;
+    },
+    {},
+  );
+  const exceptionCountByDate = attendanceExceptions.reduce<
+    Record<string, number>
+  >((accumulator, row) => {
+    const key = getExceptionDateValue(row)?.slice(0, 10);
     if (key) {
-      accumulator[key] = (accumulator[key] || 0) + 1
+      accumulator[key] = (accumulator[key] || 0) + 1;
     }
-    return accumulator
-  }, {})
-  const exceptionCountByDate = attendanceExceptions.reduce<Record<string, number>>((accumulator, row) => {
-    const key = getExceptionDateValue(row)?.slice(0, 10)
-    if (key) {
-      accumulator[key] = (accumulator[key] || 0) + 1
-    }
-    return accumulator
-  }, {})
+    return accumulator;
+  }, {});
   const selectedDateLeaves = leaveRows
     .filter((row) => {
-      const status = (row.status || '').toLowerCase()
+      const status = (row.status || "").toLowerCase();
       return (
-        !['rejected', 'cancelled'].includes(status) &&
+        !["rejected", "cancelled"].includes(status) &&
         isDateWithinRange(selectedAttendanceDate, row.from_date, row.to_date)
-      )
+      );
     })
     .sort((left, right) =>
-      (left.emp_full_name || left.emp_code || '').localeCompare(right.emp_full_name || right.emp_code || '')
-    )
-  const weeklyAttendanceTrend = buildWeeklyAttendanceTrend(attendanceRows, selectedAttendanceDate)
-  const attendanceEfficiencyScores = buildAttendanceEfficiencyScores(employees, attendanceRows, selectedAttendanceDate)
+      (left.emp_full_name || left.emp_code || "").localeCompare(
+        right.emp_full_name || right.emp_code || "",
+      ),
+    );
+  const weeklyAttendanceTrend = buildWeeklyAttendanceTrend(
+    attendanceRows,
+    selectedAttendanceDate,
+  );
+  const attendanceEfficiencyScores = buildAttendanceEfficiencyScores(
+    employees,
+    attendanceRows,
+    selectedAttendanceDate,
+  );
 
   const {
     calendarMonthView,
@@ -902,12 +985,12 @@ function FawnixApp() {
     calendarMonthLabel,
     calendarDays,
     maxCalendarAttendance,
-    leaveCountByDate
+    leaveCountByDate,
   } = useCalendarPanel({
     attendanceDateFilter,
     attendanceCountByDate,
-    leaveRows
-  })
+    leaveRows,
+  });
 
   const {
     attendanceReportMonth,
@@ -933,18 +1016,18 @@ function FawnixApp() {
     fetchAttendanceHeatmapData,
     updateAttendanceCell,
     maxWeeklyAttendance,
-    weeklyTrendPoints
+    weeklyTrendPoints,
   } = useReportsPanel({
     accessToken,
     refreshAccessToken,
     attendanceDateFilter,
     weeklyAttendanceTrend,
-    resolveDownloadFilename
-  })
+    resolveDownloadFilename,
+  });
 
-    const renderDashboardPanel = () => {
+  const renderDashboardPanel = () => {
     if (dashboardLoading) {
-      return <div className="empty-state">Loading admin data...</div>
+      return <div className="empty-state">Loading admin data...</div>;
     }
 
     if (dashboardError) {
@@ -952,14 +1035,17 @@ function FawnixApp() {
         <div className="empty-state">
           <strong>Unable to load dashboard</strong>
           <p>{dashboardError}</p>
-          <button className="ghost dashboard-button" onClick={() => void loadDashboard(accessToken)}>
+          <button
+            className="ghost dashboard-button"
+            onClick={() => void loadDashboard(accessToken)}
+          >
             Retry
           </button>
         </div>
-      )
+      );
     }
 
-    if (activePanel === 'dashboard') {
+    if (activePanel === "dashboard") {
       return (
         <AdminOverviewPage
           attendanceDateFilter={attendanceDateFilter}
@@ -978,10 +1064,10 @@ function FawnixApp() {
           selectedDateLeaves={selectedDateLeaves}
           weeklyAttendanceTrend={weeklyAttendanceTrend}
         />
-      )
+      );
     }
 
-    if (activePanel === 'employees') {
+    if (activePanel === "employees") {
       return (
         <AdminEmployeesPage
           canWriteAdminData={canWriteAdminData}
@@ -1010,7 +1096,7 @@ function FawnixApp() {
           setEmployeeStatusFilter={setEmployeeStatusFilter}
           setEmployeeStatusMenuOpen={setEmployeeStatusMenuOpen}
         />
-      )
+      );
     }
 
     if (employeeMasterIsActive) {
@@ -1023,11 +1109,17 @@ function FawnixApp() {
           error={employeeMasterError}
           filterOptions={employeeMasterFilterOptions}
           filters={employeeMasterFilters}
+          appliedFilters={employeeMasterAppliedFilters}
           lastSyncedAt={employeeMasterLastSyncedAt}
           loading={employeeMasterLoading}
           pagination={employeeMasterPagination}
           records={employeeMasterRecords}
           resource={employeeMasterResource}
+          resources={employeeMasterResources}
+          onSelectResource={(sidebarId) => {
+            setActivePanel(sidebarId);
+            navigate(getAdminPanelPath(sidebarId));
+          }}
           applyFilters={applyEmployeeMasterFilters}
           changePage={changeEmployeeMasterPage}
           clearFilters={clearEmployeeMasterFilters}
@@ -1038,10 +1130,10 @@ function FawnixApp() {
           updateRecord={updateEmployeeMasterRecord}
           createRequestId={employeeMasterCreateRequestId}
         />
-      )
+      );
     }
 
-    if (activePanel === 'attendance-exceptions') {
+    if (activePanel === "attendance-exceptions") {
       return (
         <AdminAttendanceExceptionsPage
           error={attendanceExceptionError}
@@ -1063,13 +1155,15 @@ function FawnixApp() {
           apiRequest={apiRequest}
           accessToken={accessToken}
         />
-      )
+      );
     }
 
-    if (activePanel === 'attendance') {
+    if (activePanel === "attendance") {
       return (
         <AdminAttendancePage
-          actionableMissedLoginEmployeeCodes={actionableMissedLoginEmployeeCodes}
+          actionableMissedLoginEmployeeCodes={
+            actionableMissedLoginEmployeeCodes
+          }
           alertCandidatesLoading={alertCandidatesLoading}
           alertSentEmpCodes={alertSentEmpCodes}
           alertSendCounts={alertSendCounts}
@@ -1108,10 +1202,10 @@ function FawnixApp() {
           showAlertComposer={showAlertComposer}
           triggerAttendanceReminder={triggerAttendanceReminder}
         />
-        )
-      }
+      );
+    }
 
-    if (activePanel === 'attendance-records') {
+    if (activePanel === "attendance-records") {
       return (
         <AdminAttendanceRecordsPage
           attendanceDateFilter={attendanceDateFilter}
@@ -1122,11 +1216,11 @@ function FawnixApp() {
           loadDashboard={() => loadDashboard(accessToken)}
           setAttendanceDateFilter={setAttendanceDateFilter}
         />
-      )
+      );
     }
 
-      if (activePanel === 'calendar') {
-        return (
+    if (activePanel === "calendar") {
+      return (
         <AdminCalendarPage
           attendanceCountByDate={attendanceCountByDate}
           calendarDays={calendarDays}
@@ -1139,10 +1233,10 @@ function FawnixApp() {
           setCalendarMonthView={setCalendarMonthView}
           toDateInputValue={toDateInputValue}
         />
-      )
+      );
     }
 
-    if (activePanel === 'reports') {
+    if (activePanel === "reports") {
       return (
         <AdminReportsPage
           attendanceDateFilter={attendanceDateFilter}
@@ -1176,10 +1270,10 @@ function FawnixApp() {
           updateAttendanceCell={updateAttendanceCell}
           canWriteAdminData={canWriteAdminData}
         />
-      )
+      );
     }
 
-    if (activePanel === 'leaves') {
+    if (activePanel === "leaves") {
       return (
         <AdminLeavesPage
           error={adminLeaveError}
@@ -1202,10 +1296,10 @@ function FawnixApp() {
           apiRequest={apiRequest}
           accessToken={accessToken}
         />
-      )
+      );
     }
 
-    if (activePanel === 'overtime-records') {
+    if (activePanel === "overtime-records") {
       return (
         <AdminOvertimeRecordsPage
           actionLoading={overtimeRecordActionLoading}
@@ -1231,10 +1325,10 @@ function FawnixApp() {
           updateFilter={updateOvertimeRecordFilter}
           updateStatus={updateOvertimeRecordStatus}
         />
-      )
+      );
     }
 
-    if (activePanel === 'activities') {
+    if (activePanel === "activities") {
       return (
         <AdminActivitiesPage
           filteredActivities={filteredActivities}
@@ -1243,20 +1337,23 @@ function FawnixApp() {
           setShowTodayActivities={setShowTodayActivities}
           showTodayActivities={showTodayActivities}
         />
-      )
+      );
     }
 
-    if (activePanel === 'inbox') {
+    if (activePanel === "inbox") {
       return (
         <AdminEmptyPanel
           eyebrow="Administration"
           title="Inbox"
           message="Inbox is empty."
         />
-      )
+      );
     }
 
-    if (activePanel === 'api-telemetry' && profile?.emp_code === API_TELEMETRY_EMP_CODE) {
+    if (
+      activePanel === "api-telemetry" &&
+      profile?.emp_code === API_TELEMETRY_EMP_CODE
+    ) {
       return (
         <AdminApiTelemetryPage
           clientEntries={telemetryEntries}
@@ -1272,7 +1369,7 @@ function FawnixApp() {
           onRefreshServerLogs={() => void loadApiLogs(accessToken)}
           updateServerFilter={updateApiLogFilter}
         />
-      )
+      );
     }
 
     return (
@@ -1287,133 +1384,174 @@ function FawnixApp() {
         openMapForFieldVisit={openMapForFieldVisit}
         resolveVisitDurationMinutes={resolveVisitDurationMinutes}
       />
-    )
-  }
+    );
+  };
 
-    const loginTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Device Time'
-    const loginTimeLabel = new Intl.DateTimeFormat([], {
-      hour: 'numeric',
-      minute: '2-digit'
-    }).format(loginSceneTime)
-    const loginDateLabel = new Intl.DateTimeFormat([], {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric'
-    }).format(loginSceneTime)
-    const loginSceneMode = getLoginSceneMode(loginSceneTime)
+  const loginTimeZone =
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "Device Time";
+  const loginTimeLabel = new Intl.DateTimeFormat([], {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(loginSceneTime);
+  const loginDateLabel = new Intl.DateTimeFormat([], {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  }).format(loginSceneTime);
+  const loginSceneMode = getLoginSceneMode(loginSceneTime);
 
-    return (
-      <div className={`admin-shell${showAdminLogin ? ' admin-shell-login' : ''}`}>
+  return (
+    <div
+      className={`admin-shell${showAdminLogin ? " admin-shell-login" : ""}${
+        !showAdminLogin && sidebarCollapsed ? " admin-shell-sidebar-rail" : ""
+      }`}
+    >
+      {!showAdminLogin ? (
+        <AdminSidebar
+          profile={profile}
+          activePanel={activePanel}
+          onSelectPanel={(id) => {
+            setActivePanel(id);
+            navigate(getAdminPanelPath(id));
+          }}
+          onAddOrgUnit={canWriteAdminData ? handleAddOrgUnit : undefined}
+          onCollapsedChange={setSidebarCollapsed}
+          onSearchClick={() =>
+            window.dispatchEvent(new Event("fawnix:open-admin-jump"))
+          }
+          onLogout={handleLogout}
+        />
+      ) : null}
+
+      <main
+        className={`dashboard-main${showAdminLogin ? " dashboard-main-login" : ""}`}
+      >
+        {fieldVisitPanelOpen && fieldVisitPanelRow ? (
+          <FieldVisitDetailDrawer
+            row={fieldVisitPanelRow}
+            durationMinutes={fieldVisitPanelDurationMinutes}
+            loading={fieldVisitPanelLoading}
+            error={fieldVisitPanelError}
+            timelineItems={fieldVisitTimelineItems}
+            formatDateTime={formatDateTime}
+            onClose={() => setFieldVisitPanelOpen(false)}
+          />
+        ) : null}
+        {mapDialogOpen ? (
+          <MapDialog
+            title={mapDialogTitle}
+            loading={mapDialogLoading}
+            error={mapDialogError}
+            mapContainerRef={mapContainerRef}
+            mapCenter={mapCenter}
+            fieldPointCount={fieldPointCount}
+            activityPointCount={activityPointCount}
+            distanceKm={mapSummary?.distanceKm}
+            startPoint={startPoint}
+            endPoint={endPoint}
+            mapTrackingPoints={mapTrackingPoints}
+            onClose={() => setMapDialogOpen(false)}
+          />
+        ) : null}
         {!showAdminLogin ? (
-          <AdminSidebar
-            profile={profile}
+          <AdminTopbar
             activePanel={activePanel}
             onSelectPanel={(id) => {
-              setActivePanel(id)
-              navigate(getAdminPanelPath(id))
+              setActivePanel(id);
+              navigate(getAdminPanelPath(id));
             }}
-            onLogout={handleLogout}
-            onAddOrgUnit={canWriteAdminData ? handleAddOrgUnit : undefined}
+            onRefresh={() => loadDashboard(accessToken)}
+            syncDeps={[
+              activePanel,
+              attendanceDateFilter,
+              employees.length,
+              attendanceRows.length,
+            ]}
           />
         ) : null}
 
-        <main className={`dashboard-main${showAdminLogin ? ' dashboard-main-login' : ''}`}>
-          {fieldVisitPanelOpen && fieldVisitPanelRow ? (
-            <FieldVisitDetailDrawer
-              row={fieldVisitPanelRow}
-              durationMinutes={fieldVisitPanelDurationMinutes}
-              loading={fieldVisitPanelLoading}
-              error={fieldVisitPanelError}
-              timelineItems={fieldVisitTimelineItems}
-              formatDateTime={formatDateTime}
-              onClose={() => setFieldVisitPanelOpen(false)}
-            />
-          ) : null}
-          {mapDialogOpen ? (
-            <MapDialog
-              title={mapDialogTitle}
-              loading={mapDialogLoading}
-              error={mapDialogError}
-              mapContainerRef={mapContainerRef}
-              mapCenter={mapCenter}
-              fieldPointCount={fieldPointCount}
-              activityPointCount={activityPointCount}
-              distanceKm={mapSummary?.distanceKm}
-              startPoint={startPoint}
-              endPoint={endPoint}
-              mapTrackingPoints={mapTrackingPoints}
-              onClose={() => setMapDialogOpen(false)}
-            />
-          ) : null}
-          {showAdminLogin ? (
-            <AdminLoginPage
-              adminEmpCode={adminEmpCode}
-              adminOtp={adminOtp}
-              authLoading={authLoading}
-              authStatus={authStatus}
-              loginDateLabel={loginDateLabel}
-              loginLocationDetails={loginLocationDetails}
-              loginSceneMode={loginSceneMode}
-              loginTimeLabel={loginTimeLabel}
-              loginTimeZone={loginTimeZone}
-              onAdminEmpCodeChange={setAdminEmpCode}
-              onAdminOtpChange={setAdminOtp}
-              onBack={() => navigate(appRoutes.home)}
-              onLogin={() => void handleAdminLogin()}
-              onRequestOtp={() => void handleAdminRequestOtp()}
-              timeZoneLabel={formatTimeZoneLabel(loginTimeZone)}
-            />
-          ) : (
-            <>
-              {refreshNotice ? <div className="refresh-toast">{refreshNotice}</div> : null}
-              {renderDashboardPanel()}
-            </>
-          )}
+        {showAdminLogin ? (
+          <AdminLoginPage
+            adminEmpCode={adminEmpCode}
+            adminOtp={adminOtp}
+            authLoading={authLoading}
+            authStatus={authStatus}
+            loginDateLabel={loginDateLabel}
+            loginLocationDetails={loginLocationDetails}
+            loginSceneMode={loginSceneMode}
+            loginTimeLabel={loginTimeLabel}
+            loginTimeZone={loginTimeZone}
+            onAdminEmpCodeChange={setAdminEmpCode}
+            onAdminOtpChange={setAdminOtp}
+            onBack={() => navigate(appRoutes.home)}
+            onLogin={() => void handleAdminLogin()}
+            onRequestOtp={() => void handleAdminRequestOtp()}
+            timeZoneLabel={formatTimeZoneLabel(loginTimeZone)}
+          />
+        ) : (
+          <div className="dashboard-canvas">
+            {refreshNotice ? (
+              <div className="refresh-toast">{refreshNotice}</div>
+            ) : null}
+            {renderDashboardPanel()}
+          </div>
+        )}
 
-          {employeePanelMode ? (
-            <EmployeeFormDrawer
-              mode={employeePanelMode}
-              newEmployee={newEmployee}
-              updateNewEmployee={updateNewEmployee}
-              resetNewEmployee={resetNewEmployee}
-              createEmployeeLoading={createEmployeeLoading}
-              createEmployeeStatus={createEmployeeStatus}
-              onCreateEmployee={() => void handleCreateEmployee()}
-              editingEmployee={editingEmployee}
-              editFormData={editFormData}
-              setEditFormData={setEditFormData}
-              editLoading={editLoading}
-              editStatus={editStatus}
-              onSaveEmployee={handleSaveEmployee}
-              onClose={closeEmployeePanel}
-              shiftOptions={shiftOptions}
-              employees={employees}
-            />
-          ) : null}
-          {employeeImportOpen ? (
-            <EmployeeImportDrawer
-              employees={employees}
-              apiRequest={apiRequest}
-              onClose={closeEmployeeImport}
-              onImported={refreshAfterEmployeeImport}
-              onDownloadTemplate={downloadEmployeesTemplate}
-            />
-          ) : null}
-          {viewingEmployee ? (
-            <EmployeeViewDrawer employee={viewingEmployee} onClose={closeEmployeeView} onEdit={canWriteAdminData ? () => { closeEmployeeView(); handleEditEmployee(viewingEmployee) } : undefined} />
-          ) : null}
-          {deleteEmployeeTarget ? (
-            <DeleteEmployeeModal
-              target={deleteEmployeeTarget}
-              deleteLoading={deleteEmployeeLoading}
-              statusMessage={editStatus}
-              onClose={() => setDeleteEmployeeTarget(null)}
-              onConfirmDelete={() => void handleDeleteEmployee()}
-            />
-          ) : null}
-        </main>
-      </div>
-    )
+        {employeePanelMode ? (
+          <EmployeeFormDrawer
+            mode={employeePanelMode}
+            newEmployee={newEmployee}
+            updateNewEmployee={updateNewEmployee}
+            resetNewEmployee={resetNewEmployee}
+            createEmployeeLoading={createEmployeeLoading}
+            createEmployeeStatus={createEmployeeStatus}
+            onCreateEmployee={() => void handleCreateEmployee()}
+            editingEmployee={editingEmployee}
+            editFormData={editFormData}
+            setEditFormData={setEditFormData}
+            editLoading={editLoading}
+            editStatus={editStatus}
+            onSaveEmployee={handleSaveEmployee}
+            onClose={closeEmployeePanel}
+            shiftOptions={shiftOptions}
+            employees={employees}
+          />
+        ) : null}
+        {employeeImportOpen ? (
+          <EmployeeImportDrawer
+            employees={employees}
+            apiRequest={apiRequest}
+            onClose={closeEmployeeImport}
+            onImported={refreshAfterEmployeeImport}
+            onDownloadTemplate={downloadEmployeesTemplate}
+          />
+        ) : null}
+        {viewingEmployee ? (
+          <EmployeeViewDrawer
+            employee={viewingEmployee}
+            onClose={closeEmployeeView}
+            onEdit={
+              canWriteAdminData
+                ? () => {
+                    closeEmployeeView();
+                    handleEditEmployee(viewingEmployee);
+                  }
+                : undefined
+            }
+          />
+        ) : null}
+        {deleteEmployeeTarget ? (
+          <DeleteEmployeeModal
+            target={deleteEmployeeTarget}
+            deleteLoading={deleteEmployeeLoading}
+            statusMessage={editStatus}
+            onClose={() => setDeleteEmployeeTarget(null)}
+            onConfirmDelete={() => void handleDeleteEmployee()}
+          />
+        ) : null}
+      </main>
+    </div>
+  );
 }
 
-export default FawnixApp
+export default FawnixApp;

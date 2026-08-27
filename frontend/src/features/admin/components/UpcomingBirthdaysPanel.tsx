@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ClientPagination } from './ClientPagination'
 
 export type UpcomingBirthday = {
@@ -22,8 +22,8 @@ export function UpcomingBirthdaysPanel({ birthdays }: Props) {
   const [page, setPage] = useState(1)
   const pageSize = 8
   const totalPages = Math.max(1, Math.ceil(birthdays.length / pageSize))
-  useEffect(() => setPage((value) => Math.min(value, totalPages)), [totalPages])
-  const visibleBirthdays = birthdays.slice((page - 1) * pageSize, page * pageSize)
+  const visiblePage = Math.min(page, totalPages)
+  const visibleBirthdays = birthdays.slice((visiblePage - 1) * pageSize, visiblePage * pageSize)
   return (
     <div className="ov2-card ov2-exc-card">
       <div className="ov2-card-head">
@@ -42,7 +42,7 @@ export function UpcomingBirthdaysPanel({ birthdays }: Props) {
                 <span className="ov2-exc-name">{name}</span>
                 <span className="ov2-exc-desc">{employee.emp_department || employee.emp_designation || 'Employee'}</span>
               </div>
-              <div className="ov2-approval-copy">
+              <div className="ov2-approval-copy ov2-birthday-date">
                 <strong>{DATE_FORMATTER.format(date)}</strong>
                 <span>{timingLabel(daysUntil)}</span>
               </div>
@@ -51,7 +51,7 @@ export function UpcomingBirthdaysPanel({ birthdays }: Props) {
         })}
         {birthdays.length === 0 && <div className="ov2-empty">No upcoming birthdays found.</div>}
       </div>
-      <ClientPagination page={page} pageSize={pageSize} total={birthdays.length} onPageChange={setPage} />
+      <ClientPagination page={visiblePage} pageSize={pageSize} total={birthdays.length} onPageChange={setPage} />
     </div>
   )
 }

@@ -7,15 +7,15 @@
   --otr-muted: #57708f;
   --otr-soft: #6d85a3;
   --otr-body: #496380;
-  --otr-canvas: #eef4fb;
+  --otr-canvas: var(--a-accent-soft);
   --otr-surface: #ffffff;
   --otr-tint: #f6faff;
   --otr-line: #dbe7f5;
   --otr-line-2: #cfe0f2;
   --otr-line-3: #e8f0f9;
-  --otr-primary: #2f7fe0;
-  --otr-primary-hover: #2570ca;
-  --otr-primary-ink: #1b5fb0;
+  --otr-primary: var(--a-accent);
+  --otr-primary-hover: var(--a-accent-hover);
+  --otr-primary-ink: var(--a-accent-ink);
   --otr-success: #12734c;
   --otr-success-bg: #e9f7f0;
   --otr-warning: #8a5a1a;
@@ -118,7 +118,7 @@
 }
 
 .otr-btn:hover:not(:disabled) {
-  border-color: #9dc2e8;
+  border-color: var(--a-accent-border);
   background: #f8fbff;
 }
 
@@ -289,7 +289,7 @@
 
 .otr-filter-field input:hover:not(:disabled),
 .otr-filter-field select:hover:not(:disabled) {
-  border-color: #9dc2e8;
+  border-color: var(--a-accent-border);
 }
 
 .otr-filter-field input:focus,
@@ -682,7 +682,7 @@
 }
 
 .admin-aligned-page--overtime-records .table-pill.inactive {
-  background: #eef4fb;
+  background: var(--a-accent-soft);
   color: var(--otr-muted);
 }
 
@@ -744,7 +744,7 @@
 }
 
 .otr-action-btn:hover {
-  border-color: #9dc2e8;
+  border-color: var(--a-accent-border);
   background: #f0f7ff;
 }
 

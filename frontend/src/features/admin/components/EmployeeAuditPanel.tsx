@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ClientPagination } from './ClientPagination'
 
 type Props = { logs: Record<string, any>[] }
@@ -83,6 +83,7 @@ function getOccurredAt(log: Record<string, any>) {
 export function EmployeeAuditPanel({ logs }: Props) {
   const [page, setPage] = useState(1)
   const pageSize = 8
+<<<<<<< HEAD
   const activityLogs = logs.filter((log) => !EXCLUDED_TABLES.has(String(log.table_name || '').trim().toLowerCase()))
   const totalPages = Math.max(1, Math.ceil(activityLogs.length / pageSize))
 
@@ -90,6 +91,11 @@ export function EmployeeAuditPanel({ logs }: Props) {
 
   const visibleLogs = activityLogs.slice((page - 1) * pageSize, page * pageSize)
 
+=======
+  const totalPages = Math.max(1, Math.ceil(logs.length / pageSize))
+  const visiblePage = Math.min(page, totalPages)
+  const visibleLogs = logs.slice((visiblePage - 1) * pageSize, visiblePage * pageSize)
+>>>>>>> a5b6e82576715b62b77e682863a98af4f9b0919f
   return (
     <div className="ov2-card ov2-approvals-card">
       <div className="ov2-card-head">
@@ -119,7 +125,11 @@ export function EmployeeAuditPanel({ logs }: Props) {
         })}
         {activityLogs.length === 0 && <div className="ov2-empty">No audit activity recorded yet.</div>}
       </div>
+<<<<<<< HEAD
       <ClientPagination page={page} pageSize={pageSize} total={activityLogs.length} onPageChange={setPage} />
+=======
+      <ClientPagination page={visiblePage} pageSize={pageSize} total={logs.length} onPageChange={setPage} />
+>>>>>>> a5b6e82576715b62b77e682863a98af4f9b0919f
     </div>
   )
 }

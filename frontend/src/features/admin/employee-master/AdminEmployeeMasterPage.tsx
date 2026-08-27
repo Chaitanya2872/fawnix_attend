@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { EMPLOYEE_MASTER_STATUS_OPTIONS } from './employeeMasterConfig'
+import LocationPicker from './LocationPicker'
+import { useDialogFocus } from '../hooks/useDialogFocus'
 import './AdminEmployeeMasterPage.css'
 import type {
   EmployeeMasterFilterOptionEntry,
@@ -29,11 +31,16 @@ type AdminEmployeeMasterPageProps = {
   error: string
   filterOptions: EmployeeMasterFilterOptions
   filters: EmployeeMasterFilterState
+  /** Filters the current rows were fetched with, for an accurate empty state. */
+  appliedFilters: EmployeeMasterFilterState
   lastSyncedAt: Date | null
   loading: boolean
   pagination: EmployeeMasterPagination
   records: EmployeeMasterRecord[]
   resource: EmployeeMasterResourceConfig
+  /** Every master list reachable from this page, rendered as tabs. */
+  resources: EmployeeMasterResourceConfig[]
+  onSelectResource: (sidebarId: EmployeeMasterResourceConfig['sidebarId']) => void
   applyFilters: () => void
   changePage: (page: number) => void
   clearFilters: () => void
@@ -220,11 +227,14 @@ export default function AdminEmployeeMasterPage({
   error,
   filterOptions,
   filters,
+  appliedFilters,
   lastSyncedAt,
   loading,
   pagination,
   records,
   resource,
+  resources,
+  onSelectResource,
   applyFilters,
   changePage,
   clearFilters,
@@ -238,6 +248,13 @@ export default function AdminEmployeeMasterPage({
   const [formPanel, setFormPanel] = useState<EmployeeMasterFormState | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<EmployeeMasterRecord | null>(null)
   const handledCreateRequestId = useRef(0)
+  const formPanelRef = useRef<HTMLElement | null>(null)
+
+  useDialogFocus({
+    containerRef: formPanelRef,
+    open: Boolean(formPanel),
+    onClose: () => setFormPanel(null),
+  })
 
   const activeOnPage = records.filter(
     (record) => stringifyValue(record.status).toLowerCase() === 'active'
@@ -255,7 +272,18 @@ export default function AdminEmployeeMasterPage({
       getOptionsFromFilterData('statuses', filterOptions, records, 'status', EMPLOYEE_MASTER_STATUS_OPTIONS),
     [filterOptions, records]
   )
-  const tableColumnCount = resource.tableColumns.length + (canWriteAdminData ? 1 : 0)
+
+  const [showMoreFilters, setShowMoreFilters] = useState(false)
+  const narrowedByFilters =
+    Boolean(appliedFilters.search.trim()) ||
+    Boolean(appliedFilters.status) ||
+    resource.filters.some((filter) => String(appliedFilters[filter.stateKey] || '').trim() !== '')
+  const activeExtraFilterCount = resource.filters.filter(
+    (filter) => String(filters[filter.stateKey] || '').trim() !== ''
+  ).length
+
+  // No reset needed when switching tabs: the page is keyed on resource.key in
+  // FawnixApp, so each tab mounts fresh with the extra filters collapsed.
 
   const openCreatePanel = () => {
     setFormPanel({
@@ -276,12 +304,16 @@ export default function AdminEmployeeMasterPage({
       return
     }
 
-    setFormPanel({
-      mode: 'create',
-      record: null,
-      values: buildFormValues(resource),
-      errors: {},
-    })
+    const timer = window.setTimeout(() => {
+      setFormPanel({
+        mode: 'create',
+        record: null,
+        values: buildFormValues(resource),
+        errors: {},
+      })
+    }, 0)
+
+    return () => window.clearTimeout(timer)
   }, [canWriteAdminData, createRequestId, resource])
 
   const openEditPanel = (record: EmployeeMasterRecord) => {
@@ -338,25 +370,22 @@ export default function AdminEmployeeMasterPage({
     }
   }
 
-  const renderTableBody = () => {
-    if (loading) {
+  const renderTableState = () => {
+    // Only take the table over on a cold load. A refresh that already has rows
+    // keeps them on screen -- swapping them for a spinner on every refetch is
+    // what makes the page look like it is perpetually loading.
+    if (loading && records.length === 0) {
       return (
-        <tr className="adm-row em-row em-row--message">
-          <td colSpan={tableColumnCount}>
             <div className="em-table-message">
               <span className="em-spinner" aria-hidden="true" />
               <strong>Loading {resource.title.toLowerCase()}</strong>
               <span>Fetching the latest master records.</span>
             </div>
-          </td>
-        </tr>
       )
     }
 
     if (error) {
       return (
-        <tr className="adm-row em-row em-row--message">
-          <td colSpan={tableColumnCount}>
             <div className="em-table-message">
               <svg viewBox="0 0 24 24" aria-hidden="true" className="adm-empty__icon">
                 <path d="M12 9v4m0 4h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.72 3h16.92a2 2 0 0 0 1.72-3L13.7 3.86a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -367,24 +396,49 @@ export default function AdminEmployeeMasterPage({
                 Try again
               </button>
             </div>
-          </td>
-        </tr>
       )
     }
 
     if (!records.length) {
-      return (
-        <tr className="adm-row em-row em-row--message">
-          <td colSpan={tableColumnCount}>
-            <div className="em-table-message">
-              <strong>No {resource.title.toLowerCase()} found</strong>
-              <span>Adjust filters or add a new {resource.singularLabel.toLowerCase()}.</span>
-            </div>
-          </td>
-        </tr>
+      return narrowedByFilters ? (
+              <div className="em-table-message em-table-message--empty">
+                <svg viewBox="0 0 24 24" aria-hidden="true" className="adm-empty__icon">
+                  <path d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <strong>No {resource.tabLabel.toLowerCase()} match these filters</strong>
+                <span>
+                  {appliedFilters.search.trim()
+                    ? `Nothing found for “${appliedFilters.search.trim()}”. Try a different term or clear the filters.`
+                    : 'Every record was filtered out. Widen or clear the filters to see more.'}
+                </span>
+                <button className="adm-btn" type="button" onClick={clearFilters}>
+                  Clear filters
+                </button>
+              </div>
+            ) : (
+              <div className="em-table-message em-table-message--empty">
+                <svg viewBox="0 0 24 24" aria-hidden="true" className="adm-empty__icon">
+                  <path d="M4 20V8l8-4 8 4v12M4 20h16M9 20v-6h6v6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <strong>No {resource.tabLabel.toLowerCase()} yet</strong>
+                <span>
+                  {canWriteAdminData
+                    ? `Add your first ${resource.singularLabel.toLowerCase()} to start organizing employees against it.`
+                    : `No ${resource.tabLabel.toLowerCase()} have been set up yet. Ask an administrator to add one.`}
+                </span>
+                {canWriteAdminData ? (
+                  <button className="adm-btn adm-btn--primary" type="button" onClick={openCreatePanel}>
+                    Add {resource.singularLabel}
+                  </button>
+                ) : null}
+              </div>
       )
     }
 
+    return null
+  }
+
+  const renderRows = () => {
     return records.map((record, index) => {
       const rowKey = stringifyValue(getRecordId(record, resource) ?? index)
       const displayName = getDisplayName(record, resource)
@@ -483,15 +537,51 @@ export default function AdminEmployeeMasterPage({
     }
   }
 
+  const applyResolvedAddress = (parts: Record<string, string | undefined>) => {
+    setFormPanel((current) => {
+      if (!current) return current
+      const values = { ...current.values }
+      const keys: Record<string, string | undefined> = {
+        city: parts.city,
+        state: parts.state,
+        country: parts.country,
+        pincode: parts.pincode,
+      }
+      for (const [key, value] of Object.entries(keys)) {
+        // Only fill gaps -- never overwrite something already typed.
+        if (value && !String(values[key] || '').trim()) {
+          values[key] = value
+        }
+      }
+      return { ...current, values }
+    })
+  }
+
+  const tableState = renderTableState()
+
   return (
     <div className="admin-aligned-page admin-aligned-page--employee-master">
       <div className="em-header dashboard-section-head">
         <div className="em-header__copy">
-          <p className="adm-eyebrow">Administration / Employee Master</p>
-          <h1 className="adm-heading">{resource.title}</h1>
+          <p className="adm-eyebrow">Administration</p>
+          <h1 className="adm-heading">Organization</h1>
           <p className="em-subtitle">
             Maintain the reference records that organize employees, payroll, reporting lines, and departments.
           </p>
+          <div className="adm-tabs" role="tablist" aria-label="Organization records">
+            {resources.map((entry) => (
+              <button
+                key={entry.key}
+                type="button"
+                role="tab"
+                aria-selected={entry.key === resource.key}
+                className={`adm-tab${entry.key === resource.key ? ' adm-tab--active' : ''}`}
+                onClick={() => onSelectResource(entry.sidebarId)}
+              >
+                {entry.tabLabel}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="em-header__actions">
@@ -553,18 +643,6 @@ export default function AdminEmployeeMasterPage({
             <p className="adm-stat-label">Active On Page</p>
             <strong className="adm-stat-value">{activeOnPage.toLocaleString()}</strong>
             <span className="adm-stat-caption">{inactiveOnPage.toLocaleString()} inactive on page</span>
-          </div>
-        </div>
-        <div className="adm-stat-item">
-          <span className="adm-stat-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path d="M4 7h16M7 12h10M10 17h4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </span>
-          <div>
-            <p className="adm-stat-label">Filters</p>
-            <strong className="adm-stat-value">{resource.filters.length + 2}</strong>
-            <span className="adm-stat-caption">Search, status, and resource filters</span>
           </div>
         </div>
         <div className="adm-stat-item">
@@ -632,6 +710,31 @@ export default function AdminEmployeeMasterPage({
           </select>
         </label>
 
+        {resource.filters.length > 0 ? (
+        <button
+          type="button"
+          className={`em-filter-more${activeExtraFilterCount ? ' em-filter-more--active' : ''}`}
+          onClick={() => setShowMoreFilters((current) => !current)}
+          aria-expanded={showMoreFilters}
+        >
+          <svg className="adm-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 6h16M7 12h10M10 18h4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+          {showMoreFilters ? 'Fewer filters' : 'More filters'}
+          {activeExtraFilterCount ? <em>{activeExtraFilterCount}</em> : null}
+        </button>
+        ) : null}
+
+        <div className="em-filter-actions">
+          <button className="adm-btn adm-btn--primary" type="submit" disabled={loading}>
+            Apply
+          </button>
+          <button className="adm-btn" type="button" onClick={clearFilters} disabled={loading}>
+            Clear
+          </button>
+        </div>
+
+        <div className={`em-filter-extra${showMoreFilters ? ' em-filter-extra--open' : ''}`}>
         {resource.filters.map((filter) => {
           const options = getOptionsFromFilterData(
             filter.optionKey,
@@ -649,7 +752,7 @@ export default function AdminEmployeeMasterPage({
                   value={filters[filter.stateKey]}
                   onChange={(event) => updateFilter(filter.stateKey, event.target.value)}
                 >
-                  <option value="">All {filter.label.toLowerCase()}</option>
+                  <option value="">Any {filter.label.toLowerCase()}</option>
                   {options.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -667,14 +770,6 @@ export default function AdminEmployeeMasterPage({
             </label>
           )
         })}
-
-        <div className="em-filter-actions">
-          <button className="adm-btn adm-btn--primary" type="submit" disabled={loading}>
-            Apply
-          </button>
-          <button className="adm-btn" type="button" onClick={clearFilters} disabled={loading}>
-            Clear
-          </button>
         </div>
       </form>
 
@@ -690,7 +785,7 @@ export default function AdminEmployeeMasterPage({
           </div>
         </div>
 
-        <div className="adm-table-scroll table-scroll em-table-scroll">
+        <div className="adm-table-scroll table-scroll em-table-scroll" hidden={Boolean(tableState)}>
           <table className="adm-table dashboard-table em-table" aria-label={resource.title}>
             <thead>
               <tr>
@@ -702,9 +797,11 @@ export default function AdminEmployeeMasterPage({
                 {canWriteAdminData ? <th className="em-actions-th">Actions</th> : null}
               </tr>
             </thead>
-            <tbody>{renderTableBody()}</tbody>
+            <tbody>{renderRows()}</tbody>
           </table>
         </div>
+
+        {tableState ? <div className="em-table-state">{tableState}</div> : null}
 
         <div className="em-pagination">
           <strong>
@@ -740,12 +837,15 @@ export default function AdminEmployeeMasterPage({
             onClick={() => setFormPanel(null)}
           />
           <aside
+            ref={formPanelRef}
+            role="dialog"
+            aria-modal="true"
             className="field-visit-panel employee-form-panel em-form-panel"
             aria-label={`${formPanel.mode === 'create' ? 'Add' : 'Edit'} ${resource.singularLabel}`}
           >
             <div className="field-visit-panel-head employee-panel-head em-panel-head">
               <div>
-                <span>Employee Master</span>
+                <span>Organization</span>
                 <h3>{formPanel.mode === 'create' ? `Add ${resource.singularLabel}` : `Edit ${resource.singularLabel}`}</h3>
                 <p className="employee-panel-copy">
                   Mandatory fields are marked before saving to the admin API.
@@ -771,8 +871,12 @@ export default function AdminEmployeeMasterPage({
                     : []
                   const errorMessage = formPanel.errors[field.key]
 
+                  const showPickerAfter =
+                    resource.hasLocationPicker && field.key === 'geofence_radius'
+
                   return (
-                    <div className={`em-field${errorMessage ? ' em-field--error' : ''}`} key={field.key}>
+                    <Fragment key={field.key}>
+                    <div className={`em-field${errorMessage ? ' em-field--error' : ''}`}>
                       <label htmlFor={fieldId}>
                         {field.label}
                         {field.required ? <span className="em-required" aria-label="required">*</span> : null}
@@ -810,6 +914,27 @@ export default function AdminEmployeeMasterPage({
                       )}
                       {errorMessage ? <span className="em-field-error">{errorMessage}</span> : null}
                     </div>
+                    {showPickerAfter ? (
+                      <div className="em-field em-field--full">
+                        <label>Pin the location</label>
+                        <LocationPicker
+                          latitude={formPanel.values.latitude || ''}
+                          longitude={formPanel.values.longitude || ''}
+                          geofenceRadius={formPanel.values.geofence_radius || ''}
+                          addressHint={
+                            [formPanel.values.address, formPanel.values.city, formPanel.values.state]
+                              .filter((part) => String(part || '').trim())
+                              .join(', ') || undefined
+                          }
+                          onChange={(next) => {
+                            updateFormValue('latitude', next.latitude)
+                            updateFormValue('longitude', next.longitude)
+                          }}
+                          onResolveAddress={applyResolvedAddress}
+                        />
+                      </div>
+                    ) : null}
+                    </Fragment>
                   )
                 })}
               </div>

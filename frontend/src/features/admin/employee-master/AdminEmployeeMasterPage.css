@@ -6,9 +6,9 @@
   --em-text: #111827;
   --em-text-soft: #747b84;
   --em-text-muted: #8b929c;
-  --em-blue: #4f7bf7;
-  --em-blue-hover: #416ce7;
-  --em-blue-soft: #eef3ff;
+  --em-blue: var(--a-accent);
+  --em-blue-hover: var(--a-accent-hover);
+  --em-blue-soft: var(--a-accent-soft);
   --em-success: #168a41;
   --em-success-soft: #eafbea;
   --em-danger: #ef4444;
@@ -106,16 +106,6 @@
   opacity: 0.58;
 }
 
-.admin-aligned-page--employee-master .adm-btn--primary {
-  border-color: var(--em-blue);
-  background: var(--em-blue);
-  color: #ffffff;
-}
-
-.admin-aligned-page--employee-master .adm-btn--primary:hover:not(:disabled) {
-  border-color: var(--em-blue-hover);
-  background: var(--em-blue-hover);
-}
 
 .admin-aligned-page--employee-master .adm-btn--icon {
   width: 34px;
@@ -229,7 +219,7 @@
 
 .em-filter-bar {
   display: grid;
-  grid-template-columns: minmax(220px, 1.3fr) repeat(4, minmax(150px, 0.7fr)) auto;
+  grid-template-columns: minmax(220px, 1.6fr) minmax(150px, 0.7fr) minmax(90px, 0.4fr) auto auto;
   gap: 10px;
   align-items: end;
   padding: 12px;
@@ -360,7 +350,7 @@
   white-space: nowrap;
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 4;
 }
 
 .admin-aligned-page--employee-master .em-table tbody td {
@@ -780,5 +770,157 @@
   .em-spinner {
     animation: none;
     transition: none;
+  }
+}
+
+
+/* ---------- Collapsible resource filters ---------- */
+.em-filter-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: end;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--em-border);
+  border-radius: 8px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--em-text-soft);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.16s ease, color 0.16s ease, background 0.16s ease;
+}
+
+.em-filter-more:hover:not(:disabled) {
+  color: var(--em-text);
+  border-color: var(--a-accent, #2563eb);
+}
+
+.em-filter-more:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.em-filter-more svg {
+  width: 15px;
+  height: 15px;
+}
+
+.em-filter-more em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 17px;
+  padding: 1px 5px;
+  border-radius: 20px;
+  background: var(--a-accent, #2563eb);
+  color: #fff;
+}
+
+.em-filter-more--active {
+  border-color: var(--a-accent, #2563eb);
+  color: var(--em-text);
+}
+
+/* Grid row that only exists once expanded. */
+.em-filter-extra {
+  display: none;
+  grid-column: 1 / -1;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  padding-top: 10px;
+  border-top: 1px solid var(--em-border);
+}
+
+.em-filter-extra--open {
+  display: grid;
+}
+
+
+/* Empty states: a little more room than an inline message, with the icon
+   muted so the heading and the action stay the focus. */
+.em-table-message--empty {
+  min-height: 240px;
+  gap: 8px;
+  padding: 24px 16px;
+}
+
+.em-table-message--empty .adm-empty__icon {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 4px;
+  color: var(--em-border-strong);
+}
+
+.em-table-message--empty span {
+  max-width: 420px;
+  line-height: 1.55;
+}
+
+.em-table-message--empty .adm-btn {
+  margin-top: 10px;
+}
+
+/* Loading / error / empty states sit beside the scrolling table, not inside a
+   colSpan cell -- in a wide table that cell is as wide as all columns combined,
+   which pushed the centred message out of the visible scroll area. */
+.em-table-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+}
+
+/* Full-width row inside the two-column record form (used by the map picker). */
+.em-form-grid .em-field--full {
+  grid-column: 1 / -1;
+}
+
+/* ---------- Sticky identity column ----------
+   Working Units renders 15 columns (~2400px). Scrolling right to reach
+   Latitude used to carry the Unit Name off screen, so rows lost their identity
+   exactly when it was needed. Pinning the first column keeps the name in view.
+   z-index ladder: body cells 3 < header row 4 < header's first cell 5. */
+.admin-aligned-page--employee-master .em-table thead th:first-child,
+.admin-aligned-page--employee-master .em-table tbody td:first-child {
+  position: sticky;
+  left: 0;
+}
+
+.admin-aligned-page--employee-master .em-table tbody td:first-child {
+  z-index: 3;
+  background: var(--em-surface);
+}
+
+.admin-aligned-page--employee-master .em-table thead th:first-child {
+  z-index: 5;
+}
+
+/* Hover/zebra states must repaint the pinned cell too, or rows show a seam. */
+.admin-aligned-page--employee-master .em-table tbody tr:hover td:first-child {
+  background: var(--em-surface-muted);
+}
+
+/* A hairline that only appears once the table is actually scrolled sideways
+   would need JS; a permanent soft edge reads as a column divider instead. */
+.admin-aligned-page--employee-master .em-table thead th:first-child::after,
+.admin-aligned-page--employee-master .em-table tbody td:first-child::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--em-border);
+}
+
+@media (max-width: 640px) {
+  /* Too little width to give a whole column away on a phone. */
+  .admin-aligned-page--employee-master .em-table thead th:first-child,
+  .admin-aligned-page--employee-master .em-table tbody td:first-child {
+    position: static;
   }
 }

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import fawnixBg from "../../../assets/fawnix_bg.png";
+import SidebarIcon from "../components/navigation/SidebarIcon";
 import { usePublicStats } from "../../public/hooks/usePublicStats";
 
 type AdminLoginPageProps = {
@@ -28,6 +29,34 @@ const sceneCopy = {
   night: "Your workspace is ready when you are.",
 };
 
+const FLOW_DWELL = 3600;
+const flowSteps = [
+  {
+    id: "approach",
+    label: "Arrive",
+    title: "The workday walks in with them.",
+    caption: "A team member approaches the workplace with Fawnix ready on mobile.",
+  },
+  {
+    id: "check-in",
+    label: "Check in",
+    title: "One tap verifies their arrival.",
+    caption: "Time, identity and the approved location become one attendance event.",
+  },
+  {
+    id: "review",
+    label: "Approve",
+    title: "The scene moves to the admin.",
+    caption: "The verified request arrives with enough context for a confident decision.",
+  },
+  {
+    id: "record",
+    label: "Record",
+    title: "Approval becomes a trusted record.",
+    caption: "The employee timeline, attendance register and operations view update together.",
+  },
+] as const;
+
 export default function AdminLoginPage({
   adminEmpCode,
   adminOtp,
@@ -49,7 +78,20 @@ export default function AdminLoginPage({
   const digitRefs = useRef<(HTMLInputElement | null)[]>([]);
   const isErr = /error|invalid|fail|denied|unauthorized/i.test(authStatus);
   const stats = usePublicStats();
-  const peak = Math.max(...stats.rates, 1);
+  const [flowStep, setFlowStep] = useState(0);
+  const activeFlow = flowSteps[flowStep] ?? flowSteps[0];
+
+  useEffect(() => {
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (reduceMotion) return;
+    const cycleId = window.setInterval(
+      () => setFlowStep((current) => (current + 1) % flowSteps.length),
+      FLOW_DWELL,
+    );
+    return () => window.clearInterval(cycleId);
+  }, []);
 
   useEffect(() => {
     if (adminOtp) return;
@@ -121,54 +163,132 @@ export default function AdminLoginPage({
             </div>
 
             <div
-              className="login-v3-preview"
-              data-live={stats.isLive || undefined}
+              className="login-flow-story"
+              data-stage={activeFlow.id}
             >
-              <div className="preview-top">
-                <span>Today at a glance</span>
-                <b>
-                  <i aria-hidden="true" /> {stats.isLive ? "Live" : "Preview"}
-                </b>
+              <div className="login-flow-head">
+                <span>
+                  <i aria-hidden="true" />
+                  One connected workday
+                </span>
+                <time>{loginTimeLabel}</time>
               </div>
-              <div className="preview-value">
-                <strong>{stats.rateLabel}</strong>
-                <small>
-                  attendance rhythm · {stats.presentLabel}/
-                  {stats.headcountLabel} in
-                </small>
+
+              <div className="login-flow-cinema" aria-hidden="true">
+                <div className="login-story-scene login-story-employee">
+                  <span className="login-story-sun" />
+                  <div className="login-story-building">
+                    <span>FAWNIX</span>
+                    <i />
+                    <i />
+                    <i />
+                  </div>
+                  <span className="login-story-ground" />
+                  <div className="login-story-worker">
+                    <span className="worker-shadow" />
+                    <span className="worker-head"><i /></span>
+                    <span className="worker-body"><i /></span>
+                    <span className="worker-arm-back" />
+                    <span className="worker-arm-phone"><i /></span>
+                    <span className="worker-leg worker-leg-back" />
+                    <span className="worker-leg worker-leg-front" />
+                  </div>
+                  <div className="login-story-phone-card">
+                    <span className="phone-card-top">
+                      <i /> Fawnix Attend
+                    </span>
+                    <span className="phone-card-person">
+                      <SidebarIcon name="users" />
+                    </span>
+                    <strong>Good morning, Aarav</strong>
+                    <small>Main office / 08:55</small>
+                    <span className="phone-card-action">
+                      <SidebarIcon name="clock" /> Check in
+                    </span>
+                    <i className="phone-card-tap" />
+                  </div>
+                  <div className="login-story-verified">
+                    <span><SidebarIcon name="pin" /></span>
+                    <div><strong>Arrival verified</strong><small>Time and place matched</small></div>
+                  </div>
+                </div>
+
+                <div className="login-story-scene login-story-admin">
+                  <div className="admin-story-wall">
+                    <span>Operations</span>
+                    <i /><i /><i />
+                  </div>
+                  <div className="admin-story-person">
+                    <span className="admin-head"><i /></span>
+                    <span className="admin-body" />
+                    <span className="admin-arm" />
+                  </div>
+                  <span className="admin-story-chair" />
+                  <span className="admin-story-desk" />
+                  <div className="admin-story-monitor">
+                    <span className="admin-monitor-bar"><i /> Attendance inbox</span>
+                    <div className="admin-request-card">
+                      <span>AS</span>
+                      <div><strong>Aarav Sharma</strong><small>08:55 / Main office / Verified</small></div>
+                      <em>Pending</em>
+                    </div>
+                    <span className="admin-approve-button">Approve</span>
+                    <span className="admin-approved-state">
+                      <SidebarIcon name="badge" /> Approved
+                    </span>
+                    <i className="admin-story-cursor" />
+                  </div>
+                  <span className="admin-monitor-stand" />
+                </div>
+
+                <div className="login-story-scene login-story-record">
+                  <div className="record-story-head">
+                    <span><SidebarIcon name="activity" /></span>
+                    <div><strong>Attendance timeline</strong><small>Aarav Sharma / Today</small></div>
+                    <em>Complete</em>
+                  </div>
+                  <div className="record-story-line"><i /><i /><i /></div>
+                  <div className="record-story-events">
+                    <span><b>08:55</b><small>Mobile check-in</small></span>
+                    <span><b>08:55</b><small>Location verified</small></span>
+                    <span><b>08:56</b><small>Admin approved</small></span>
+                  </div>
+                  <div className="record-story-seal">
+                    <SidebarIcon name="badge" />
+                    <strong>Recorded across Fawnix</strong>
+                    <small>Employee / Attendance / Operations</small>
+                  </div>
+                </div>
+
+                <span className="login-story-cut" />
               </div>
-              <div className="preview-line">
-                {stats.rates.map((rate, index) => (
-                  <span
-                    key={index}
-                    className={
-                      index === stats.rates.length - 1 ? "is-today" : undefined
-                    }
-                    style={
-                      {
-                        "--h": `${Math.max(12, (rate / peak) * 100)}%`,
-                        "--i": index,
-                      } as CSSProperties
-                    }
-                    title={`${stats.days[index]} · ${rate}%`}
-                  />
+
+              <div className="login-flow-copy" key={activeFlow.id}>
+                <span>0{flowStep + 1}</span>
+                <div>
+                  <strong>{activeFlow.title}</strong>
+                  <p>{activeFlow.caption}</p>
+                </div>
+              </div>
+
+              <div
+                className="login-flow-steps"
+                role="tablist"
+                aria-label="Workday story"
+              >
+                {flowSteps.map((step, index) => (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={index === flowStep}
+                    className={index === flowStep ? "is-active" : undefined}
+                    key={step.id}
+                    onClick={() => setFlowStep(index)}
+                  >
+                    <span>{step.label}</span>
+                    <i aria-hidden="true" />
+                  </button>
                 ))}
-              </div>
-              <div className="preview-days">
-                {stats.days.map((day, index) => (
-                  <i key={`${day}-${index}`}>{day}</i>
-                ))}
-              </div>
-              <div className="preview-footer">
-                <span>
-                  <b>{stats.presentLabel}</b> present
-                </span>
-                <span>
-                  <b>{stats.approvalsLabel}</b> to review
-                </span>
-                <span>
-                  <b>{stats.inFieldLabel}</b> in field
-                </span>
               </div>
             </div>
           </aside>
@@ -177,7 +297,7 @@ export default function AdminLoginPage({
             <div className="login-v3-card">
               <div className="login-v3-card-head">
                 <div className="login-v3-icon">
-                  <img src={fawnixBg} alt="" />
+                  <span aria-hidden="true">ID</span>
                 </div>
                 <div>
                   <span>Secure access</span>

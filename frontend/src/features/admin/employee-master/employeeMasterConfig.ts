@@ -35,6 +35,7 @@ export const employeeMasterResourceConfigs: Record<EmployeeMasterResourceKey, Em
     endpoint: '/api/admin/employee-master/working-units',
     codeField: 'unit_code',
     nameField: 'unit_name',
+    hasLocationPicker: true,
     tableColumns: [
       { key: 'unit_name', label: 'Unit Name', kind: 'primary', minWidth: 220 },
       { key: 'unit_code', label: 'Unit Code', kind: 'code', minWidth: 130 },
@@ -124,16 +125,6 @@ export const employeeMasterResourceConfigs: Record<EmployeeMasterResourceKey, Em
         placeholder: '1',
       },
       statusField,
-      {
-        key: 'created_by',
-        label: 'Created By',
-        placeholder: 'Admin name or code',
-      },
-      {
-        key: 'created_date',
-        label: 'Created Date',
-        inputType: 'date',
-      },
     ],
     filters: [
       {
@@ -258,16 +249,6 @@ export const employeeMasterResourceConfigs: Record<EmployeeMasterResourceKey, Em
         placeholder: 'Monthly',
       },
       statusField,
-      {
-        key: 'created_by',
-        label: 'Created By',
-        placeholder: 'Admin name or code',
-      },
-      {
-        key: 'created_date',
-        label: 'Created Date',
-        inputType: 'date',
-      },
     ],
     filters: [
       {

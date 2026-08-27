@@ -5,14 +5,28 @@ Shared CRUD, search, filter, status, and pagination behavior for the
 administration master tables under Employee Master.
 """
 
+import logging
 from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 from typing import Dict, List
 
 from database.connection import get_db_connection, return_connection
 
+logger = logging.getLogger(__name__)
 
 VALID_STATUSES = {"active", "inactive"}
+
+# Provenance is recorded by the server, never accepted from a client. Stripped
+# from every write payload so a caller cannot claim someone else authored a
+# record, nor rewrite when it was created.
+IMMUTABLE_FIELDS = {"id", "created_by", "created_date", "created_at", "updated_at"}
+
+# Returned instead of raw driver text, which otherwise leaks table names,
+# column names and SQL fragments to the browser.
+GENERIC_ERROR = "Something went wrong handling this request. Please try again."
+
+UNIQUE_VIOLATION = "23505"
+FOREIGN_KEY_VIOLATION = "23503"
 
 RESOURCE_CONFIGS = {
     "working-units": {
@@ -44,7 +58,24 @@ RESOURCE_CONFIGS = {
         ],
         "integer_fields": {"shift_mapping_id"},
         "numeric_fields": {"latitude", "longitude", "geofence_radius"},
+        # A coordinate outside these bounds stores fine in NUMERIC(10,7) but
+        # silently breaks geofencing at clock-in, so reject it at the door.
+        "numeric_ranges": {
+            "latitude": (Decimal("-90"), Decimal("90")),
+            "longitude": (Decimal("-180"), Decimal("180")),
+            "geofence_radius": (Decimal("0"), Decimal("100000")),
+        },
         "date_fields": {"created_date"},
+        # Deleting a unit that departments still point at would orphan them:
+        # the reference is a free-text name, not a foreign key.
+        "blocking_references": [
+            {
+                "table": "departments",
+                "column": "working_unit",
+                "match_fields": ["unit_name", "unit_code"],
+                "label": "department",
+            }
+        ],
         "search_fields": [
             "unit_name",
             "unit_code",
@@ -254,6 +285,21 @@ def _serialize_row(row: Dict) -> Dict:
     return result
 
 
+def _select_columns(config: Dict) -> str:
+    """
+    Explicit projection for responses.
+
+    `SELECT *` coupled the API payload to the physical table, so any column
+    added for internal use would start leaking to the browser. Every table in
+    this module carries id/created_at/updated_at alongside its configured
+    fields.
+    """
+    columns = ["id", *config["fields"], "created_at", "updated_at"]
+    seen = set()
+    ordered = [c for c in columns if not (c in seen or seen.add(c))]
+    return ", ".join(ordered)
+
+
 def _get_config(resource: str) -> Dict:
     config = RESOURCE_CONFIGS.get((resource or "").strip())
     if not config:
@@ -280,14 +326,20 @@ def _normalize_integer(field_name: str, value):
         raise ValueError(f"{field_name} must be a whole number") from exc
 
 
-def _normalize_decimal(field_name: str, value):
+def _normalize_decimal(field_name: str, value, value_range=None):
     text_value = "" if value is None else str(value).strip()
     if not text_value:
         return None
     try:
-        return Decimal(text_value)
+        number = Decimal(text_value)
     except InvalidOperation as exc:
         raise ValueError(f"{field_name} must be a number") from exc
+
+    if value_range:
+        minimum, maximum = value_range
+        if number < minimum or number > maximum:
+            raise ValueError(f"{field_name} must be between {minimum} and {maximum}")
+    return number
 
 
 def _normalize_date(field_name: str, value):
@@ -301,7 +353,9 @@ def _normalize_date(field_name: str, value):
 
 
 def _normalize_payload(payload: Dict, config: Dict, *, require_required_fields: bool) -> Dict:
-    payload = payload or {}
+    payload = {
+        key: value for key, value in (payload or {}).items() if key not in IMMUTABLE_FIELDS
+    }
     normalized = {}
     integer_fields = config.get("integer_fields") or set()
     numeric_fields = config.get("numeric_fields") or set()
@@ -322,7 +376,9 @@ def _normalize_payload(payload: Dict, config: Dict, *, require_required_fields: 
             normalized[field_name] = normalized_value
             continue
         if field_name in numeric_fields:
-            normalized_value = _normalize_decimal(field_name, value)
+            normalized_value = _normalize_decimal(
+                field_name, value, (config.get("numeric_ranges") or {}).get(field_name)
+            )
             if normalized_value is None and require_required_fields:
                 continue
             normalized[field_name] = normalized_value
@@ -378,11 +434,13 @@ def _build_where(config: Dict, query_params: Dict):
         clauses.append("status = %s")
         values.append(status)
 
+    # These back select controls whose values come from _filter_options, so they
+    # match exactly -- a substring match let "Pune" also select "Pune East".
     for field_name in config["filter_fields"]:
         raw_value = str(query_params.get(field_name) or "").strip()
         if raw_value:
-            clauses.append(f"COALESCE({field_name}::text, '') ILIKE %s")
-            values.append(f"%{raw_value}%")
+            clauses.append(f"LOWER(TRIM(COALESCE({field_name}::text, ''))) = LOWER(%s)")
+            values.append(raw_value)
 
     return " AND ".join(clauses), values
 
@@ -450,7 +508,7 @@ def list_master_records(resource: str, query_params: Dict):
 
         cursor.execute(
             f"""
-            SELECT *
+            SELECT {_select_columns(config)}
             FROM {config['table']}
             WHERE {where_clause}
             ORDER BY {_sort_clause(config, query_params.get('sort_by'), query_params.get('sort_order'))}
@@ -479,8 +537,9 @@ def list_master_records(resource: str, query_params: Dict):
         }, 200)
     except ValueError as exc:
         return ({"success": False, "message": str(exc)}, 400)
-    except Exception as exc:
-        return ({"success": False, "message": str(exc)}, 500)
+    except Exception:
+        logger.exception("Employee master read failed for resource=%s", resource)
+        return ({"success": False, "message": GENERIC_ERROR}, 500)
     finally:
         cursor.close()
         return_connection(conn)
@@ -493,7 +552,7 @@ def get_master_record(resource: str, record_id: int):
     try:
         config = _get_config(resource)
         cursor.execute(
-            f"SELECT * FROM {config['table']} WHERE id = %s",
+            f"SELECT {_select_columns(config)} FROM {config['table']} WHERE id = %s",
             (record_id,),
         )
         row = cursor.fetchone()
@@ -502,8 +561,9 @@ def get_master_record(resource: str, record_id: int):
         return ({"success": True, "data": {"record": _serialize_row(row)}}, 200)
     except ValueError as exc:
         return ({"success": False, "message": str(exc)}, 400)
-    except Exception as exc:
-        return ({"success": False, "message": str(exc)}, 500)
+    except Exception:
+        logger.exception("Employee master read failed for resource=%s", resource)
+        return ({"success": False, "message": GENERIC_ERROR}, 500)
     finally:
         cursor.close()
         return_connection(conn)
@@ -515,12 +575,11 @@ def create_master_record(resource: str, payload: Dict, created_by_emp_code: str 
 
     try:
         config = _get_config(resource)
-        if created_by_emp_code and "created_by" in config["fields"]:
-            payload = {
-                **(payload or {}),
-                "created_by": (payload or {}).get("created_by") or created_by_emp_code,
-            }
         record_data = _normalize_payload(payload, config, require_required_fields=True)
+        # Stamped after normalisation, which strips any client-supplied value.
+        # created_date/created_at are left to the column defaults.
+        if created_by_emp_code and "created_by" in config["fields"]:
+            record_data["created_by"] = created_by_emp_code
         code_field = config["code_field"]
 
         cursor.execute(
@@ -536,7 +595,7 @@ def create_master_record(resource: str, payload: Dict, created_by_emp_code: str 
             f"""
             INSERT INTO {config['table']} ({', '.join(columns)})
             VALUES ({', '.join(['%s'] * len(columns))})
-            RETURNING *
+            RETURNING {_select_columns(config)}
             """,
             values,
         )
@@ -552,7 +611,17 @@ def create_master_record(resource: str, payload: Dict, created_by_emp_code: str 
         return ({"success": False, "message": str(exc)}, 400)
     except Exception as exc:
         conn.rollback()
-        return ({"success": False, "message": str(exc)}, 500)
+        if getattr(exc, "pgcode", None) == FOREIGN_KEY_VIOLATION:
+            return (
+                {"success": False, "message": "This record is still referenced elsewhere and cannot be deleted."},
+                409,
+            )
+        if getattr(exc, "pgcode", None) == UNIQUE_VIOLATION:
+            # The database is the real arbiter of code uniqueness; the
+            # pre-check above can lose a race with a concurrent writer.
+            return ({"success": False, "message": f"{_get_config(resource)['singular']} code already exists"}, 409)
+        logger.exception("Employee master write failed for resource=%s", resource)
+        return ({"success": False, "message": GENERIC_ERROR}, 500)
     finally:
         cursor.close()
         return_connection(conn)
@@ -565,7 +634,7 @@ def update_master_record(resource: str, record_id: int, payload: Dict):
     try:
         config = _get_config(resource)
         cursor.execute(
-            f"SELECT * FROM {config['table']} WHERE id = %s",
+            f"SELECT {_select_columns(config)} FROM {config['table']} WHERE id = %s",
             (record_id,),
         )
         current = cursor.fetchone()
@@ -590,8 +659,10 @@ def update_master_record(resource: str, record_id: int, payload: Dict):
             if cursor.fetchone():
                 return ({"success": False, "message": f"{config['singular']} code already exists"}, 409)
 
-        record_data["updated_at"] = datetime.now()
+        # NOW() rather than the app's naive local clock, so updated_at and
+        # created_at are always read from the same source of time.
         assignments = [f"{column} = %s" for column in record_data]
+        assignments.append("updated_at = NOW()")
         values = [record_data[column] for column in record_data]
         values.append(record_id)
 
@@ -600,7 +671,7 @@ def update_master_record(resource: str, record_id: int, payload: Dict):
             UPDATE {config['table']}
             SET {', '.join(assignments)}
             WHERE id = %s
-            RETURNING *
+            RETURNING {_select_columns(config)}
             """,
             values,
         )
@@ -616,10 +687,52 @@ def update_master_record(resource: str, record_id: int, payload: Dict):
         return ({"success": False, "message": str(exc)}, 400)
     except Exception as exc:
         conn.rollback()
-        return ({"success": False, "message": str(exc)}, 500)
+        if getattr(exc, "pgcode", None) == FOREIGN_KEY_VIOLATION:
+            return (
+                {"success": False, "message": "This record is still referenced elsewhere and cannot be deleted."},
+                409,
+            )
+        if getattr(exc, "pgcode", None) == UNIQUE_VIOLATION:
+            # The database is the real arbiter of code uniqueness; the
+            # pre-check above can lose a race with a concurrent writer.
+            return ({"success": False, "message": f"{_get_config(resource)['singular']} code already exists"}, 409)
+        logger.exception("Employee master write failed for resource=%s", resource)
+        return ({"success": False, "message": GENERIC_ERROR}, 500)
     finally:
         cursor.close()
         return_connection(conn)
+
+
+def _blocking_reference_count(cursor, config: Dict, record: Dict):
+    """
+    Counts rows elsewhere that still point at this record.
+
+    These references are free-text names rather than foreign keys, so the
+    database will not stop a delete from orphaning them -- this does.
+    Returns (label, count) for the first reference found, else None.
+    """
+    for reference in config.get("blocking_references") or []:
+        candidates = [
+            str(record.get(field) or "").strip()
+            for field in reference["match_fields"]
+            if str(record.get(field) or "").strip()
+        ]
+        if not candidates:
+            continue
+
+        placeholders = ", ".join(["LOWER(%s)"] * len(candidates))
+        cursor.execute(
+            f"""
+            SELECT COUNT(*) AS total
+            FROM {reference['table']}
+            WHERE LOWER(TRIM(COALESCE({reference['column']}::text, ''))) IN ({placeholders})
+            """,
+            candidates,
+        )
+        total = int((cursor.fetchone() or {}).get("total") or 0)
+        if total:
+            return reference["label"], total
+    return None
 
 
 def delete_master_record(resource: str, record_id: int):
@@ -628,6 +741,29 @@ def delete_master_record(resource: str, record_id: int):
 
     try:
         config = _get_config(resource)
+
+        cursor.execute(f"SELECT {_select_columns(config)} FROM {config['table']} WHERE id = %s", (record_id,))
+        record = cursor.fetchone()
+        if not record:
+            conn.rollback()
+            return ({"success": False, "message": f"{config['singular']} not found"}, 404)
+
+        blocking = _blocking_reference_count(cursor, config, record)
+        if blocking:
+            label, total = blocking
+            conn.rollback()
+            return (
+                {
+                    "success": False,
+                    "message": (
+                        f"{config['singular']} is still used by {total} "
+                        f"{label}{'' if total == 1 else 's'}. Reassign them, or set this "
+                        f"{config['singular'].lower()} to inactive instead of deleting it."
+                    ),
+                },
+                409,
+            )
+
         cursor.execute(
             f"""
             DELETE FROM {config['table']}
@@ -637,9 +773,6 @@ def delete_master_record(resource: str, record_id: int):
             (record_id,),
         )
         deleted = cursor.fetchone()
-        if not deleted:
-            conn.rollback()
-            return ({"success": False, "message": f"{config['singular']} not found"}, 404)
 
         conn.commit()
         return ({
@@ -652,7 +785,17 @@ def delete_master_record(resource: str, record_id: int):
         return ({"success": False, "message": str(exc)}, 400)
     except Exception as exc:
         conn.rollback()
-        return ({"success": False, "message": str(exc)}, 500)
+        if getattr(exc, "pgcode", None) == FOREIGN_KEY_VIOLATION:
+            return (
+                {"success": False, "message": "This record is still referenced elsewhere and cannot be deleted."},
+                409,
+            )
+        if getattr(exc, "pgcode", None) == UNIQUE_VIOLATION:
+            # The database is the real arbiter of code uniqueness; the
+            # pre-check above can lose a race with a concurrent writer.
+            return ({"success": False, "message": f"{_get_config(resource)['singular']} code already exists"}, 409)
+        logger.exception("Employee master write failed for resource=%s", resource)
+        return ({"success": False, "message": GENERIC_ERROR}, 500)
     finally:
         cursor.close()
         return_connection(conn)

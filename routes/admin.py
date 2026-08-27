@@ -20,7 +20,8 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 import openpyxl
-from openpyxl.styles import Font
+import calendar
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from services.notification_service import (
     create_scheduled_notification,
@@ -519,6 +520,113 @@ def _monthly_attendance_report_payload(month: int, year: int):
     return admin_service.build_monthly_attendance_report_rows(daily_rows)
 
 
+def _monthly_attendance_matrix_payload(month: int, year: int):
+    payload, status_code = attendance_heatmap_service.get_attendance_heatmap(month, year)
+    if status_code != 200 or not payload.get('success'):
+        raise RuntimeError(payload.get('message') or 'Unable to build monthly attendance matrix')
+    return payload.get('employees', [])
+
+
+def _build_monthly_attendance_workbook(month: int, year: int, employees):
+    """Create the payroll-style, month-wide attendance workbook."""
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "Attendance"
+    days_in_month = calendar.monthrange(year, month)[1]
+    master_headers = ["S#", "Employee ID", "Project / Department", "Employee Name", "Designation", "DOJ"]
+    summary_headers = ["Working Days", "Holidays / Week Off", "Leave Availed", "Absent", "Total Days",
+                       "Adjustments / LOP", "Final Attendance", "Calendar Days", "LOP", "Release Type", "Remarks"]
+    headers = master_headers + [date(year, month, day) for day in range(1, days_in_month + 1)] + summary_headers
+    last_column = len(headers)
+
+    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_column)
+    title_cell = sheet.cell(1, 1, f"MONTHLY ATTENDANCE REPORT - {calendar.month_name[month].upper()} {year}")
+    title_cell.font = Font(name="Aptos Display", size=16, bold=True, color="FFFFFF")
+    title_cell.fill = PatternFill("solid", fgColor="123B52")
+    title_cell.alignment = Alignment(horizontal="center", vertical="center")
+    sheet.row_dimensions[1].height = 28
+
+    thin = Side(style="thin", color="B9C9CF")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    for column, value in enumerate(headers, start=1):
+        cell = sheet.cell(2, column, value)
+        cell.font = Font(bold=True, color="FFFFFF", size=9)
+        cell.fill = PatternFill("solid", fgColor="155E75" if 7 <= column < 7 + days_in_month else "0F766E")
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = border
+        if 7 <= column < 7 + days_in_month:
+            cell.number_format = "d"
+    sheet.row_dimensions[2].height = 34
+
+    status_fills = {"P": "C6EFCE", "S": "A7F3D0", "WFH": "BAE6FD", "H": "FDE68A",
+                    "O": "E5E7EB", "L": "DDD6FE", "A": "FECACA"}
+    day_start_column = 7
+    summary_start_column = day_start_column + days_in_month
+    for row_index, employee in enumerate(employees, start=3):
+        days = {item.get('date'): item for item in employee.get('days', [])}
+        joined_date = employee.get('emp_joined_date') or ''
+        values = [row_index - 2, employee.get('emp_code', ''), employee.get('emp_department', ''),
+                  employee.get('emp_full_name', ''), employee.get('emp_designation', ''), joined_date]
+        for column, value in enumerate(values, start=1):
+            cell = sheet.cell(row_index, column, value)
+            cell.border = border
+            cell.alignment = Alignment(vertical="center", wrap_text=column in (3, 4, 5))
+        if joined_date:
+            try:
+                sheet.cell(row_index, 6).value = datetime.strptime(joined_date[:10], "%Y-%m-%d").date()
+                sheet.cell(row_index, 6).number_format = "dd-mmm-yyyy"
+            except (TypeError, ValueError):
+                pass
+
+        statuses, remarks = [], []
+        for day_number in range(1, days_in_month + 1):
+            item = days.get(date(year, month, day_number).isoformat(), {})
+            status = item.get('status', '')
+            statuses.append(status)
+            if item.get('remarks'):
+                remarks.append(f"{day_number}: {item['remarks']}")
+            cell = sheet.cell(row_index, day_start_column + day_number - 1, status)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.font = Font(bold=True, size=9, color="173042")
+            cell.border = border
+            if status in status_fills:
+                cell.fill = PatternFill("solid", fgColor=status_fills[status])
+
+        worked = sum(status in {"P", "S", "WFH"} for status in statuses)
+        holiday = sum(status in {"H", "O"} for status in statuses)
+        leave = statuses.count("L")
+        absent = statuses.count("A")
+        # Only populated employee-period cells participate in payroll. This
+        # excludes pre-DOJ and future dates instead of charging them as LOP.
+        calendar_days = worked + holiday + leave + absent
+        adjustments = 0  # No adjustment/LOP source exists in the current schema.
+        final_attendance = worked + holiday + leave + adjustments
+        lop = max(calendar_days - final_attendance, 0)
+        summary_values = [worked, holiday, leave, absent, calendar_days, adjustments, final_attendance,
+                          calendar_days, lop, "", "; ".join(remarks)]
+        for offset, value in enumerate(summary_values):
+            cell = sheet.cell(row_index, summary_start_column + offset, value)
+            cell.border = border
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    sheet.freeze_panes = "G3"
+    sheet.auto_filter.ref = f"A2:{get_column_letter(last_column)}{max(2, len(employees) + 2)}"
+    for index, width in enumerate([6, 15, 22, 24, 20, 14], start=1):
+        sheet.column_dimensions[get_column_letter(index)].width = width
+    for index in range(day_start_column, summary_start_column):
+        sheet.column_dimensions[get_column_letter(index)].width = 4.2
+    for index in range(summary_start_column, last_column + 1):
+        sheet.column_dimensions[get_column_letter(index)].width = 28 if index == last_column else 14
+    sheet.sheet_view.showGridLines = False
+    sheet.page_setup.orientation = "landscape"
+    sheet.page_setup.fitToWidth = 1
+    sheet.page_setup.fitToHeight = 0
+    sheet.sheet_properties.pageSetUpPr.fitToPage = True
+    sheet.print_title_rows = "1:2"
+    sheet.print_options.horizontalCentered = True
+    return workbook
+
+
 def _styled_pdf_table(table_data, col_widths, header_color):
     table = Table(
         table_data,
@@ -689,42 +797,9 @@ def _export_monthly_report(report_format: str, month: int, year: int, monthly_ro
         return response
 
     if report_format == 'xlsx':
-        workbook = openpyxl.Workbook()
-        sheet = workbook.active
-        sheet.title = "Monthly Report"
-        sheet.append(MONTHLY_ATTENDANCE_HEADERS)
-
-        for column_index in range(1, len(MONTHLY_ATTENDANCE_HEADERS) + 1):
-            sheet.cell(row=1, column=column_index).font = Font(bold=True)
-
-        for row_index, row in enumerate(monthly_rows, start=2):
-            sheet.cell(row=row_index, column=1, value=row.get('employee_id', ''))
-            sheet.cell(row=row_index, column=2, value=row.get('employee_name', ''))
-            sheet.cell(row=row_index, column=3, value=row.get('total_working_days', 0))
-            sheet.cell(row=row_index, column=4, value=(row.get('total_hours_minutes', 0) or 0) / 1440)
-            sheet.cell(row=row_index, column=5, value=f"=IF(C{row_index}=0,0,D{row_index}/C{row_index})")
-            sheet.cell(row=row_index, column=6, value=(row.get('total_overtime_minutes', 0) or 0) / 1440)
-
-            sheet.cell(row=row_index, column=4).number_format = "[h]:mm"
-            sheet.cell(row=row_index, column=5).number_format = "[h]:mm"
-            sheet.cell(row=row_index, column=6).number_format = "[h]:mm"
-
-        if monthly_rows:
-            last_data_row = len(monthly_rows) + 1
-            totals_row = last_data_row + 1
-            sheet.cell(row=totals_row, column=1, value="Totals").font = Font(bold=True)
-            sheet.cell(row=totals_row, column=3, value=f"=SUM(C2:C{last_data_row})").font = Font(bold=True)
-            sheet.cell(row=totals_row, column=4, value=f"=SUM(D2:D{last_data_row})").font = Font(bold=True)
-            sheet.cell(row=totals_row, column=5, value=f"=IF(C{totals_row}=0,0,D{totals_row}/C{totals_row})").font = Font(bold=True)
-            sheet.cell(row=totals_row, column=6, value=f"=SUM(F2:F{last_data_row})").font = Font(bold=True)
-            sheet.cell(row=totals_row, column=4).number_format = "[h]:mm"
-            sheet.cell(row=totals_row, column=5).number_format = "[h]:mm"
-            sheet.cell(row=totals_row, column=6).number_format = "[h]:mm"
-
-        sheet.freeze_panes = "A2"
-        column_widths = [16, 24, 14, 18, 16, 14]
-        for idx, width in enumerate(column_widths, start=1):
-            sheet.column_dimensions[openpyxl.utils.get_column_letter(idx)].width = width
+        workbook = _build_monthly_attendance_workbook(
+            month, year, _monthly_attendance_matrix_payload(month, year)
+        )
 
         buffer = BytesIO()
         workbook.save(buffer)
@@ -2303,4 +2378,3 @@ def admin_api_logs(current_user):
     )
 
     return jsonify({"success": True, "data": data}), 200
-

@@ -185,12 +185,22 @@ export function useReportsPanel({
         throw new Error('Choose a valid start and end date.')
       }
       setAttendanceReportStatus(`Preparing ${reportType} report...`)
-      const params = new URLSearchParams({
-        start_date: startDate,
-        end_date: endDate,
-        format: attendanceReportFormat,
-      })
-      const makeRequest = (token: string) => fetch(`/api/admin/reports/${reportType}?${params}`, {
+      const isMonthlyAttendance = reportType === 'attendance' && reportDateMode === 'month'
+      const params = isMonthlyAttendance
+        ? new URLSearchParams({
+            month: attendanceReportMonth,
+            year: attendanceReportYear,
+            format: attendanceReportFormat,
+          })
+        : new URLSearchParams({
+            start_date: startDate,
+            end_date: endDate,
+            format: attendanceReportFormat,
+          })
+      const endpoint = isMonthlyAttendance
+        ? '/api/admin/attendance/report/monthly'
+        : `/api/admin/reports/${reportType}`
+      const makeRequest = (token: string) => fetch(`${endpoint}?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       let response = await makeRequest(accessToken)
@@ -200,7 +210,10 @@ export function useReportsPanel({
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = resolveDownloadFilename(response, `${reportType}_report_${startDate}_${endDate}.${attendanceReportFormat}`)
+      const fallbackFilename = isMonthlyAttendance
+        ? `monthly_attendance_report_${attendanceReportYear}_${attendanceReportMonth.padStart(2, '0')}.${attendanceReportFormat}`
+        : `${reportType}_report_${startDate}_${endDate}.${attendanceReportFormat}`
+      link.download = resolveDownloadFilename(response, fallbackFilename)
       document.body.appendChild(link)
       link.click()
       link.remove()

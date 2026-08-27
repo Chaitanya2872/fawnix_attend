@@ -24,6 +24,7 @@ import calendar
 from services.admin_service import (
     _get_employee_joined_date_select_expression,
     _get_employees_columns,
+    _get_organization_holiday_columns,
     _is_fourth_saturday,
     _is_second_saturday,
     _is_sunday,
@@ -165,11 +166,13 @@ def _fetch_leave_days(cursor, start_date: date, end_date: date):
 
 def _fetch_holidays(cursor, start_date: date, end_date: date):
     """Active configured organization holidays, keyed by date."""
+    available_columns = _get_organization_holiday_columns(cursor)
+    status_select = "status" if 'status' in available_columns else "'Active'::TEXT AS status"
     cursor.execute("""
-        SELECT holiday_date, holiday_name, status
+        SELECT holiday_date, holiday_name, {status_select}
         FROM organization_holidays
         WHERE holiday_date BETWEEN %s AND %s
-    """, (start_date, end_date))
+    """.format(status_select=status_select), (start_date, end_date))
 
     holidays = {}
     for row in cursor.fetchall():
@@ -294,6 +297,7 @@ def get_attendance_heatmap(month: int, year: int):
                 "emp_full_name": employee.get('emp_full_name') or emp_code,
                 "emp_designation": employee.get('emp_designation') or '',
                 "emp_department": employee.get('emp_department') or '',
+                "emp_joined_date": joined_date.isoformat() if joined_date else None,
                 "days": days,
             })
 

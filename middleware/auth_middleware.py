@@ -3,7 +3,7 @@ Authentication Middleware
 JWT token validation
 """
 
-from flask import request, jsonify
+from flask import g, request, jsonify
 from functools import wraps
 from services.auth_service import decode_jwt_token
 from database.connection import get_db_connection
@@ -97,6 +97,11 @@ def _finalize_current_user(user, payload, token, source):
 
     user["_access_token"] = token
     user["_access_token_source"] = source
+    # Publish the authenticated actor for the request: database/connection.py
+    # stamps it onto every connection it hands out, which is what the audit
+    # trigger records as changed_by ("who updated what").
+    g.current_emp_code = str(user.get('emp_code') or '').strip()
+    g.current_emp_name = str(user.get('emp_full_name') or '').strip()
     return user, None
 
 

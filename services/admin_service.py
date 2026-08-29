@@ -3,6 +3,7 @@ Admin Service
 Business logic for admin-only operations
 """
 
+from config import Config
 from database.connection import get_db_connection
 from datetime import date, datetime, time, timedelta
 from typing import Dict, List, Optional
@@ -277,7 +278,28 @@ def _audit_changed_field_summary(row):
     return f"{label} changed"
 
 
+def _audit_system_actor_names():
+    """Names that mean "nobody in particular" - the DB role, not a person."""
+    return {"", "system", "postgres", str(Config.DATABASE_USER or "").strip().lower()}
+
+
+def _audit_stamped_actor(row):
+    """
+    The actor the audit trigger recorded, when it names a person.
+
+    Requests stamp the authenticated emp_code onto the connection, but
+    background jobs and pre-stamping history fall back to the database role,
+    which tells us nothing about who acted.
+    """
+    value = str(row.get("changed_by") or "").strip()
+    return "" if value.lower() in _audit_system_actor_names() else value
+
+
 def _audit_actor(table_name, row):
+    stamped = _audit_stamped_actor(row)
+    if stamped:
+        return stamped
+
     old_data = _audit_dict(row.get("old_data"))
     new_data = _audit_dict(row.get("new_data"))
     snapshot = new_data or old_data
@@ -285,7 +307,7 @@ def _audit_actor(table_name, row):
         value = snapshot.get(field)
         if value is not None and str(value).strip():
             return str(value).strip()
-    return row.get("changed_by") or "System"
+    return "System"
 
 
 def _audit_activity_action(table_name, row):
@@ -367,7 +389,75 @@ def _build_audit_activity(row):
     return activity
 
 
-def get_database_audit_logs(limit=20):
+def _audit_tables_for_modules(modules):
+    """Map display module names ("Attendance") back onto their audited tables."""
+    wanted = {str(module or "").strip().lower() for module in (modules or []) if str(module or "").strip()}
+    if not wanted:
+        return []
+    return sorted(
+        table_name for table_name, module in AUDIT_TABLE_MODULES.items()
+        if module.lower() in wanted
+    )
+
+
+def _audit_actor_lookup(cursor, activities):
+    """
+    Resolve actor emp_codes / emails to employee names in one query, so the
+    activity feed can say "Asha Rao" instead of "3051".
+    """
+    candidates = {
+        activity["performed_by"] for activity in activities
+        if activity.get("performed_by") and activity["performed_by"] != "System"
+    }
+    if not candidates:
+        return {}
+
+    cursor.execute("""
+        SELECT emp_code, emp_full_name, emp_email
+        FROM employees
+        WHERE emp_code = ANY(%s) OR lower(emp_email) = ANY(%s)
+    """, (list(candidates), [candidate.lower() for candidate in candidates]))
+
+    names = {}
+    for row in (cursor.fetchall() or []):
+        full_name = str(row.get("emp_full_name") or "").strip()
+        if not full_name:
+            continue
+        emp_code = str(row.get("emp_code") or "").strip()
+        emp_email = str(row.get("emp_email") or "").strip()
+        if emp_code:
+            names[emp_code] = full_name
+        if emp_email:
+            names[emp_email.lower()] = full_name
+    return names
+
+
+def get_database_audit_logs(limit=20, modules=None, start_date=None, end_date=None):
+    """
+    Recent create/update/delete activity across admin data - who changed what,
+    newest first.
+
+    Optional filters narrow the feed to particular modules ("Attendance",
+    "Leave", ...) and to a date range, which is what the Reports page uses to
+    line the feed up with the period it is showing.
+    """
+    tables = _audit_tables_for_modules(modules)
+    conditions = ["lower(l.table_name) <> ALL(%s)"]
+    params = [list(AUDIT_LOG_EXCLUDED_TABLES)]
+
+    if tables:
+        conditions.append("lower(l.table_name) = ANY(%s)")
+        params.append(tables)
+    if start_date:
+        conditions.append("l.changed_at >= %s::date")
+        params.append(start_date)
+    if end_date:
+        # Inclusive of the whole end day, whatever the row's time-of-day is.
+        conditions.append("l.changed_at < (%s::date + INTERVAL '1 day')")
+        params.append(end_date)
+
+    params.append(max(1, min(int(limit or 20), 100)))
+
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -387,12 +477,18 @@ def get_database_audit_logs(limit=20):
         cursor.execute("""
             SELECT l.*
             FROM database_audit_logs l
-            WHERE lower(l.table_name) <> ALL(%s)
+            WHERE {conditions}
             ORDER BY changed_at DESC, id DESC
             LIMIT %s
-        """, (list(AUDIT_LOG_EXCLUDED_TABLES), max(1, min(int(limit or 20), 100))))
+        """.format(conditions="\n              AND ".join(conditions)), tuple(params))
         conn.commit()
-        return [_build_audit_activity(row) for row in (cursor.fetchall() or [])]
+        activities = [_build_audit_activity(row) for row in (cursor.fetchall() or [])]
+
+        names = _audit_actor_lookup(cursor, activities)
+        for activity in activities:
+            actor = activity.get("performed_by") or "System"
+            activity["performed_by_name"] = names.get(actor) or names.get(actor.lower()) or actor
+        return activities
     finally:
         cursor.close()
         conn.close()

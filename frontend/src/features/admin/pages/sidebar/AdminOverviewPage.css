@@ -1380,3 +1380,116 @@
     break-inside: avoid;
   }
 }
+
+/* ── Recent audit activity ─────────────────────────────────────────────────
+   Actor-first rows: who made the change leads, then the record they touched
+   and the fields that moved. Filters narrow a long feed to one person or one
+   module without another round trip. */
+
+.ov2-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ov2-audit-filters {
+  flex: none;
+  display: flex;
+  gap: 6px;
+}
+
+.ov2-audit-filter select {
+  max-width: 132px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--a-line, #e5ebe7);
+  border-radius: 8px;
+  background: var(--a-surface-2, #f8fbf9);
+  font: inherit;
+  font-size: 11px;
+  color: var(--a-ink-3, #5a6a63);
+  cursor: pointer;
+}
+
+.ov2-audit-filter select:hover {
+  border-color: var(--a-line-strong, #d4ded8);
+  color: var(--a-ink, #12201c);
+}
+
+.ov2-audit-row {
+  align-items: flex-start;
+}
+
+.ov2-approval-avatar.is-system {
+  background: var(--a-surface-2, #f1f5f2);
+  color: var(--a-ink-4, #88958f);
+  border: 1px solid var(--a-line, #e5ebe7);
+}
+
+.ov2-audit-headline {
+  display: block;
+}
+
+/* The action reads on from the actor's name, so it stays lighter than it. */
+.ov2-audit-action {
+  font-weight: 450;
+  color: var(--a-ink-3, #5a6a63);
+}
+
+.ov2-audit-record {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ov2-audit-module {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--a-line, #e5ebe7);
+  border-radius: 999px;
+  background: var(--a-surface-2, #f8fbf9);
+  font-size: 9.5px;
+  font-weight: 560;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--a-ink-4, #88958f);
+}
+
+.ov2-audit-detail {
+  font-size: 11px;
+  color: var(--a-ink-4, #88958f);
+}
+
+.ov2-audit-when {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ov2-audit-actor-code {
+  font-size: 10px;
+  color: var(--a-ink-4, #88958f);
+  opacity: 0.8;
+}
+
+@media (max-width: 720px) {
+  .ov2-audit-filters {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .ov2-audit-filter select {
+    max-width: 108px;
+  }
+}

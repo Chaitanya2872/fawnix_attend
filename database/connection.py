@@ -65,6 +65,68 @@ def close_connection_pool():
         logger.info("Connection pool closed")
 
 
+AUDIT_ACTOR_SETTING = "app.current_emp_code"
+_AUDIT_ACTOR_FLAG = "_fawnix_audit_actor"
+
+
+def _request_actor_emp_code():
+    """
+    The emp_code of the authenticated user driving this request, if any.
+
+    Set by the auth middleware on flask.g. Background jobs and scripts run
+    without a request context and stamp nothing, so their audit rows keep
+    falling back to the database role.
+    """
+    try:
+        from flask import g, has_request_context
+    except ImportError:
+        return None
+
+    if not has_request_context():
+        return None
+
+    return str(getattr(g, "current_emp_code", "") or "").strip() or None
+
+
+def _stamp_audit_actor(conn):
+    """
+    Publish the actor on the connection so the audit trigger records who made
+    each change, instead of everything being attributed to the database role.
+    """
+    actor = _request_actor_emp_code()
+    if not actor:
+        return
+
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT set_config(%s, %s, false)", (AUDIT_ACTOR_SETTING, actor))
+        setattr(conn, _AUDIT_ACTOR_FLAG, actor)
+    except Exception as exc:
+        # Audit attribution must never take a request down with it.
+        logger.warning("Could not stamp audit actor on connection: %s", exc)
+
+
+def _clear_audit_actor(conn):
+    """
+    Wipe the actor before the connection goes back to the pool - a pooled
+    connection must never carry one request's identity into the next.
+    """
+    if not getattr(conn, _AUDIT_ACTOR_FLAG, None):
+        return
+
+    try:
+        # putconn discards any open transaction anyway, so rolling back here
+        # costs nothing and lets the reset be committed on its own.
+        conn.rollback()
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT set_config(%s, '', false)", (AUDIT_ACTOR_SETTING,))
+        conn.commit()
+    except Exception as exc:
+        logger.warning("Could not clear audit actor from connection: %s", exc)
+    finally:
+        setattr(conn, _AUDIT_ACTOR_FLAG, None)
+
+
 def get_db_connection():
     """Get a database connection from the pool or create one directly."""
     try:
@@ -72,9 +134,10 @@ def get_db_connection():
         if connection_pool:
             conn = connection_pool.getconn()
             if conn:
+                _stamp_audit_actor(conn)
                 return conn
 
-        return psycopg2.connect(
+        conn = psycopg2.connect(
             host=Config.DATABASE_HOST,
             port=Config.DATABASE_PORT,
             database=Config.DATABASE_NAME,
@@ -82,6 +145,8 @@ def get_db_connection():
             password=Config.DATABASE_PASSWORD,
             cursor_factory=RealDictCursor,
         )
+        _stamp_audit_actor(conn)
+        return conn
     except Exception as exc:
         logger.error("Database connection error: %s", exc)
         raise
@@ -90,6 +155,7 @@ def get_db_connection():
 def return_connection(conn):
     """Return a connection to the pool."""
     if connection_pool and conn:
+        _clear_audit_actor(conn)
         connection_pool.putconn(conn)
     elif conn:
         conn.close()

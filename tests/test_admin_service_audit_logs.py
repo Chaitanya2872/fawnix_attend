@@ -163,3 +163,77 @@ def test_database_audit_logs_normalize_manual_attendance_edit_actor():
     assert attendance_row["module"] == "Attendance"
     assert attendance_row["record_label"] == "3051 on 2026-08-04"
     assert attendance_row["performed_by"] == "8888"
+
+
+def test_stamped_actor_wins_over_record_owner(monkeypatch):
+    """A request stamps the authenticated emp_code, and that is who acted."""
+    row = admin_service._build_audit_activity({
+        "table_name": "attendance_day_overrides",
+        "operation": "UPDATE",
+        "record_id": "3051:2026-08-04",
+        "changed_fields": ["status"],
+        "old_data": {"emp_code": "3051", "override_date": "2026-08-04", "status": "A"},
+        "new_data": {"emp_code": "3051", "override_date": "2026-08-04", "status": "P"},
+        "changed_by": "8888",
+        "changed_at": "2026-08-27T13:30:00",
+    })
+
+    assert row["performed_by"] == "8888"
+
+
+def test_database_role_is_not_reported_as_a_person():
+    row = admin_service._build_audit_activity({
+        "table_name": "departments",
+        "operation": "UPDATE",
+        "record_id": "9",
+        "changed_fields": ["department_head"],
+        "old_data": {"department_name": "Support"},
+        "new_data": {"department_name": "Support"},
+        "changed_by": "postgres",
+        "changed_at": "2026-08-27T13:30:00",
+    })
+
+    assert row["performed_by"] == "System"
+
+
+def test_module_and_date_filters_narrow_the_query(monkeypatch):
+    cursor = FakeCursor()
+    cursor.fetchall = lambda: []
+    monkeypatch.setattr(admin_service, "get_db_connection", lambda: FakeConnection(cursor))
+
+    admin_service.get_database_audit_logs(
+        limit=15, modules=["Attendance"], start_date="2026-08-01", end_date="2026-08-31"
+    )
+
+    query, params = cursor.executed[-1]
+    assert "lower(l.table_name) = ANY(%s)" in query
+    assert "l.changed_at >= %s::date" in query
+    assert "l.changed_at < (%s::date + INTERVAL '1 day')" in query
+    assert params[1] == ["attendance", "attendance_day_overrides", "attendance_exceptions"]
+    assert params[2] == "2026-08-01"
+    assert params[3] == "2026-08-31"
+    assert params[4] == 15
+
+
+def test_actor_codes_are_resolved_to_employee_names(monkeypatch):
+    cursor = FakeCursor()
+    audit_rows = [{
+        "id": 3,
+        "table_name": "leaves",
+        "operation": "UPDATE",
+        "record_id": "44",
+        "changed_fields": ["status"],
+        "old_data": {"emp_code": "3051", "leave_type": "casual", "status": "pending"},
+        "new_data": {"emp_code": "3051", "leave_type": "casual", "status": "approved"},
+        "changed_by": "9001",
+        "changed_at": "2026-08-27T10:20:00",
+    }]
+    employee_rows = [{"emp_code": "9001", "emp_full_name": "Priya Nair", "emp_email": "priya@fawnix.com"}]
+    responses = [audit_rows, employee_rows]
+    cursor.fetchall = lambda: responses.pop(0) if responses else []
+    monkeypatch.setattr(admin_service, "get_db_connection", lambda: FakeConnection(cursor))
+
+    row = admin_service.get_database_audit_logs(limit=10)[0]
+
+    assert row["performed_by"] == "9001"
+    assert row["performed_by_name"] == "Priya Nair"

@@ -123,7 +123,34 @@ def get_employees(current_user):
 @token_required
 @hr_or_devtester_required
 def get_database_audit_logs_route(current_user):
-    logs = admin_service.get_database_audit_logs(request.args.get('limit', default=20, type=int))
+    """
+    Recent create/update/delete activity - who changed what, newest first.
+
+    Optional query params:
+    - limit (1-100, defaults to 20)
+    - modules (comma separated display names, e.g. "Attendance,Leave")
+    - start_date / end_date (YYYY-MM-DD, inclusive)
+    """
+    modules = [part.strip() for part in (request.args.get('modules') or '').split(',') if part.strip()]
+
+    for param_name in ('start_date', 'end_date'):
+        value = request.args.get(param_name)
+        if not value:
+            continue
+        try:
+            datetime.strptime(value, "%Y-%m-%d")
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "message": f"Invalid {param_name}. Use YYYY-MM-DD."
+            }), 400
+
+    logs = admin_service.get_database_audit_logs(
+        request.args.get('limit', default=20, type=int),
+        modules=modules,
+        start_date=request.args.get('start_date'),
+        end_date=request.args.get('end_date'),
+    )
     return jsonify({
         "success": True,
         "data": [serialize_row(row) for row in logs],

@@ -9,6 +9,7 @@ from middleware.auth_middleware import token_required
 from middleware.admin_middleware import hr_or_devtester_required, api_log_viewer_required
 from services import admin_service
 from services import attendance_heatmap_service
+from services import attendance_insights_service
 from services import employee_master_service
 from services import field_visit_service
 import csv
@@ -1347,6 +1348,34 @@ def get_all_day_summary(current_user):
 
     response, status_code = admin_service.get_all_day_summary(target_date)
 
+    return jsonify(response), status_code
+
+
+@admin_bp.route('/attendance/insights', methods=['GET'])
+@token_required
+@hr_or_devtester_required
+def get_attendance_insights(current_user):
+    """
+    Attendance efficiency score and daily attendance trend for the Reports page.
+
+    Query params:
+    - end_date (YYYY-MM-DD, defaults to today; never reads into the future)
+    - days (window length, 1-31, defaults to 7)
+    """
+    window_days = request.args.get('days') or attendance_insights_service.DEFAULT_WINDOW_DAYS
+
+    try:
+        window_days = int(window_days)
+    except (TypeError, ValueError):
+        return jsonify({
+            "success": False,
+            "message": "Invalid days. Use a numeric value."
+        }), 400
+
+    response, status_code = attendance_insights_service.get_attendance_insights(
+        end_date=request.args.get('end_date'),
+        window_days=window_days,
+    )
     return jsonify(response), status_code
 
 

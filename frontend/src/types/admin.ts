@@ -815,3 +815,99 @@ export type AttendanceDayUpdateApiResponse = {
   message?: string | null
   cell?: (AttendanceHeatmapApiCell & { emp_code?: string | null }) | null
 }
+
+/* ── Attendance insights ───────────────────────────────────────────────────
+   Summary numbers behind the Reports header cards: one organisation-wide
+   efficiency score with its previous-window comparison, plus the per-day
+   attendance rate the trend chart plots. Both are derived server-side from the
+   same status matrix as the heatmap, so a manual cell correction moves them. */
+
+export type AttendanceTrendDay = {
+  date: string
+  label: string
+  present: number
+  leave: number
+  absent: number
+  expected: number
+  /** Share of expected attendance actually met, or null on a day nobody was due in. */
+  percentage: number | null
+  isWorkingDay: boolean
+}
+
+export type AttendanceEfficiency = {
+  score: number | null
+  rating: string
+  previousScore: number | null
+  /** Percentage-point change against the previous window of the same length. */
+  delta: number | null
+  presentDays: number
+  expectedDays: number
+}
+
+export type AttendanceEmployeeScore = {
+  empCode: string
+  name: string
+  department: string
+  presentDays: number
+  expectedDays: number
+  /** Null when the employee had no expected working days in the window. */
+  score: number | null
+}
+
+export type AttendanceInsights = {
+  startDate: string
+  endDate: string
+  previousStartDate: string
+  previousEndDate: string
+  windowDays: number
+  efficiency: AttendanceEfficiency
+  totals: {
+    employees: number
+    present: number
+    leave: number
+    absent: number
+    holiday: number
+    weekOff: number
+  }
+  trend: AttendanceTrendDay[]
+  /** Weakest attendance first — the list exists to be acted on. */
+  employees: AttendanceEmployeeScore[]
+}
+
+/** Wire shape returned by GET /api/admin/attendance/insights. */
+export type AttendanceInsightsApiResponse = {
+  success?: boolean
+  message?: string | null
+  start_date?: string | null
+  end_date?: string | null
+  previous_start_date?: string | null
+  previous_end_date?: string | null
+  window_days?: number | string | null
+  efficiency?: {
+    score?: number | string | null
+    rating?: string | null
+    previous_score?: number | string | null
+    delta?: number | string | null
+    present_days?: number | string | null
+    expected_days?: number | string | null
+  } | null
+  totals?: Record<string, number | string | null> | null
+  trend?: Array<{
+    date?: string | null
+    label?: string | null
+    present?: number | string | null
+    leave?: number | string | null
+    absent?: number | string | null
+    expected?: number | string | null
+    percentage?: number | string | null
+    is_working_day?: boolean | null
+  }> | null
+  employees?: Array<{
+    emp_code?: string | null
+    emp_full_name?: string | null
+    emp_department?: string | null
+    present_days?: number | string | null
+    expected_days?: number | string | null
+    score?: number | string | null
+  }> | null
+}

@@ -8,10 +8,28 @@ import type {
   AttendanceHeatmapCell,
   AttendanceHeatmapEmployee,
   AttendanceHeatmapMatrix,
+  AttendanceInsights,
+  AttendanceInsightsApiResponse,
   AttendanceStatusCode
 } from '../../../types/admin'
 
 type WeeklyTrendPoint = { dateKey: string; count: number; label: string }
+
+/**
+ * One plotted day on the trend chart. `ratio` is what the line is drawn from
+ * (0-1); `valueLabel` is what the axis label shows, which is a percentage when
+ * the backend insights are available and a headcount when we fall back to the
+ * locally derived trend.
+ */
+export type AttendanceTrendSeriesPoint = {
+  key: string
+  label: string
+  ratio: number
+  valueLabel: string
+  caption: string
+  /** Holiday / week off — plotted, but greyed out because nobody was due in. */
+  isMuted: boolean
+}
 
 const ATTENDANCE_STATUS_CODES: AttendanceStatusCode[] = ['P', 'S', 'WFH', 'A', 'L', 'H', 'O']
 
@@ -105,6 +123,68 @@ async function readErrorMessage(response: Response, fallback: string) {
   }
 }
 
+function toNumber(value: number | string | null | undefined, fallback = 0) {
+  const numericValue = Number(value)
+  return Number.isFinite(numericValue) ? numericValue : fallback
+}
+
+function toNullableNumber(value: number | string | null | undefined) {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+  const numericValue = Number(value)
+  return Number.isFinite(numericValue) ? numericValue : null
+}
+
+/** Folds the insights payload into the camelCase model the summary cards read. */
+function normaliseInsightsResponse(payload: AttendanceInsightsApiResponse): AttendanceInsights {
+  const efficiency = payload.efficiency || {}
+  const totals = payload.totals || {}
+  return {
+    startDate: payload.start_date || '',
+    endDate: payload.end_date || '',
+    previousStartDate: payload.previous_start_date || '',
+    previousEndDate: payload.previous_end_date || '',
+    windowDays: toNumber(payload.window_days, 7),
+    efficiency: {
+      score: toNullableNumber(efficiency.score),
+      rating: efficiency.rating || 'No data',
+      previousScore: toNullableNumber(efficiency.previous_score),
+      delta: toNullableNumber(efficiency.delta),
+      presentDays: toNumber(efficiency.present_days),
+      expectedDays: toNumber(efficiency.expected_days)
+    },
+    totals: {
+      employees: toNumber(totals.employees),
+      present: toNumber(totals.present),
+      leave: toNumber(totals.leave),
+      absent: toNumber(totals.absent),
+      holiday: toNumber(totals.holiday),
+      weekOff: toNumber(totals.week_off)
+    },
+    trend: (payload.trend || []).map((day) => ({
+      date: (day?.date || '').slice(0, 10),
+      label: day?.label || '',
+      present: toNumber(day?.present),
+      leave: toNumber(day?.leave),
+      absent: toNumber(day?.absent),
+      expected: toNumber(day?.expected),
+      percentage: toNullableNumber(day?.percentage),
+      isWorkingDay: Boolean(day?.is_working_day)
+    })),
+    employees: (payload.employees || [])
+      .filter((row) => Boolean(row?.emp_code))
+      .map((row) => ({
+        empCode: String(row.emp_code),
+        name: row.emp_full_name || String(row.emp_code),
+        department: row.emp_department || '',
+        presentDays: toNumber(row.present_days),
+        expectedDays: toNumber(row.expected_days),
+        score: toNullableNumber(row.score)
+      }))
+  }
+}
+
 /** Returns a copy of the matrix with one cell replaced (or removed when cell is null). */
 function replaceHeatmapCell(
   matrix: AttendanceHeatmapMatrix | null,
@@ -161,6 +241,9 @@ export function useReportsPanel({
   const [attendanceHeatmapLoading, setAttendanceHeatmapLoading] = useState(false)
   const [attendanceHeatmapStatus, setAttendanceHeatmapStatus] = useState('')
   const [attendanceHeatmapSavingCell, setAttendanceHeatmapSavingCell] = useState<string | null>(null)
+  const [attendanceInsights, setAttendanceInsights] = useState<AttendanceInsights | null>(null)
+  const [attendanceInsightsLoading, setAttendanceInsightsLoading] = useState(false)
+  const [attendanceInsightsStatus, setAttendanceInsightsStatus] = useState('')
 
   // fetchAttendanceHeatmapData is consumed from an effect, so it has to stay
   // referentially stable — the auth handles live in refs instead of deps.
@@ -170,6 +253,7 @@ export function useReportsPanel({
   authRef.current = { accessToken, refreshAccessToken }
   /** Guards against an older month's response landing after a newer one. */
   const heatmapRequestRef = useRef(0)
+  const insightsRequestRef = useRef(0)
 
   const downloadRangeReport = async (reportType: 'attendance' | 'exceptions' | 'leaves') => {
     try {
@@ -375,6 +459,58 @@ export function useReportsPanel({
   }, [])
 
   /**
+   * Loads the organisation-wide efficiency score and daily attendance rate.
+   * Same auth/401-retry shape as the heatmap fetch above, and equally stable so
+   * it can be called straight from an effect.
+   */
+  const fetchAttendanceInsights = useCallback(async (endDate?: string, windowDays = 7) => {
+    const requestId = insightsRequestRef.current + 1
+    insightsRequestRef.current = requestId
+    setAttendanceInsightsLoading(true)
+
+    try {
+      const params = new URLSearchParams({ days: String(windowDays) })
+      if (endDate) {
+        params.set('end_date', endDate)
+      }
+      const makeRequest = async (token: string) =>
+        fetch(`/api/admin/attendance/insights?${params.toString()}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        })
+
+      let response = await makeRequest(authRef.current.accessToken)
+      if (response.status === 401) {
+        const nextAccessToken = await authRef.current.refreshAccessToken()
+        response = await makeRequest(nextAccessToken)
+      }
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'Failed to load attendance insights'))
+      }
+
+      const payload = await readJsonBody<AttendanceInsightsApiResponse>(response, 'The attendance insights endpoint')
+      if (insightsRequestRef.current !== requestId) {
+        return
+      }
+      setAttendanceInsights(normaliseInsightsResponse(payload))
+      setAttendanceInsightsStatus('')
+    } catch (error) {
+      if (insightsRequestRef.current !== requestId) {
+        return
+      }
+      setAttendanceInsights(null)
+      setAttendanceInsightsStatus(error instanceof Error ? error.message : 'Failed to load attendance insights')
+    } finally {
+      if (insightsRequestRef.current === requestId) {
+        setAttendanceInsightsLoading(false)
+      }
+    }
+  }, [])
+
+  /**
    * Applies a manual status correction to a single day. The cell is repainted
    * immediately and rolled back to its previous value if the PATCH fails.
    */
@@ -441,9 +577,33 @@ export function useReportsPanel({
   }
 
   const maxWeeklyAttendance = Math.max(...weeklyAttendanceTrend.map((item) => item.count), 1)
-  const weeklyTrendPoints = weeklyAttendanceTrend.map((item, index) => {
-    const x = weeklyAttendanceTrend.length > 1 ? (index / (weeklyAttendanceTrend.length - 1)) * 100 : 50
-    const y = 100 - (item.count / maxWeeklyAttendance) * 100
+
+  // The chart prefers the server-derived attendance rate, which accounts for
+  // leave, holidays and week offs. Without it we still plot the locally derived
+  // login counts, scaled against the busiest day in the window.
+  const attendanceTrendSeries: AttendanceTrendSeriesPoint[] = attendanceInsights?.trend.length
+    ? attendanceInsights.trend.map((day) => ({
+        key: day.date,
+        label: day.label,
+        ratio: (day.percentage ?? 0) / 100,
+        valueLabel: day.percentage === null ? '—' : `${Math.round(day.percentage)}%`,
+        caption: day.isWorkingDay ? `${day.present}/${day.expected}` : 'Off',
+        isMuted: !day.isWorkingDay
+      }))
+    : weeklyAttendanceTrend.map((item) => ({
+        key: item.dateKey,
+        label: item.label,
+        ratio: item.count / maxWeeklyAttendance,
+        valueLabel: String(item.count),
+        caption: 'clocked in',
+        isMuted: false
+      }))
+
+  const isAttendanceTrendPercentage = Boolean(attendanceInsights?.trend.length)
+
+  const weeklyTrendPoints = attendanceTrendSeries.map((item, index) => {
+    const x = attendanceTrendSeries.length > 1 ? (index / (attendanceTrendSeries.length - 1)) * 100 : 50
+    const y = 100 - Math.min(Math.max(item.ratio, 0), 1) * 100
     return `${x},${y}`
   }).join(' ')
 
@@ -470,6 +630,12 @@ export function useReportsPanel({
     attendanceHeatmapSavingCell,
     fetchAttendanceHeatmapData,
     updateAttendanceCell,
+    attendanceInsights,
+    attendanceInsightsLoading,
+    attendanceInsightsStatus,
+    fetchAttendanceInsights,
+    attendanceTrendSeries,
+    isAttendanceTrendPercentage,
     maxWeeklyAttendance,
     weeklyTrendPoints
   }

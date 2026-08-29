@@ -1015,6 +1015,12 @@ function FawnixApp() {
     attendanceHeatmapSavingCell,
     fetchAttendanceHeatmapData,
     updateAttendanceCell,
+    attendanceInsights,
+    attendanceInsightsLoading,
+    attendanceInsightsStatus,
+    fetchAttendanceInsights,
+    attendanceTrendSeries,
+    isAttendanceTrendPercentage,
     maxWeeklyAttendance,
     weeklyTrendPoints,
   } = useReportsPanel({
@@ -1268,6 +1274,12 @@ function FawnixApp() {
           attendanceHeatmapSavingCell={attendanceHeatmapSavingCell}
           fetchAttendanceHeatmapData={fetchAttendanceHeatmapData}
           updateAttendanceCell={updateAttendanceCell}
+          attendanceInsights={attendanceInsights}
+          attendanceInsightsLoading={attendanceInsightsLoading}
+          attendanceInsightsStatus={attendanceInsightsStatus}
+          fetchAttendanceInsights={fetchAttendanceInsights}
+          attendanceTrendSeries={attendanceTrendSeries}
+          isAttendanceTrendPercentage={isAttendanceTrendPercentage}
           canWriteAdminData={canWriteAdminData}
         />
       );

@@ -1,18 +1,29 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import AttendanceHeatmap from './AttendanceHeatmap'
-import type { AttendanceHeatmapMatrix, AttendanceStatusCode } from '../../../types/admin'
+import AttendanceEfficiencyCard from './AttendanceEfficiencyCard'
+import ReportDownloadMenu from './ReportDownloadMenu'
+import WeeklyTrendChart from './WeeklyTrendChart'
+import type { AttendanceTrendSeriesPoint } from './useReportsPanel'
+import type { AttendanceHeatmapMatrix, AttendanceInsights, AttendanceStatusCode } from '../../../types/admin'
+import './AdminReportsPage.css'
 
 type Props = any
 
-/** Strictly typed slice of the (still loosely typed) page props used by the heatmap. */
-type ReportsHeatmapProps = {
+/** Strictly typed slice of the (still loosely typed) page props used by the analytics cards. */
+type ReportsAnalyticsProps = {
   attendanceHeatmapData: AttendanceHeatmapMatrix | null
   attendanceHeatmapLoading: boolean
   attendanceHeatmapStatus: string
   attendanceHeatmapSavingCell: string | null
   fetchAttendanceHeatmapData: (month: number, year: number) => Promise<void>
   updateAttendanceCell: (employeeId: string, date: string, status: AttendanceStatusCode) => Promise<boolean>
+  attendanceInsights: AttendanceInsights | null
+  attendanceInsightsLoading: boolean
+  attendanceInsightsStatus: string
+  fetchAttendanceInsights: (endDate?: string, windowDays?: number) => Promise<void>
+  attendanceTrendSeries: AttendanceTrendSeriesPoint[]
+  isAttendanceTrendPercentage: boolean
   canWriteAdminData: boolean
 }
 
@@ -20,6 +31,25 @@ const MONTH_LABELS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
 ]
+
+const TREND_WINDOW_DAYS = 7
+
+/**
+ * The window the summary cards describe. For the current month that is simply
+ * "the last seven days"; for a past month it ends on the last day of the month
+ * the user selected, so changing the period actually moves the numbers.
+ */
+function resolveInsightsEndDate(month: number, year: number) {
+  const today = new Date()
+  if (!Number.isFinite(month) || !Number.isFinite(year)) {
+    return undefined
+  }
+  if (month === today.getMonth() + 1 && year === today.getFullYear()) {
+    return undefined
+  }
+  const lastDay = new Date(year, month, 0).getDate()
+  return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+}
 
 export default function AdminReportsPage(props: Props) {
   const {
@@ -39,9 +69,7 @@ export default function AdminReportsPage(props: Props) {
     maxWeeklyAttendance,
     setAttendanceReportFormat,
     setAttendanceReportMonth,
-    setAttendanceReportYear,
-    weeklyAttendanceTrend,
-    weeklyTrendPoints
+    setAttendanceReportYear
   } = props
 
   const {
@@ -51,165 +79,152 @@ export default function AdminReportsPage(props: Props) {
     attendanceHeatmapSavingCell,
     fetchAttendanceHeatmapData,
     updateAttendanceCell,
+    attendanceInsights,
+    attendanceInsightsLoading,
+    attendanceInsightsStatus,
+    fetchAttendanceInsights,
+    attendanceTrendSeries,
+    isAttendanceTrendPercentage,
     canWriteAdminData
-  }: ReportsHeatmapProps = props
+  }: ReportsAnalyticsProps = props
 
-  const [primaryView, setPrimaryView] = useState<'heatmap' | 'trend'>('heatmap')
   const heatmapMonth = Number(attendanceReportMonth)
   const heatmapYear = Number(attendanceReportYear)
+  const insightsEndDate = resolveInsightsEndDate(heatmapMonth, heatmapYear)
 
   useEffect(() => {
     void fetchAttendanceHeatmapData(heatmapMonth, heatmapYear)
   }, [fetchAttendanceHeatmapData, heatmapMonth, heatmapYear])
 
+  useEffect(() => {
+    void fetchAttendanceInsights(insightsEndDate, TREND_WINDOW_DAYS)
+  }, [fetchAttendanceInsights, insightsEndDate])
+
   const heatmapMonthLabel = `${MONTH_LABELS[heatmapMonth - 1] || ''} ${heatmapYear}`.trim()
+
+  // Prefer the server scores — they exclude holidays, week offs and days before
+  // an employee joined, which the locally derived ones count against everyone.
+  const employeeScores: Array<{ key: string; name: string; detail: string; score: number | null }> =
+    attendanceInsights?.employees.length
+      ? attendanceInsights.employees.map((item) => ({
+          key: item.empCode,
+          name: item.name,
+          detail: `${item.presentDays} / ${item.expectedDays} expected days present`,
+          score: item.score
+        }))
+      : (attendanceEfficiencyScores as any[]).map((item) => ({
+          key: item.empCode || item.name,
+          name: item.name,
+          detail: `${item.presentDays} / ${TREND_WINDOW_DAYS} days present`,
+          score: item.score
+        }))
+
+  const refreshAll = () => {
+    void loadDashboard()
+    void fetchAttendanceInsights(insightsEndDate, TREND_WINDOW_DAYS)
+    void fetchAttendanceHeatmapData(heatmapMonth, heatmapYear)
+  }
 
   return (
     <div className="admin-aligned-page admin-aligned-page--reports">
-      <div className="dashboard-section-head">
+      <div className="dashboard-section-head rp-head">
         <div>
           <p className="eyebrow">Insights</p>
-          <h2>Reports & Analytics</h2>
+          <h2>Reports &amp; Analytics</h2>
+          <p className="rp-head-sub">Attendance insights, trends, efficiency and employee reports</p>
         </div>
-        <button className="ghost dashboard-button" onClick={() => void loadDashboard()} type="button">Refresh</button>
+        <div className="rp-head-actions">
+          <button className="ghost dashboard-button" onClick={refreshAll} type="button">Refresh</button>
+          <ReportDownloadMenu
+            reportDateMode={reportDateMode}
+            setReportDateMode={setReportDateMode}
+            attendanceReportMonth={attendanceReportMonth}
+            setAttendanceReportMonth={setAttendanceReportMonth}
+            attendanceReportYear={attendanceReportYear}
+            setAttendanceReportYear={setAttendanceReportYear}
+            reportStartDate={reportStartDate}
+            setReportStartDate={setReportStartDate}
+            reportEndDate={reportEndDate}
+            setReportEndDate={setReportEndDate}
+            attendanceReportFormat={attendanceReportFormat}
+            setAttendanceReportFormat={setAttendanceReportFormat}
+            onDownload={(reportType) => void downloadRangeReport(reportType)}
+            statusMessage={attendanceReportStatus}
+          />
+        </div>
       </div>
+
       <div className="reports-main">
-        <div className="report-toolbar attendance-controls-row">
-          <div className="attendance-filter attendance-filter-compact">
-            <label htmlFor="report-date-mode">Date Filter</label>
-            <select id="report-date-mode" value={reportDateMode} onChange={(event) => setReportDateMode(event.target.value)}>
-              <option value="month">Monthly</option>
-              <option value="custom">Custom dates</option>
-            </select>
-          </div>
-          {reportDateMode === 'month' ? (
-            <>
-              <div className="attendance-filter attendance-filter-compact">
-                <label htmlFor="attendance-month">Month</label>
-                <select id="attendance-month" value={attendanceReportMonth} onChange={(event) => setAttendanceReportMonth(event.target.value)}>
-                  {['01','02','03','04','05','06','07','08','09','10','11','12'].map((month, index) => <option key={month} value={index + 1}>{month}</option>)}
-                </select>
+        <div className="rp-summary-grid">
+          <AttendanceEfficiencyCard
+            insights={attendanceInsights}
+            loading={attendanceInsightsLoading}
+            statusMessage={attendanceInsightsStatus}
+          />
+
+          <div className="chart-card rp-trend-card">
+            <div className="chart-card-head">
+              <div>
+                <strong>Weekly Attendance Trend</strong>
+                <span>
+                  {isAttendanceTrendPercentage
+                    ? 'Share of expected attendance met each day.'
+                    : 'Unique employee clock-ins across the last 7 days.'}
+                </span>
               </div>
-              <div className="attendance-filter attendance-filter-compact">
-                <label htmlFor="attendance-year">Year</label>
-                <select id="attendance-year" value={attendanceReportYear} onChange={(event) => setAttendanceReportYear(event.target.value)}>
-                  {Array.from({ length: 8 }, (_, index) => {
-                    const year = new Date().getFullYear() - index
-                    return <option key={year} value={year}>{year}</option>
-                  })}
-                </select>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="attendance-filter attendance-filter-date">
-                <label htmlFor="report-start-date">Start Date</label>
-                <input className="modern-date-input" id="report-start-date" type="date" value={reportStartDate} onChange={(event) => setReportStartDate(event.target.value)} />
-              </div>
-              <div className="attendance-filter attendance-filter-date">
-                <label htmlFor="report-end-date">End Date</label>
-                <input className="modern-date-input" id="report-end-date" type="date" value={reportEndDate} min={reportStartDate} onChange={(event) => setReportEndDate(event.target.value)} />
-              </div>
-            </>
-          )}
-          <div className="attendance-filter attendance-filter-compact">
-            <label htmlFor="attendance-format">Format</label>
-            <select id="attendance-format" value={attendanceReportFormat} onChange={(event) => setAttendanceReportFormat(event.target.value)}>
-              <option value="csv">CSV</option>
-              <option value="pdf">PDF</option>
-              <option value="xlsx">XLSX</option>
-            </select>
+            </div>
+            <WeeklyTrendChart
+              series={attendanceTrendSeries}
+              isPercentage={isAttendanceTrendPercentage}
+              maxValue={maxWeeklyAttendance}
+              loading={attendanceInsightsLoading}
+            />
           </div>
         </div>
-        <div className="report-actions-card">
-          <div>
-            <strong>Download Reports</strong>
-            <span>Export attendance, exceptions, or leaves for the selected month or custom date range.</span>
-          </div>
-          <div className="report-actions">
-            <button className="cta dashboard-button" onClick={() => void downloadRangeReport('attendance')} type="button">Attendance Report</button>
-            <button className="ghost dashboard-button" onClick={() => void downloadRangeReport('exceptions')} type="button">Exceptions Report</button>
-            <button className="ghost dashboard-button" onClick={() => void downloadRangeReport('leaves')} type="button">Leaves Report</button>
-          </div>
-          {attendanceReportStatus ? <span className="report-status attendance-report-status">{attendanceReportStatus}</span> : null}
-        </div>
-        <div className="chart-card">
+
+        <div className="chart-card rp-heatmap-card">
           <div className="chart-card-head">
             <div>
-              <strong>{primaryView === 'heatmap' ? 'Attendance Heatmap' : 'Weekly Attendance Trend'}</strong>
+              <strong>Attendance Heatmap</strong>
               <span>
-                {primaryView === 'heatmap'
-                  ? `Daily status per employee for ${heatmapMonthLabel}.${canWriteAdminData ? ' Click a cell to correct it.' : ''}`
-                  : 'Unique employee clock-ins across the last 7 days.'}
+                {`Daily status per employee for ${heatmapMonthLabel}.${canWriteAdminData ? ' Click a cell to correct it.' : ''}`}
               </span>
             </div>
-            <div className="report-actions chart-view-switch">
-              <button
-                className={`${primaryView === 'heatmap' ? 'cta' : 'ghost'} dashboard-button`}
-                onClick={() => setPrimaryView('heatmap')}
-                type="button"
-              >
-                Heatmap
-              </button>
-              <button
-                className={`${primaryView === 'trend' ? 'cta' : 'ghost'} dashboard-button`}
-                onClick={() => setPrimaryView('trend')}
-                type="button"
-              >
-                Weekly Trend
-              </button>
-            </div>
           </div>
-          {primaryView === 'heatmap' ? (
-            <AttendanceHeatmap
-              data={attendanceHeatmapData}
-              loading={attendanceHeatmapLoading}
-              statusMessage={attendanceHeatmapStatus}
-              savingCellKey={attendanceHeatmapSavingCell}
-              canEdit={canWriteAdminData}
-              onCellEdit={(employeeId, date, newStatus) => void updateAttendanceCell(employeeId, date, newStatus)}
-              onRefresh={() => void fetchAttendanceHeatmapData(heatmapMonth, heatmapYear)}
-            />
-          ) : (
-            <div className="line-chart-shell">
-              <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="line-chart">
-                <polyline fill="none" stroke="#1fa7a4" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={weeklyTrendPoints} />
-                {weeklyAttendanceTrend.map((item: any, index: number) => {
-                  const x = weeklyAttendanceTrend.length > 1 ? (index / (weeklyAttendanceTrend.length - 1)) * 100 : 50
-                  const y = 100 - (item.count / maxWeeklyAttendance) * 100
-                  return <circle key={item.dateKey} cx={x} cy={y} r="2.5" fill="#112c32" />
-                })}
-              </svg>
-              <div className="line-chart-labels">
-                {weeklyAttendanceTrend.map((item: any) => (
-                  <div key={item.dateKey} className="chart-label-block">
-                    <strong>{item.count}</strong>
-                    <span>{item.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <AttendanceHeatmap
+            data={attendanceHeatmapData}
+            loading={attendanceHeatmapLoading}
+            statusMessage={attendanceHeatmapStatus}
+            savingCellKey={attendanceHeatmapSavingCell}
+            canEdit={canWriteAdminData}
+            onCellEdit={(employeeId, date, newStatus) => void updateAttendanceCell(employeeId, date, newStatus)}
+            onRefresh={() => void fetchAttendanceHeatmapData(heatmapMonth, heatmapYear)}
+          />
         </div>
+
         <div className="chart-card">
           <div className="chart-card-head">
             <div>
-              <strong>Attendance Efficiency Score</strong>
-              <span>Employee presence score across the same 7-day window.</span>
+              <strong>Employee Efficiency Score</strong>
+              <span>
+                {attendanceInsights?.employees.length
+                  ? 'Share of expected working days each employee covered, lowest first.'
+                  : `Per-employee presence across the same ${TREND_WINDOW_DAYS}-day window.`}
+              </span>
             </div>
           </div>
           <div className="efficiency-list">
-            {attendanceEfficiencyScores.length ? (
-              attendanceEfficiencyScores.map((item: any) => (
-                <div key={item.empCode || item.name} className="efficiency-row">
+            {employeeScores.length ? (
+              employeeScores.map((item) => (
+                <div key={item.key} className="efficiency-row">
                   <div className="efficiency-meta">
                     <strong>{item.name}</strong>
-                    <span>{item.presentDays} / 7 days present</span>
+                    <span>{item.detail}</span>
                   </div>
                   <div className="efficiency-bar-track">
-                    <div className="efficiency-bar-fill" style={{ width: `${item.score}%` }} />
+                    <div className="efficiency-bar-fill" style={{ width: `${item.score ?? 0}%` }} />
                   </div>
-                  <strong className="efficiency-score">{item.score}%</strong>
+                  <strong className="efficiency-score">{item.score === null ? '—' : `${Math.round(item.score)}%`}</strong>
                 </div>
               ))
             ) : (

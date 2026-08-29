@@ -1,0 +1,382 @@
+/* Reports & Analytics page shell: header with a single export menu, an
+   efficiency + trend row, then the full-width heatmap. Colours stay on the
+   admin tokens, falling back to the reports palette (#1fa7a4 brand, #112c32
+   ink, #607076 muted) so the page also reads correctly outside .admin-shell. */
+
+.rp-head {
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.rp-head-sub {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted, #607076);
+}
+
+.rp-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── Download menu ────────────────────────────────────────────────────────── */
+.rp-download {
+  position: relative;
+}
+
+.rp-download-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rp-download-caret {
+  font-size: 10px;
+  line-height: 1;
+  transition: transform var(--dur-fast, 120ms) ease;
+}
+
+.rp-download-caret.is-open {
+  transform: rotate(180deg);
+}
+
+.rp-download-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: var(--z-dropdown, 60);
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  background: var(--surface-2, #fff);
+  border: 1px solid var(--border, rgba(17, 44, 50, 0.12));
+  border-radius: 12px;
+  box-shadow: var(--e-3, 0 18px 40px -22px rgba(16, 40, 33, 0.4));
+}
+
+.rp-download-section {
+  display: grid;
+  gap: 8px;
+}
+
+.rp-download-legend {
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #607076);
+}
+
+.rp-download-segmented {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--surface-1, #f4f7f6);
+  border: 1px solid var(--border, rgba(17, 44, 50, 0.08));
+  border-radius: 9px;
+}
+
+.rp-download-segmented button {
+  flex: 1;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-secondary, #607076);
+  cursor: pointer;
+}
+
+.rp-download-segmented button:hover {
+  color: var(--text-primary, #112c32);
+}
+
+.rp-download-segmented button.is-active {
+  background: var(--surface-2, #fff);
+  color: var(--text-primary, #112c32);
+  font-weight: 600;
+  box-shadow: var(--e-1, 0 1px 2px rgba(16, 40, 33, 0.08));
+}
+
+.rp-download-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.rp-download-fields label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted, #607076);
+}
+
+.rp-download-fields select,
+.rp-download-fields input {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--border, rgba(17, 44, 50, 0.12));
+  border-radius: 8px;
+  background: var(--surface-2, #fff);
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-primary, #112c32);
+}
+
+.rp-download-list {
+  display: grid;
+  gap: 4px;
+}
+
+.rp-download-item {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rp-download-item:hover,
+.rp-download-item:focus-visible {
+  border-color: var(--border, rgba(17, 44, 50, 0.12));
+  background: var(--hover-tint, #f4f7f6);
+}
+
+.rp-download-item strong {
+  font-size: 12.5px;
+  color: var(--text-primary, #112c32);
+}
+
+.rp-download-item span {
+  font-size: 11px;
+  color: var(--text-muted, #607076);
+}
+
+.rp-download-status {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-accent, #1fa7a4);
+}
+
+/* ── Summary row ──────────────────────────────────────────────────────────── */
+.rp-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.85fr) minmax(0, 2fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.rp-efficiency-card,
+.rp-trend-card {
+  min-width: 0;
+  align-content: start;
+}
+
+/* ── Efficiency gauge ─────────────────────────────────────────────────────── */
+.rp-gauge {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 4px 0 8px;
+}
+
+.rp-gauge svg {
+  width: min(180px, 100%);
+  height: auto;
+}
+
+.rp-gauge-track {
+  fill: none;
+  stroke: var(--surface-sunken, #e7eeeb);
+  stroke-width: 12;
+}
+
+.rp-gauge-value {
+  fill: none;
+  stroke: #1fa7a4;
+  stroke-width: 12;
+  stroke-linecap: round;
+  transition: stroke-dasharray var(--dur-slow, 320ms) var(--ease-out, ease);
+}
+
+.rp-efficiency-card.is-excellent .rp-gauge-value { stroke: #2f9e70; }
+.rp-efficiency-card.is-good .rp-gauge-value { stroke: #1fa7a4; }
+.rp-efficiency-card.is-fair .rp-gauge-value { stroke: #e0a53c; }
+.rp-efficiency-card.is-poor .rp-gauge-value { stroke: #d9534f; }
+.rp-efficiency-card.is-idle .rp-gauge-value { stroke: #9aa7ab; }
+
+.rp-gauge-centre {
+  position: absolute;
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  pointer-events: none;
+}
+
+.rp-gauge-centre strong {
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--text-primary, #112c32);
+}
+
+.rp-gauge-centre span {
+  font-size: 11.5px;
+  color: var(--text-muted, #607076);
+}
+
+.rp-efficiency-foot {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  text-align: center;
+}
+
+.rp-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: var(--surface-1, #f4f7f6);
+  color: var(--text-secondary, #607076);
+}
+
+.rp-delta.is-up {
+  background: var(--bg-success, #e7f5ec);
+  color: var(--text-success, #14724a);
+}
+
+.rp-delta.is-down {
+  background: var(--bg-danger, #fbecec);
+  color: var(--text-danger, #9d2f2f);
+}
+
+.rp-efficiency-detail {
+  font-size: 11px;
+  color: var(--text-muted, #607076);
+}
+
+/* ── Trend chart ──────────────────────────────────────────────────────────── */
+.rp-trend {
+  display: grid;
+  gap: 10px;
+  transition: opacity var(--dur-base, 200ms) ease;
+}
+
+.rp-trend.is-refreshing {
+  opacity: 0.55;
+}
+
+.rp-trend-svg {
+  width: 100%;
+  height: auto;
+  max-height: 260px;
+  overflow: visible;
+}
+
+.rp-trend-grid {
+  stroke: var(--border, rgba(17, 44, 50, 0.1));
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+}
+
+.rp-trend-axis,
+.rp-trend-label {
+  font-size: 11px;
+  fill: var(--text-muted, #607076);
+}
+
+.rp-trend-label.is-muted {
+  opacity: 0.55;
+}
+
+.rp-trend-area {
+  fill: rgba(31, 167, 164, 0.12);
+}
+
+.rp-trend-line {
+  fill: none;
+  stroke: #1fa7a4;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rp-trend-dot {
+  fill: #112c32;
+  stroke: var(--surface-2, #fff);
+  stroke-width: 2;
+}
+
+.rp-trend-dot.is-muted {
+  fill: #9aa7ab;
+}
+
+.rp-trend-readout {
+  display: grid;
+  gap: 6px;
+}
+
+.rp-trend-readout-item {
+  display: grid;
+  gap: 2px;
+  text-align: center;
+}
+
+.rp-trend-readout-item strong {
+  font-size: 13px;
+  color: var(--text-primary, #112c32);
+}
+
+.rp-trend-readout-item span {
+  font-size: 10.5px;
+  color: var(--text-muted, #607076);
+}
+
+.rp-trend-readout-item.is-muted strong,
+.rp-trend-readout-item.is-muted span {
+  color: var(--text-muted, #9aa7ab);
+  opacity: 0.75;
+}
+
+.rp-heatmap-card {
+  min-width: 0;
+}
+
+@media (max-width: 1080px) {
+  .rp-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .rp-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rp-head-actions {
+    justify-content: flex-end;
+  }
+
+  .rp-download-menu {
+    width: min(320px, calc(100vw - 32px));
+  }
+
+  .rp-trend-readout-item span {
+    display: none;
+  }
+}

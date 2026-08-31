@@ -267,22 +267,37 @@ def _generate_notes_with_sarvam(audio_file, meeting_title: str | None = None, la
 # ---------------------------------------------------------------------------
 # Startup diagnostic — logs S3 config state so misconfiguration is visible
 # immediately in server output rather than silently failing at request time.
+# Never log the raw key id or secret: only a masked key id, and never the
+# secret's value (a full key id + secret pair leaking into log files is how
+# AWS credentials end up exposed in git history).
 # ---------------------------------------------------------------------------
+def _mask_key_id(key_id: str | None) -> str:
+    if not key_id:
+        return "(empty)"
+    if len(key_id) <= 8:
+        return "***"
+    return f"{key_id[:4]}…{key_id[-4:]}"
+
+
 def _log_s3_config_state() -> None:
     from services.s3_storage_service import get_s3_configuration_error, is_s3_configured  # local import avoids circular at module load
-    bucket   = Config.MEETING_NOTES_S3_BUCKET
-    region   = Config.MEETING_NOTES_S3_REGION
-    key_id   = Config.MEETING_NOTES_AWS_ACCESS_KEY_ID
-    secret   = Config.MEETING_NOTES_AWS_SECRET_ACCESS_KEY
+
+    # Under Flask's debug reloader this module is imported once by the parent
+    # watcher and once by the child that actually serves traffic; only log
+    # from the process that will serve requests so startup output isn't doubled.
+    if Config.DEBUG and os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+
+    config_error = get_s3_configuration_error()
+    if config_error:
+        logger.warning("S3 not configured: %s", config_error)
+        return
 
     logger.info(
-        "S3 config check — bucket=%r region=%r key_id=%r secret_set=%s configured=%s error=%r",
-        bucket or "(empty)",
-        region or "(empty)",
-        key_id or "(empty)",
-        bool(secret),
-        is_s3_configured(),
-        get_s3_configuration_error(),
+        "S3 configured (bucket=%s region=%s key_id=%s)",
+        Config.MEETING_NOTES_S3_BUCKET,
+        Config.MEETING_NOTES_S3_REGION,
+        _mask_key_id(Config.MEETING_NOTES_AWS_ACCESS_KEY_ID),
     )
 
 _log_s3_config_state()
@@ -2090,15 +2105,14 @@ def upload_meeting_note_audio(
     if validation_error:
         return validation_error
 
-    logger.info(
-        "upload_meeting_note_audio — S3 check: bucket=%r region=%r key_id=%r secret_set=%s configured=%s error=%r",
-        Config.MEETING_NOTES_S3_BUCKET or "(empty)",
-        Config.MEETING_NOTES_S3_REGION or "(empty)",
-        Config.MEETING_NOTES_AWS_ACCESS_KEY_ID or "(empty)",
-        bool(Config.MEETING_NOTES_AWS_SECRET_ACCESS_KEY),
-        is_s3_configured(),
-        get_s3_configuration_error(),
-    )
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "upload_meeting_note_audio — S3 check: bucket=%s region=%s key_id=%s configured=%s",
+            Config.MEETING_NOTES_S3_BUCKET or "(empty)",
+            Config.MEETING_NOTES_S3_REGION or "(empty)",
+            _mask_key_id(Config.MEETING_NOTES_AWS_ACCESS_KEY_ID),
+            is_s3_configured(),
+        )
     if not is_s3_configured():
         return _error(get_s3_configuration_error() or "S3 is not configured", 503)
 

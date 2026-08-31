@@ -86,7 +86,7 @@ def register_attendance_reminder_job(scheduler, scheduler_timezone, misfire_grac
         replace_existing=True,
         misfire_grace_time=misfire_grace_time,
     )
-    logger.info(
+    logger.debug(
         "Attendance reminder job scheduled for %02d:%02d (%s)",
         reminder_hour,
         reminder_minute,
@@ -111,7 +111,7 @@ def register_attendance_reminder_job(scheduler, scheduler_timezone, misfire_grac
         replace_existing=True,
         misfire_grace_time=misfire_grace_time,
     )
-    logger.info(
+    logger.debug(
         "Lunch reminder job scheduled for %02d:%02d (%s)",
         lunch_hour,
         lunch_minute,
@@ -125,7 +125,7 @@ def register_attendance_reminder_job(scheduler, scheduler_timezone, misfire_grac
         replace_existing=True,
         misfire_grace_time=misfire_grace_time,
     )
-    logger.info(
+    logger.debug(
         "Scheduled notification processor job scheduled every minute (%s)",
         scheduler_timezone,
     )
@@ -137,7 +137,7 @@ def register_attendance_reminder_job(scheduler, scheduler_timezone, misfire_grac
         replace_existing=True,
         misfire_grace_time=misfire_grace_time,
     )
-    logger.info(
+    logger.debug(
         "Comp-off expiry job scheduled for 00:30 daily (%s)",
         scheduler_timezone,
     )

@@ -21,12 +21,12 @@ LEGACY_BASELINE_MAX_MIGRATION_NUMBER = 15
 
 def _print_db_login_config():
     """Debug print for DB login config values."""
-    print("DB_HOST =", Config.DATABASE_HOST)
-    print("DB_PORT =", Config.DATABASE_PORT)
-    print("DB_NAME =", Config.DATABASE_NAME)
-    print("DB_USER =", Config.DATABASE_USER)
-    print("DB_PASSWORD_LENGTH =", len(Config.DATABASE_PASSWORD or ""))
-
+    logger.debug(
+        "DB config: host=%s port=%s db=%s user=%s pw_len=%d",
+        Config.DATABASE_HOST, Config.DATABASE_PORT,
+        Config.DATABASE_NAME, Config.DATABASE_USER,
+        len(Config.DATABASE_PASSWORD or ""),
+    )
 
 def initialize_connection_pool(min_conn=2, max_conn=10):
     """Initialize PostgreSQL connection pool."""
@@ -66,6 +66,7 @@ def close_connection_pool():
 
 
 AUDIT_ACTOR_SETTING = "app.current_emp_code"
+_audit_actor_by_conn_id: dict[int, str] = {}
 _AUDIT_ACTOR_FLAG = "_fawnix_audit_actor"
 
 
@@ -100,9 +101,13 @@ def _stamp_audit_actor(conn):
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT set_config(%s, %s, false)", (AUDIT_ACTOR_SETTING, actor))
-        setattr(conn, _AUDIT_ACTOR_FLAG, actor)
+        _audit_actor_by_conn_id[id(conn)] = actor          # CHANGED
     except Exception as exc:
         # Audit attribution must never take a request down with it.
+        try:
+            conn.rollback()                                # NEW — don't leave a txn open
+        except Exception:
+            pass
         logger.warning("Could not stamp audit actor on connection: %s", exc)
 
 
@@ -111,12 +116,10 @@ def _clear_audit_actor(conn):
     Wipe the actor before the connection goes back to the pool - a pooled
     connection must never carry one request's identity into the next.
     """
-    if not getattr(conn, _AUDIT_ACTOR_FLAG, None):
+    if id(conn) not in _audit_actor_by_conn_id:            # CHANGED
         return
 
     try:
-        # putconn discards any open transaction anyway, so rolling back here
-        # costs nothing and lets the reset be committed on its own.
         conn.rollback()
         with conn.cursor() as cursor:
             cursor.execute("SELECT set_config(%s, '', false)", (AUDIT_ACTOR_SETTING,))
@@ -124,13 +127,12 @@ def _clear_audit_actor(conn):
     except Exception as exc:
         logger.warning("Could not clear audit actor from connection: %s", exc)
     finally:
-        setattr(conn, _AUDIT_ACTOR_FLAG, None)
-
+        _audit_actor_by_conn_id.pop(id(conn), None)  
 
 def get_db_connection():
     """Get a database connection from the pool or create one directly."""
     try:
-        _print_db_login_config()
+        # _print_db_login_config()
         if connection_pool:
             conn = connection_pool.getconn()
             if conn:
@@ -677,7 +679,7 @@ def init_database():
         )
 
         conn.commit()
-        logger.info("Bootstrap database tables initialized successfully")
+        logger.debug("Bootstrap database tables initialized successfully")
     except Exception as exc:
         conn.rollback()
         logger.error("Error initializing database: %s", exc)

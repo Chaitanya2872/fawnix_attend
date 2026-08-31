@@ -3,59 +3,150 @@ Logging Middleware
 Request/response logging
 """
 
+import io
 import logging
+import os
+import sys
 import time
 from logging.handlers import RotatingFileHandler
-import os
+
 from flask import g, request
+
 from config import Config
 from services.api_log_service import record_api_log
 
 
+# Marker on the root logger so setup_logging is a no-op the second time it
+# runs (Flask's reloader boots app.py twice; without this we stack duplicate
+# handlers and every log line prints two or three times).
+_LOG_SETUP_MARKER = "_fawnix_logging_configured"
+
+
+def _make_formatter():
+    """One formatter shared across every handler.
+
+    Pinning `converter` explicitly is what stops the app logger and werkzeug's
+    logger from disagreeing on the timestamp - the drift you saw between
+    `19:26` and `18:26` lines came from two loggers using two different
+    time sources.
+    """
+    formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+    )
+    formatter.converter = time.localtime
+    return formatter
+
+
+def _ensure_utf8_streams():
+    """Windows consoles default to cp1252 and choke on the emoji banner.
+
+    Must run before the console StreamHandler is constructed, otherwise the
+    handler keeps a reference to the pre-wrap stream and the wrap does nothing.
+    """
+    if sys.platform != 'win32':
+        return
+    for name in ('stdout', 'stderr'):
+        stream = getattr(sys, name, None)
+        if stream is None:
+            continue
+        if (getattr(stream, 'encoding', '') or '').lower() == 'utf-8':
+            continue
+        try:
+            wrapped = io.TextIOWrapper(stream.buffer, encoding='utf-8', line_buffering=True)
+            setattr(sys, name, wrapped)
+        except Exception:
+            pass
+
+
+class _BackendOnlyAccessLogFilter(logging.Filter):
+    """Drop werkzeug's per-request access log line for frontend traffic.
+
+    The dev server logs every request it serves, including SPA routes and
+    static assets (/assets/*.js, *.css, images). Those drown out the backend
+    API calls we actually care about, so only /api/* and /health survive here.
+    """
+
+    _KEEP_PREFIXES = ("/api/", "/health")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if not args or not isinstance(args[0], str):
+            return True  # not a per-request log line (e.g. debugger banner)
+
+        request_line = args[0]  # e.g. 'GET /assets/foo.js HTTP/1.1'
+        parts = request_line.split(" ")
+        if len(parts) < 2:
+            return True
+
+        path = parts[1].split("?", 1)[0]
+        return path.startswith(self._KEEP_PREFIXES)
+
+
 def setup_logging(app):
-    """Setup logging configuration"""
-    
-    # Create logs directory if not exists
+    """Configure logging so every logger writes through the same handlers
+    with the same formatter, and API request/response logs start flowing as
+    soon as the server accepts its first connection.
+
+    Idempotent - safe under Flask's reloader.
+    """
+    if getattr(logging.root, _LOG_SETUP_MARKER, False):
+        return
+
     os.makedirs('logs', exist_ok=True)
-    
-    # File handler with UTF-8 encoding
+
+    # Wrap stdout FIRST, then build the StreamHandler against it. Order matters.
+    _ensure_utf8_streams()
+
+    formatter = _make_formatter()
+    level = getattr(logging, Config.LOG_LEVEL)
+
     file_handler = RotatingFileHandler(
         Config.LOG_FILE,
         maxBytes=Config.LOG_MAX_BYTES,
         backupCount=Config.LOG_BACKUP_COUNT,
-        encoding='utf-8'  # Fix Unicode errors on Windows
+        encoding='utf-8',
     )
     file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    ))
-    
-    # Console handler with UTF-8 encoding
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(getattr(logging, Config.LOG_LEVEL))
-    console_handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s'
-    ))
-    
-    # Set console encoding to UTF-8 if on Windows
-    import sys
-    if sys.platform == 'win32':
-        try:
-            import io
-            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
-        except:
-            pass
-    
-    # Configure app logger
-    app.logger.addHandler(file_handler)
-    app.logger.addHandler(console_handler)
-    app.logger.setLevel(getattr(logging, Config.LOG_LEVEL))
-    
-    # Configure root logger
-    logging.root.setLevel(getattr(logging, Config.LOG_LEVEL))
-    logging.root.addHandler(file_handler)
-    logging.root.addHandler(console_handler)
+    file_handler.setFormatter(formatter)
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(level)
+    console_handler.setFormatter(formatter)
+
+    # Handlers live on the root logger. Every other logger propagates up to
+    # root by default, so adding handlers anywhere else would just duplicate
+    # every message. Clear whatever was there before us.
+    root_logger = logging.getLogger()
+    for handler in list(root_logger.handlers):
+        root_logger.removeHandler(handler)
+    root_logger.setLevel(level)
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+
+    # Flask's app.logger ships with its own default handler. Strip it and let
+    # it propagate to root - otherwise every app.logger.info() lands twice.
+    for handler in list(app.logger.handlers):
+        app.logger.removeHandler(handler)
+    app.logger.setLevel(level)
+    app.logger.propagate = True
+
+    # Werkzeug installs its own handler with its own formatter when Flask
+    # starts. Take it over the same way so ` * Restarting`, ` * Debugger`,
+    # and per-request lines use OUR formatter and OUR timestamp source.
+    werkzeug_logger = logging.getLogger('werkzeug')
+    for handler in list(werkzeug_logger.handlers):
+        werkzeug_logger.removeHandler(handler)
+    werkzeug_logger.setLevel(level)
+    werkzeug_logger.propagate = True
+    if not any(isinstance(f, _BackendOnlyAccessLogFilter) for f in werkzeug_logger.filters):
+        werkzeug_logger.addFilter(_BackendOnlyAccessLogFilter())
+
+    # APScheduler is chatty at INFO. Everything below WARNING is just noise
+    # once you've confirmed jobs are scheduled at startup.
+    logging.getLogger('apscheduler').setLevel(logging.WARNING)
+
+    setattr(logging.root, _LOG_SETUP_MARKER, True)
 
 
 def _extract_emp_code_from_request():

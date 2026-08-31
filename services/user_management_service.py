@@ -504,7 +504,7 @@ def update_employee(emp_code: str, payload: dict, updated_by_emp_code: str = Non
     cursor = conn.cursor()
     
     try:
-        conn.autocommit = False  # Start transaction
+        # conn.autocommit = False  # Start transaction
         
         # Check if employee exists
         cursor.execute("SELECT * FROM employees WHERE emp_code = %s", (target_emp_code,))
@@ -637,6 +637,6 @@ def update_employee(emp_code: str, payload: dict, updated_by_emp_code: str = Non
         logger.error("Update employee error: %s", e)
         return {"success": False, "message": "Internal server error"}, 500
     finally:
-        conn.autocommit = True
+        # conn.autocommit = True
         cursor.close()
         return_connection(conn)

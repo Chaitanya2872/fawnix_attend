@@ -275,9 +275,8 @@ def _acquire_scheduler_process_lock(lock_file_path):
         return True
 
     if fcntl is None:
-        logger.warning(
-            "Process lock unavailable on this platform; skipping cross-process scheduler lock."
-        )
+        # No fcntl (e.g. Windows): single-process enforcement is a no-op here.
+        # Callers must not report this as an acquired lock.
         return True
 
     lock_dir = os.path.dirname(lock_file_path)
@@ -818,98 +817,33 @@ def after_request(response):
     return response
 
 
-# Initialize database on startup
-with app.app_context():
-    logger.info("=" * 80)
-    logger.info("EMPLOYEE MANAGEMENT SYSTEM v2.0.0 - MONOLITHIC APPLICATION")
-    logger.info("=" * 80)
-    logger.info("\n🆕 NEW FEATURES:")
-    logger.info("  ✓ Refresh Token System (7 days)")
-    logger.info("  ✓ Location Reports (Daily/Weekly)")
-    logger.info("  ✓ Distance Monitoring (Smart 1km checks)")
-    logger.info("  ✓ Activity Approvals (Late Arrival/Early Leave)")
-    logger.info("  ✓ Lead Management (with optional field-visit linking)")
-    logger.info("  ✓ Auto Clock-out (03:00 TESTING / 18:30, 23:59 PRODUCTION)")
+# _is_reloader_child: under Flask's debug reloader, the parent watcher process
+# imports this module once and then spawns a child that imports it again.
+# Startup logs (banner, DB init, endpoint list) should only appear in the child
+# that actually serves traffic - otherwise every save doubles the output.
+_is_reloader_child = (not Config.DEBUG) or os.environ.get("WERKZEUG_RUN_MAIN") == "true"
 
-    logger.info("\n🔧 Initializing database...")
+
+# Initialize database on startup - always do the work, but only log the summary
+# in the process that will actually serve requests.
+with app.app_context():
+    if _is_reloader_child:
+        logger.info("Employee Management System v2.0.0 starting up")
+
     try:
         init_database()
-        logger.info("Database bootstrap initialized successfully")
-        logger.info("Running database migrations...")
         run_migrations()
-        logger.info("✓ Database initialized successfully")
+        if _is_reloader_child:
+            logger.info("Database ready (bootstrap + migrations OK)")
     except Exception as e:
-        logger.error(f"✗ Database initialization failed: {e}")
-        logger.error("Please check your database configuration and try again")
+        logger.error("Database initialization failed: %s", e)
         raise
 
-    logger.info("\n📋 Available Endpoints:")
-
-    logger.info("\n  🔐 Authentication:")
-    logger.info("    POST   /api/auth/request-otp")
-    logger.info("    POST   /api/auth/verify-otp")
-    logger.info("    POST   /api/auth/refresh              ✨ NEW")
-    logger.info("    POST   /api/auth/logout")
-    logger.info("    GET    /api/auth/sessions             ✨ NEW")
-    logger.info("    DELETE /api/auth/sessions/{id}        ✨ NEW")
-    logger.info("    GET    /api/auth/me")
-
-    logger.info("\n  👤 Users:")
-    logger.info("    GET    /api/users")
-    logger.info("    GET    /api/users/{emp_code}")
-    logger.info("    POST   /api/users")
-    logger.info("    PUT    /api/users/{emp_code}")
-
-    logger.info("\n  ⏰ Attendance:")
-    logger.info("    POST   /api/attendance/login")
-    logger.info("    POST   /api/attendance/logout")
-    logger.info("    GET    /api/attendance/status")
-    logger.info("    GET    /api/attendance/history")
-
-    logger.info("\n  📍 Activities:")
-    logger.info("    POST   /api/activities/start")
-    logger.info("    POST   /api/activities/end")
-    logger.info("    GET    /api/activities")
-    logger.info("    POST   /api/activities/break/start")
-    logger.info("    POST   /api/activities/break/end")
-
-    logger.info("\n  📊 Location Reports:                  ✨ NEW")
-    logger.info("    GET    /api/reports/daily")
-    logger.info("    GET    /api/reports/weekly")
-
-    logger.info("\n  📏 Distance Monitoring:                ✨ NEW")
-    logger.info("    POST   /api/distance/check")
-    logger.info("    GET    /api/distance/alerts")
-    logger.info("    POST   /api/distance/clear/{id}")
-
-    logger.info("\n  ✅ Activity Approvals:                 ✨ NEW")
-    logger.info("    POST   /api/approvals/late-arrival/request")
-    logger.info("    POST   /api/approvals/early-leave/request")
-    logger.info("    POST   /api/approvals/approve")
-    logger.info("    GET    /api/approvals/my-requests")
-    logger.info("    GET    /api/approvals/team-requests")
-
-    logger.info("\n  📅 Leaves:")
-    logger.info("    GET    /api/leaves")
-    logger.info("    POST   /api/leaves")
-    logger.info("    PUT    /api/leaves/{id}")
-
-    logger.info("\n  🔄 Comp-off:")
-    logger.info("    GET    /api/compoff")
-    logger.info("    POST   /api/compoff")
-
-    logger.info("\n  🎯 Leads:")
-    logger.info("    POST   /api/leads")
-    logger.info("    GET    /api/leads")
-    logger.info("    GET    /api/leads/{id}")
-    logger.info("    PUT    /api/leads/{id}")
-    logger.info("    POST   /api/leads/{id}/link-field-visit")
-
-    logger.info("\n  🛡️  Admin:")
-    logger.info("    POST   /api/admin/assign-role")
-    logger.info("    GET    /api/admin/stats")
-
-    logger.info("\n" + "=" * 80)
+    # Endpoint catalogue lives at /api/docs. Log it here at DEBUG only so it's
+    # available when you crank the log level up, without spamming normal boots.
+    if _is_reloader_child and logger.isEnabledFor(logging.DEBUG):
+        logger.debug("API surface: %d routes registered under /api/*",
+                     sum(1 for r in app.url_map.iter_rules() if r.rule.startswith("/api/")))
 
 
 def start_scheduler(schedule_config=None):
@@ -964,33 +898,27 @@ def start_scheduler(schedule_config=None):
     scheduler.start()
     scheduler_instance = scheduler
     _register_scheduler_shutdown_hook()
-    logger.info("=" * 80)
-    logger.info("🟢 APScheduler started successfully")
+
+    # One line for humans; details available at DEBUG for troubleshooting.
+    job_count = len(scheduler.get_jobs())
     logger.info(
-        "⏰ Auto clockout schedule mode: %s | times: %s (%s)",
+        "Scheduler started (mode=%s, times=%s %s, %d jobs)",
         schedule_config["mode"],
         schedule_config["active_times_text"],
         scheduler_timezone_name,
+        job_count,
     )
-    logger.info(
-        "⏰ Testing schedule: %s (%s)",
-        schedule_config["testing_times"],
-        scheduler_timezone_name,
-    )
-    logger.info(
-        "⏰ Production schedule: %s (%s)",
-        schedule_config["production_times"],
-        scheduler_timezone_name,
-    )
-    logger.info(
-        "⏰ Misfire grace: %ss | coalesce=%s | max_instances=%s",
-        schedule_config["misfire_grace_seconds"],
-        schedule_config["coalesce"],
-        schedule_config["max_instances"],
-    )
-    for job in scheduler.get_jobs():
-        logger.info("📌 Scheduled job %s next run: %s", job.id, job.next_run_time)
-    logger.info("=" * 80)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Scheduler config: testing=%s production=%s misfire_grace=%ss coalesce=%s max_instances=%s",
+            schedule_config["testing_times"],
+            schedule_config["production_times"],
+            schedule_config["misfire_grace_seconds"],
+            schedule_config["coalesce"],
+            schedule_config["max_instances"],
+        )
+        for job in scheduler.get_jobs():
+            logger.debug("  job=%s next_run=%s", job.id, job.next_run_time)
     return scheduler
 
 
@@ -1016,7 +944,12 @@ def maybe_start_scheduler():
                 lock_path,
             )
             return
-        logger.info("🔒 Scheduler process lock acquired: %s", lock_path)
+        if fcntl is not None:
+            logger.debug("Scheduler process lock acquired: %s", lock_path)
+        else:
+            logger.debug(
+                "Single-process lock enforcement unavailable on this platform (no fcntl); continuing without it."
+            )
 
     try:
         start_scheduler(schedule_config)
@@ -1029,25 +962,13 @@ if __name__ == "__main__":
     port = Config.PORT
     debug = Config.DEBUG
 
-    logger.info(f"\n🚀 Starting server on http://0.0.0.0:{port}")
-    logger.info(f"📖 API Documentation: http://localhost:{port}/api/docs")
-    logger.info(f"🆕 New Features: http://localhost:{port}/api/features")
-    logger.info(f"💚 Health Check: http://localhost:{port}/health")
-
-    logger.info("\n🔑 Token System:")
-    logger.info("   • Access Token: 30 minutes")
-    logger.info("   • Refresh Token: 7 days")
-    logger.info("   • Automatic rotation on refresh")
-
-    logger.info("\n✨ New Capabilities:")
-    logger.info("   • Daily/weekly location reports")
-    logger.info("   • Smart distance monitoring (1km checks)")
-    logger.info("   • Manager approval workflows")
-    logger.info("   • Lead management with field-visit linking")
-    logger.info("   • Multi-device session management")
-    logger.info(
-        "   • Auto clock-out at 03:00 (testing) / 18:30 and 23:59 (production)\n"
-    )
+    # Only the child process actually binds the port; skip the "listening on"
+    # line in the reloader parent so it doesn't appear twice.
+    if _is_reloader_child:
+        logger.info(
+            "Server listening on http://0.0.0.0:%s (docs=/api/docs, health=/health)",
+            port,
+        )
 
     maybe_start_scheduler()
 

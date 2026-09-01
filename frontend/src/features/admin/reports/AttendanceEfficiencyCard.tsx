@@ -50,6 +50,14 @@ export default function AttendanceEfficiencyCard({
   const delta = efficiency?.delta ?? null
   const progress = Math.min(Math.max(score ?? 0, 0), 100) / 100
   const tone = toneFor(rating)
+  const markerAngle = progress * Math.PI * 2 - Math.PI / 2
+  const markerX = 70 + RADIUS * Math.cos(markerAngle)
+  const markerY = 70 + RADIUS * Math.sin(markerAngle)
+  const deltaLabel = delta === null
+    ? 'No comparison'
+    : delta === 0
+      ? 'No change'
+      : `${delta > 0 ? '+' : ''}${delta} pts`
 
   return (
     <div className={`chart-card rp-efficiency-card ${tone}`}>
@@ -62,38 +70,41 @@ export default function AttendanceEfficiencyCard({
         </div>
       </div>
 
-      <div className="rp-gauge">
-        <svg viewBox="0 0 140 140" role="img" aria-label={`Attendance efficiency ${score === null ? 'unavailable' : `${score} percent`}`}>
-          <circle className="rp-gauge-track" cx="70" cy="70" r={RADIUS} />
-          <circle
-            className="rp-gauge-value"
-            cx="70"
-            cy="70"
-            r={RADIUS}
-            strokeDasharray={`${CIRCUMFERENCE * progress} ${CIRCUMFERENCE}`}
-            transform="rotate(-90 70 70)"
-          />
-        </svg>
-        <div className="rp-gauge-centre">
-          <strong>{score === null ? (loading ? '…' : '—') : `${Math.round(score)}%`}</strong>
-          <span>{rating}</span>
+      <div className="rp-efficiency-body">
+        <div className="rp-gauge">
+          <svg viewBox="0 0 140 140" role="img" aria-label={`Attendance efficiency ${score === null ? 'unavailable' : `${score} percent`}`}>
+            <circle className="rp-gauge-inner" cx="70" cy="70" r="42" />
+            <circle className="rp-gauge-track" cx="70" cy="70" r={RADIUS} />
+            <circle
+              className="rp-gauge-value"
+              cx="70"
+              cy="70"
+              r={RADIUS}
+              strokeDasharray={`${CIRCUMFERENCE * progress} ${CIRCUMFERENCE}`}
+              transform="rotate(-90 70 70)"
+            />
+            {score !== null ? <circle className="rp-gauge-marker" cx={markerX} cy={markerY} r="4" /> : null}
+          </svg>
+          <div className="rp-gauge-centre">
+            <strong>{score === null ? (loading ? '…' : '—') : `${Math.round(score)}%`}</strong>
+            <span>Efficiency</span>
+          </div>
         </div>
-      </div>
 
-      <div className="rp-efficiency-foot">
-        {delta === null ? (
-          <span className="rp-delta is-flat">No previous window to compare</span>
-        ) : (
-          <span className={`rp-delta ${delta > 0 ? 'is-up' : delta < 0 ? 'is-down' : 'is-flat'}`}>
-            <span aria-hidden="true">{delta > 0 ? '↑' : delta < 0 ? '↓' : '→'}</span>
-            {delta === 0 ? 'No change' : `${Math.abs(delta)} pts`} vs previous {insights?.windowDays ?? 7} days
-          </span>
-        )}
-        {efficiency ? (
-          <span className="rp-efficiency-detail">
-            {efficiency.presentDays} of {efficiency.expectedDays} expected days covered
-          </span>
-        ) : null}
+        <div className="rp-efficiency-metrics">
+          <div className="rp-efficiency-metric">
+            <span>Coverage</span>
+            <strong>{efficiency ? `${efficiency.presentDays} / ${efficiency.expectedDays}` : '—'}</strong>
+            <small>Expected days</small>
+          </div>
+          <div className="rp-efficiency-metric">
+            <span>Change</span>
+            <strong className={delta === null ? 'is-flat' : delta > 0 ? 'is-up' : delta < 0 ? 'is-down' : 'is-flat'}>
+              {deltaLabel}
+            </strong>
+            <small>Previous {insights?.windowDays ?? 7} days</small>
+          </div>
+        </div>
       </div>
 
       {statusMessage ? <span className="report-status">{statusMessage}</span> : null}

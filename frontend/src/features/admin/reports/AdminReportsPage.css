@@ -21,6 +21,19 @@
   flex-shrink: 0;
 }
 
+.admin-aligned-page--reports .reports-main {
+  gap: 12px;
+}
+
+.admin-aligned-page--reports .chart-card {
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.admin-aligned-page--reports .chart-card-head {
+  margin-bottom: 4px;
+}
+
 /* ── Download menu ────────────────────────────────────────────────────────── */
 .rp-download {
   position: relative;
@@ -172,7 +185,7 @@
 .rp-summary-grid {
   display: grid;
   grid-template-columns: minmax(240px, 0.85fr) minmax(0, 2fr);
-  gap: 14px;
+  gap: 12px;
   align-items: stretch;
 }
 
@@ -182,31 +195,57 @@
   align-content: start;
 }
 
+.rp-efficiency-card {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-content: stretch;
+}
+
 /* ── Efficiency gauge ─────────────────────────────────────────────────────── */
+.rp-efficiency-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .rp-gauge {
   position: relative;
   display: grid;
   place-items: center;
-  padding: 4px 0 8px;
+  min-height: 164px;
 }
 
 .rp-gauge svg {
-  width: min(180px, 100%);
+  width: min(164px, 100%);
   height: auto;
+  filter: drop-shadow(0 8px 12px rgba(17, 44, 50, 0.08));
+}
+
+.rp-gauge-inner {
+  fill: var(--surface-1, #f7f9f9);
+  stroke: rgba(17, 44, 50, 0.04);
+  stroke-width: 1;
 }
 
 .rp-gauge-track {
   fill: none;
-  stroke: var(--surface-sunken, #e7eeeb);
-  stroke-width: 12;
+  stroke: var(--surface-sunken, #e3eae8);
+  stroke-width: 11;
 }
 
 .rp-gauge-value {
   fill: none;
   stroke: #1fa7a4;
-  stroke-width: 12;
+  stroke-width: 11;
   stroke-linecap: round;
   transition: stroke-dasharray var(--dur-slow, 320ms) var(--ease-out, ease);
+}
+
+.rp-gauge-marker {
+  fill: #fff;
+  stroke: #1fa7a4;
+  stroke-width: 3;
 }
 
 .rp-efficiency-card.is-excellent .rp-gauge-value { stroke: #2f9e70; }
@@ -214,6 +253,11 @@
 .rp-efficiency-card.is-fair .rp-gauge-value { stroke: #e0a53c; }
 .rp-efficiency-card.is-poor .rp-gauge-value { stroke: #d9534f; }
 .rp-efficiency-card.is-idle .rp-gauge-value { stroke: #9aa7ab; }
+.rp-efficiency-card.is-excellent .rp-gauge-marker { stroke: #2f9e70; }
+.rp-efficiency-card.is-good .rp-gauge-marker { stroke: #1fa7a4; }
+.rp-efficiency-card.is-fair .rp-gauge-marker { stroke: #e0a53c; }
+.rp-efficiency-card.is-poor .rp-gauge-marker { stroke: #d9534f; }
+.rp-efficiency-card.is-idle .rp-gauge-marker { stroke: #9aa7ab; }
 
 .rp-gauge-centre {
   position: absolute;
@@ -224,55 +268,71 @@
 }
 
 .rp-gauge-centre strong {
-  font-size: 30px;
+  font-size: 25px;
   line-height: 1.1;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   color: var(--text-primary, #112c32);
 }
 
 .rp-gauge-centre span {
-  font-size: 11.5px;
-  color: var(--text-muted, #607076);
-}
-
-.rp-efficiency-foot {
-  display: grid;
-  gap: 4px;
-  justify-items: center;
-  text-align: center;
-}
-
-.rp-delta {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 11.5px;
+  font-size: 10px;
   font-weight: 600;
-  background: var(--surface-1, #f4f7f6);
-  color: var(--text-secondary, #607076);
-}
-
-.rp-delta.is-up {
-  background: var(--bg-success, #e7f5ec);
-  color: var(--text-success, #14724a);
-}
-
-.rp-delta.is-down {
-  background: var(--bg-danger, #fbecec);
-  color: var(--text-danger, #9d2f2f);
-}
-
-.rp-efficiency-detail {
-  font-size: 11px;
+  text-transform: uppercase;
   color: var(--text-muted, #607076);
+}
+
+.rp-efficiency-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  min-width: 0;
+  border: 1px solid var(--border, rgba(17, 44, 50, 0.08));
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.rp-efficiency-metric > span {
+  font-size: 10.5px;
+  color: var(--text-muted, #607076);
+}
+
+.rp-efficiency-metric {
+  display: grid;
+  gap: 3px;
+  align-content: center;
+  min-width: 0;
+  min-height: 68px;
+  padding: 9px 8px;
+}
+
+.rp-efficiency-metric + .rp-efficiency-metric {
+  border-left: 1px solid var(--border, rgba(17, 44, 50, 0.08));
+}
+
+.rp-efficiency-metric strong {
+  overflow: hidden;
+  color: var(--text-primary, #112c32);
+  font-size: 13px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rp-efficiency-metric strong.is-up { color: var(--text-success, #14724a); }
+.rp-efficiency-metric strong.is-down { color: var(--text-danger, #9d2f2f); }
+
+.rp-efficiency-metric small {
+  overflow: hidden;
+  color: var(--text-muted, #607076);
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Trend chart ──────────────────────────────────────────────────────────── */
 .rp-trend {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   transition: opacity var(--dur-base, 200ms) ease;
 }
 
@@ -283,14 +343,19 @@
 .rp-trend-svg {
   width: 100%;
   height: auto;
-  max-height: 260px;
+  max-height: 232px;
   overflow: visible;
 }
 
-.rp-trend-grid {
-  stroke: var(--border, rgba(17, 44, 50, 0.1));
+.rp-trend-plot {
+  fill: var(--surface-1, #f7f9f9);
+  stroke: var(--border, rgba(17, 44, 50, 0.08));
   stroke-width: 1;
-  stroke-dasharray: 3 5;
+}
+
+.rp-trend-grid {
+  stroke: rgba(17, 44, 50, 0.08);
+  stroke-width: 1;
 }
 
 .rp-trend-axis,
@@ -304,52 +369,75 @@
 }
 
 .rp-trend-area {
-  fill: rgba(31, 167, 164, 0.12);
+  fill: url(#attendanceTrendArea);
+}
+
+.rp-trend-average {
+  stroke: #e0a53c;
+  stroke-width: 1.5;
+  stroke-dasharray: 5 5;
+}
+
+.rp-trend-average-label {
+  fill: #9b6b18;
+  font-size: 9px;
+  font-weight: 700;
 }
 
 .rp-trend-line {
   fill: none;
   stroke: #1fa7a4;
-  stroke-width: 2.5;
+  stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
+  filter: drop-shadow(0 4px 5px rgba(31, 167, 164, 0.16));
 }
 
 .rp-trend-dot {
-  fill: #112c32;
+  fill: #1fa7a4;
   stroke: var(--surface-2, #fff);
-  stroke-width: 2;
+  stroke-width: 2.5;
 }
 
 .rp-trend-dot.is-muted {
   fill: #9aa7ab;
 }
 
-.rp-trend-readout {
-  display: grid;
-  gap: 6px;
+.rp-trend-dot-halo {
+  fill: rgba(31, 167, 164, 0.14);
 }
 
-.rp-trend-readout-item {
+.rp-trend-summary {
   display: grid;
-  gap: 2px;
-  text-align: center;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border, rgba(17, 44, 50, 0.08));
+  border-radius: 8px;
 }
 
-.rp-trend-readout-item strong {
-  font-size: 13px;
+.rp-trend-summary-item {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.rp-trend-summary-item + .rp-trend-summary-item {
+  border-left: 1px solid var(--border, rgba(17, 44, 50, 0.08));
+}
+
+.rp-trend-summary-item strong {
+  overflow: hidden;
+  font-size: 12.5px;
   color: var(--text-primary, #112c32);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.rp-trend-readout-item span {
-  font-size: 10.5px;
+.rp-trend-summary-item span {
+  font-size: 10px;
+  text-transform: uppercase;
   color: var(--text-muted, #607076);
-}
-
-.rp-trend-readout-item.is-muted strong,
-.rp-trend-readout-item.is-muted span {
-  color: var(--text-muted, #9aa7ab);
-  opacity: 0.75;
 }
 
 .rp-heatmap-card {
@@ -376,7 +464,12 @@
     width: min(320px, calc(100vw - 32px));
   }
 
-  .rp-trend-readout-item span {
-    display: none;
+  .rp-trend-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rp-trend-summary-item + .rp-trend-summary-item {
+    border-top: 1px solid var(--border, rgba(17, 44, 50, 0.08));
+    border-left: 0;
   }
 }

@@ -193,6 +193,7 @@ export default function AdminReportsPage(props: Props) {
           </div>
           <AttendanceHeatmap
             data={attendanceHeatmapData}
+            efficiencyScores={employeeScores}
             loading={attendanceHeatmapLoading}
             statusMessage={attendanceHeatmapStatus}
             savingCellKey={attendanceHeatmapSavingCell}
@@ -202,36 +203,6 @@ export default function AdminReportsPage(props: Props) {
           />
         </div>
 
-        <div className="chart-card">
-          <div className="chart-card-head">
-            <div>
-              <strong>Employee Efficiency Score</strong>
-              <span>
-                {attendanceInsights?.employees.length
-                  ? 'Share of expected working days each employee covered, lowest first.'
-                  : `Per-employee presence across the same ${TREND_WINDOW_DAYS}-day window.`}
-              </span>
-            </div>
-          </div>
-          <div className="efficiency-list">
-            {employeeScores.length ? (
-              employeeScores.map((item) => (
-                <div key={item.key} className="efficiency-row">
-                  <div className="efficiency-meta">
-                    <strong>{item.name}</strong>
-                    <span>{item.detail}</span>
-                  </div>
-                  <div className="efficiency-bar-track">
-                    <div className="efficiency-bar-fill" style={{ width: `${item.score ?? 0}%` }} />
-                  </div>
-                  <strong className="efficiency-score">{item.score === null ? '—' : `${Math.round(item.score)}%`}</strong>
-                </div>
-              ))
-            ) : (
-              <div className="empty-state">No attendance data available for analytics yet.</div>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   )

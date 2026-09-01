@@ -18,6 +18,11 @@ const WEEKDAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
 type AttendanceHeatmapProps = {
   data: AttendanceHeatmapMatrix | null
+  efficiencyScores: Array<{
+    key: string
+    detail: string
+    score: number | null
+  }>
   loading: boolean
   /** Status-message string, mirroring the attendanceReportStatus pattern used elsewhere. */
   statusMessage: string
@@ -52,6 +57,21 @@ function countWorkedDays(employee: AttendanceHeatmapEmployee) {
   return Object.values(employee.days).filter((cell) => WORKED_ATTENDANCE_STATUSES.includes(cell.status)).length
 }
 
+function normaliseEfficiencyScore(score: number | null | undefined) {
+  if (typeof score !== 'number' || !Number.isFinite(score)) {
+    return null
+  }
+  return Math.min(100, Math.max(0, score))
+}
+
+function efficiencyTone(score: number | null) {
+  if (score === null) return 'is-idle'
+  if (score >= 90) return 'is-excellent'
+  if (score >= 75) return 'is-good'
+  if (score >= 60) return 'is-fair'
+  return 'is-poor'
+}
+
 /**
  * GitHub-contributions-style attendance grid: one row per employee, one column
  * per day of the selected month. Colour encodes the status code, hovering a
@@ -60,6 +80,7 @@ function countWorkedDays(employee: AttendanceHeatmapEmployee) {
  */
 export default function AttendanceHeatmap({
   data,
+  efficiencyScores,
   loading,
   statusMessage,
   savingCellKey,
@@ -70,6 +91,11 @@ export default function AttendanceHeatmap({
   const [hovered, setHovered] = useState<CellAnchor | null>(null)
   const [editing, setEditing] = useState<CellAnchor | null>(null)
   const editorRef = useRef<HTMLDivElement>(null)
+
+  const efficiencyByEmployee = useMemo(
+    () => new Map(efficiencyScores.map((item) => [item.key, item])),
+    [efficiencyScores]
+  )
 
   const columns = useMemo(() => {
     if (!data) {
@@ -189,6 +215,13 @@ export default function AttendanceHeatmap({
             <thead>
               <tr>
                 <th scope="col" className="attendance-heatmap-name-head">Employee</th>
+                <th
+                  scope="col"
+                  className="attendance-heatmap-efficiency-head"
+                  title="Share of expected working days attended"
+                >
+                  Efficiency
+                </th>
                 {columns.map((column) => (
                   <th
                     key={column.date}
@@ -204,48 +237,65 @@ export default function AttendanceHeatmap({
               </tr>
             </thead>
             <tbody>
-              {data.employees.map((employee) => (
-                <tr key={employee.empCode}>
-                  <th scope="row" className="attendance-heatmap-name-cell">
-                    <strong>{employee.name || employee.empCode}</strong>
-                    <span>{employee.designation || employee.empCode}</span>
-                  </th>
-                  {columns.map((column) => {
-                    const cell = employee.days[column.date]
-                    const meta = cell ? ATTENDANCE_STATUS_META[cell.status] : null
-                    const isSaving = savingCellKey === toCellKey(employee.empCode, column.date)
-                    const isEditing = editing?.empCode === employee.empCode && editing.date === column.date
-                    const cellClassName = [
-                      'attendance-heatmap-cell',
-                      meta ? meta.className : 'is-empty',
-                      cell?.source === 'manual' ? 'is-manual' : '',
-                      column.isWeekend ? 'is-weekend-col' : '',
-                      isEditing ? 'is-editing' : '',
-                      isSaving ? 'is-saving' : ''
-                    ].filter(Boolean).join(' ')
-                    return (
-                      <td key={column.date} className="attendance-heatmap-cell-wrap">
-                        <button
-                          type="button"
-                          className={cellClassName}
-                          disabled={!canEdit || isSaving}
-                          aria-label={`${employee.name || employee.empCode}, ${formatCellDate(column.date)}, ${meta ? meta.label : 'No data'}`}
-                          onMouseEnter={(event) => setHovered(anchorFor(event.currentTarget, employee.empCode, column.date))}
-                          onMouseLeave={() => setHovered((current) => (
-                            current?.empCode === employee.empCode && current.date === column.date ? null : current
-                          ))}
-                          onFocus={(event) => setHovered(anchorFor(event.currentTarget, employee.empCode, column.date))}
-                          onBlur={() => setHovered(null)}
-                          onClick={(event) => openEditor(event.currentTarget, employee.empCode, column.date)}
-                        >
-                          <span aria-hidden="true">{meta ? meta.glyph : ''}</span>
-                        </button>
-                      </td>
-                    )
-                  })}
-                  <td className="attendance-heatmap-total-cell">{countWorkedDays(employee)}</td>
-                </tr>
-              ))}
+              {data.employees.map((employee) => {
+                const efficiency = efficiencyByEmployee.get(employee.empCode)
+                  ?? efficiencyByEmployee.get(employee.name)
+                const score = normaliseEfficiencyScore(efficiency?.score)
+
+                return (
+                  <tr key={employee.empCode}>
+                    <th scope="row" className="attendance-heatmap-name-cell">
+                      <strong>{employee.name || employee.empCode}</strong>
+                      <span>{employee.designation || employee.empCode}</span>
+                    </th>
+                    <td className="attendance-heatmap-efficiency-cell">
+                      <div
+                        className={`attendance-heatmap-efficiency ${efficiencyTone(score)}`}
+                        title={efficiency?.detail ?? 'Efficiency score unavailable'}
+                      >
+                        <strong>{score === null ? '-' : `${Math.round(score)}%`}</strong>
+                        <span className="attendance-heatmap-efficiency-track" aria-hidden="true">
+                          <span style={{ width: `${score ?? 0}%` }} />
+                        </span>
+                      </div>
+                    </td>
+                    {columns.map((column) => {
+                      const cell = employee.days[column.date]
+                      const meta = cell ? ATTENDANCE_STATUS_META[cell.status] : null
+                      const isSaving = savingCellKey === toCellKey(employee.empCode, column.date)
+                      const isEditing = editing?.empCode === employee.empCode && editing.date === column.date
+                      const cellClassName = [
+                        'attendance-heatmap-cell',
+                        meta ? meta.className : 'is-empty',
+                        cell?.source === 'manual' ? 'is-manual' : '',
+                        column.isWeekend ? 'is-weekend-col' : '',
+                        isEditing ? 'is-editing' : '',
+                        isSaving ? 'is-saving' : ''
+                      ].filter(Boolean).join(' ')
+                      return (
+                        <td key={column.date} className="attendance-heatmap-cell-wrap">
+                          <button
+                            type="button"
+                            className={cellClassName}
+                            disabled={!canEdit || isSaving}
+                            aria-label={`${employee.name || employee.empCode}, ${formatCellDate(column.date)}, ${meta ? meta.label : 'No data'}`}
+                            onMouseEnter={(event) => setHovered(anchorFor(event.currentTarget, employee.empCode, column.date))}
+                            onMouseLeave={() => setHovered((current) => (
+                              current?.empCode === employee.empCode && current.date === column.date ? null : current
+                            ))}
+                            onFocus={(event) => setHovered(anchorFor(event.currentTarget, employee.empCode, column.date))}
+                            onBlur={() => setHovered(null)}
+                            onClick={(event) => openEditor(event.currentTarget, employee.empCode, column.date)}
+                          >
+                            <span aria-hidden="true">{meta ? meta.glyph : ''}</span>
+                          </button>
+                        </td>
+                      )
+                    })}
+                    <td className="attendance-heatmap-total-cell">{countWorkedDays(employee)}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

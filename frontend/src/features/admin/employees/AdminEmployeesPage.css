@@ -142,46 +142,58 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
 }
 
-.adm-dropdown-btn .adm-btn {
-  padding-right: 6px;
+.adm-dropdown-btn .adm-dropdown-trigger {
+  gap: 7px;
+  min-width: 148px;
+  justify-content: center;
+  padding: 0 10px;
 }
 
-.adm-dropdown-btn .adm-btn--chevron {
-  padding: 0 6px;
-  border-left: 1px solid var(--adm-border);
-  border-radius: 0 8px 8px 0;
-}
-
-.adm-dropdown-btn .adm-btn--chevron:hover {
+.adm-dropdown-trigger.is-open {
+  border-color: var(--adm-border-strong);
   background: var(--adm-surface-muted);
+  color: var(--adm-text);
+}
+
+.adm-dropdown-caret {
+  width: 13px;
+  height: 13px;
+  margin-left: 2px;
+  transition: transform 0.16s ease;
+}
+
+.adm-dropdown-trigger.is-open .adm-dropdown-caret {
+  transform: rotate(180deg);
 }
 
 .adm-dropdown-menu {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + 7px);
   right: 0;
-  min-width: 160px;
+  z-index: 120;
+  display: none;
+  width: 258px;
+  max-width: calc(100vw - 28px);
+  padding: 7px;
+  overflow: hidden;
   background: var(--adm-surface);
   border: 1px solid var(--adm-border);
-  border-radius: 10px;
-  box-shadow: 0 12px 32px -8px rgba(0,0,0,0.12);
-  padding: 4px 0;
-  z-index: 100;
-  animation: slideDown 0.2s ease;
-  display: none;
+  border-radius: 9px;
+  box-shadow: 0 18px 42px -18px rgba(17, 24, 39, 0.34), 0 4px 12px rgba(17, 24, 39, 0.08);
+  transform-origin: top right;
 }
 
 .adm-dropdown-menu--open {
-  display: block;
+  display: grid;
+  animation: slideDown 0.16s ease;
 }
 
 @keyframes slideDown {
   from {
     opacity: 0;
-    transform: translateY(-6px) scale(0.98);
+    transform: translateY(-4px) scale(0.98);
   }
   to {
     opacity: 1;
@@ -189,33 +201,99 @@
   }
 }
 
+.adm-dropdown-section {
+  display: grid;
+  gap: 2px;
+}
+
+.adm-dropdown-section-label {
+  padding: 4px 8px 5px;
+  color: var(--adm-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
 .adm-dropdown-menu button {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   width: 100%;
-  padding: 8px 14px;
+  min-height: 38px;
+  padding: 5px 8px;
   border: 0;
+  border-radius: 6px;
   background: transparent;
   color: var(--adm-text);
-  font-size: 13px;
-  font-weight: 500;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.14s ease, color 0.14s ease;
 }
 
-.adm-dropdown-menu button:hover {
+.adm-dropdown-menu button:hover,
+.adm-dropdown-menu button:focus-visible {
+  outline: none;
   background: var(--adm-surface-muted);
+  color: var(--adm-blue);
 }
 
-.adm-dropdown-menu button .adm-icon {
-  opacity: 0.6;
+.adm-dropdown-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border: 1px solid var(--adm-border);
+  border-radius: 6px;
+  background: var(--adm-surface-muted);
+  color: var(--adm-text-soft);
+}
+
+.adm-dropdown-item-icon .adm-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.adm-dropdown-menu button:hover .adm-dropdown-item-icon,
+.adm-dropdown-menu button:focus-visible .adm-dropdown-item-icon {
+  border-color: #cddafe;
+  background: var(--adm-blue-soft);
+  color: var(--adm-blue);
 }
 
 .adm-dropdown-menu .adm-dropdown-divider {
   height: 1px;
-  margin: 4px 12px;
+  margin: 7px 2px;
   background: var(--adm-border);
+}
+
+.adm-dropdown-format-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.adm-dropdown-menu .adm-dropdown-format-grid button {
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 6px;
+  border: 1px solid var(--adm-border);
+  background: var(--adm-surface);
+  color: var(--adm-text-soft);
+  font-size: 11px;
+  text-align: center;
+}
+
+.adm-dropdown-menu .adm-dropdown-format-grid button:hover,
+.adm-dropdown-menu .adm-dropdown-format-grid button:focus-visible {
+  border-color: #cddafe;
+  background: var(--adm-blue-soft);
+  color: var(--adm-blue);
 }
 
 /* ===== SPLIT BUTTON (Export) ===== */
@@ -916,6 +994,16 @@
   .admin-aligned-page--employees .adm-header__actions > *,
   .admin-aligned-page--employees .adm-btn--primary {
     width: 100%;
+  }
+
+  .admin-aligned-page--employees .adm-dropdown-trigger {
+    width: 100%;
+  }
+
+  .admin-aligned-page--employees .adm-dropdown-menu {
+    right: auto;
+    left: 0;
+    width: min(258px, calc(100vw - 28px));
   }
 
   .admin-aligned-page--employees .adm-split-btn {

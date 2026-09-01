@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import './AdminEmployeesPage.css'
-import { useRef, useState, useEffect } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { ClientPagination } from '../components/ClientPagination'
 
 type Props = any
@@ -77,26 +77,52 @@ function getSelectionKey(employee: any) {
 }
 
 // Dropdown Menu Component
-function DropdownMenu({ trigger, children }: { trigger: React.ReactNode; children: React.ReactNode }) {
+function DropdownMenu({
+  trigger,
+  children
+}: {
+  trigger: (props: { isOpen: boolean; menuId: string; onToggle: () => void }) => React.ReactNode
+  children: React.ReactNode
+}) {
   const [isOpen, setIsOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const menuId = useId()
 
   useEffect(() => {
+    if (!isOpen) return
+
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsOpen(false)
       }
     }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
 
   return (
     <div className="adm-dropdown-btn" ref={menuRef}>
-      <div onClick={() => setIsOpen(!isOpen)} style={{ display: 'inline-flex' }}>
-        {trigger}
-      </div>
-      <div className={`adm-dropdown-menu${isOpen ? ' adm-dropdown-menu--open' : ''}`}>
+      {trigger({ isOpen, menuId, onToggle: () => setIsOpen((current) => !current) })}
+      <div
+        id={menuId}
+        className={`adm-dropdown-menu${isOpen ? ' adm-dropdown-menu--open' : ''}`}
+        role="menu"
+        aria-label="Employee import and export"
+        onClick={(event) => {
+          if ((event.target as HTMLElement).closest('button')) {
+            setIsOpen(false)
+          }
+        }}
+      >
         {children}
       </div>
     </div>
@@ -227,8 +253,15 @@ export default function AdminEmployeesPage(props: Props) {
           {canWriteAdminData && (
             <>
               <DropdownMenu
-                trigger={
-                  <button className="adm-btn adm-btn--ghost" type="button">
+                trigger={({ isOpen, menuId, onToggle }) => (
+                  <button
+                    className={`adm-btn adm-btn--ghost adm-dropdown-trigger${isOpen ? ' is-open' : ''}`}
+                    type="button"
+                    onClick={onToggle}
+                    aria-haspopup="menu"
+                    aria-expanded={isOpen}
+                    aria-controls={menuId}
+                  >
                     <svg className="adm-icon" viewBox="0 0 24 24" aria-hidden="true">
                       <path
                         d="M4 17v3a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-3M12 4v11m0-11 4 4m-4-4-4 4"
@@ -240,37 +273,46 @@ export default function AdminEmployeesPage(props: Props) {
                       />
                     </svg>
                     Import / Export
-                    <svg className="adm-icon" viewBox="0 0 24 24" style={{ width: '12px', height: '12px' }}>
+                    <svg className="adm-dropdown-caret" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </button>
-                }
+                )}
               >
-                <button onClick={() => openEmployeeImport()}>
-                  <svg className="adm-icon" viewBox="0 0 24 24">
-                    <path d="M12 3v11m0-11 4 4m-4-4-4 4M5 15v3a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  Import Employees
-                </button>
-                <button onClick={downloadEmployeesTemplate}>
-                  <svg className="adm-icon" viewBox="0 0 24 24">
-                    <path d="M4 17v3a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-3M12 4v11m0-11 4 4m-4-4-4 4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  Download Template
-                </button>
-                <div className="adm-dropdown-divider" />
-                <div style={{ padding: '4px 14px', fontSize: '11px', color: 'var(--adm-text-soft)' }}>
-                  Export as:
+                <div className="adm-dropdown-section">
+                  <span className="adm-dropdown-section-label">Import</span>
+                  <button type="button" role="menuitem" onClick={() => openEmployeeImport()}>
+                    <span className="adm-dropdown-item-icon" aria-hidden="true">
+                      <svg className="adm-icon" viewBox="0 0 24 24">
+                        <path d="M12 3v11m0-11 4 4m-4-4-4 4M5 15v3a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    <span>Import Employees</span>
+                  </button>
+                  <button type="button" role="menuitem" onClick={downloadEmployeesTemplate}>
+                    <span className="adm-dropdown-item-icon" aria-hidden="true">
+                      <svg className="adm-icon" viewBox="0 0 24 24">
+                        <path d="M12 4v11m0 0 4-4m-4 4-4-4M5 17v1a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-1" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    <span>Download Template</span>
+                  </button>
                 </div>
-                <button onClick={() => { setEmployeeExportFormat('csv'); downloadEmployeesReport(); }}>
-                  CSV
-                </button>
-                <button onClick={() => { setEmployeeExportFormat('pdf'); downloadEmployeesReport(); }}>
-                  PDF
-                </button>
-                <button onClick={() => { setEmployeeExportFormat('xlsx'); downloadEmployeesReport(); }}>
-                  XLSX
-                </button>
+                <div className="adm-dropdown-divider" role="separator" />
+                <div className="adm-dropdown-section">
+                  <span className="adm-dropdown-section-label">Export format</span>
+                  <div className="adm-dropdown-format-grid">
+                    <button type="button" role="menuitem" onClick={() => { setEmployeeExportFormat('csv'); downloadEmployeesReport(); }}>
+                      CSV
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => { setEmployeeExportFormat('pdf'); downloadEmployeesReport(); }}>
+                      PDF
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => { setEmployeeExportFormat('xlsx'); downloadEmployeesReport(); }}>
+                      XLSX
+                    </button>
+                  </div>
+                </div>
               </DropdownMenu>
             </>
           )}

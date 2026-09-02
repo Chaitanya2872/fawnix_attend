@@ -147,7 +147,7 @@ function fmtDateRangeDay(fromDate?: string, toDate?: string) {
 
 function truncate(v: string | null | undefined, max = 40) {
   if (!v) return '--'
-  return v.length > max ? v.slice(0, max) + 'â€¦' : v
+  return v.length > max ? `${v.slice(0, max)}...` : v
 }
 
 function waitingDays(appliedAt?: string): number | null {
@@ -315,7 +315,7 @@ export default function AdminLeavesPage({
     }
   }
 
-  const headline = `${kpis.pending.toLocaleString()} requests awaiting approval Â· oldest has been waiting ${kpis.oldest_pending_days ?? 0} day${kpis.oldest_pending_days === 1 ? '' : 's'}`
+  const headline = `${kpis.pending.toLocaleString()} requests awaiting approval - oldest has been waiting ${kpis.oldest_pending_days ?? 0} day${kpis.oldest_pending_days === 1 ? '' : 's'}`
   const syncedLabel = lastSyncedAt
     ? lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : null
@@ -332,13 +332,16 @@ export default function AdminLeavesPage({
         <div className="lv-header-actions">
           {syncedLabel && <span className="lv-synced-label">synced {syncedLabel}</span>}
           <button
-            className="ghost dashboard-button"
+            className="ghost dashboard-button lv-icon-label-btn"
             onClick={onRefresh}
             disabled={loading}
             type="button"
             aria-label="Refresh leave requests"
           >
-            {loading ? 'Refreshingâ€¦' : 'âŸ³ Refresh'}
+            <svg className={`lv-control-icon${loading ? ' is-spinning' : ''}`} viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 11a8 8 0 1 0-2.34 5.66M20 5v6h-6" />
+            </svg>
+            <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
           </button>
           <button
             className="cta dashboard-button"
@@ -375,7 +378,7 @@ export default function AdminLeavesPage({
       <div className="table-card lv-table-card">
         <div className="lv-toolbar">
           <span className="lv-toolbar__count">
-            {loading ? 'Loadingâ€¦' : `${pagination.total_records.toLocaleString()} result${pagination.total_records === 1 ? '' : 's'}`}
+            {loading ? 'Loading...' : `${pagination.total_records.toLocaleString()} result${pagination.total_records === 1 ? '' : 's'}`}
           </span>
           <div className="lv-toolbar__right">
             <ColumnVisibilitySelector
@@ -390,7 +393,7 @@ export default function AdminLeavesPage({
         {loading ? (
           <div className="empty-state lv-loading-state">
             <div className="lv-spinner" aria-hidden="true" />
-            Loading leave requestsâ€¦
+            Loading leave requests...
           </div>
         ) : error && records.length === 0 ? (
           <div className="empty-state">
@@ -467,8 +470,8 @@ export default function AdminLeavesPage({
                             {(isPending || hasPriorPattern) && (
                               <span className="lv-sub lv-sub--delta">
                                 {isPending && waiting != null ? `${waiting}d waiting` : ''}
-                                {isPending && waiting != null && hasPriorPattern ? ' Â· ' : ''}
-                                {hasPriorPattern ? `${row.prior_requests_90d}Ã— prior` : ''}
+                                {isPending && waiting != null && hasPriorPattern ? ' / ' : ''}
+                                {hasPriorPattern ? `${row.prior_requests_90d}x prior` : ''}
                               </span>
                             )}
                           </td>
@@ -525,7 +528,7 @@ export default function AdminLeavesPage({
                                   onClick={() => void handleAlert(row, rowKey)}
                                   disabled={alertLoadingKey === rowKey}
                                 >
-                                  {alertLoadingKey === rowKey ? 'Alertingâ€¦' : 'Alert manager'}
+                                  {alertLoadingKey === rowKey ? 'Alerting...' : 'Alert manager'}
                                 </button>
                               ) : null}
                               <button
@@ -556,20 +559,26 @@ export default function AdminLeavesPage({
               </div>
               <div className="lv-pagination__actions">
                 <button
-                  className="ghost"
+                  className="ghost lv-pagination-btn"
                   type="button"
                   onClick={() => onChangePage(pagination.page - 1)}
                   disabled={!pagination.has_previous || loading}
                 >
-                  â† Previous
+                  <svg className="lv-control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m15 18-6-6 6-6" />
+                  </svg>
+                  <span>Previous</span>
                 </button>
                 <button
-                  className="ghost"
+                  className="ghost lv-pagination-btn"
                   type="button"
                   onClick={() => onChangePage(pagination.page + 1)}
                   disabled={!pagination.has_next || loading}
                 >
-                  Next â†’
+                  <span>Next</span>
+                  <svg className="lv-control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m9 18 6-6-6-6" />
+                  </svg>
                 </button>
               </div>
             </div>

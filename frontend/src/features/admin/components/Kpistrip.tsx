@@ -15,6 +15,7 @@ type KpiCardProps = {
   sparkData?: number[]
   progressPct?: number
   miniList?: string[]
+  celebration?: boolean
 }
 
 export function KpiCard({
@@ -31,9 +32,12 @@ export function KpiCard({
   sparkData,
   progressPct,
   miniList,
+  celebration = false,
 }: KpiCardProps) {
   return (
-    <div className={`ov2-kpi-card${color === 'red' ? ' exceptions' : ''}`}>
+    <div
+      className={`ov2-kpi-card${celebration ? ' birthday-celebration' : color === 'red' ? ' exceptions' : ''}`}
+    >
       <div className="ov2-kpi-top">
         <div className={`ov2-kpi-icon-wrap ${color}`}>{icon}</div>
         <div>
@@ -186,15 +190,23 @@ export function KpiStrip({
         label="Upcoming Birthdays"
         period="Next 30 days"
         color="red"
+        celebration
         icon={
           <svg viewBox="0 0 16 16" fill="none" width="14" height="14">
             <path
-              d="M8 2L14.5 13.5H1.5L8 2z"
+              d="M2 6.5h12v7.75H2V6.5zM1.5 4h13v2.5h-13V4zM8 4v10.25"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth="1.35"
+              strokeLinecap="round"
               strokeLinejoin="round"
             />
-            <path d="M8 7v3M8 11.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <path
+              d="M8 4H5.65a1.55 1.55 0 1 1 0-3.1C7.35.9 8 4 8 4zm0 0h2.35a1.55 1.55 0 1 0 0-3.1C8.65.9 8 4 8 4z"
+              stroke="currentColor"
+              strokeWidth="1.25"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         }
         value={upcomingBirthdayCount}

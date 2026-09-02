@@ -13,6 +13,11 @@ type AttendanceDatePickerProps = {
 }
 
 const WEEK_DAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+const TRIGGER_DATE_FORMATTER = new Intl.DateTimeFormat('en-IN', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric'
+})
 
 function addDays(date: Date, days: number) {
   const nextDate = new Date(date)
@@ -69,7 +74,9 @@ export default function AttendanceDatePicker({ value, onChange }: AttendanceDate
           <rect x="3" y="5" width="18" height="16" rx="2" />
           <path d="M16 3v4M8 3v4M3 10h18" />
         </svg>
-        <span>{formatAttendanceDateLabel(value)}</span>
+        <span className="attendance-date-trigger-label">
+          {value ? TRIGGER_DATE_FORMATTER.format(selectedDate) : 'Pick a date'}
+        </span>
         <svg className="attendance-date-trigger-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
       </button>
 

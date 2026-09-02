@@ -62,6 +62,33 @@
   font-family: 'IBM Plex Mono', monospace;
 }
 
+.lv-icon-label-btn,
+.lv-pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.lv-control-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.lv-control-icon.is-spinning {
+  animation: lv-control-spin 700ms linear infinite;
+}
+
+@keyframes lv-control-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* â”€â”€â”€ KPI cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .lv-kpi-wrap {
   margin-bottom: 16px;
@@ -694,6 +721,10 @@
   gap: 6px;
 }
 
+.lv-pagination-btn {
+  min-width: 92px;
+}
+
 /* â”€â”€â”€ Drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .lv-drawer-overlay {
   position: fixed;
@@ -959,7 +990,8 @@
   }
 
   .lv-spinner,
-  .lv-kpi__skeleton {
+  .lv-kpi__skeleton,
+  .lv-control-icon.is-spinning {
     animation: none;
   }
 }

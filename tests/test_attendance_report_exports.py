@@ -23,14 +23,25 @@ def test_build_daily_attendance_report_rows_formats_duration_and_incomplete_valu
             "login_time": datetime(2026, 4, 3, 9, 30),
             "logout_time": None,
         },
+        {
+            "date": date(2026, 4, 3),
+            "id": None,
+            "emp_code": "EMP003",
+            "emp_full_name": "Cara Wells",
+            "employee_email": None,
+            "employee_name": None,
+            "login_time": None,
+            "logout_time": None,
+        },
     ]
 
     daily_rows = admin_service.build_daily_attendance_report_rows(records)
 
-    assert len(daily_rows) == 2
+    assert len(daily_rows) == 3
 
     assert daily_rows[0]["employee_id"] == "EMP001"
     assert daily_rows[0]["employee_name"] == "Alice Smith"
+    assert daily_rows[0]["status"] == "Present"
     assert daily_rows[0]["clock_in_display"] == "09:00 AM"
     assert daily_rows[0]["clock_out_display"] == "06:45 PM"
     assert daily_rows[0]["duration_minutes"] == 585
@@ -39,10 +50,17 @@ def test_build_daily_attendance_report_rows_formats_duration_and_incomplete_valu
     assert daily_rows[0]["overtime_display"] == "1h 45m"
 
     assert daily_rows[1]["employee_id"] == "EMP002"
+    assert daily_rows[1]["status"] == "Present"
     assert daily_rows[1]["clock_out_display"] == "Incomplete"
     assert daily_rows[1]["duration_minutes"] is None
     assert daily_rows[1]["duration_display"] == "Incomplete"
     assert daily_rows[1]["overtime_display"] == "Incomplete"
+
+    assert daily_rows[2]["employee_id"] == "EMP003"
+    assert daily_rows[2]["employee_name"] == "Cara Wells"
+    assert daily_rows[2]["status"] == "Absent"
+    assert daily_rows[2]["clock_in_display"] == ""
+    assert daily_rows[2]["clock_out_display"] == ""
 
 
 def test_build_monthly_attendance_report_rows_summarizes_from_daily_rows():

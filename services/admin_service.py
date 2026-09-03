@@ -820,20 +820,24 @@ def get_attendance_report_base_data(month: int = None, year: int = None, target_
         if target_date is not None:
             cursor.execute(
                 """
+                WITH report_day AS (
+                    SELECT %s::date AS target_date
+                )
                 SELECT
                     a.id,
-                    a.date,
+                    report_day.target_date AS date,
                     a.employee_email,
                     a.employee_name,
                     a.login_time,
                     a.logout_time,
                     e.emp_code,
                     e.emp_full_name
-                FROM attendance a
-                LEFT JOIN employees e
-                    ON a.employee_email = e.emp_email
-                WHERE a.date = %s
-                ORDER BY a.login_time ASC, COALESCE(e.emp_full_name, a.employee_name) ASC
+                FROM employees e
+                CROSS JOIN report_day
+                LEFT JOIN attendance a
+                    ON LOWER(a.employee_email) = LOWER(e.emp_email)
+                   AND a.date = report_day.target_date
+                ORDER BY a.login_time ASC NULLS LAST, e.emp_full_name ASC
                 """,
                 (target_date,),
             )
@@ -849,12 +853,12 @@ def get_attendance_report_base_data(month: int = None, year: int = None, target_
                     a.logout_time,
                     e.emp_code,
                     e.emp_full_name
-                FROM attendance a
-                LEFT JOIN employees e
-                    ON a.employee_email = e.emp_email
-                WHERE EXTRACT(MONTH FROM a.date) = %s
-                  AND EXTRACT(YEAR FROM a.date) = %s
-                ORDER BY a.date ASC, a.login_time ASC, COALESCE(e.emp_full_name, a.employee_name) ASC
+                FROM employees e
+                LEFT JOIN attendance a
+                    ON LOWER(a.employee_email) = LOWER(e.emp_email)
+                   AND EXTRACT(MONTH FROM a.date) = %s
+                   AND EXTRACT(YEAR FROM a.date) = %s
+                ORDER BY a.date ASC NULLS LAST, a.login_time ASC NULLS LAST, e.emp_full_name ASC
                 """,
                 (month, year),
             )
@@ -879,6 +883,7 @@ def build_daily_attendance_report_rows(records):
         emp_name = (record.get("emp_full_name") or record.get("employee_name") or "").strip()
         clock_in = record.get("login_time")
         clock_out = record.get("logout_time")
+        is_present = record.get("id") is not None or clock_in is not None or clock_out is not None
 
         duration_minutes = None
         if isinstance(clock_in, datetime) and isinstance(clock_out, datetime):
@@ -895,10 +900,11 @@ def build_daily_attendance_report_rows(records):
                 "date": record.get("date"),
                 "employee_id": emp_id,
                 "employee_name": emp_name,
+                "status": "Present" if is_present else "Absent",
                 "clock_in": clock_in,
                 "clock_out": clock_out,
-                "clock_in_display": _format_time_as_12h(clock_in),
-                "clock_out_display": _format_time_as_12h(clock_out),
+                "clock_in_display": _format_time_as_12h(clock_in) if is_present else "",
+                "clock_out_display": _format_time_as_12h(clock_out) if is_present else "",
                 "duration_minutes": duration_minutes,
                 "duration_display": _format_minutes_as_hours_and_minutes(duration_minutes),
                 "overtime_minutes": overtime_minutes,
@@ -921,6 +927,7 @@ def build_monthly_attendance_report_rows(daily_rows):
             summary_map[summary_key] = {
                 "employee_id": row.get("employee_id") or "",
                 "employee_name": row.get("employee_name") or "",
+                "has_presence": False,
                 "worked_dates": set(),
                 "total_hours_minutes": 0,
                 "total_overtime_minutes": 0,
@@ -929,6 +936,8 @@ def build_monthly_attendance_report_rows(daily_rows):
         summary = summary_map[summary_key]
         duration_minutes = row.get("duration_minutes")
         overtime_minutes = row.get("overtime_minutes")
+        if row.get("status") == "Present" or duration_minutes is not None:
+            summary["has_presence"] = True
 
         if duration_minutes is None:
             continue
@@ -959,6 +968,7 @@ def build_monthly_attendance_report_rows(daily_rows):
             {
                 "employee_id": summary["employee_id"],
                 "employee_name": summary["employee_name"],
+                "status": "Present" if summary["has_presence"] else "Absent",
                 "total_working_days": working_days,
                 "total_hours_minutes": total_minutes,
                 "total_hours_display": _format_minutes_as_hours_and_minutes(total_minutes),

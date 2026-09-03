@@ -14,12 +14,18 @@ from services import employee_master_service
 from services import field_visit_service
 import csv
 from io import StringIO, BytesIO
-from reportlab.lib.pagesizes import letter, landscape
-from reportlab.lib.units import inch
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.pdfgen import canvas
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+try:
+    from reportlab.lib.pagesizes import letter, landscape
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.pdfgen import canvas
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    REPORTLAB_IMPORT_ERROR = None
+except ModuleNotFoundError as exc:
+    letter = landscape = inch = colors = getSampleStyleSheet = canvas = None
+    Paragraph = SimpleDocTemplate = Spacer = Table = TableStyle = None
+    REPORTLAB_IMPORT_ERROR = exc
 import openpyxl
 import calendar
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -46,6 +52,17 @@ from flask import request
 
 admin_bp = Blueprint('admin', __name__)
 MAX_LEAVE_IMPORT_BYTES = 2 * 1024 * 1024
+
+
+def _reportlab_missing_response():
+    return jsonify({
+        'success': False,
+        'message': 'PDF export requires reportlab. Install project dependencies with: pip install -r requirements.txt',
+    }), 500
+
+
+def _reportlab_available():
+    return REPORTLAB_IMPORT_ERROR is None
 
 
 def serialize_row(row):
@@ -310,6 +327,9 @@ def download_employees_report(current_user):
     today_str = datetime.utcnow().strftime("%Y-%m-%d")
 
     if report_format == 'pdf':
+        if not _reportlab_available():
+            return _reportlab_missing_response()
+
         buffer = BytesIO()
         pdf = canvas.Canvas(buffer, pagesize=landscape(letter))
         width, height = landscape(letter)
@@ -522,6 +542,7 @@ def get_all_attendance_history(current_user):
 DAILY_ATTENDANCE_HEADERS = [
     "Employee ID",
     "Employee Name",
+    "Present / Absent Status",
     "Clock In Time",
     "Clock Out Time",
     "Duration",
@@ -530,6 +551,7 @@ DAILY_ATTENDANCE_HEADERS = [
 MONTHLY_ATTENDANCE_HEADERS = [
     "Employee ID",
     "Employee Name",
+    "Present / Absent Status",
     "Working Days",
     "Total Hours",
     "Average Hours",
@@ -562,7 +584,7 @@ def _build_monthly_attendance_workbook(month: int, year: int, employees):
     sheet.title = "Attendance"
     days_in_month = calendar.monthrange(year, month)[1]
     master_headers = ["S#", "Employee ID", "Project / Department", "Employee Name", "Designation", "DOJ"]
-    summary_headers = ["Working Days", "Holidays / Week Off", "Leave Availed", "Absent", "Total Days",
+    summary_headers = ["Present / Absent Status", "Working Days", "Holidays / Week Off", "Leave Availed", "Absent", "Total Days",
                        "Adjustments / LOP", "Final Attendance", "Calendar Days", "LOP", "Release Type", "Remarks"]
     headers = master_headers + [date(year, month, day) for day in range(1, days_in_month + 1)] + summary_headers
     last_column = len(headers)
@@ -630,7 +652,7 @@ def _build_monthly_attendance_workbook(month: int, year: int, employees):
         adjustments = 0  # No adjustment/LOP source exists in the current schema.
         final_attendance = worked + holiday + leave + adjustments
         lop = max(calendar_days - final_attendance, 0)
-        summary_values = [worked, holiday, leave, absent, calendar_days, adjustments, final_attendance,
+        summary_values = ["Present" if worked else "Absent", worked, holiday, leave, absent, calendar_days, adjustments, final_attendance,
                           calendar_days, lop, "", "; ".join(remarks)]
         for offset, value in enumerate(summary_values):
             cell = sheet.cell(row_index, summary_start_column + offset, value)
@@ -695,6 +717,7 @@ def _export_daily_report(report_format: str, target_date: date, daily_rows):
             writer.writerow([
                 row.get('employee_id', ''),
                 row.get('employee_name', ''),
+                row.get('status', ''),
                 row.get('clock_in_display', ''),
                 row.get('clock_out_display', ''),
                 row.get('duration_display', ''),
@@ -716,25 +739,26 @@ def _export_daily_report(report_format: str, target_date: date, daily_rows):
         for row_index, row in enumerate(daily_rows, start=2):
             sheet.cell(row=row_index, column=1, value=row.get('employee_id', ''))
             sheet.cell(row=row_index, column=2, value=row.get('employee_name', ''))
+            sheet.cell(row=row_index, column=3, value=row.get('status', ''))
 
-            clock_in_cell = sheet.cell(row=row_index, column=3)
+            clock_in_cell = sheet.cell(row=row_index, column=4)
             if isinstance(row.get('clock_in'), datetime):
                 clock_in_cell.value = row['clock_in']
                 clock_in_cell.number_format = "hh:mm AM/PM"
             else:
-                clock_in_cell.value = "Incomplete"
+                clock_in_cell.value = ""
 
-            clock_out_cell = sheet.cell(row=row_index, column=4)
+            clock_out_cell = sheet.cell(row=row_index, column=5)
             if isinstance(row.get('clock_out'), datetime):
                 clock_out_cell.value = row['clock_out']
                 clock_out_cell.number_format = "hh:mm AM/PM"
             else:
-                clock_out_cell.value = "Incomplete"
+                clock_out_cell.value = ""
 
             duration_cell = sheet.cell(
                 row=row_index,
-                column=5,
-                value=f'=IF(OR(NOT(ISNUMBER(C{row_index})),NOT(ISNUMBER(D{row_index})),D{row_index}<C{row_index}),"Incomplete",D{row_index}-C{row_index})',
+                column=6,
+                value=f'=IF(OR(NOT(ISNUMBER(D{row_index})),NOT(ISNUMBER(E{row_index})),E{row_index}<D{row_index}),"Incomplete",E{row_index}-D{row_index})',
             )
             duration_cell.number_format = "[h]:mm"
 
@@ -742,11 +766,11 @@ def _export_daily_report(report_format: str, target_date: date, daily_rows):
             last_data_row = len(daily_rows) + 1
             totals_row = last_data_row + 1
             sheet.cell(row=totals_row, column=1, value="Total Duration").font = Font(bold=True)
-            sheet.cell(row=totals_row, column=5, value=f"=SUM(E2:E{last_data_row})").font = Font(bold=True)
-            sheet.cell(row=totals_row, column=5).number_format = "[h]:mm"
+            sheet.cell(row=totals_row, column=6, value=f"=SUM(F2:F{last_data_row})").font = Font(bold=True)
+            sheet.cell(row=totals_row, column=6).number_format = "[h]:mm"
 
         sheet.freeze_panes = "A2"
-        column_widths = [16, 24, 16, 16, 14]
+        column_widths = [16, 24, 22, 16, 16, 14]
         for idx, width in enumerate(column_widths, start=1):
             sheet.column_dimensions[openpyxl.utils.get_column_letter(idx)].width = width
 
@@ -759,6 +783,9 @@ def _export_daily_report(report_format: str, target_date: date, daily_rows):
             download_name=f"{base_filename}.xlsx",
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         )
+
+    if not _reportlab_available():
+        return _reportlab_missing_response()
 
     buffer = BytesIO()
     document = SimpleDocTemplate(
@@ -778,17 +805,18 @@ def _export_daily_report(report_format: str, target_date: date, daily_rows):
             table_data.append([
                 row.get('employee_id', ''),
                 row.get('employee_name', ''),
+                row.get('status', ''),
                 row.get('clock_in_display', ''),
                 row.get('clock_out_display', ''),
                 row.get('duration_display', ''),
             ])
     else:
-        table_data.append(["No records found", "", "", "", ""])
+        table_data.append(["No records found", "", "", "", "", ""])
 
     story.append(
         _styled_pdf_table(
             table_data,
-            col_widths=[1.3 * inch, 2.5 * inch, 1.7 * inch, 1.7 * inch, 1.4 * inch],
+            col_widths=[1.3 * inch, 2.5 * inch, 1.7 * inch, 1.7 * inch, 1.7 * inch, 1.4 * inch],
             header_color=colors.HexColor("#1F2937"),
         )
     )
@@ -814,6 +842,7 @@ def _export_monthly_report(report_format: str, month: int, year: int, monthly_ro
             writer.writerow([
                 row.get('employee_id', ''),
                 row.get('employee_name', ''),
+                row.get('status', ''),
                 row.get('total_working_days', 0),
                 row.get('total_hours_display', ''),
                 row.get('average_hours_display', ''),
@@ -839,6 +868,9 @@ def _export_monthly_report(report_format: str, month: int, year: int, monthly_ro
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         )
 
+    if not _reportlab_available():
+        return _reportlab_missing_response()
+
     buffer = BytesIO()
     document = SimpleDocTemplate(
         buffer,
@@ -857,18 +889,19 @@ def _export_monthly_report(report_format: str, month: int, year: int, monthly_ro
             table_data.append([
                 row.get('employee_id', ''),
                 row.get('employee_name', ''),
+                row.get('status', ''),
                 str(row.get('total_working_days', 0)),
                 row.get('total_hours_display', ''),
                 row.get('average_hours_display', ''),
                 row.get('total_overtime_display', ''),
             ])
     else:
-        table_data.append(["No records found", "", "", "", "", ""])
+        table_data.append(["No records found", "", "", "", "", "", ""])
 
     story.append(
         _styled_pdf_table(
             table_data,
-            col_widths=[1.3 * inch, 2.4 * inch, 1.3 * inch, 1.6 * inch, 1.6 * inch, 1.2 * inch],
+            col_widths=[1.3 * inch, 2.4 * inch, 1.7 * inch, 1.3 * inch, 1.6 * inch, 1.6 * inch, 1.2 * inch],
             header_color=colors.HexColor("#0F766E"),
         )
     )
@@ -1048,6 +1081,7 @@ ATTENDANCE_RANGE_REPORT_COLUMNS = [
     ('date', 'Date', 'date'),
     ('emp_code', 'Employee ID', 'text'),
     ('employee_name', 'Employee Name', 'text'),
+    ('present_absent_status', 'Present / Absent Status', 'text'),
     ('employee_email', 'Employee Email', 'text'),
     ('emp_department', 'Department', 'text'),
     ('emp_designation', 'Designation', 'text'),
@@ -1174,13 +1208,22 @@ RANGE_REPORT_CONFIG = {
         'title': 'Attendance Report',
         'columns': ATTENDANCE_RANGE_REPORT_COLUMNS,
         'query': """
-            SELECT a.date, e.emp_code, a.employee_name, a.employee_email,
+            WITH report_days AS (
+                SELECT generate_series(%s::date, %s::date, interval '1 day')::date AS report_date
+            )
+            SELECT d.report_date AS date,
+                   e.emp_code,
+                   COALESCE(NULLIF(TRIM(e.emp_full_name), ''), a.employee_name) AS employee_name,
+                   CASE WHEN a.id IS NULL THEN 'Absent' ELSE 'Present' END AS present_absent_status,
+                   COALESCE(a.employee_email, e.emp_email) AS employee_email,
                    e.emp_department, e.emp_designation, a.login_time, a.logout_time,
                    a.working_hours, a.status, a.attendance_type
-            FROM attendance a
-            LEFT JOIN employees e ON LOWER(e.emp_email) = LOWER(a.employee_email)
-            WHERE a.date BETWEEN %s AND %s
-            ORDER BY a.date DESC, a.employee_name
+            FROM report_days d
+            CROSS JOIN employees e
+            LEFT JOIN attendance a
+                ON LOWER(a.employee_email) = LOWER(e.emp_email)
+               AND a.date = d.report_date
+            ORDER BY d.report_date DESC, employee_name ASC, a.login_time ASC NULLS LAST
         """,
     },
     'exceptions': {
@@ -1283,6 +1326,9 @@ def _export_range_report(report_type, report_format, start_date, end_date, rows,
             as_attachment=True,
             download_name=filename,
         )
+
+    if not _reportlab_available():
+        return _reportlab_missing_response()
 
     output = BytesIO()
     document = SimpleDocTemplate(output, pagesize=landscape(letter), leftMargin=20, rightMargin=20, topMargin=24, bottomMargin=24)

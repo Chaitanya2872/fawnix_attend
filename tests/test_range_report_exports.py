@@ -148,6 +148,7 @@ def test_attendance_report_renders_working_hours_as_hours_and_minutes():
         'emp_code': 'EMP001',
         'employee_name': 'Alice Smith',
         'employee_email': 'alice@example.com',
+        'present_absent_status': 'Present',
         'emp_department': 'Finance',
         'emp_designation': 'Analyst',
         'login_time': datetime(2026, 4, 3, 9, 0),
@@ -161,11 +162,39 @@ def test_attendance_report_renders_working_hours_as_hours_and_minutes():
 
     row = dict(zip(headers, data_rows[0]))
     assert row['Date'] == '03-Apr-2026'
+    assert row['Present / Absent Status'] == 'Present'
     assert row['Clock In'] == '09:00 AM'
     assert row['Clock Out'] == '06:45 PM'
     assert row['Working Hours'] == '9h 15m'
     assert row['Attendance Status'] == 'Logged Out'
     assert row['Work Mode'] == 'Work From Home'
+
+
+def test_attendance_report_renders_absent_rows_with_blank_clock_times():
+    rows = [{
+        'date': date(2026, 4, 3),
+        'emp_code': 'EMP002',
+        'employee_name': 'Bob Green',
+        'employee_email': 'bob@example.com',
+        'present_absent_status': 'Absent',
+        'emp_department': 'Finance',
+        'emp_designation': 'Analyst',
+        'login_time': None,
+        'logout_time': None,
+        'working_hours': None,
+        'status': None,
+        'attendance_type': None,
+    }]
+
+    _response, headers, data_rows = _export_csv_rows('attendance', rows)
+
+    assert headers[:4] == ['Date', 'Employee ID', 'Employee Name', 'Present / Absent Status']
+    row = dict(zip(headers, data_rows[0]))
+    assert row['Present / Absent Status'] == 'Absent'
+    assert row['Clock In'] == ''
+    assert row['Clock Out'] == ''
+    assert row['Working Hours'] == ''
+    assert row['Attendance Status'] == ''
 
 
 def test_empty_result_still_exports_full_header_row():

@@ -12,11 +12,12 @@ from services.lead_service import (
     list_leads,
     get_lead,
     update_lead,
+    update_lead_status,
     add_remark,
     edit_remark,
 )
 from services.activity_service import get_lead_field_visits, link_field_visit_to_lead
-from services import quotation_service
+from services import quote_service
 
 leads_bp = Blueprint("leads", __name__)
 
@@ -53,6 +54,15 @@ def update(current_user, lead_id):
     """Update lead."""
     payload = request.get_json() or {}
     result, status = update_lead(lead_id, current_user, payload)
+    return jsonify(result), status
+
+
+@leads_bp.route("/<string:lead_id>/status", methods=["PATCH"])
+@token_required_allow_verse
+def update_status(current_user, lead_id):
+    """Move a lead's pipeline stage (adds a real remark when one is given)."""
+    payload = request.get_json() or {}
+    result, status = update_lead_status(lead_id, current_user, payload)
     return jsonify(result), status
 
 
@@ -112,32 +122,32 @@ def update_remark(current_user, lead_id, remark_id):
 @leads_bp.route("/<string:lead_id>/quotations", methods=["POST"])
 @token_required_allow_verse
 def create_quotation(current_user, lead_id):
-    """Create a quotation for this lead from mobile-supplied line items."""
+    """Create a quotation for this lead (proxied to sales-service /api/sales/quotes)."""
     payload = request.get_json() or {}
-    result, status = quotation_service.create_quotation(lead_id, current_user, payload)
+    result, status = quote_service.create_quote_for_lead(lead_id, current_user, payload)
     return jsonify(result), status
 
 
 @leads_bp.route("/<string:lead_id>/quotations", methods=["GET"])
 @token_required_allow_verse
 def list_quotations(current_user, lead_id):
-    """List quotations created by the current employee for this lead."""
-    result, status = quotation_service.list_quotations(lead_id, current_user)
+    """List quotations for this lead (proxied to sales-service /api/sales/quotes)."""
+    result, status = quote_service.list_quotes_for_lead(lead_id, current_user)
     return jsonify(result), status
 
 
-@leads_bp.route("/<string:lead_id>/quotations/<int:quotation_id>", methods=["GET"])
+@leads_bp.route("/<string:lead_id>/quotations/<string:quotation_id>", methods=["GET"])
 @token_required_allow_verse
 def get_quotation(current_user, lead_id, quotation_id):
     """Get a single quotation's detail, including line items."""
-    result, status = quotation_service.get_quotation(lead_id, quotation_id, current_user)
+    result, status = quote_service.get_quote(quotation_id, current_user)
     return jsonify(result), status
 
 
-@leads_bp.route("/<string:lead_id>/quotations/<int:quotation_id>", methods=["PATCH"])
+@leads_bp.route("/<string:lead_id>/quotations/<string:quotation_id>", methods=["PATCH"])
 @token_required_allow_verse
 def update_quotation(current_user, lead_id, quotation_id):
     """Update a quotation's items, totals, status, or notes."""
     payload = request.get_json() or {}
-    result, status = quotation_service.update_quotation(lead_id, quotation_id, current_user, payload)
+    result, status = quote_service.update_quote(quotation_id, current_user, payload)
     return jsonify(result), status

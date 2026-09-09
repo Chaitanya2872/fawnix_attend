@@ -650,6 +650,7 @@ def api_docs():
                         "GET /api/leads": "List leads (supports filters)",
                         "GET /api/leads/{id}": "Get lead details",
                         "PATCH /api/leads/{id}": "Partially update lead",
+                        "PATCH /api/leads/{id}/status": "Move a lead's pipeline stage",
                         "POST /api/leads/{id}/link-field-visit": "Attach an already-started field visit to this lead",
                         "GET /api/leads/{id}/field-visits": "List field/branch visits linked to this lead",
                         "POST /api/leads/{id}/remarks": "Add a remark to a lead",

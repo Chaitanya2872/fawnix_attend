@@ -169,6 +169,11 @@ def update_lead(lead_id, current_user, payload):
     return _request(current_user, "PATCH", f"/api/leads/{lead_identifier}", payload=payload)
 
 
+def update_lead_status(lead_id, current_user, payload):
+    lead_identifier = parse_lead_identifier(lead_id)
+    return _request(current_user, "PATCH", f"/api/leads/{lead_identifier}/status", payload=payload)
+
+
 def add_remark(lead_id, current_user, content):
     lead_identifier = parse_lead_identifier(lead_id)
     return _request(

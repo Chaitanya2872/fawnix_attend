@@ -114,7 +114,8 @@ def start(current_user):
         notes,
         destinations,
         lead_id=lead_id,
-        emp_code=current_user['emp_code']
+        emp_code=current_user['emp_code'],
+        current_user=current_user
     )
     
     return jsonify(result[0]), result[1]
@@ -150,7 +151,7 @@ def end(current_user):
     latitude = data.get('latitude', '')
     longitude = data.get('longitude', '')
     
-    result = end_activity(activity_id, latitude, longitude)
+    result = end_activity(activity_id, latitude, longitude, current_user=current_user)
     return jsonify(result[0]), result[1]
 
 
@@ -309,6 +310,7 @@ def visit_destination(current_user):
         destination_reached=destination_reached,
         destination_visit_status=destination_visit_status,
         reached_destination=reached_destination,
+        current_user=current_user,
     )
     return jsonify(result[0]), result[1]
 

@@ -13,6 +13,11 @@ from typing import Any
 import requests
 
 from config import Config
+from services.lead_notification_service import (
+    assignment_fields_changed,
+    assignee_identity,
+    notify_lead_assignment_event,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +152,10 @@ def _request(current_user, method: str, path: str, *, params=None, payload=None)
 
 
 def create_lead(current_user, payload):
-    return _request(current_user, "POST", "/api/leads", payload=payload)
+    body, status_code = _request(current_user, "POST", "/api/leads", payload=payload)
+    if status_code in range(200, 300) and assignment_fields_changed(payload):
+        _notify_assignment_safely("assignment", body, current_user)
+    return body, status_code
 
 
 def list_leads(current_user, filters):
@@ -166,7 +174,48 @@ def get_lead(lead_id, current_user):
 
 def update_lead(lead_id, current_user, payload):
     lead_identifier = parse_lead_identifier(lead_id)
-    return _request(current_user, "PATCH", f"/api/leads/{lead_identifier}", payload=payload)
+    previous_body = None
+    if assignment_fields_changed(payload):
+        previous_body, previous_status = get_lead(lead_identifier, current_user)
+        if previous_status not in range(200, 300) or not isinstance(previous_body, dict):
+            previous_body = None
+
+    body, status_code = _request(current_user, "PATCH", f"/api/leads/{lead_identifier}", payload=payload)
+    if status_code in range(200, 300) and assignment_fields_changed(payload):
+        old_assignee = assignee_identity(previous_body)
+        new_assignee = assignee_identity(body) or assignee_identity(payload)
+        if new_assignee and (not old_assignee or old_assignee.strip().lower() != new_assignee.strip().lower()):
+            event_type = "reassignment" if old_assignee else "assignment"
+            _notify_assignment_safely(
+                event_type,
+                body if isinstance(body, dict) else payload,
+                current_user,
+                previous_lead=previous_body,
+                fallback_lead_id=lead_identifier,
+            )
+    return body, status_code
+
+
+def assign_lead(lead_id, current_user, payload):
+    lead_identifier = parse_lead_identifier(lead_id)
+    previous_body, previous_status = get_lead(lead_identifier, current_user)
+    if previous_status not in range(200, 300) or not isinstance(previous_body, dict):
+        previous_body = None
+
+    body, status_code = _request(current_user, "PATCH", f"/api/leads/{lead_identifier}/assign", payload=payload)
+    if status_code in range(200, 300):
+        old_assignee = assignee_identity(previous_body)
+        new_assignee = assignee_identity(body) or assignee_identity(payload)
+        if new_assignee and (not old_assignee or old_assignee.strip().lower() != new_assignee.strip().lower()):
+            event_type = "reassignment" if old_assignee else "assignment"
+            _notify_assignment_safely(
+                event_type,
+                body if isinstance(body, dict) else payload,
+                current_user,
+                previous_lead=previous_body,
+                fallback_lead_id=lead_identifier,
+            )
+    return body, status_code
 
 
 def update_lead_status(lead_id, current_user, payload):
@@ -192,3 +241,28 @@ def edit_remark(lead_id, remark_id, current_user, content):
         f"/api/leads/{lead_identifier}/remarks/{remark_id}",
         payload={"content": content},
     )
+
+
+def _notify_assignment_safely(
+    event_type,
+    lead,
+    current_user,
+    *,
+    previous_lead=None,
+    fallback_lead_id=None,
+):
+    try:
+        notify_lead_assignment_event(
+            event_type,
+            lead if isinstance(lead, dict) else None,
+            current_user,
+            previous_lead=previous_lead,
+            fallback_lead_id=fallback_lead_id,
+        )
+    except Exception:
+        logger.exception(
+            "Lead assignment push notification failed event=%s lead_id=%s actor=%s",
+            event_type,
+            fallback_lead_id or (lead.get("id") if isinstance(lead, dict) else None),
+            (current_user or {}).get("emp_code"),
+        )

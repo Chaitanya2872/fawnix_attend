@@ -12,6 +12,7 @@ from services.lead_service import (
     list_leads,
     get_lead,
     update_lead,
+    assign_lead,
     update_lead_status,
     add_remark,
     edit_remark,
@@ -54,6 +55,15 @@ def update(current_user, lead_id):
     """Update lead."""
     payload = request.get_json() or {}
     result, status = update_lead(lead_id, current_user, payload)
+    return jsonify(result), status
+
+
+@leads_bp.route("/<string:lead_id>/assign", methods=["PATCH"])
+@token_required_allow_verse
+def assign(current_user, lead_id):
+    """Assign or reassign a lead."""
+    payload = request.get_json() or {}
+    result, status = assign_lead(lead_id, current_user, payload)
     return jsonify(result), status
 
 

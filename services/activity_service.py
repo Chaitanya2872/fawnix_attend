@@ -2,6 +2,7 @@ from datetime import datetime
 from database.connection import get_db_connection
 from services.attendance_constants import ATTENDANCE_STATUS_LOGGED_IN
 from services.geocoding_service import get_address_from_coordinates
+from services.lead_notification_service import fetch_lead_for_notification, notify_lead_activity_event
 from config import ActivityType
 import logging
 import json
@@ -167,7 +168,7 @@ def _auto_mark_reached_destination(destinations, actual_lat: str, actual_lon: st
 
 def start_activity(emp_email: str, emp_name: str, activity_type: str,
                   lat: str, lon: str, notes: str = '', destinations: list = None,
-                  lead_id: str = None, emp_code: str = None):
+                  lead_id: str = None, emp_code: str = None, current_user: dict = None):
     """
     Start activity
     
@@ -398,6 +399,15 @@ def start_activity(emp_email: str, emp_name: str, activity_type: str,
         
         if destinations_json:
             response_data['destinations'] = json.loads(destinations_json)
+
+        if linked_lead_id:
+            _notify_lead_activity_safely(
+                "activity_created",
+                linked_lead_id,
+                current_user or _actor_from_activity(emp_code, emp_email, emp_name),
+                activity_id=activity_id,
+                activity_type=activity_type,
+            )
         
         message = "Activity started"
         if field_visit_id:
@@ -420,7 +430,7 @@ def start_activity(emp_email: str, emp_name: str, activity_type: str,
         conn.close()
 
 
-def end_activity(activity_id: int, lat: str, lon: str):
+def end_activity(activity_id: int, lat: str, lon: str, current_user: dict = None):
     """
     End activity with end location
     
@@ -597,6 +607,20 @@ def end_activity(activity_id: int, lat: str, lon: str):
                     response_data['destinations'] = dests
             else:
                 response_data['destinations'] = dests
+
+        linked_lead_id = activity.get('lead_id')
+        if linked_lead_id:
+            _notify_lead_activity_safely(
+                "activity_updated",
+                linked_lead_id,
+                current_user or _actor_from_activity(
+                    None,
+                    activity.get('employee_email'),
+                    activity.get('employee_name'),
+                ),
+                activity_id=activity_id,
+                activity_type=activity.get('activity_type'),
+            )
         
         return ({
             "success": True,
@@ -1003,6 +1027,7 @@ def mark_destination_visited(
     destination_reached=None,
     destination_visit_status=None,
     reached_destination=None,
+    current_user: dict = None,
 ):
     """
     Mark a destination as visited (for branch visits)
@@ -1021,7 +1046,7 @@ def mark_destination_visited(
     
     try:
         cursor.execute("""
-            SELECT destinations, field_visit_id FROM activities
+            SELECT destinations, field_visit_id, lead_id, employee_email, employee_name, activity_type FROM activities
             WHERE id = %s AND status = 'active'
         """, (activity_id,))
         
@@ -1083,6 +1108,20 @@ def mark_destination_visited(
             destination_sequence,
             debug_info,
         )
+
+        linked_lead_id = result.get('lead_id')
+        if linked_lead_id:
+            _notify_lead_activity_safely(
+                "activity_updated",
+                linked_lead_id,
+                current_user or _actor_from_activity(
+                    None,
+                    result.get('employee_email'),
+                    result.get('employee_name'),
+                ),
+                activity_id=activity_id,
+                activity_type=result.get('activity_type'),
+            )
         
         return ({
             "success": True,
@@ -1265,6 +1304,37 @@ def end_break(break_id: int):
         Tuple of (response_dict, status_code)
     """
     return end_activity(break_id, '', '')
+
+
+def _actor_from_activity(emp_code, emp_email, emp_name):
+    actor = {
+        "emp_email": emp_email,
+        "emp_full_name": emp_name,
+    }
+    if emp_code:
+        actor["emp_code"] = emp_code
+    return actor
+
+
+def _notify_lead_activity_safely(event_type, lead_id, actor, *, activity_id=None, activity_type=None):
+    try:
+        lead = fetch_lead_for_notification(lead_id, actor)
+        notify_lead_activity_event(
+            event_type,
+            lead,
+            actor,
+            activity_id=activity_id,
+            activity_type=activity_type,
+            fallback_lead_id=lead_id,
+        )
+    except Exception:
+        logger.exception(
+            "Lead activity push notification failed event=%s lead_id=%s activity_id=%s actor=%s",
+            event_type,
+            lead_id,
+            activity_id,
+            (actor or {}).get("emp_code"),
+        )
 
 
 def get_active_activity(emp_email: str):

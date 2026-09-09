@@ -169,11 +169,21 @@ def update_lead(lead_id, current_user, payload):
     return _request(current_user, "PATCH", f"/api/leads/{lead_identifier}", payload=payload)
 
 
-def link_lead_field_visit(lead_id, field_visit_id, current_user):
+def add_remark(lead_id, current_user, content):
     lead_identifier = parse_lead_identifier(lead_id)
     return _request(
         current_user,
         "POST",
-        f"/api/leads/{lead_identifier}/link-field-visit",
-        payload={"field_visit_id": field_visit_id},
+        f"/api/leads/{lead_identifier}/remarks",
+        payload={"content": content},
+    )
+
+
+def edit_remark(lead_id, remark_id, current_user, content):
+    lead_identifier = parse_lead_identifier(lead_id)
+    return _request(
+        current_user,
+        "PATCH",
+        f"/api/leads/{lead_identifier}/remarks/{remark_id}",
+        payload={"content": content},
     )

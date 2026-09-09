@@ -341,14 +341,14 @@ def start_activity(emp_email: str, emp_name: str, activity_type: str,
                 attendance_id, field_visit_id,
                 employee_email, employee_name, activity_type,
                 start_time, start_location, start_address,
-                notes, date, status, destinations
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                notes, date, status, destinations, lead_id
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             attendance_id, field_visit_id,
             emp_email, emp_name, activity_type,
             start_time, location, address,
-            notes, start_time.date(), 'active', destinations_json
+            notes, start_time.date(), 'active', destinations_json, linked_lead_id
         ))
         
         activity_id = cursor.fetchone()['id']
@@ -738,6 +738,95 @@ def get_activities(emp_email: str, limit: int = 50, activity_type: str = None,
         
     except Exception as e:
         logger.error(f"❌ Get activities error: {e}")
+        return ({"success": False, "message": str(e)}, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_lead_field_visits(emp_email: str, lead_id: str, limit: int = 50):
+    """Get field/branch visits linked to a specific CRM lead for this employee."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT
+                a.id AS activity_id,
+                a.field_visit_id,
+                a.activity_type,
+                a.status,
+                a.start_time,
+                a.end_time,
+                a.duration_minutes,
+                a.notes,
+                a.start_address,
+                a.end_address,
+                fv.total_distance_km
+            FROM activities a
+            LEFT JOIN field_visits fv ON a.field_visit_id = fv.id
+            WHERE a.employee_email = %s
+              AND a.lead_id = %s
+              AND a.activity_type IN ('field_visit', 'branch_visit')
+            ORDER BY a.start_time DESC
+            LIMIT %s
+        """, (emp_email, lead_id, limit))
+
+        visits = cursor.fetchall()
+        for visit in visits:
+            for key, value in visit.items():
+                if isinstance(value, datetime):
+                    visit[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+
+        return ({
+            "success": True,
+            "data": {
+                "field_visits": visits,
+                "count": len(visits)
+            }
+        }, 200)
+
+    except Exception as e:
+        logger.error(f"❌ Get lead field visits error: {e}")
+        return ({"success": False, "message": str(e)}, 500)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def link_field_visit_to_lead(emp_email: str, field_visit_id: int, lead_id: str):
+    """Retroactively attach an existing (already started) field/branch visit to a lead."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            UPDATE activities
+            SET lead_id = %s
+            WHERE field_visit_id = %s
+              AND employee_email = %s
+              AND activity_type IN ('field_visit', 'branch_visit')
+            RETURNING id, field_visit_id, activity_type, lead_id
+        """, (lead_id, field_visit_id, emp_email))
+
+        updated = cursor.fetchone()
+        if not updated:
+            conn.rollback()
+            return ({
+                "success": False,
+                "message": "Field visit not found for this employee"
+            }, 404)
+
+        conn.commit()
+        return ({
+            "success": True,
+            "message": "Lead linked to field visit",
+            "data": dict(updated)
+        }, 200)
+
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"❌ Link field visit to lead error: {e}")
         return ({"success": False, "message": str(e)}, 500)
     finally:
         cursor.close()

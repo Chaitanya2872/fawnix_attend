@@ -1,6 +1,7 @@
 """
 Lead Routes
-Lead management endpoints with optional field-visit linkage.
+Lead management endpoints with optional field-visit linkage, remarks, and
+quotations.
 """
 
 from flask import Blueprint, request, jsonify
@@ -11,8 +12,11 @@ from services.lead_service import (
     list_leads,
     get_lead,
     update_lead,
-    link_lead_field_visit,
+    add_remark,
+    edit_remark,
 )
+from services.activity_service import get_lead_field_visits, link_field_visit_to_lead
+from services import quotation_service
 
 leads_bp = Blueprint("leads", __name__)
 
@@ -55,7 +59,7 @@ def update(current_user, lead_id):
 @leads_bp.route("/<string:lead_id>/link-field-visit", methods=["POST"])
 @token_required_allow_verse
 def link_field_visit(current_user, lead_id):
-    """Link lead to an existing field visit."""
+    """Attach an already-started field/branch visit to this lead."""
     payload = request.get_json() or {}
     field_visit_id = payload.get("field_visit_id")
     if field_visit_id in (None, ""):
@@ -66,5 +70,74 @@ def link_field_visit(current_user, lead_id):
     except Exception:
         return jsonify({"success": False, "message": "field_visit_id must be an integer"}), 400
 
-    result, status = link_lead_field_visit(lead_id, field_visit_id, current_user)
+    result, status = link_field_visit_to_lead(current_user["emp_email"], field_visit_id, lead_id)
+    return jsonify(result), status
+
+
+@leads_bp.route("/<string:lead_id>/field-visits", methods=["GET"])
+@token_required_allow_verse
+def field_visits(current_user, lead_id):
+    """List field/branch visits linked to this lead for the current employee."""
+    limit = request.args.get("limit", 50, type=int)
+    result, status = get_lead_field_visits(current_user["emp_email"], lead_id, limit)
+    return jsonify(result), status
+
+
+@leads_bp.route("/<string:lead_id>/remarks", methods=["POST"])
+@token_required_allow_verse
+def create_remark(current_user, lead_id):
+    """Add a remark to a lead (proxied to the CRM service)."""
+    payload = request.get_json() or {}
+    content = (payload.get("content") or "").strip()
+    if not content:
+        return jsonify({"success": False, "message": "content is required"}), 400
+
+    result, status = add_remark(lead_id, current_user, content)
+    return jsonify(result), status
+
+
+@leads_bp.route("/<string:lead_id>/remarks/<string:remark_id>", methods=["PATCH"])
+@token_required_allow_verse
+def update_remark(current_user, lead_id, remark_id):
+    """Edit an existing remark version on a lead (proxied to the CRM service)."""
+    payload = request.get_json() or {}
+    content = (payload.get("content") or "").strip()
+    if not content:
+        return jsonify({"success": False, "message": "content is required"}), 400
+
+    result, status = edit_remark(lead_id, remark_id, current_user, content)
+    return jsonify(result), status
+
+
+@leads_bp.route("/<string:lead_id>/quotations", methods=["POST"])
+@token_required_allow_verse
+def create_quotation(current_user, lead_id):
+    """Create a quotation for this lead from mobile-supplied line items."""
+    payload = request.get_json() or {}
+    result, status = quotation_service.create_quotation(lead_id, current_user, payload)
+    return jsonify(result), status
+
+
+@leads_bp.route("/<string:lead_id>/quotations", methods=["GET"])
+@token_required_allow_verse
+def list_quotations(current_user, lead_id):
+    """List quotations created by the current employee for this lead."""
+    result, status = quotation_service.list_quotations(lead_id, current_user)
+    return jsonify(result), status
+
+
+@leads_bp.route("/<string:lead_id>/quotations/<int:quotation_id>", methods=["GET"])
+@token_required_allow_verse
+def get_quotation(current_user, lead_id, quotation_id):
+    """Get a single quotation's detail, including line items."""
+    result, status = quotation_service.get_quotation(lead_id, quotation_id, current_user)
+    return jsonify(result), status
+
+
+@leads_bp.route("/<string:lead_id>/quotations/<int:quotation_id>", methods=["PATCH"])
+@token_required_allow_verse
+def update_quotation(current_user, lead_id, quotation_id):
+    """Update a quotation's items, totals, status, or notes."""
+    payload = request.get_json() or {}
+    result, status = quotation_service.update_quotation(lead_id, quotation_id, current_user, payload)
     return jsonify(result), status

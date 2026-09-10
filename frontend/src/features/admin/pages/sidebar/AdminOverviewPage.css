@@ -702,7 +702,7 @@
 
 .ov2-main-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.62fr) minmax(0, 1fr);
+  grid-template-columns: minmax(420px, 1.4fr) repeat(2, minmax(260px, 0.8fr));
   gap: var(--ov2-gap);
   align-items: start;
 }
@@ -1124,15 +1124,22 @@
   width: 100%;
 }
 
-.ov2-birthday-card {
+.ov2-birthday-card,
+.ov2-anniversary-card {
   min-height: 316px;
   overflow: hidden;
+}
+
+.ov2-birthday-card {
   border-top: 2px solid #e0a53c;
 }
 
 .ov2-birthday-card .ov2-card-head,
 .ov2-birthday-list,
-.ov2-birthday-card .client-pagination {
+.ov2-birthday-card .client-pagination,
+.ov2-anniversary-card .ov2-card-head,
+.ov2-anniversary-list,
+.ov2-anniversary-card .client-pagination {
   position: relative;
   z-index: 1;
 }
@@ -1162,6 +1169,33 @@
 }
 
 .ov2-birthday-title-icon svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ov2-anniversary-card {
+  border-top: 2px solid var(--a-info, #0f766e);
+}
+
+.ov2-anniversary-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border: 1px solid var(--a-info-border, #b9dcd7);
+  border-radius: 8px;
+  background: var(--a-info-soft, #e6f4f2);
+  color: var(--a-info-ink, #115e59);
+}
+
+.ov2-anniversary-title-icon svg {
   width: 17px;
   height: 17px;
   fill: none;
@@ -1202,6 +1236,27 @@
 
 .ov2-birthday-date strong {
   color: #78500b;
+}
+
+.ov2-anniversary-item {
+  border-color: rgba(15, 118, 110, 0.1);
+  background: rgba(230, 244, 242, 0.42);
+}
+
+.ov2-anniversary-item:hover {
+  border-color: rgba(15, 118, 110, 0.22);
+  background: #f0fbf9;
+}
+
+.ov2-anniversary-avatar {
+  border-radius: 50%;
+  background: var(--a-info-soft, #e6f4f2);
+  color: var(--a-info-ink, #115e59);
+  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.18);
+}
+
+.ov2-anniversary-item .ov2-birthday-date {
+  flex-basis: 106px;
 }
 
 .ov2-birthday-confetti {
@@ -1493,7 +1548,11 @@
 
 @media (max-width: 1240px) {
   .ov2-main-grid {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ov2-chart-card {
+    grid-column: 1 / -1;
   }
 }
 
@@ -1509,6 +1568,10 @@
   }
 
   .ov2-lower-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ov2-main-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 

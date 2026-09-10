@@ -9,9 +9,24 @@ type AttendanceEfficiencyCardProps = {
 const RADIUS = 52
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 
-/** Rating bands come from the backend; this only maps them onto a colour. */
-function toneFor(rating: string) {
+/** Rating bands come from the backend; score-based mapping keeps old labels tolerant. */
+function toneFor(score: number | null, rating: string) {
+  if (score !== null) {
+    if (score >= 90) return 'is-range-90-100'
+    if (score >= 70) return 'is-range-70-90'
+    if (score >= 50) return 'is-range-50-70'
+    if (score >= 30) return 'is-range-30-50'
+    if (score >= 10) return 'is-range-10-30'
+    return 'is-range-0-10'
+  }
+
   const normalised = rating.toLowerCase()
+  if (normalised === '90-100') return 'is-range-90-100'
+  if (normalised === '70-90') return 'is-range-70-90'
+  if (normalised === '50-70') return 'is-range-50-70'
+  if (normalised === '30-50') return 'is-range-30-50'
+  if (normalised === '10-30') return 'is-range-10-30'
+  if (normalised === '0-10') return 'is-range-0-10'
   if (normalised === 'excellent') return 'is-excellent'
   if (normalised === 'good') return 'is-good'
   if (normalised === 'fair') return 'is-fair'
@@ -49,7 +64,7 @@ export default function AttendanceEfficiencyCard({
   const rating = efficiency?.rating ?? 'No data'
   const delta = efficiency?.delta ?? null
   const progress = Math.min(Math.max(score ?? 0, 0), 100) / 100
-  const tone = toneFor(rating)
+  const tone = toneFor(score, rating)
   const markerAngle = progress * Math.PI * 2 - Math.PI / 2
   const markerX = 70 + RADIUS * Math.cos(markerAngle)
   const markerY = 70 + RADIUS * Math.sin(markerAngle)

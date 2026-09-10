@@ -41,6 +41,9 @@ type CellAnchor = {
   left: number
 }
 
+type EfficiencySort = 'score-desc' | 'score-asc' | 'name'
+type EfficiencyFilter = 'all' | '90-100' | '70-89' | '50-69' | '30-49' | '0-29' | 'no-data'
+
 function toCellKey(empCode: string, date: string) {
   return `${empCode}|${date}`
 }
@@ -66,10 +69,12 @@ function normaliseEfficiencyScore(score: number | null | undefined) {
 
 function efficiencyTone(score: number | null) {
   if (score === null) return 'is-idle'
-  if (score >= 90) return 'is-excellent'
-  if (score >= 75) return 'is-good'
-  if (score >= 60) return 'is-fair'
-  return 'is-poor'
+  if (score >= 90) return 'is-range-90-100'
+  if (score >= 70) return 'is-range-70-90'
+  if (score >= 50) return 'is-range-50-70'
+  if (score >= 30) return 'is-range-30-50'
+  if (score >= 10) return 'is-range-10-30'
+  return 'is-range-0-10'
 }
 
 /**
@@ -90,12 +95,46 @@ export default function AttendanceHeatmap({
 }: AttendanceHeatmapProps) {
   const [hovered, setHovered] = useState<CellAnchor | null>(null)
   const [editing, setEditing] = useState<CellAnchor | null>(null)
+  const [efficiencySort, setEfficiencySort] = useState<EfficiencySort>('score-desc')
+  const [efficiencyFilter, setEfficiencyFilter] = useState<EfficiencyFilter>('all')
   const editorRef = useRef<HTMLDivElement>(null)
 
   const efficiencyByEmployee = useMemo(
     () => new Map(efficiencyScores.map((item) => [item.key, item])),
     [efficiencyScores]
   )
+
+  const visibleEmployees = useMemo(() => {
+    if (!data) {
+      return []
+    }
+
+    const rows = data.employees.map((employee) => {
+      const efficiency = efficiencyByEmployee.get(employee.empCode)
+        ?? efficiencyByEmployee.get(employee.name)
+      return { employee, score: normaliseEfficiencyScore(efficiency?.score) }
+    }).filter(({ score }) => {
+      if (efficiencyFilter === 'all') return true
+      if (efficiencyFilter === 'no-data') return score === null
+      if (score === null) return false
+      if (efficiencyFilter === '90-100') return score >= 90
+      if (efficiencyFilter === '70-89') return score >= 70 && score < 90
+      if (efficiencyFilter === '50-69') return score >= 50 && score < 70
+      if (efficiencyFilter === '30-49') return score >= 30 && score < 50
+      return score < 30
+    })
+
+    return rows.sort((left, right) => {
+      if (efficiencySort === 'name') {
+        return (left.employee.name || left.employee.empCode).localeCompare(right.employee.name || right.employee.empCode)
+      }
+      if (left.score === null && right.score === null) return 0
+      if (left.score === null) return 1
+      if (right.score === null) return -1
+      const difference = left.score - right.score
+      return efficiencySort === 'score-asc' ? difference : -difference
+    })
+  }, [data, efficiencyByEmployee, efficiencyFilter, efficiencySort])
 
   const columns = useMemo(() => {
     if (!data) {
@@ -210,7 +249,41 @@ export default function AttendanceHeatmap({
           <button className="ghost dashboard-button attendance-heatmap-retry" onClick={onRefresh} type="button">Reload</button>
         </div>
       ) : (
-        <div className={`attendance-heatmap-scroll${loading ? ' is-refreshing' : ''}`}>
+        <>
+          <div className="attendance-heatmap-controls">
+            <label htmlFor="attendance-efficiency-sort">
+              <span>Sort</span>
+              <select
+                id="attendance-efficiency-sort"
+                value={efficiencySort}
+                onChange={(event) => setEfficiencySort(event.target.value as EfficiencySort)}
+              >
+                <option value="score-desc">Highest score</option>
+                <option value="score-asc">Lowest score</option>
+                <option value="name">Employee name</option>
+              </select>
+            </label>
+            <label htmlFor="attendance-efficiency-filter">
+              <span>Score</span>
+              <select
+                id="attendance-efficiency-filter"
+                value={efficiencyFilter}
+                onChange={(event) => setEfficiencyFilter(event.target.value as EfficiencyFilter)}
+              >
+                <option value="all">All scores</option>
+                <option value="90-100">90-100%</option>
+                <option value="70-89">70-89%</option>
+                <option value="50-69">50-69%</option>
+                <option value="30-49">30-49%</option>
+                <option value="0-29">0-29%</option>
+                <option value="no-data">No data</option>
+              </select>
+            </label>
+            <span className="attendance-heatmap-result-count">
+              {visibleEmployees.length} of {data.employees.length} employees
+            </span>
+          </div>
+          <div className={`attendance-heatmap-scroll${loading ? ' is-refreshing' : ''}`}>
           <table className="attendance-heatmap-table">
             <thead>
               <tr>
@@ -237,7 +310,7 @@ export default function AttendanceHeatmap({
               </tr>
             </thead>
             <tbody>
-              {data.employees.map((employee) => {
+              {visibleEmployees.map(({ employee }) => {
                 const efficiency = efficiencyByEmployee.get(employee.empCode)
                   ?? efficiencyByEmployee.get(employee.name)
                 const score = normaliseEfficiencyScore(efficiency?.score)
@@ -298,7 +371,8 @@ export default function AttendanceHeatmap({
               })}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
 
       {statusMessage ? <span className="report-status attendance-heatmap-status">{statusMessage}</span> : null}

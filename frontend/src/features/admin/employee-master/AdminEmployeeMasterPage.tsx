@@ -337,6 +337,25 @@ export default function AdminEmployeeMasterPage({
     )
   }
 
+  const updateFormValues = (nextValues: Record<string, string>) => {
+    setFormPanel((current) => {
+      if (!current) {
+        return current
+      }
+
+      const errors = { ...current.errors }
+      Object.keys(nextValues).forEach((key) => {
+        errors[key] = ''
+      })
+
+      return {
+        ...current,
+        values: { ...current.values, ...nextValues },
+        errors,
+      }
+    })
+  }
+
   const submitForm = async () => {
     if (!formPanel) {
       return
@@ -542,14 +561,14 @@ export default function AdminEmployeeMasterPage({
       if (!current) return current
       const values = { ...current.values }
       const keys: Record<string, string | undefined> = {
+        address: parts.address,
         city: parts.city,
         state: parts.state,
         country: parts.country,
         pincode: parts.pincode,
       }
       for (const [key, value] of Object.entries(keys)) {
-        // Only fill gaps -- never overwrite something already typed.
-        if (value && !String(values[key] || '').trim()) {
+        if (value) {
           values[key] = value
         }
       }
@@ -927,8 +946,10 @@ export default function AdminEmployeeMasterPage({
                               .join(', ') || undefined
                           }
                           onChange={(next) => {
-                            updateFormValue('latitude', next.latitude)
-                            updateFormValue('longitude', next.longitude)
+                            updateFormValues({
+                              latitude: next.latitude,
+                              longitude: next.longitude,
+                            })
                           }}
                           onResolveAddress={applyResolvedAddress}
                         />

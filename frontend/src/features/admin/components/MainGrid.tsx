@@ -1,6 +1,8 @@
 import { AttendanceTrendChart } from './Attendancetrendchart'
 import { UpcomingBirthdaysPanel } from './UpcomingBirthdaysPanel'
 import type { UpcomingBirthday } from './UpcomingBirthdaysPanel'
+import { WorkAnniversariesPanel } from './WorkAnniversariesPanel'
+import type { UpcomingWorkAnniversary } from './WorkAnniversariesPanel'
 
 type TrendItem = { label: string; count: number }
 type MainGridProps = {
@@ -14,6 +16,7 @@ type MainGridProps = {
   fieldActive: number
   totalEmployees: number
   birthdays: UpcomingBirthday[]
+  workAnniversaries: UpcomingWorkAnniversary[]
 }
 
 export function MainGrid({
@@ -26,6 +29,7 @@ export function MainGrid({
   fieldActive,
   totalEmployees,
   birthdays,
+  workAnniversaries,
 }: MainGridProps) {
   return (
     <div className="ov2-main-grid">
@@ -40,6 +44,7 @@ export function MainGrid({
         totalEmployees={totalEmployees}
       />
       <UpcomingBirthdaysPanel birthdays={birthdays} />
+      <WorkAnniversariesPanel anniversaries={workAnniversaries} />
     </div>
   )
 }

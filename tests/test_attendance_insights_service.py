@@ -66,7 +66,7 @@ def test_efficiency_ignores_holidays_week_offs_and_pre_joining_days(monkeypatch)
     # EMP1 attended four of those, EMP2 attended the 9th and is WFH on the 10th.
     assert payload["efficiency"]["present_days"] == 6
     assert payload["efficiency"]["score"] == 75.0
-    assert payload["efficiency"]["rating"] == "Fair"
+    assert payload["efficiency"]["rating"] == "70-90"
 
 
 def test_previous_window_drives_the_delta(monkeypatch):
@@ -129,3 +129,15 @@ def test_window_is_validated(monkeypatch):
 
     _payload, status_code = attendance_insights_service.get_attendance_insights(end_date='not-a-date')
     assert status_code == 400
+
+
+def test_efficiency_rating_uses_configured_ranges():
+    assert attendance_insights_service._rating_for(None) == "No data"
+    assert attendance_insights_service._rating_for(0) == "0-10"
+    assert attendance_insights_service._rating_for(9.9) == "0-10"
+    assert attendance_insights_service._rating_for(10) == "10-30"
+    assert attendance_insights_service._rating_for(30) == "30-50"
+    assert attendance_insights_service._rating_for(50) == "50-70"
+    assert attendance_insights_service._rating_for(70) == "70-90"
+    assert attendance_insights_service._rating_for(90) == "90-100"
+    assert attendance_insights_service._rating_for(100) == "90-100"

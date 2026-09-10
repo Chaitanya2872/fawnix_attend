@@ -34,6 +34,29 @@
   margin-bottom: 4px;
 }
 
+.rp-heatmap-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-width: 0;
+  color: var(--text-muted, #607076);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.rp-heatmap-filter input {
+  width: 148px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--border, rgba(17, 44, 50, 0.12));
+  border-radius: 8px;
+  background: var(--surface-2, #fff);
+  color: var(--text-primary, #112c32);
+  font: inherit;
+  font-size: 12.5px;
+}
+
 /* ── Download menu ────────────────────────────────────────────────────────── */
 .rp-download {
   position: relative;
@@ -253,11 +276,23 @@
 .rp-efficiency-card.is-fair .rp-gauge-value { stroke: #e0a53c; }
 .rp-efficiency-card.is-poor .rp-gauge-value { stroke: #d9534f; }
 .rp-efficiency-card.is-idle .rp-gauge-value { stroke: #9aa7ab; }
+.rp-efficiency-card.is-range-90-100 .rp-gauge-value { stroke: #2f9e70; }
+.rp-efficiency-card.is-range-70-90 .rp-gauge-value { stroke: #1fa7a4; }
+.rp-efficiency-card.is-range-50-70 .rp-gauge-value { stroke: #e0a53c; }
+.rp-efficiency-card.is-range-30-50 .rp-gauge-value { stroke: #d97706; }
+.rp-efficiency-card.is-range-10-30 .rp-gauge-value { stroke: #d9534f; }
+.rp-efficiency-card.is-range-0-10 .rp-gauge-value { stroke: #9d2f2f; }
 .rp-efficiency-card.is-excellent .rp-gauge-marker { stroke: #2f9e70; }
 .rp-efficiency-card.is-good .rp-gauge-marker { stroke: #1fa7a4; }
 .rp-efficiency-card.is-fair .rp-gauge-marker { stroke: #e0a53c; }
 .rp-efficiency-card.is-poor .rp-gauge-marker { stroke: #d9534f; }
 .rp-efficiency-card.is-idle .rp-gauge-marker { stroke: #9aa7ab; }
+.rp-efficiency-card.is-range-90-100 .rp-gauge-marker { stroke: #2f9e70; }
+.rp-efficiency-card.is-range-70-90 .rp-gauge-marker { stroke: #1fa7a4; }
+.rp-efficiency-card.is-range-50-70 .rp-gauge-marker { stroke: #e0a53c; }
+.rp-efficiency-card.is-range-30-50 .rp-gauge-marker { stroke: #d97706; }
+.rp-efficiency-card.is-range-10-30 .rp-gauge-marker { stroke: #d9534f; }
+.rp-efficiency-card.is-range-0-10 .rp-gauge-marker { stroke: #9d2f2f; }
 
 .rp-gauge-centre {
   position: absolute;
@@ -458,6 +493,11 @@
 
   .rp-head-actions {
     justify-content: flex-end;
+  }
+
+  .rp-heatmap-card .chart-card-head {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .rp-download-menu {

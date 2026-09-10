@@ -21,7 +21,7 @@ function timingLabel(daysUntil: number) {
 
 export function UpcomingBirthdaysPanel({ birthdays }: Props) {
   const [page, setPage] = useState(1)
-  const pageSize = 8
+  const pageSize = 4
   const totalPages = Math.max(1, Math.ceil(birthdays.length / pageSize))
   const visiblePage = Math.min(page, totalPages)
   const visibleBirthdays = birthdays.slice((visiblePage - 1) * pageSize, visiblePage * pageSize)

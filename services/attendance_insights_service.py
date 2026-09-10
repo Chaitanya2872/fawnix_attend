@@ -32,21 +32,23 @@ PRESENT_STATUSES = ('P', 'S', 'WFH')
 # Statuses where no attendance was expected, so the day is left out of the score.
 NON_WORKING_STATUSES = ('H', 'O')
 
-RATING_BANDS = (
-    (95, 'Excellent'),
-    (85, 'Good'),
-    (70, 'Fair'),
-    (0, 'Needs attention'),
+EFFICIENCY_BANDS = (
+    (90, '90-100'),
+    (70, '70-90'),
+    (50, '50-70'),
+    (30, '30-50'),
+    (10, '10-30'),
+    (0, '0-10'),
 )
 
 
 def _rating_for(score):
     if score is None:
         return 'No data'
-    for threshold, label in RATING_BANDS:
+    for threshold, label in EFFICIENCY_BANDS:
         if score >= threshold:
             return label
-    return 'Needs attention'
+    return '0-10'
 
 
 def _percentage(numerator: int, denominator: int):

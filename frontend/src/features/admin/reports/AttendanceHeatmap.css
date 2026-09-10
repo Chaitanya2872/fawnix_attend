@@ -21,6 +21,42 @@
   gap: 6px;
 }
 
+.attendance-heatmap-controls {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.attendance-heatmap-controls label {
+  display: grid;
+  gap: 3px;
+  color: #607076;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.attendance-heatmap-controls select {
+  min-width: 138px;
+  padding: 6px 24px 6px 8px;
+  border: 1px solid rgba(17, 44, 50, 0.14);
+  border-radius: 5px;
+  background: #fff;
+  color: #112c32;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.attendance-heatmap-result-count {
+  margin-bottom: 7px;
+  color: #607076;
+  font-size: 11px;
+}
+
 .attendance-heatmap-swatch {
   width: 11px;
   height: 11px;
@@ -234,10 +270,12 @@
   background: #9aa7ab;
 }
 
-.attendance-heatmap-efficiency.is-excellent .attendance-heatmap-efficiency-track span { background: #2f9e70; }
-.attendance-heatmap-efficiency.is-good .attendance-heatmap-efficiency-track span { background: #1fa7a4; }
-.attendance-heatmap-efficiency.is-fair .attendance-heatmap-efficiency-track span { background: #e0a53c; }
-.attendance-heatmap-efficiency.is-poor .attendance-heatmap-efficiency-track span { background: #d9534f; }
+.attendance-heatmap-efficiency.is-range-90-100 .attendance-heatmap-efficiency-track span { background: #2f9e70; }
+.attendance-heatmap-efficiency.is-range-70-90 .attendance-heatmap-efficiency-track span { background: #1fa7a4; }
+.attendance-heatmap-efficiency.is-range-50-70 .attendance-heatmap-efficiency-track span { background: #e0a53c; }
+.attendance-heatmap-efficiency.is-range-30-50 .attendance-heatmap-efficiency-track span { background: #d97706; }
+.attendance-heatmap-efficiency.is-range-10-30 .attendance-heatmap-efficiency-track span { background: #d9534f; }
+.attendance-heatmap-efficiency.is-range-0-10 .attendance-heatmap-efficiency-track span { background: #9d2f2f; }
 
 .attendance-heatmap-cell-wrap {
   padding: 1px 2px;

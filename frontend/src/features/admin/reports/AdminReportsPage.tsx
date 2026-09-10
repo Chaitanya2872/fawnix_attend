@@ -51,6 +51,13 @@ function resolveInsightsEndDate(month: number, year: number) {
   return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 }
 
+function toHeatmapMonthValue(month: number, year: number) {
+  if (!Number.isFinite(month) || !Number.isFinite(year) || month < 1 || month > 12) {
+    return ''
+  }
+  return `${year}-${String(month).padStart(2, '0')}`
+}
+
 export default function AdminReportsPage(props: Props) {
   const {
     attendanceEfficiencyScores,
@@ -91,6 +98,7 @@ export default function AdminReportsPage(props: Props) {
   const heatmapMonth = Number(attendanceReportMonth)
   const heatmapYear = Number(attendanceReportYear)
   const insightsEndDate = resolveInsightsEndDate(heatmapMonth, heatmapYear)
+  const heatmapMonthValue = toHeatmapMonthValue(heatmapMonth, heatmapYear)
 
   useEffect(() => {
     void fetchAttendanceHeatmapData(heatmapMonth, heatmapYear)
@@ -101,6 +109,15 @@ export default function AdminReportsPage(props: Props) {
   }, [fetchAttendanceInsights, insightsEndDate])
 
   const heatmapMonthLabel = `${MONTH_LABELS[heatmapMonth - 1] || ''} ${heatmapYear}`.trim()
+
+  const handleHeatmapMonthChange = (value: string) => {
+    const [yearValue, monthValue] = value.split('-').map(Number)
+    if (!Number.isFinite(yearValue) || !Number.isFinite(monthValue)) {
+      return
+    }
+    setAttendanceReportYear(String(yearValue))
+    setAttendanceReportMonth(String(monthValue))
+  }
 
   // Prefer the server scores — they exclude holidays, week offs and days before
   // an employee joined, which the locally derived ones count against everyone.
@@ -190,6 +207,18 @@ export default function AdminReportsPage(props: Props) {
                 {`Daily status per employee for ${heatmapMonthLabel}.${canWriteAdminData ? ' Click a cell to correct it.' : ''}`}
               </span>
             </div>
+            <label className="rp-heatmap-filter" htmlFor="attendance-heatmap-month">
+              <span>Date</span>
+              <input
+                className="modern-date-input"
+                id="attendance-heatmap-month"
+                type="month"
+                min="2000-01"
+                max="2100-12"
+                value={heatmapMonthValue}
+                onChange={(event) => handleHeatmapMonthChange(event.target.value)}
+              />
+            </label>
           </div>
           <AttendanceHeatmap
             data={attendanceHeatmapData}

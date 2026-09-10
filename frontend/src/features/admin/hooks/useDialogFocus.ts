@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { RefObject } from 'react'
 
 const FOCUSABLE = [
@@ -34,6 +34,12 @@ function getFocusable(container: HTMLElement) {
  * drawer into content that is visually covered.
  */
 export function useDialogFocus({ containerRef, open, onClose }: UseDialogFocusOptions) {
+  const onCloseRef = useRef(onClose)
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
   useEffect(() => {
     if (!open) return
 
@@ -53,9 +59,9 @@ export function useDialogFocus({ containerRef, open, onClose }: UseDialogFocusOp
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && onClose) {
+      if (event.key === 'Escape' && onCloseRef.current) {
         event.stopPropagation()
-        onClose()
+        onCloseRef.current()
         return
       }
 
@@ -94,5 +100,5 @@ export function useDialogFocus({ containerRef, open, onClose }: UseDialogFocusOp
         previouslyFocused.focus()
       }
     }
-  }, [containerRef, open, onClose])
+  }, [containerRef, open])
 }

@@ -15,6 +15,7 @@ import { MainGrid } from "../../components/MainGrid";
 import { DepartmentsPanel } from "../../components/Departmentspanel";
 import { EmployeeAuditPanel } from "../../components/EmployeeAuditPanel";
 import type { UpcomingBirthday } from "../../components/UpcomingBirthdaysPanel";
+import type { UpcomingWorkAnniversary } from "../../components/WorkAnniversariesPanel";
 
 type Props = any;
 
@@ -51,6 +52,26 @@ function getMonthBounds(monthKey: string) {
 
 function getMonthKeyFromDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getAnnualDateForYear(sourceDate: Date, year: number) {
+  const month = sourceDate.getMonth();
+  const day = sourceDate.getDate();
+  const next = new Date(year, month, day);
+
+  if (next.getMonth() !== month) {
+    return new Date(year, month + 1, 0);
+  }
+
+  return next;
+}
+
+function getNextAnnualDate(sourceDate: Date, today: Date) {
+  let next = getAnnualDateForYear(sourceDate, today.getFullYear());
+  if (next < today) {
+    next = getAnnualDateForYear(sourceDate, today.getFullYear() + 1);
+  }
+  return next;
 }
 
 function getLeaveDateRange(row: any) {
@@ -157,16 +178,15 @@ export default function AdminOverviewPage({
 
     return employees
       .map((employee: any) => {
-        const dob = parseOverviewDate(employee.emp_date_of_birth);
+        const dob = parseOverviewDate(
+          employee.emp_date_of_birth ||
+            employee.date_of_birth ||
+            employee.birth_date ||
+            employee.birthday,
+        );
         if (!dob) return null;
 
-        let next = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
-        if (next < today)
-          next = new Date(
-            today.getFullYear() + 1,
-            dob.getMonth(),
-            dob.getDate(),
-          );
+        const next = getNextAnnualDate(dob, today);
         const daysUntil = Math.round(
           (next.getTime() - today.getTime()) / 86400000,
         );
@@ -179,6 +199,43 @@ export default function AdminOverviewPage({
       .sort(
         (a: UpcomingBirthday, b: UpcomingBirthday) => a.daysUntil - b.daysUntil,
       );
+  }, [employees]);
+  const upcomingWorkAnniversaries = useMemo<UpcomingWorkAnniversary[]>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return employees
+      .map((employee: any) => {
+        const joinedDate = parseOverviewDate(
+          employee.emp_joined_date ||
+            employee.emp_joining_date ||
+            employee.joining_date ||
+            employee.joined_date ||
+            employee.date_of_joining,
+        );
+        if (!joinedDate) return null;
+
+        const next = getNextAnnualDate(joinedDate, today);
+        const years = next.getFullYear() - joinedDate.getFullYear();
+        if (years < 1) return null;
+
+        const daysUntil = Math.round(
+          (next.getTime() - today.getTime()) / 86400000,
+        );
+        return { employee, date: next, daysUntil, years };
+      })
+      .filter(
+        (
+          item: UpcomingWorkAnniversary | null,
+        ): item is UpcomingWorkAnniversary =>
+          item !== null && item.daysUntil <= 30,
+      )
+      .sort((a: UpcomingWorkAnniversary, b: UpcomingWorkAnniversary) => {
+        if (a.daysUntil !== b.daysUntil) return a.daysUntil - b.daysUntil;
+        return (a.employee.emp_full_name || "").localeCompare(
+          b.employee.emp_full_name || "",
+        );
+      });
   }, [employees]);
   // ── Date / label helpers ───────────────────────────
   const weekLabel = getWeekRangeLabel(attendanceDateFilter);
@@ -384,6 +441,7 @@ export default function AdminOverviewPage({
           fieldActive={fieldActive}
           totalEmployees={totalEmployees}
           birthdays={upcomingBirthdays}
+          workAnniversaries={upcomingWorkAnniversaries}
         />
 
         {/* ── Lower grid: departments + approvals ── */}

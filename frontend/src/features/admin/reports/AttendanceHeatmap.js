@@ -208,11 +208,11 @@ function AttendanceHeatmap(_a) {
               <span>Score</span>
               <select id="attendance-efficiency-filter" value={efficiencyFilter} onChange={function (event) { return setEfficiencyFilter(event.target.value); }}>
                 <option value="all">All scores</option>
-                <option value="90-100">90–100%</option>
-                <option value="70-89">70–89%</option>
-                <option value="50-69">50–69%</option>
-                <option value="30-49">30–49%</option>
-                <option value="0-29">0–29%</option>
+                <option value="90-100">90-100%</option>
+                <option value="70-89">70-89%</option>
+                <option value="50-69">50-69%</option>
+                <option value="30-49">30-49%</option>
+                <option value="0-29">0-29%</option>
                 <option value="no-data">No data</option>
               </select>
             </label>

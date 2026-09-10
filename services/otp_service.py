@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Play Store review dummy credentials
 PLAYSTORE_TEST_EMP_CODE = "2872"
-PLAYSTORE_TEST_OTP = "654321"
+PLAYSTORE_TEST_OTP ="437893"
 
 
 def is_playstore_test_emp(emp_code: str) -> bool:

@@ -166,6 +166,7 @@ def list_activities(current_user):
         type: Filter by activity type (optional)
         include_tracking: true/false (default: true) for field visit tracking points
         include_activity_tracking: true/false (default: true) for activity GPS points
+        include_lead: true/false (default: false) to resolve linked CRM lead details
     """
     limit = request.args.get('limit', 50, type=int)
     activity_type = request.args.get('type')
@@ -173,6 +174,8 @@ def list_activities(current_user):
     include_tracking = str(include_tracking).lower() in ['1', 'true', 'yes']
     include_activity_tracking = request.args.get('include_activity_tracking', default='true')
     include_activity_tracking = str(include_activity_tracking).lower() in ['1', 'true', 'yes']
+    include_lead = request.args.get('include_lead', default='false')
+    include_lead = str(include_lead).lower() in ['1', 'true', 'yes']
     emp_code = request.args.get('emp_code')
     emp_email = request.args.get('emp_email')
 
@@ -192,7 +195,9 @@ def list_activities(current_user):
         limit,
         activity_type,
         include_tracking=include_tracking,
-        include_activity_tracking=include_activity_tracking
+        include_activity_tracking=include_activity_tracking,
+        include_lead=include_lead,
+        current_user=current_user
     )
     return jsonify(result[0]), result[1]
 
@@ -208,6 +213,7 @@ def list_team_activities(current_user):
         type: Filter by activity type (optional)
         include_tracking: true/false (default: true) for field visit tracking points
         include_activity_tracking: true/false (default: true) for activity GPS points
+        include_lead: true/false (default: false) to resolve linked CRM lead details
     """
     limit = request.args.get('limit', 100, type=int)
     activity_type = request.args.get('type')
@@ -215,6 +221,8 @@ def list_team_activities(current_user):
     include_tracking = str(include_tracking).lower() in ['1', 'true', 'yes']
     include_activity_tracking = request.args.get('include_activity_tracking', default='true')
     include_activity_tracking = str(include_activity_tracking).lower() in ['1', 'true', 'yes']
+    include_lead = request.args.get('include_lead', default='false')
+    include_lead = str(include_lead).lower() in ['1', 'true', 'yes']
     emp_code = request.args.get('emp_code')
     emp_email = request.args.get('emp_email')
 
@@ -224,7 +232,9 @@ def list_team_activities(current_user):
                 limit=limit,
                 activity_type=activity_type,
                 include_tracking=include_tracking,
-                include_activity_tracking=include_activity_tracking
+                include_activity_tracking=include_activity_tracking,
+                include_lead=include_lead,
+                current_user=current_user
             )
             return jsonify(response), status_code
 
@@ -238,7 +248,9 @@ def list_team_activities(current_user):
             limit,
             activity_type,
             include_tracking=include_tracking,
-            include_activity_tracking=include_activity_tracking
+            include_activity_tracking=include_activity_tracking,
+            include_lead=include_lead,
+            current_user=current_user
         )
         return jsonify(result[0]), result[1]
     elif emp_code or emp_email:
@@ -252,7 +264,9 @@ def list_team_activities(current_user):
         limit,
         activity_type,
         include_tracking=include_tracking,
-        include_activity_tracking=include_activity_tracking
+        include_activity_tracking=include_activity_tracking,
+        include_lead=include_lead,
+        current_user=current_user
     )
     return jsonify(result[0]), result[1]
 

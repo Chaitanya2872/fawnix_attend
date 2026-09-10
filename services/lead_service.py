@@ -46,6 +46,11 @@ def _resolve_verse_access_token(current_user: dict[str, Any]) -> str | None:
     if not fawnix_access_token:
         return None
 
+    # ``current_user`` is built per request, so caching the exchanged token on it keeps
+    # a request that touches several leads down to a single SSO round trip.
+    if "_verse_access_token" in current_user:
+        return current_user["_verse_access_token"]
+
     url = f"{CRM_BASE_URL}{CRM_SSO_EXCHANGE_PATH}"
     try:
         response = requests.post(
@@ -58,23 +63,40 @@ def _resolve_verse_access_token(current_user: dict[str, Any]) -> str | None:
         )
     except requests.Timeout:
         logger.warning("CRM SSO exchange timed out: %s", url)
+        current_user["_verse_access_token"] = None
         return None
     except requests.RequestException as exc:
         logger.error("CRM SSO exchange failed: %s (%s)", url, exc)
+        current_user["_verse_access_token"] = None
         return None
 
     if not response.ok:
         logger.warning("CRM SSO exchange rejected with status %s for %s", response.status_code, url)
+        current_user["_verse_access_token"] = None
         return None
 
     try:
         body = response.json() or {}
     except ValueError:
         logger.warning("CRM SSO exchange returned non-JSON response for %s", url)
+        current_user["_verse_access_token"] = None
         return None
 
-    access_token = str(body.get("accessToken") or "").strip()
-    return access_token or None
+    access_token = str(body.get("accessToken") or "").strip() or None
+    current_user["_verse_access_token"] = access_token
+    return access_token
+
+
+def warm_access_token(current_user: dict[str, Any]) -> None:
+    """Resolve the CRM token up front so a burst of lead calls shares one exchange.
+
+    Safe to call speculatively - the result (including failure) is cached on
+    ``current_user``, and any error here just falls back to per-call resolution.
+    """
+    try:
+        _resolve_verse_access_token(current_user)
+    except Exception:
+        logger.debug("CRM access token pre-warm failed", exc_info=True)
 
 
 def _headers(current_user: dict[str, Any], verse_access_token: str | None) -> dict[str, str]:

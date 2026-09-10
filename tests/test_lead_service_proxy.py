@@ -197,3 +197,40 @@ def test_proxy_falls_back_to_service_token_when_exchange_fails(monkeypatch):
     assert status_code == 200
     assert response == {"data": []}
     assert captured["headers"]["Authorization"] == "Bearer service-token"
+
+
+def test_access_token_exchange_is_reused_across_calls(monkeypatch):
+    exchanges = []
+    requests_made = []
+
+    def fake_post(url, headers=None, timeout=None):
+        exchanges.append(url)
+        return DummyResponse(payload={"accessToken": "verse-token"})
+
+    def fake_request(method, url, headers=None, params=None, json=None, timeout=None):
+        requests_made.append(url)
+        return DummyResponse(payload={"id": "lead-1"})
+
+    monkeypatch.setattr(lead_service.requests, "post", fake_post)
+    monkeypatch.setattr(lead_service.requests, "request", fake_request)
+    monkeypatch.setattr(lead_service, "CRM_SERVICE_TOKEN", "")
+
+    current_user = {"_access_token": "jwt-token", "emp_email": "john@example.com"}
+    for lead_id in ("lead-1", "lead-2", "lead-3"):
+        body, status_code = lead_service.get_lead(lead_id, current_user)
+        assert status_code == 200
+        assert body == {"id": "lead-1"}
+
+    # Enriching a list of activities must not cost one SSO round trip per lead.
+    assert len(requests_made) == 3
+    assert len(exchanges) == 1
+
+
+def test_warm_access_token_is_safe_without_a_token(monkeypatch):
+    def explode(*args, **kwargs):
+        raise AssertionError("no exchange should be attempted without a source token")
+
+    monkeypatch.setattr(lead_service.requests, "post", explode)
+
+    lead_service.warm_access_token({"emp_email": "john@example.com"})
+    lead_service.warm_access_token({})

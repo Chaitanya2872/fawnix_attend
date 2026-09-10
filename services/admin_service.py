@@ -2282,7 +2282,8 @@ def get_calendar_summary(month: int, year: int, department: str = None, emp_code
 
 
 def get_all_activities(limit: int = 100, activity_type: str = None,
-                       include_tracking: bool = True, include_activity_tracking: bool = True):
+                       include_tracking: bool = True, include_activity_tracking: bool = True,
+                       include_lead: bool = False, current_user: dict = None):
     """Get activities for all employees (optionally include field visit + activity GPS tracking points)"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -2420,6 +2421,10 @@ def get_all_activities(limit: int = 100, activity_type: str = None,
                     if aid:
                         activity['activity_tracking'] = tracking_by_activity.get(aid, [])
                         activity['activity_tracking_count'] = len(activity['activity_tracking'])
+
+        if include_lead:
+            from services.activity_service import attach_lead_details
+            attach_lead_details(activities, current_user)
 
         return ({
             "success": True,

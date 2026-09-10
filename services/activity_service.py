@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import datetime
 from database.connection import get_db_connection
 from services.attendance_constants import ATTENDANCE_STATUS_LOGGED_IN
@@ -9,6 +11,10 @@ import json
 import math
 
 logger = logging.getLogger(__name__)
+
+MAX_LEAD_LOOKUPS_PER_LIST = 25
+LEAD_LOOKUP_WORKERS = 8
+LEAD_LOOKUP_BUDGET_SECONDS = 8.0
 
 DEFAULT_DESTINATION_RADIUS_METERS = 100.0
 CLOCK_IN_REQUIRED_ACTIVITY_MESSAGE = "Clock-in first, heroics later — please clock in before starting your work."
@@ -639,8 +645,85 @@ def end_activity(activity_id: int, lat: str, lon: str, current_user: dict = None
         conn.close()
 
 
+def attach_lead_details(activities, current_user):
+    """Attach linked CRM lead details (name/company/status) to each activity.
+
+    Activities only store ``lead_id``; leads themselves live in the CRM service.
+    Lead ids are de-duplicated so a list of visits against the same lead costs a
+    single upstream call. Failures are non-fatal - the activity keeps its raw
+    ``lead_id`` and simply carries no lead name.
+    """
+    if not activities or not current_user:
+        return activities
+
+    lead_ids = []
+    for activity in activities:
+        lead_id = activity.get('lead_id')
+        if lead_id in (None, ''):
+            continue
+        lead_id = str(lead_id).strip()
+        if lead_id and lead_id not in lead_ids:
+            lead_ids.append(lead_id)
+
+    if not lead_ids:
+        return activities
+
+    if len(lead_ids) > MAX_LEAD_LOOKUPS_PER_LIST:
+        logger.warning(
+            "Lead enrichment capped at %s of %s distinct leads",
+            MAX_LEAD_LOOKUPS_PER_LIST,
+            len(lead_ids),
+        )
+        lead_ids = lead_ids[:MAX_LEAD_LOOKUPS_PER_LIST]
+
+    # Warm the CRM token once so the workers below don't each pay for an SSO exchange.
+    # Imported lazily: lead_service imports back into this module's notification helper.
+    from services.lead_service import warm_access_token
+    warm_access_token(current_user)
+
+    leads_by_id = {}
+    workers = min(LEAD_LOOKUP_WORKERS, len(lead_ids))
+    # Deliberately not a `with` block: its shutdown(wait=True) would block on in-flight
+    # CRM calls and undo the budget below.
+    executor = ThreadPoolExecutor(max_workers=workers)
+    try:
+        futures = {
+            executor.submit(fetch_lead_for_notification, lead_id, current_user): lead_id
+            for lead_id in lead_ids
+        }
+        try:
+            # A slow CRM must not hold up the activity list - take what resolved in time.
+            for future in as_completed(futures, timeout=LEAD_LOOKUP_BUDGET_SECONDS):
+                lead = future.result()
+                if isinstance(lead, dict):
+                    leads_by_id[futures[future]] = lead
+        except FuturesTimeoutError:
+            logger.warning(
+                "Lead enrichment budget exhausted; resolved %s of %s leads",
+                len(leads_by_id),
+                len(lead_ids),
+            )
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+    for activity in activities:
+        lead_id = activity.get('lead_id')
+        if lead_id in (None, ''):
+            continue
+        lead = leads_by_id.get(str(lead_id).strip())
+        if not lead:
+            continue
+        activity['lead_name'] = lead.get('name')
+        activity['lead_company'] = lead.get('company')
+        activity['lead_status'] = lead.get('status')
+        activity['lead_phone'] = lead.get('phone')
+
+    return activities
+
+
 def get_activities(emp_email: str, limit: int = 50, activity_type: str = None,
-                   include_tracking: bool = True, include_activity_tracking: bool = True):
+                   include_tracking: bool = True, include_activity_tracking: bool = True,
+                   include_lead: bool = False, current_user: dict = None):
     """Get activities with full details including field visit info and tracking data"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -751,7 +834,10 @@ def get_activities(emp_email: str, limit: int = 50, activity_type: str = None,
                             point[key] = value.strftime('%Y-%m-%d %H:%M:%S')
                 
                 activity['field_visit_tracking'] = fv_points
-        
+
+        if include_lead:
+            attach_lead_details(activities, current_user)
+
         return ({
             "success": True,
             "data": {
@@ -858,7 +944,8 @@ def link_field_visit_to_lead(emp_email: str, field_visit_id: int, lead_id: str):
 
 
 def get_team_activities(manager_code: str, limit: int = 100, activity_type: str = None,
-                        include_tracking: bool = True, include_activity_tracking: bool = True):
+                        include_tracking: bool = True, include_activity_tracking: bool = True,
+                        include_lead: bool = False, current_user: dict = None):
     """Get activities for a manager's team (optionally include field visit + activity GPS tracking points)"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -998,6 +1085,9 @@ def get_team_activities(manager_code: str, limit: int = 100, activity_type: str 
                     if aid:
                         activity['activity_tracking'] = tracking_by_activity.get(aid, [])
                         activity['activity_tracking_count'] = len(activity['activity_tracking'])
+
+        if include_lead:
+            attach_lead_details(activities, current_user)
 
         return ({
             "success": True,

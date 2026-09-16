@@ -1,7 +1,6 @@
 import { AttendanceTrendChart } from './Attendancetrendchart'
-import { UpcomingBirthdaysPanel } from './UpcomingBirthdaysPanel'
+import { CelebrationsPanel } from './CelebrationsPanel'
 import type { UpcomingBirthday } from './UpcomingBirthdaysPanel'
-import { WorkAnniversariesPanel } from './WorkAnniversariesPanel'
 import type { UpcomingWorkAnniversary } from './WorkAnniversariesPanel'
 
 type TrendItem = { label: string; count: number }
@@ -43,8 +42,7 @@ export function MainGrid({
         fieldActive={fieldActive}
         totalEmployees={totalEmployees}
       />
-      <UpcomingBirthdaysPanel birthdays={birthdays} />
-      <WorkAnniversariesPanel anniversaries={workAnniversaries} />
+      <CelebrationsPanel birthdays={birthdays} anniversaries={workAnniversaries} />
     </div>
   )
 }

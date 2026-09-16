@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 
 const MONTH_OPTIONS = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
 
-const REPORT_TYPES: Array<{ value: 'attendance' | 'exceptions' | 'leaves'; label: string; hint: string }> = [
+const REPORT_TYPES: Array<{ value: 'attendance' | 'exceptions' | 'leaves' | 'missed-logins'; label: string; hint: string }> = [
   { value: 'attendance', label: 'Attendance Report', hint: 'Daily clock-in / clock-out per employee' },
   { value: 'exceptions', label: 'Exceptions Report', hint: 'Late arrivals, early leaves and missed logins' },
-  { value: 'leaves', label: 'Leaves Report', hint: 'Applied, approved and rejected leave' }
+  { value: 'leaves', label: 'Leaves Report', hint: 'Applied, approved and rejected leave' },
+  { value: 'missed-logins', label: 'Missed Login Report', hint: 'Clock-ins after 10:05 AM or clock-outs before 6:00 PM' }
 ]
 
 type ReportDownloadMenuProps = {
@@ -21,7 +22,7 @@ type ReportDownloadMenuProps = {
   setReportEndDate: (value: string) => void
   attendanceReportFormat: 'csv' | 'pdf' | 'xlsx'
   setAttendanceReportFormat: (value: 'csv' | 'pdf' | 'xlsx') => void
-  onDownload: (reportType: 'attendance' | 'exceptions' | 'leaves') => void
+  onDownload: (reportType: 'attendance' | 'exceptions' | 'leaves' | 'missed-logins') => void
   statusMessage: string
 }
 

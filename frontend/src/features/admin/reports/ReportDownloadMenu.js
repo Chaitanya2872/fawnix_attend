@@ -6,7 +6,8 @@ var MONTH_OPTIONS = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10',
 var REPORT_TYPES = [
     { value: 'attendance', label: 'Attendance Report', hint: 'Daily clock-in / clock-out per employee' },
     { value: 'exceptions', label: 'Exceptions Report', hint: 'Late arrivals, early leaves and missed logins' },
-    { value: 'leaves', label: 'Leaves Report', hint: 'Applied, approved and rejected leave' }
+  { value: 'leaves', label: 'Leaves Report', hint: 'Applied, approved and rejected leave' },
+  { value: 'missed-logins', label: 'Missed Login Report', hint: 'Clock-ins after 10:05 AM or clock-outs before 6:00 PM' }
 ];
 /**
  * Single entry point for every export on the Reports page. The period and

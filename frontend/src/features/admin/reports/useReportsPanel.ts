@@ -255,7 +255,7 @@ export function useReportsPanel({
   const heatmapRequestRef = useRef(0)
   const insightsRequestRef = useRef(0)
 
-  const downloadRangeReport = async (reportType: 'attendance' | 'exceptions' | 'leaves') => {
+  const downloadRangeReport = async (reportType: 'attendance' | 'exceptions' | 'leaves' | 'missed-logins') => {
     try {
       let startDate = reportStartDate
       let endDate = reportEndDate

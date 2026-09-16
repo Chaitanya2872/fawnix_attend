@@ -1116,6 +1116,20 @@ EXCEPTIONS_RANGE_REPORT_COLUMNS = [
     ('manager_remarks', 'Manager Remarks', 'text'),
 ]
 
+MISSED_LOGINS_RANGE_REPORT_COLUMNS = [
+    ('date', 'Date', 'date'),
+    ('emp_code', 'Employee ID', 'text'),
+    ('employee_name', 'Employee Name', 'text'),
+    ('employee_email', 'Employee Email', 'text'),
+    ('emp_department', 'Department', 'text'),
+    ('emp_designation', 'Designation', 'text'),
+    ('login_time', 'Clock In', 'time'),
+    ('logout_time', 'Clock Out', 'time'),
+    ('late_login', 'Late Login', 'text'),
+    ('early_logout', 'Early Logout', 'text'),
+    ('working_hours', 'Working Hours', 'hours'),
+]
+
 LEAVES_RANGE_REPORT_COLUMNS = [
     ('emp_code', 'Employee ID', 'text'),
     ('employee_name', 'Employee Name', 'text'),
@@ -1230,6 +1244,28 @@ RANGE_REPORT_CONFIG = {
         'title': 'Attendance Exceptions Report',
         'columns': EXCEPTIONS_RANGE_REPORT_COLUMNS,
         'query_builder': _build_exceptions_range_query,
+    },
+    'missed-logins': {
+        'title': 'Missed Login Report',
+        'columns': MISSED_LOGINS_RANGE_REPORT_COLUMNS,
+        'query': """
+            SELECT a.date,
+                   e.emp_code,
+                   COALESCE(NULLIF(TRIM(e.emp_full_name), ''), a.employee_name) AS employee_name,
+                   COALESCE(a.employee_email, e.emp_email) AS employee_email,
+                   e.emp_department, e.emp_designation,
+                   a.login_time, a.logout_time,
+                   CASE WHEN a.login_time::time > TIME '10:05:00' THEN 'Yes' ELSE 'No' END AS late_login,
+                   CASE WHEN a.logout_time IS NOT NULL AND a.logout_time::time < TIME '18:00:00' THEN 'Yes' ELSE 'No' END AS early_logout,
+                   a.working_hours
+            FROM attendance a
+            LEFT JOIN employees e ON LOWER(a.employee_email) = LOWER(e.emp_email)
+            WHERE a.date BETWEEN %s AND %s
+              AND a.login_time IS NOT NULL
+              AND (a.login_time::time > TIME '10:05:00'
+                   OR (a.logout_time IS NOT NULL AND a.logout_time::time < TIME '18:00:00'))
+            ORDER BY a.date DESC, employee_name ASC, a.login_time ASC
+        """,
     },
     'leaves': {
         'title': 'Leave Report',
@@ -1364,7 +1400,7 @@ def _export_range_report(report_type, report_format, start_date, end_date, rows,
 def download_range_report(current_user, report_type):
     config = RANGE_REPORT_CONFIG.get(report_type)
     if not config:
-        return jsonify({'success': False, 'message': 'Report type must be attendance, exceptions, or leaves.'}), 400
+        return jsonify({'success': False, 'message': 'Report type must be attendance, exceptions, leaves, or missed-logins.'}), 400
     report_format = (request.args.get('format') or 'csv').lower()
     if report_format not in {'csv', 'xlsx', 'pdf'}:
         return jsonify({'success': False, 'message': 'Format must be csv, xlsx, or pdf.'}), 400

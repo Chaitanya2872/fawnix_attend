@@ -1109,9 +1109,12 @@ function FawnixApp() {
       return (
         <AdminEmployeeMasterPage
           key={employeeMasterResource.key}
+          accessToken={accessToken}
           actionLoading={employeeMasterActionLoading}
           actionStatus={employeeMasterActionStatus}
+          apiRequest={apiRequest}
           canWriteAdminData={canWriteAdminData}
+          employees={employees}
           error={employeeMasterError}
           filterOptions={employeeMasterFilterOptions}
           filters={employeeMasterFilters}

@@ -75,6 +75,12 @@
   background: var(--em-surface-muted, #f8f9fb);
 }
 
+.em-locpick-results button.is-selected {
+  background: var(--a-accent-soft, #e9f4f0);
+  color: var(--a-accent-ink, #0b4f3c);
+  font-weight: 600;
+}
+
 .em-locpick-map {
   height: 280px;
   border: 1px solid var(--em-border, #e5e7eb);

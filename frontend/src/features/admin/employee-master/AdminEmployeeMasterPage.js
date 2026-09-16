@@ -60,6 +60,7 @@ exports.default = AdminEmployeeMasterPage;
 var react_1 = require("react");
 var employeeMasterConfig_1 = require("./employeeMasterConfig");
 var LocationPicker_1 = require("./LocationPicker");
+var OrganizationStructureMap_1 = require("./OrganizationStructureMap");
 var useDialogFocus_1 = require("../hooks/useDialogFocus");
 require("./AdminEmployeeMasterPage.css");
 function stringifyValue(value) {
@@ -178,7 +179,7 @@ function DataListInput(_a) {
 }
 function AdminEmployeeMasterPage(_a) {
     var _this = this;
-    var actionLoading = _a.actionLoading, actionStatus = _a.actionStatus, canWriteAdminData = _a.canWriteAdminData, error = _a.error, filterOptions = _a.filterOptions, filters = _a.filters, appliedFilters = _a.appliedFilters, lastSyncedAt = _a.lastSyncedAt, loading = _a.loading, pagination = _a.pagination, records = _a.records, resource = _a.resource, resources = _a.resources, onSelectResource = _a.onSelectResource, applyFilters = _a.applyFilters, changePage = _a.changePage, clearFilters = _a.clearFilters, createRecord = _a.createRecord, deleteRecord = _a.deleteRecord, refresh = _a.refresh, updateFilter = _a.updateFilter, updateRecord = _a.updateRecord, _b = _a.createRequestId, createRequestId = _b === void 0 ? 0 : _b;
+    var accessToken = _a.accessToken, actionLoading = _a.actionLoading, actionStatus = _a.actionStatus, apiRequest = _a.apiRequest, canWriteAdminData = _a.canWriteAdminData, employees = _a.employees, error = _a.error, filterOptions = _a.filterOptions, filters = _a.filters, appliedFilters = _a.appliedFilters, lastSyncedAt = _a.lastSyncedAt, loading = _a.loading, pagination = _a.pagination, records = _a.records, resource = _a.resource, resources = _a.resources, onSelectResource = _a.onSelectResource, applyFilters = _a.applyFilters, changePage = _a.changePage, clearFilters = _a.clearFilters, createRecord = _a.createRecord, deleteRecord = _a.deleteRecord, refresh = _a.refresh, updateFilter = _a.updateFilter, updateRecord = _a.updateRecord, _b = _a.createRequestId, createRequestId = _b === void 0 ? 0 : _b;
     var _c = (0, react_1.useState)(null), formPanel = _c[0], setFormPanel = _c[1];
     var _d = (0, react_1.useState)(null), deleteTarget = _d[0], setDeleteTarget = _d[1];
     var handledCreateRequestId = (0, react_1.useRef)(0);
@@ -449,6 +450,13 @@ function AdminEmployeeMasterPage(_a) {
         });
     };
     var tableState = renderTableState();
+    var departmentRecordsVersion = resource.key === 'departments'
+        ? [
+            (lastSyncedAt === null || lastSyncedAt === void 0 ? void 0 : lastSyncedAt.getTime()) || 0,
+            pagination.total_records,
+            records.length,
+        ].join('-')
+        : '';
     return (<div className="admin-aligned-page admin-aligned-page--employee-master">
       <div className="em-header dashboard-section-head">
         <div className="em-header__copy">
@@ -520,6 +528,8 @@ function AdminEmployeeMasterPage(_a) {
       </section>
 
       {actionStatus ? <div className="adm-status-line em-status-line" role="status">{actionStatus}</div> : null}
+
+      <OrganizationStructureMap_1.default accessToken={accessToken} apiRequest={apiRequest} currentDepartmentRecords={resource.key === 'departments' ? records : []} departmentRecordsVersion={departmentRecordsVersion} employees={employees}/>
 
       <form className="em-filter-bar" onSubmit={function (event) {
             event.preventDefault();

@@ -22,7 +22,7 @@ type LocationPickerProps = {
   addressHint?: string
   onChange: (next: { latitude: string; longitude: string }) => void
   /** Called when a search result carries address parts worth filling in. */
-  onResolveAddress?: (parts: { city?: string; state?: string; country?: string; pincode?: string }) => void
+  onResolveAddress?: (parts: { address?: string; city?: string; state?: string; country?: string; pincode?: string }) => void
   disabled?: boolean
 }
 
@@ -67,6 +67,7 @@ export default function LocationPicker({
   const mapRef = useRef<L.Map | null>(null)
   const markerRef = useRef<L.Marker | null>(null)
   const circleRef = useRef<L.Circle | null>(null)
+  const searchRequestRef = useRef(0)
   // Held in a ref so the map's event handlers never close over a stale prop.
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
@@ -79,6 +80,7 @@ export default function LocationPicker({
   const lat = parseCoord(latitude)
   const lon = parseCoord(longitude)
   const hasPoint = lat !== null && lon !== null
+  const selectedResultKey = hasPoint ? `${toFixedCoord(lat as number)}-${toFixedCoord(lon as number)}` : ''
 
   // Build the map once; later prop changes are pushed in by the effects below.
   useEffect(() => {
@@ -159,6 +161,43 @@ export default function LocationPicker({
     }
   }, [lat, lon, hasPoint, geofenceRadius, disabled])
 
+  const moveMapToPoint = (nextLat: number, nextLon: number) => {
+    const map = mapRef.current
+    if (!map) return
+
+    map.flyTo([nextLat, nextLon], Math.max(map.getZoom(), PLACED_ZOOM), {
+      duration: 0.55,
+    })
+  }
+
+  const applyResult = (result: NominatimResult, options: { keepResults?: boolean } = {}) => {
+    const nextLat = Number(result.lat)
+    const nextLon = Number(result.lon)
+    if (!Number.isFinite(nextLat) || !Number.isFinite(nextLon)) {
+      setSearchError('The selected place did not include usable coordinates.')
+      return
+    }
+
+    onChangeRef.current({
+      latitude: toFixedCoord(nextLat),
+      longitude: toFixedCoord(nextLon),
+    })
+    moveMapToPoint(nextLat, nextLon)
+    if (!options.keepResults) {
+      setResults([])
+    }
+    setSearch(result.display_name)
+
+    const address = result.address || {}
+    onResolveAddress?.({
+      address: result.display_name,
+      city: address.city || address.town || address.village || address.suburb || address.county,
+      state: address.state,
+      country: address.country,
+      pincode: address.postcode,
+    })
+  }
+
   const runSearch = async (event: React.FormEvent) => {
     event.preventDefault()
     const query = (search || addressHint || '').trim()
@@ -170,6 +209,8 @@ export default function LocationPicker({
     setSearching(true)
     setSearchError('')
     setResults([])
+    const requestId = searchRequestRef.current + 1
+    searchRequestRef.current = requestId
 
     try {
       const response = await fetch(
@@ -177,34 +218,25 @@ export default function LocationPicker({
       )
       if (!response.ok) throw new Error('Address lookup failed. Try again in a moment.')
       const found = (await response.json()) as NominatimResult[]
+      if (searchRequestRef.current !== requestId) {
+        return
+      }
       if (!Array.isArray(found) || found.length === 0) {
         setSearchError(`No place found for “${query}”. Try a broader search, or click the map.`)
         return
       }
       setResults(found)
-      if (found.length === 1) applyResult(found[0])
+      applyResult(found[0], { keepResults: found.length > 1 })
     } catch (error) {
+      if (searchRequestRef.current !== requestId) {
+        return
+      }
       setSearchError(error instanceof Error ? error.message : 'Address lookup failed.')
     } finally {
-      setSearching(false)
+      if (searchRequestRef.current === requestId) {
+        setSearching(false)
+      }
     }
-  }
-
-  const applyResult = (result: NominatimResult) => {
-    onChangeRef.current({
-      latitude: toFixedCoord(Number(result.lat)),
-      longitude: toFixedCoord(Number(result.lon)),
-    })
-    setResults([])
-    setSearch(result.display_name)
-
-    const address = result.address || {}
-    onResolveAddress?.({
-      city: address.city || address.town || address.village || address.suburb || address.county,
-      state: address.state,
-      country: address.country,
-      pincode: address.postcode,
-    })
   }
 
   const useCurrentLocation = () => {
@@ -214,11 +246,13 @@ export default function LocationPicker({
     }
     setSearchError('')
     navigator.geolocation.getCurrentPosition(
-      (position) =>
+      (position) => {
+        moveMapToPoint(position.coords.latitude, position.coords.longitude)
         onChangeRef.current({
           latitude: toFixedCoord(position.coords.latitude),
           longitude: toFixedCoord(position.coords.longitude),
-        }),
+        })
+      },
       () => setSearchError('Could not read your location. Check the browser permission.')
     )
   }
@@ -265,8 +299,12 @@ export default function LocationPicker({
       {results.length > 1 ? (
         <ul className="em-locpick-results">
           {results.map((result) => (
-            <li key={`${result.lat}-${result.lon}`}>
-              <button type="button" onClick={() => applyResult(result)}>
+            <li key={`${result.lat}-${result.lon}-${result.display_name}`}>
+              <button
+                type="button"
+                className={`${toFixedCoord(Number(result.lat))}-${toFixedCoord(Number(result.lon))}` === selectedResultKey ? 'is-selected' : ''}
+                onClick={() => applyResult(result)}
+              >
                 {result.display_name}
               </button>
             </li>

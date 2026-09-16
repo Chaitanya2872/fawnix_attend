@@ -1,9 +1,11 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { EMPLOYEE_MASTER_STATUS_OPTIONS } from './employeeMasterConfig'
 import LocationPicker from './LocationPicker'
+import OrganizationStructureMap from './OrganizationStructureMap'
 import { useDialogFocus } from '../hooks/useDialogFocus'
 import './AdminEmployeeMasterPage.css'
 import type {
+  EmployeeRow,
   EmployeeMasterFilterOptionEntry,
   EmployeeMasterFilterOptions,
   EmployeeMasterFilterState,
@@ -24,10 +26,16 @@ type SelectOption = {
   label: string
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ApiRequest = (path: string, options?: RequestInit, tokenOverride?: string) => Promise<any>
+
 type AdminEmployeeMasterPageProps = {
+  accessToken: string
   actionLoading: boolean
   actionStatus: string
+  apiRequest: ApiRequest
   canWriteAdminData: boolean
+  employees: EmployeeRow[]
   error: string
   filterOptions: EmployeeMasterFilterOptions
   filters: EmployeeMasterFilterState
@@ -221,9 +229,12 @@ function DataListInput({
 }
 
 export default function AdminEmployeeMasterPage({
+  accessToken,
   actionLoading,
   actionStatus,
+  apiRequest,
   canWriteAdminData,
+  employees,
   error,
   filterOptions,
   filters,
@@ -577,6 +588,13 @@ export default function AdminEmployeeMasterPage({
   }
 
   const tableState = renderTableState()
+  const departmentRecordsVersion = resource.key === 'departments'
+    ? [
+        lastSyncedAt?.getTime() || 0,
+        pagination.total_records,
+        records.length,
+      ].join('-')
+    : ''
 
   return (
     <div className="admin-aligned-page admin-aligned-page--employee-master">
@@ -679,6 +697,14 @@ export default function AdminEmployeeMasterPage({
       </section>
 
       {actionStatus ? <div className="adm-status-line em-status-line" role="status">{actionStatus}</div> : null}
+
+      <OrganizationStructureMap
+        accessToken={accessToken}
+        apiRequest={apiRequest}
+        currentDepartmentRecords={resource.key === 'departments' ? records : []}
+        departmentRecordsVersion={departmentRecordsVersion}
+        employees={employees}
+      />
 
       <form
         className="em-filter-bar"

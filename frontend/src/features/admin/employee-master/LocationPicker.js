@@ -74,6 +74,7 @@ function LocationPicker(_a) {
     var mapRef = (0, react_1.useRef)(null);
     var markerRef = (0, react_1.useRef)(null);
     var circleRef = (0, react_1.useRef)(null);
+    var searchRequestRef = (0, react_1.useRef)(0);
     // Held in a ref so the map's event handlers never close over a stale prop.
     var onChangeRef = (0, react_1.useRef)(onChange);
     onChangeRef.current = onChange;
@@ -84,6 +85,7 @@ function LocationPicker(_a) {
     var lat = parseCoord(latitude);
     var lon = parseCoord(longitude);
     var hasPoint = lat !== null && lon !== null;
+    var selectedResultKey = hasPoint ? "".concat(toFixedCoord(lat), "-").concat(toFixedCoord(lon)) : '';
     // Build the map once; later prop changes are pushed in by the effects below.
     (0, react_1.useEffect)(function () {
         if (!containerRef.current || mapRef.current)
@@ -158,8 +160,42 @@ function LocationPicker(_a) {
             circleRef.current = null;
         }
     }, [lat, lon, hasPoint, geofenceRadius, disabled]);
+    var moveMapToPoint = function (nextLat, nextLon) {
+        var map = mapRef.current;
+        if (!map)
+            return;
+        map.flyTo([nextLat, nextLon], Math.max(map.getZoom(), PLACED_ZOOM), {
+            duration: 0.55,
+        });
+    };
+    var applyResult = function (result, options) {
+        if (options === void 0) { options = {}; }
+        var nextLat = Number(result.lat);
+        var nextLon = Number(result.lon);
+        if (!Number.isFinite(nextLat) || !Number.isFinite(nextLon)) {
+            setSearchError('The selected place did not include usable coordinates.');
+            return;
+        }
+        onChangeRef.current({
+            latitude: toFixedCoord(nextLat),
+            longitude: toFixedCoord(nextLon),
+        });
+        moveMapToPoint(nextLat, nextLon);
+        if (!options.keepResults) {
+            setResults([]);
+        }
+        setSearch(result.display_name);
+        var address = result.address || {};
+        onResolveAddress === null || onResolveAddress === void 0 ? void 0 : onResolveAddress({
+            address: result.display_name,
+            city: address.city || address.town || address.village || address.suburb || address.county,
+            state: address.state,
+            country: address.country,
+            pincode: address.postcode,
+        });
+    };
     var runSearch = function (event) { return __awaiter(_this, void 0, void 0, function () {
-        var query, response, found, error_1;
+        var query, requestId, response, found, error_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
@@ -172,6 +208,8 @@ function LocationPicker(_a) {
                     setSearching(true);
                     setSearchError('');
                     setResults([]);
+                    requestId = searchRequestRef.current + 1;
+                    searchRequestRef.current = requestId;
                     _a.label = 1;
                 case 1:
                     _a.trys.push([1, 4, 5, 6]);
@@ -183,40 +221,32 @@ function LocationPicker(_a) {
                     return [4 /*yield*/, response.json()];
                 case 3:
                     found = (_a.sent());
+                    if (searchRequestRef.current !== requestId) {
+                        return [2 /*return*/];
+                    }
                     if (!Array.isArray(found) || found.length === 0) {
                         setSearchError("No place found for \u201C".concat(query, "\u201D. Try a broader search, or click the map."));
                         return [2 /*return*/];
                     }
                     setResults(found);
-                    if (found.length === 1)
-                        applyResult(found[0]);
+                    applyResult(found[0], { keepResults: found.length > 1 });
                     return [3 /*break*/, 6];
                 case 4:
                     error_1 = _a.sent();
+                    if (searchRequestRef.current !== requestId) {
+                        return [2 /*return*/];
+                    }
                     setSearchError(error_1 instanceof Error ? error_1.message : 'Address lookup failed.');
                     return [3 /*break*/, 6];
                 case 5:
-                    setSearching(false);
+                    if (searchRequestRef.current === requestId) {
+                        setSearching(false);
+                    }
                     return [7 /*endfinally*/];
                 case 6: return [2 /*return*/];
             }
         });
     }); };
-    var applyResult = function (result) {
-        onChangeRef.current({
-            latitude: toFixedCoord(Number(result.lat)),
-            longitude: toFixedCoord(Number(result.lon)),
-        });
-        setResults([]);
-        setSearch(result.display_name);
-        var address = result.address || {};
-        onResolveAddress === null || onResolveAddress === void 0 ? void 0 : onResolveAddress({
-            city: address.city || address.town || address.village || address.suburb || address.county,
-            state: address.state,
-            country: address.country,
-            pincode: address.postcode,
-        });
-    };
     var useCurrentLocation = function () {
         if (!navigator.geolocation) {
             setSearchError('This browser cannot report your location.');
@@ -224,7 +254,8 @@ function LocationPicker(_a) {
         }
         setSearchError('');
         navigator.geolocation.getCurrentPosition(function (position) {
-            return onChangeRef.current({
+            moveMapToPoint(position.coords.latitude, position.coords.longitude);
+            onChangeRef.current({
                 latitude: toFixedCoord(position.coords.latitude),
                 longitude: toFixedCoord(position.coords.longitude),
             });
@@ -256,8 +287,8 @@ function LocationPicker(_a) {
       {searchError ? <p className="em-locpick-error">{searchError}</p> : null}
 
       {results.length > 1 ? (<ul className="em-locpick-results">
-          {results.map(function (result) { return (<li key={"".concat(result.lat, "-").concat(result.lon)}>
-              <button type="button" onClick={function () { return applyResult(result); }}>
+          {results.map(function (result) { return (<li key={"".concat(result.lat, "-").concat(result.lon, "-").concat(result.display_name)}>
+              <button type="button" className={"".concat(toFixedCoord(Number(result.lat)), "-").concat(toFixedCoord(Number(result.lon))) === selectedResultKey ? 'is-selected' : ''} onClick={function () { return applyResult(result); }}>
                 {result.display_name}
               </button>
             </li>); })}

@@ -27,6 +27,7 @@ export const sidebarSections: SidebarSectionDefinition[] = [
         label: 'Organization',
         icon: 'building',
         matchIds: [
+          'employee-master-organization-structure',
           'employee-master-payroll-units',
           'employee-master-designations',
           'employee-master-departments',
@@ -45,8 +46,7 @@ export const sidebarItems: SidebarItemDefinition[] = sidebarSections.flatMap(
 )
 
 /**
- * Resolves a panel to the nav entry that represents it, following `matchIds`
- * so the Organization entry answers for all of its tabs.
+ * Resolves a panel to the Organization entry when one of its tabs is active.
  */
 export function findSidebarItem(panel: SidebarId): SidebarItemDefinition | undefined {
   return sidebarItems.find(

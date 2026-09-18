@@ -10,6 +10,7 @@ import type { SidebarId } from '../../../types/admin'
 export const adminPanelPathMap: Record<SidebarId, string> = {
   dashboard: "",
   employees: "employees",
+  "employee-master-organization-structure": "employee-master/organization-structure",
   "employee-master-working-units": "employee-master/working-units",
   "employee-master-payroll-units": "employee-master/payroll-units",
   "employee-master-designations": "employee-master/designations",

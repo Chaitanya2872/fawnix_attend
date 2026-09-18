@@ -1105,7 +1105,7 @@ function FawnixApp() {
       );
     }
 
-    if (employeeMasterIsActive) {
+    if (activePanel === "employee-master-organization-structure" || employeeMasterIsActive) {
       return (
         <AdminEmployeeMasterPage
           key={employeeMasterResource.key}
@@ -1125,6 +1125,7 @@ function FawnixApp() {
           records={employeeMasterRecords}
           resource={employeeMasterResource}
           resources={employeeMasterResources}
+          showOrganizationStructure={activePanel === "employee-master-organization-structure"}
           onSelectResource={(sidebarId) => {
             setActivePanel(sidebarId);
             navigate(getAdminPanelPath(sidebarId));

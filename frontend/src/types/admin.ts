@@ -7,6 +7,7 @@ export type PrivacySection = {
 export type SidebarId =
   | 'dashboard'
   | 'employees'
+  | 'employee-master-organization-structure'
   | 'employee-master-working-units'
   | 'employee-master-payroll-units'
   | 'employee-master-designations'

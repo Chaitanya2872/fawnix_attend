@@ -46,9 +46,9 @@ type AdminEmployeeMasterPageProps = {
   pagination: EmployeeMasterPagination
   records: EmployeeMasterRecord[]
   resource: EmployeeMasterResourceConfig
-  /** Every master list reachable from this page, rendered as tabs. */
   resources: EmployeeMasterResourceConfig[]
   onSelectResource: (sidebarId: EmployeeMasterResourceConfig['sidebarId']) => void
+  showOrganizationStructure?: boolean
   applyFilters: () => void
   changePage: (page: number) => void
   clearFilters: () => void
@@ -246,6 +246,7 @@ export default function AdminEmployeeMasterPage({
   resource,
   resources,
   onSelectResource,
+  showOrganizationStructure = false,
   applyFilters,
   changePage,
   clearFilters,
@@ -601,18 +602,29 @@ export default function AdminEmployeeMasterPage({
       <div className="em-header dashboard-section-head">
         <div className="em-header__copy">
           <p className="adm-eyebrow">Administration</p>
-          <h1 className="adm-heading">Organization</h1>
+          <h1 className="adm-heading">{showOrganizationStructure ? 'Organization Structure' : resource.title}</h1>
           <p className="em-subtitle">
-            Maintain the reference records that organize employees, payroll, reporting lines, and departments.
+            {showOrganizationStructure
+              ? 'View the reporting structure across departments and employees.'
+              : `Maintain ${resource.title.toLowerCase()} as an independent employee master.`}
           </p>
           <div className="adm-tabs" role="tablist" aria-label="Organization records">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={showOrganizationStructure}
+              className={`adm-tab${showOrganizationStructure ? ' adm-tab--active' : ''}`}
+              onClick={() => onSelectResource('employee-master-organization-structure')}
+            >
+              Organization Structure
+            </button>
             {resources.map((entry) => (
               <button
                 key={entry.key}
                 type="button"
                 role="tab"
-                aria-selected={entry.key === resource.key}
-                className={`adm-tab${entry.key === resource.key ? ' adm-tab--active' : ''}`}
+                aria-selected={!showOrganizationStructure && entry.key === resource.key}
+                className={`adm-tab${!showOrganizationStructure && entry.key === resource.key ? ' adm-tab--active' : ''}`}
                 onClick={() => onSelectResource(entry.sidebarId)}
               >
                 {entry.tabLabel}
@@ -621,7 +633,7 @@ export default function AdminEmployeeMasterPage({
           </div>
         </div>
 
-        <div className="em-header__actions">
+        {!showOrganizationStructure ? <div className="em-header__actions">
           {!canWriteAdminData ? <span className="em-readonly-pill">Read only</span> : null}
           {canWriteAdminData ? (
             <button className="adm-btn adm-btn--primary" type="button" onClick={openCreatePanel}>
@@ -654,10 +666,10 @@ export default function AdminEmployeeMasterPage({
               />
             </svg>
           </button>
-        </div>
+        </div> : null}
       </div>
 
-      <section className="adm-stats-strip em-stats-strip" aria-label={`${resource.title} summary`}>
+      {!showOrganizationStructure ? <section className="adm-stats-strip em-stats-strip" aria-label={`${resource.title} summary`}>
         <div className="adm-stat-item">
           <span className="adm-stat-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24">
@@ -694,19 +706,19 @@ export default function AdminEmployeeMasterPage({
             <span className="adm-stat-caption">{loading ? 'Refreshing now' : 'Using admin API'}</span>
           </div>
         </div>
-      </section>
+      </section> : null}
 
-      {actionStatus ? <div className="adm-status-line em-status-line" role="status">{actionStatus}</div> : null}
+      {!showOrganizationStructure && actionStatus ? <div className="adm-status-line em-status-line" role="status">{actionStatus}</div> : null}
 
-      <OrganizationStructureMap
-        accessToken={accessToken}
-        apiRequest={apiRequest}
-        currentDepartmentRecords={resource.key === 'departments' ? records : []}
-        departmentRecordsVersion={departmentRecordsVersion}
-        employees={employees}
-      />
-
-      <form
+      {showOrganizationStructure ? (
+        <OrganizationStructureMap
+          accessToken={accessToken}
+          apiRequest={apiRequest}
+          currentDepartmentRecords={[]}
+          departmentRecordsVersion="organization-structure"
+          employees={employees}
+        />
+      ) : <form
         className="em-filter-bar"
         onSubmit={(event) => {
           event.preventDefault()
@@ -816,8 +828,9 @@ export default function AdminEmployeeMasterPage({
           )
         })}
         </div>
-      </form>
+      </form>}
 
+      {!showOrganizationStructure ? <>
       <div className="adm-table-card table-card em-table-card">
         <div className="adm-table-toolbar em-table-toolbar">
           <div className="adm-table-title">
@@ -1035,6 +1048,7 @@ export default function AdminEmployeeMasterPage({
           </div>
         </div>
       ) : null}
+      </> : null}
     </div>
   )
 }

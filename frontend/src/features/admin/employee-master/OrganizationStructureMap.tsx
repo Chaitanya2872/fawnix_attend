@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type WheelEvent } from 'react'
 import './OrganizationStructureMap.css'
 import type { EmployeeMasterRecord, EmployeeRow } from '../../../types/admin'
 
@@ -24,18 +24,18 @@ type DepartmentSeed = {
 
 type PositionedDepartment = DepartmentSeed & {
   angle: number
-  employeeCount: number
   x: number
   y: number
 }
 
-type PositionedEmployee = {
+type HierarchyNode = {
   key: string
   name: string
   designation: string
   initials: string
   photoUrl: string
   tone: string
+  level: 'manager' | 'lead' | 'member'
   x: number
   y: number
 }
@@ -63,12 +63,12 @@ type ZoomInput = number | ((currentScale: number) => number)
 const DEPARTMENTS_ENDPOINT = '/api/admin/employee-master/departments'
 const DEPARTMENT_PAGE_SIZE = 100
 const MAX_DEPARTMENT_FETCH_PAGES = 25
-const EMPLOYEES_PER_RING = 10
 const ROOT_NODE_SIZE = 92
-const DEPARTMENT_NODE_SIZE = 108
-const DEPARTMENT_NODE_CLEARANCE = DEPARTMENT_NODE_SIZE + 28
-const EMPLOYEE_CARD_WIDTH = 178
-const EMPLOYEE_CARD_HEIGHT = 66
+const DEPARTMENT_NODE_SIZE = 112
+const DEPARTMENT_NODE_CLEARANCE = DEPARTMENT_NODE_SIZE + 26
+const HIERARCHY_MANAGER_DISTANCE = 156
+const HIERARCHY_LEAD_DISTANCE = 302
+const HIERARCHY_MEMBER_DISTANCE = 468
 const MIN_ZOOM = 0.32
 const MAX_ZOOM = 1.55
 const DEFAULT_TRANSFORM: MapTransform = { x: 0, y: 0, scale: 1 }
@@ -117,40 +117,14 @@ function normalizeOptionalBoolean(value: unknown) {
 }
 
 function buildDepartmentRingPlans(departmentCount: number): DepartmentRingPlan[] {
-  if (departmentCount <= 0) {
-    return [{ start: 0, count: 0, radius: 230, index: 0 }]
-  }
-
-  if (departmentCount <= 24) {
-    return [{
-      start: 0,
-      count: departmentCount,
-      radius: clamp((departmentCount * DEPARTMENT_NODE_CLEARANCE) / (Math.PI * 2), 230, 430),
-      index: 0,
-    }]
-  }
-
-  const plans: DepartmentRingPlan[] = []
-  let remaining = departmentCount
-  let start = 0
-  let ringIndex = 0
-  let radius = 300
-
-  while (remaining > 0) {
-    const capacity = Math.max(
-      10,
-      Math.floor((Math.PI * 2 * radius) / DEPARTMENT_NODE_CLEARANCE)
-    )
-    const count = Math.min(remaining, capacity)
-
-    plans.push({ start, count, radius, index: ringIndex })
-    remaining -= count
-    start += count
-    ringIndex += 1
-    radius += 158
-  }
-
-  return plans
+  return [{
+    start: 0,
+    count: departmentCount,
+    radius: departmentCount > 0
+      ? Math.max(300, (departmentCount * DEPARTMENT_NODE_CLEARANCE) / (Math.PI * 2))
+      : 300,
+    index: 0,
+  }]
 }
 
 function getInitials(value: string) {
@@ -186,6 +160,10 @@ function getDepartmentName(record: EmployeeMasterRecord) {
 
 function getDepartmentCode(record: EmployeeMasterRecord) {
   return stringifyValue(record.department_code) || stringifyValue(record.code) || stringifyValue(record.id)
+}
+
+function isAllDepartment(value: string) {
+  return normalizeKey(value) === 'all'
 }
 
 function getEmployeeField(employee: EmployeeRow, keys: string[]) {
@@ -236,6 +214,23 @@ function getEmployeeKey(employee: EmployeeRow, index: number) {
     stringifyValue(employee.emp_email) ||
     `${normalizeCompactKey(getEmployeeName(employee))}-${index}`
   )
+}
+
+function employeeMatchesValue(employee: EmployeeRow, value: string) {
+  const normalized = normalizeKey(value)
+  const compact = normalizeCompactKey(value)
+  return [
+    employee.emp_code,
+    employee.emp_full_name,
+    employee.manager_code,
+    employee.manager_name,
+  ].some((candidate) => candidate && (
+    normalizeKey(candidate) === normalized || normalizeCompactKey(candidate) === compact
+  ))
+}
+
+function isLeadEmployee(employee: EmployeeRow) {
+  return /\b(team\s*)?lead\b|supervisor|coordinator/i.test(getEmployeeDesignation(employee))
 }
 
 function getTone(value: string) {
@@ -295,7 +290,7 @@ function buildDepartmentSeeds(records: EmployeeMasterRecord[], employees: Employ
 
   records.forEach((record, index) => {
     const name = getDepartmentName(record)
-    if (!name) {
+    if (!name || isAllDepartment(name)) {
       return
     }
 
@@ -319,7 +314,7 @@ function buildDepartmentSeeds(records: EmployeeMasterRecord[], employees: Employ
 
   employees.forEach((employee) => {
     const department = getEmployeeDepartment(employee)
-    if (!department) {
+    if (!department || isAllDepartment(department)) {
       return
     }
 
@@ -361,40 +356,6 @@ function buildDepartmentSeeds(records: EmployeeMasterRecord[], employees: Employ
   })
 }
 
-function bucketEmployees(departments: DepartmentSeed[], employees: EmployeeRow[]) {
-  const buckets = new Map<string, EmployeeRow[]>()
-  const lookup = new Map<string, string>()
-
-  departments.forEach((department) => {
-    buckets.set(department.id, [])
-    ;[department.name, department.code]
-      .map((value) => value.trim())
-      .filter(Boolean)
-      .forEach((value) => {
-        lookup.set(normalizeKey(value), department.id)
-        lookup.set(normalizeCompactKey(value), department.id)
-      })
-  })
-
-  employees.forEach((employee) => {
-    const department = getEmployeeDepartment(employee)
-    const departmentId = department
-      ? lookup.get(normalizeKey(department)) || lookup.get(normalizeCompactKey(department))
-      : 'department-unassigned'
-
-    if (!departmentId) {
-      return
-    }
-
-    const bucket = buckets.get(departmentId)
-    if (bucket) {
-      bucket.push(employee)
-    }
-  })
-
-  return buckets
-}
-
 function formatStatusLabel(value: string) {
   if (!value) {
     return 'Active'
@@ -414,10 +375,6 @@ function getDepartmentBadge(department: DepartmentSeed) {
 }
 
 function getDepartmentDetail(department: DepartmentSeed) {
-  if (department.head) {
-    return department.head
-  }
-
   return department.source === 'unassigned' ? 'Needs assignment' : formatStatusLabel(department.status)
 }
 
@@ -544,49 +501,28 @@ export default function OrganizationStructureMap({
     () => buildDepartmentSeeds(departmentRecords, employees),
     [departmentRecords, employees]
   )
-  const employeeBuckets = useMemo(() => bucketEmployees(departments, employees), [departments, employees])
-
   useEffect(() => {
     if (selectedDepartmentId && !departments.some((department) => department.id === selectedDepartmentId)) {
       setSelectedDepartmentId(null)
     }
   }, [departments, selectedDepartmentId])
 
-  const selectedEmployees = useMemo(
-    () => selectedDepartmentId ? employeeBuckets.get(selectedDepartmentId) || [] : [],
-    [employeeBuckets, selectedDepartmentId]
-  )
-
   const layout = useMemo(() => {
-    const largestEmployeeGroup = Math.max(
-      0,
-      ...Array.from(employeeBuckets.values()).map((bucket) => bucket.length)
-    )
-    const employeeRingCount = Math.max(1, Math.ceil(largestEmployeeGroup / EMPLOYEES_PER_RING))
     const departmentRingPlans = buildDepartmentRingPlans(departments.length)
     const maxDepartmentRadius = Math.max(...departmentRingPlans.map((plan) => plan.radius), 230)
-    const employeeReach = largestEmployeeGroup > 0
-      ? clamp(170 + (employeeRingCount - 1) * 118, 170, 620)
-      : 112
-    const width = Math.ceil((maxDepartmentRadius + employeeReach) * 2 + 360)
-    const height = Math.ceil((maxDepartmentRadius + employeeReach) * 2 + 270)
+    const stagePadding = DEPARTMENT_NODE_SIZE / 2 + 24
+    const hierarchyPadding = 540
+    const width = Math.ceil((maxDepartmentRadius + stagePadding + hierarchyPadding) * 2)
+    const height = Math.ceil((maxDepartmentRadius + stagePadding + hierarchyPadding) * 2)
     const centerX = width / 2
     const centerY = height / 2
-    const densityScale = departmentRingPlans.length > 2
-      ? 0.62
-      : departmentRingPlans.length > 1
-        ? 0.7
-        : departments.length > 18
-          ? 0.76
-          : departments.length > 10
-            ? 0.84
-            : 0.94
+    const densityScale = departments.length > 24 ? 0.82 : 0.94
     const visibleWidth = viewportSize.width || 1100
     const visibleHeight = viewportSize.height || 620
-    const departmentHalfExtent = maxDepartmentRadius + DEPARTMENT_NODE_SIZE / 2 + 44
+    const departmentHalfExtent = maxDepartmentRadius + DEPARTMENT_NODE_SIZE / 2 + hierarchyPadding
     const fitScale = Math.min(
-      (visibleWidth - 32) / (departmentHalfExtent * 2),
-      (visibleHeight - 72) / (departmentHalfExtent * 2)
+      Math.max(0.1, (visibleWidth - 28) / (departmentHalfExtent * 2)),
+      Math.max(0.1, (visibleHeight - 28) / (departmentHalfExtent * 2))
     )
     const defaultScale = clamp(
       Math.min(densityScale, Number.isFinite(fitScale) && fitScale > 0 ? fitScale : densityScale),
@@ -605,7 +541,6 @@ export default function OrganizationStructureMap({
       return {
         ...department,
         angle,
-        employeeCount: employeeBuckets.get(department.id)?.length || 0,
         x: centerX + Math.cos(angle) * ring.radius,
         y: centerY + Math.sin(angle) * ring.radius,
       }
@@ -619,7 +554,7 @@ export default function OrganizationStructureMap({
       positionedDepartments,
       width,
     }
-  }, [departments, employeeBuckets, viewportSize.height, viewportSize.width])
+  }, [departments, viewportSize.height, viewportSize.width])
 
   useEffect(() => {
     setTransform({ x: 0, y: 0, scale: layout.defaultScale })
@@ -628,43 +563,43 @@ export default function OrganizationStructureMap({
   const selectedDepartment = selectedDepartmentId
     ? layout.positionedDepartments.find((department) => department.id === selectedDepartmentId) || null
     : null
-  const selectedDepartmentAngle = selectedDepartment?.angle ?? null
-
-  useEffect(() => {
-    if (selectedDepartmentAngle == null || viewportSize.width <= 720) {
-      return
+  const selectedEmployees = useMemo(() => {
+    if (!selectedDepartment) {
+      return []
     }
 
-    const focusOffset = selectedEmployees.length ? 136 : 96
-    setTransform((current) => ({
-      ...current,
-      x: clamp(-Math.cos(selectedDepartmentAngle) * focusOffset, -260, 260),
-      y: clamp(-Math.sin(selectedDepartmentAngle) * focusOffset, -220, 220),
-    }))
-  }, [selectedDepartmentAngle, selectedEmployees.length, viewportSize.width])
+    if (selectedDepartment.source === 'unassigned') {
+      return employees.filter((employee) => !getEmployeeDepartment(employee))
+    }
 
-  const positionedEmployees = useMemo<PositionedEmployee[]>(() => {
+    const departmentKeys = [selectedDepartment.name, selectedDepartment.code]
+      .filter(Boolean)
+      .flatMap((value) => [normalizeKey(value), normalizeCompactKey(value)])
+
+    return employees.filter((employee) => {
+      const employeeDepartment = getEmployeeDepartment(employee)
+      return departmentKeys.includes(normalizeKey(employeeDepartment)) ||
+        departmentKeys.includes(normalizeCompactKey(employeeDepartment))
+    })
+  }, [employees, selectedDepartment])
+  const selectedDepartmentAngle = selectedDepartment?.angle ?? null
+
+  const hierarchyNodes = useMemo<HierarchyNode[]>(() => {
     if (!selectedDepartment || selectedEmployees.length === 0) {
       return []
     }
 
-    return selectedEmployees.map((employee, index) => {
-      const ring = Math.floor(index / EMPLOYEES_PER_RING)
-      const ringIndex = index % EMPLOYEES_PER_RING
-      const itemsInRing = Math.min(
-        EMPLOYEES_PER_RING,
-        selectedEmployees.length - ring * EMPLOYEES_PER_RING
-      )
-      const spread = itemsInRing <= 1
-        ? 0
-        : clamp(itemsInRing * 0.24, Math.PI / 2.5, Math.PI * 1.18)
-      const startAngle = selectedDepartment.angle - spread / 2
-      const angle = itemsInRing <= 1
-        ? selectedDepartment.angle
-        : startAngle + (spread * ringIndex) / (itemsInRing - 1)
-      const radius = 172 + ring * 118
+    const manager = selectedEmployees.find((employee) => {
+      return selectedEmployees.some((candidate) => {
+        const managerValue = getEmployeeField(candidate, ['emp_manager', 'manager_code', 'manager_name'])
+        return candidate !== employee && managerValue && employeeMatchesValue(employee, managerValue)
+      }) || /manager|head|director/i.test(getEmployeeDesignation(employee))
+    })
+    const leads = selectedEmployees.filter((employee) => employee !== manager && isLeadEmployee(employee))
+    const members = selectedEmployees.filter((employee) => employee !== manager && !leads.includes(employee))
+    const branchAngle = selectedDepartment.angle
+    const makeNode = (employee: EmployeeRow, level: HierarchyNode['level'], x: number, y: number, index: number): HierarchyNode => {
       const name = getEmployeeName(employee)
-
       return {
         key: getEmployeeKey(employee, index),
         name,
@@ -672,15 +607,44 @@ export default function OrganizationStructureMap({
         initials: getInitials(name),
         photoUrl: getEmployeePhotoUrl(employee),
         tone: getTone(name),
-        x: selectedDepartment.x + Math.cos(angle) * radius,
-        y: selectedDepartment.y + Math.sin(angle) * radius,
+        level,
+        x,
+        y,
       }
-    })
+    }
+    const placeRing = (items: EmployeeRow[], level: HierarchyNode['level'], distance: number, spread: number) =>
+      items.map((employee, index) => {
+        const angle = branchAngle + (items.length === 1 ? 0 : -spread / 2 + (spread * index) / (items.length - 1))
+        return makeNode(
+          employee,
+          level,
+          selectedDepartment.x + Math.cos(angle) * distance,
+          selectedDepartment.y + Math.sin(angle) * distance,
+          index
+        )
+      })
+
+    return [
+      ...(manager ? placeRing([manager], 'manager', HIERARCHY_MANAGER_DISTANCE, 0) : []),
+      ...placeRing(leads, 'lead', HIERARCHY_LEAD_DISTANCE, Math.min(Math.PI * 0.72, Math.max(0.3, leads.length * 0.22))),
+      ...placeRing(members, 'member', HIERARCHY_MEMBER_DISTANCE, Math.min(Math.PI * 0.94, Math.max(0.4, members.length * 0.18))),
+    ]
   }, [selectedDepartment, selectedEmployees])
+
+  useEffect(() => {
+    if (selectedDepartmentAngle == null || viewportSize.width <= 720) {
+      return
+    }
+
+    setTransform((current) => ({
+      ...current,
+      x: -(selectedDepartment!.x - layout.centerX) * current.scale,
+      y: -(selectedDepartment!.y - layout.centerY) * current.scale,
+    }))
+  }, [layout.centerX, layout.centerY, selectedDepartment, selectedDepartmentAngle, viewportSize.width])
 
   const departmentCount = departments.length
   const employeeCount = employees.length
-  const selectedEmployeeCount = selectedEmployees.length
 
   const setZoom = (nextScale: ZoomInput) => {
     setTransform((current) => ({
@@ -760,8 +724,8 @@ export default function OrganizationStructureMap({
             Employees
           </span>
           <span>
-            <strong>{selectedEmployeeCount.toLocaleString()}</strong>
-            In view
+            <strong>{selectedDepartment ? '1' : '0'}</strong>
+            Selected
           </span>
         </div>
       </div>
@@ -837,18 +801,29 @@ export default function OrganizationStructureMap({
                 />
               )
             })}
-            {selectedDepartment
-              ? positionedEmployees.map((employee) => (
-                  <line
-                    key={employee.key}
-                    className="org-map__line org-map__line--employee"
-                    x1={selectedDepartment.x}
-                    y1={selectedDepartment.y}
-                    x2={employee.x}
-                    y2={employee.y}
-                  />
-                ))
-              : null}
+            {hierarchyNodes.map((node, index) => {
+              const managers = hierarchyNodes.filter((item) => item.level === 'manager')
+              const leads = hierarchyNodes.filter((item) => item.level === 'lead')
+              const members = hierarchyNodes.filter((item) => item.level === 'member')
+              const memberIndex = members.indexOf(node)
+              const parent = node.level === 'manager'
+                ? selectedDepartment
+                : node.level === 'lead'
+                  ? managers[0] || selectedDepartment
+                  : leads.length
+                    ? leads[memberIndex % leads.length]
+                    : managers[0] || selectedDepartment
+              return parent ? (
+                <line
+                  key={`hierarchy-line-${node.key}-${index}`}
+                  className="org-map__line org-map__line--hierarchy"
+                  x1={parent.x}
+                  y1={parent.y}
+                  x2={node.x}
+                  y2={node.y}
+                />
+              ) : null
+            })}
           </svg>
 
           <div
@@ -861,7 +836,7 @@ export default function OrganizationStructureMap({
             }}
           >
             <span>CMD</span>
-            <strong>Command</strong>
+            <strong>Department Head</strong>
           </div>
 
           {layout.positionedDepartments.map((department) => {
@@ -876,69 +851,45 @@ export default function OrganizationStructureMap({
                   left: department.x,
                   top: department.y,
                   width: DEPARTMENT_NODE_SIZE,
-                }}
+                  '--node-delay': `${(layout.positionedDepartments.indexOf(department) % 33) * 18}ms`,
+                } as CSSProperties}
                 onClick={() =>
                   setSelectedDepartmentId((current) => current === department.id ? null : department.id)
                 }
                 onMouseEnter={() => setHoveredDepartmentId(department.id)}
                 onMouseLeave={() => setHoveredDepartmentId(null)}
                 aria-pressed={isSelected}
-                aria-label={`${isSelected ? 'Hide' : 'Show'} ${department.name} employees`}
+                aria-label={`${isSelected ? 'Deselect' : 'Select'} ${department.name}`}
               >
                 <span className="org-map__department-code">
                   {getDepartmentBadge(department)}
                 </span>
                 <strong>{department.name}</strong>
-                <span className="org-map__department-meta">
-                  {department.employeeCount.toLocaleString()} employee{department.employeeCount === 1 ? '' : 's'}
-                </span>
                 <em>{getDepartmentDetail(department)}</em>
               </button>
             )
           })}
 
-          <div
-            key={selectedDepartment?.id || 'collapsed'}
-            className={`org-map__employee-layer${selectedDepartment ? ' is-expanded' : ''}`}
-            aria-live="polite"
-          >
-            {selectedDepartment && selectedEmployeeCount === 0 ? (
-              <div
-                className="org-map__empty"
-                style={{
-                  left: selectedDepartment.x + Math.cos(selectedDepartment.angle) * 168,
-                  top: selectedDepartment.y + Math.sin(selectedDepartment.angle) * 168,
-                }}
-              >
-                <strong>No employees</strong>
-                <span>{selectedDepartment.name}</span>
-              </div>
-            ) : null}
-            {positionedEmployees.map((employee) => (
-              <article
-                className="org-map__employee"
-                key={employee.key}
-                style={{
-                  height: EMPLOYEE_CARD_HEIGHT,
-                  left: employee.x,
-                  top: employee.y,
-                  width: EMPLOYEE_CARD_WIDTH,
-                }}
-              >
-                {employee.photoUrl ? (
-                  <img src={employee.photoUrl} alt="" loading="lazy" />
-                ) : (
-                  <span className={`org-map__avatar org-map__avatar--${employee.tone}`}>
-                    {employee.initials}
-                  </span>
-                )}
-                <span className="org-map__employee-copy">
-                  <strong>{employee.name}</strong>
-                  <em>{employee.designation}</em>
-                </span>
-              </article>
-            ))}
-          </div>
+          {hierarchyNodes.map((node, index) => (
+            <article
+              className={`org-map__hierarchy-node org-map__hierarchy-node--${node.level}`}
+              key={node.key}
+              style={{
+                left: node.x,
+                top: node.y,
+                '--node-delay': `${index * 70}ms`,
+              } as CSSProperties}
+            >
+              <span className={`org-map__hierarchy-avatar org-map__avatar--${node.tone}`}>
+                {node.initials}
+              </span>
+              <span className="org-map__hierarchy-copy">
+                <strong>{node.name}</strong>
+                <em>{node.designation}</em>
+              </span>
+              <small>{node.level === 'manager' ? 'Manager' : node.level === 'lead' ? 'Team Lead' : 'Team Member'}</small>
+            </article>
+          ))}
 
           {departmentLoading ? (
             <div className="org-map__loading" role="status">
@@ -953,6 +904,7 @@ export default function OrganizationStructureMap({
           ) : null}
         </div>
       </div>
+
     </section>
   )
 }

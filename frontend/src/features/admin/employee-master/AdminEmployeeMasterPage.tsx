@@ -12,6 +12,7 @@ import type {
   EmployeeMasterPagination,
   EmployeeMasterRecord,
   EmployeeMasterResourceConfig,
+  SidebarId,
 } from '../../../types/admin'
 
 type EmployeeMasterFormState = {
@@ -47,7 +48,7 @@ type AdminEmployeeMasterPageProps = {
   records: EmployeeMasterRecord[]
   resource: EmployeeMasterResourceConfig
   resources: EmployeeMasterResourceConfig[]
-  onSelectResource: (sidebarId: EmployeeMasterResourceConfig['sidebarId']) => void
+  onSelectResource: (sidebarId: SidebarId) => void
   showOrganizationStructure?: boolean
   applyFilters: () => void
   changePage: (page: number) => void
@@ -589,13 +590,6 @@ export default function AdminEmployeeMasterPage({
   }
 
   const tableState = renderTableState()
-  const departmentRecordsVersion = resource.key === 'departments'
-    ? [
-        lastSyncedAt?.getTime() || 0,
-        pagination.total_records,
-        records.length,
-      ].join('-')
-    : ''
 
   return (
     <div className="admin-aligned-page admin-aligned-page--employee-master">

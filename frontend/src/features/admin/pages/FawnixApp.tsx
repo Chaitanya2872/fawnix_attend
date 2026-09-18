@@ -1126,7 +1126,7 @@ function FawnixApp() {
           resource={employeeMasterResource}
           resources={employeeMasterResources}
           showOrganizationStructure={activePanel === "employee-master-organization-structure"}
-          onSelectResource={(sidebarId) => {
+          onSelectResource={(sidebarId: SidebarId) => {
             setActivePanel(sidebarId);
             navigate(getAdminPanelPath(sidebarId));
           }}

@@ -204,7 +204,14 @@
   stroke-dasharray: 4 6;
 }
 
+.org-map__line--company {
+  stroke: rgba(16, 107, 82, 0.42);
+  stroke-width: 1.4;
+  stroke-dasharray: 7 7;
+}
+
 .org-map__root,
+.org-map__company,
 .org-map__department,
 .org-map__hierarchy-node,
 .org-map__employee,
@@ -223,9 +230,33 @@
   border-radius: 8px;
   background: linear-gradient(155deg, var(--em-blue), var(--a-deep, #0d2b23));
   color: #ffffff;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
   box-shadow:
     0 16px 38px -24px rgba(13, 43, 35, 0.66),
     0 0 0 9px rgba(16, 107, 82, 0.08);
+  transition:
+    border-color var(--dur-base, 220ms) var(--ease-out, ease),
+    box-shadow var(--dur-base, 220ms) var(--ease-out, ease),
+    transform var(--dur-base, 220ms) var(--ease-out, ease);
+}
+
+.org-map__root:hover,
+.org-map__root:focus-visible {
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow:
+    0 18px 42px -24px rgba(13, 43, 35, 0.7),
+    0 0 0 10px rgba(16, 107, 82, 0.12);
+  transform: translate(-50%, -50%) scale(1.04);
+}
+
+.org-map__root:focus-visible {
+  outline: none;
+}
+
+.org-map__root--company {
+  border-radius: 14px;
 }
 
 .org-map__root span {
@@ -239,6 +270,66 @@
   color: rgba(255, 255, 255, 0.82);
   font-size: 11px;
   font-weight: 650;
+}
+
+.org-map__company {
+  z-index: 3;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 5px;
+  border: 1px solid var(--em-border);
+  border-radius: 16px;
+  background: #ffffff;
+  color: var(--em-text);
+  padding: 13px 11px;
+  box-shadow: 0 18px 34px -30px rgba(13, 43, 35, 0.55);
+  cursor: pointer;
+  opacity: 0;
+  animation: org-map-node-in 560ms var(--ease-out, ease) var(--node-delay, 0ms) forwards;
+  will-change: transform, opacity;
+  transition:
+    border-color var(--dur-base, 220ms) var(--ease-out, ease),
+    background var(--dur-base, 220ms) var(--ease-out, ease),
+    box-shadow var(--dur-base, 220ms) var(--ease-out, ease),
+    color var(--dur-base, 220ms) var(--ease-out, ease),
+    transform var(--dur-base, 220ms) var(--ease-out, ease);
+}
+
+.org-map__company:hover,
+.org-map__company:focus-visible {
+  border-color: var(--a-accent-border, #b6d9cb);
+  background: var(--em-blue-soft);
+  color: var(--a-accent-ink, #0b4f3c);
+  box-shadow:
+    0 20px 38px -28px rgba(13, 43, 35, 0.58),
+    0 0 0 5px rgba(16, 107, 82, 0.08);
+  transform: translate(-50%, -50%) scale(1.04);
+}
+
+.org-map__company:focus-visible {
+  outline: none;
+}
+
+.org-map__company--info:hover,
+.org-map__company--info:focus-visible {
+  border-color: var(--a-info-border, #b9dcd7);
+  background: var(--a-info-soft, #e6f4f2);
+  color: var(--a-info-ink, #115e59);
+}
+
+.org-map__company--warning:hover,
+.org-map__company--warning:focus-visible {
+  border-color: var(--a-warn-border, #ecd9b0);
+  background: var(--a-warn-soft, #fdf3e3);
+  color: var(--a-warn-ink, #854d0e);
+}
+
+.org-map__company--rose:hover,
+.org-map__company--rose:focus-visible {
+  border-color: var(--a-danger-border, #eecccc);
+  background: var(--a-danger-soft, #fbecec);
+  color: var(--a-danger-ink, #8c1d18);
 }
 
 .org-map__department {
@@ -379,6 +470,38 @@
   text-transform: uppercase;
 }
 
+.org-map__company-code {
+  max-width: 100%;
+  min-height: 19px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(16, 107, 82, 0.09);
+  color: var(--em-blue);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.org-map__company--info .org-map__company-code {
+  background: var(--a-info-soft, #e6f4f2);
+  color: var(--a-info-ink, #115e59);
+}
+
+.org-map__company--warning .org-map__company-code {
+  background: var(--a-warn-soft, #fdf3e3);
+  color: var(--a-warn-ink, #854d0e);
+}
+
+.org-map__company--rose .org-map__company-code {
+  background: var(--a-danger-soft, #fbecec);
+  color: var(--a-danger-ink, #8c1d18);
+}
+
+.org-map__company strong,
+.org-map__company em,
 .org-map__department strong,
 .org-map__department em {
   max-width: 100%;
@@ -386,6 +509,20 @@
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.org-map__company strong {
+  color: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.18;
+}
+
+.org-map__company em {
+  color: var(--em-text-muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 650;
 }
 
 .org-map__department strong {

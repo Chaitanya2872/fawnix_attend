@@ -28,6 +28,25 @@ type PositionedDepartment = DepartmentSeed & {
   y: number
 }
 
+type CompanyDefinition = {
+  id: string
+  name: string
+  code: string
+  matchers: string[]
+  tone: 'accent' | 'info' | 'warning' | 'rose'
+}
+
+type CompanyNode = CompanyDefinition & {
+  employeeCount: number
+  departmentCount: number
+}
+
+type PositionedCompany = CompanyNode & {
+  angle: number
+  x: number
+  y: number
+}
+
 type HierarchyNode = {
   key: string
   parentKey: string
@@ -65,6 +84,8 @@ const DEPARTMENTS_ENDPOINT = '/api/admin/employee-master/departments'
 const DEPARTMENT_PAGE_SIZE = 100
 const MAX_DEPARTMENT_FETCH_PAGES = 25
 const ROOT_NODE_SIZE = 92
+const COMPANY_NODE_SIZE = 122
+const COMPANY_RING_RADIUS = 262
 const DEPARTMENT_NODE_SIZE = 112
 const DEPARTMENT_NODE_CLEARANCE = DEPARTMENT_NODE_SIZE + 26
 const HIERARCHY_MANAGER_DISTANCE = 156
@@ -75,6 +96,18 @@ const MAX_ZOOM = 1.55
 const DEFAULT_TRANSFORM: MapTransform = { x: 0, y: 0, scale: 1 }
 const DEFAULT_VIEWPORT_SIZE: ViewportSize = { width: 0, height: 0 }
 const PHOTO_FIELDS = ['photo', 'photo_url', 'profile_photo', 'avatar_url', 'emp_photo', 'image_url']
+const COMPANY_DEFINITIONS: CompanyDefinition[] = [
+  { id: 'company-acs', name: 'ACS', code: 'ACS', matchers: ['acstechnologies', 'acs'], tone: 'accent' },
+  { id: 'company-iotiq', name: 'IOTIQ', code: 'IOTIQ', matchers: ['iotiq'], tone: 'info' },
+  { id: 'company-amos', name: 'AMOS', code: 'AMOS', matchers: ['amos'], tone: 'warning' },
+]
+const OTHER_COMPANY_DEFINITION: CompanyDefinition = {
+  id: 'company-other',
+  name: 'Other',
+  code: 'Other',
+  matchers: [],
+  tone: 'rose',
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
@@ -190,6 +223,35 @@ function getEmployeeName(employee: EmployeeRow) {
   )
 }
 
+function getEmployeeEmail(employee: EmployeeRow) {
+  return getEmployeeField(employee, ['emp_email', 'employee_email', 'email'])
+}
+
+function getEmployeeCompanyDefinition(employee: EmployeeRow) {
+  const email = normalizeKey(getEmployeeEmail(employee))
+  const domain = email.includes('@') ? email.split('@').pop() || '' : email
+
+  if (!email) {
+    return OTHER_COMPANY_DEFINITION
+  }
+
+  const company = COMPANY_DEFINITIONS.find((definition) =>
+    definition.matchers.some((matcher) => {
+      const normalizedMatcher = normalizeKey(matcher)
+      if (normalizedMatcher.length <= 3) {
+        return domain.includes(normalizedMatcher)
+      }
+      return domain.includes(normalizedMatcher) || email.includes(normalizedMatcher)
+    })
+  )
+
+  return company || OTHER_COMPANY_DEFINITION
+}
+
+function getEmployeeCompanyId(employee: EmployeeRow) {
+  return getEmployeeCompanyDefinition(employee).id
+}
+
 function getEmployeeDepartment(employee: EmployeeRow) {
   return getEmployeeField(employee, ['emp_department', 'department', 'department_name'])
 }
@@ -218,7 +280,14 @@ function getEmployeeKey(employee: EmployeeRow, index: number) {
 }
 
 function getEmployeeManagerValue(employee: EmployeeRow) {
-  return getEmployeeField(employee, ['emp_manager', 'manager_code', 'manager_name'])
+  return getEmployeeField(employee, [
+    'emp_manager',
+    'manager_code',
+    'manager_name',
+    'manager_email',
+    'emp_manager_email',
+    'reporting_manager_email',
+  ])
 }
 
 function isLeadEmployee(employee: EmployeeRow) {
@@ -348,6 +417,28 @@ function buildDepartmentSeeds(records: EmployeeMasterRecord[], employees: Employ
   })
 }
 
+function buildCompanyNodes(records: EmployeeMasterRecord[], employees: EmployeeRow[]) {
+  const companyNodes = COMPANY_DEFINITIONS.map<CompanyNode>((definition) => {
+    const companyEmployees = employees.filter((employee) => getEmployeeCompanyId(employee) === definition.id)
+    return {
+      ...definition,
+      departmentCount: buildDepartmentSeeds(records, companyEmployees).length,
+      employeeCount: companyEmployees.length,
+    }
+  })
+  const otherEmployees = employees.filter((employee) => getEmployeeCompanyId(employee) === OTHER_COMPANY_DEFINITION.id)
+
+  if (otherEmployees.length > 0) {
+    companyNodes.push({
+      ...OTHER_COMPANY_DEFINITION,
+      departmentCount: buildDepartmentSeeds(records, otherEmployees).length,
+      employeeCount: otherEmployees.length,
+    })
+  }
+
+  return companyNodes
+}
+
 function formatStatusLabel(value: string) {
   if (!value) {
     return 'Active'
@@ -380,6 +471,9 @@ export default function OrganizationStructureMap({
   const [fetchedDepartmentRecords, setFetchedDepartmentRecords] = useState<EmployeeMasterRecord[]>([])
   const [departmentLoading, setDepartmentLoading] = useState(false)
   const [departmentError, setDepartmentError] = useState('')
+  const [companyLayerOpen, setCompanyLayerOpen] = useState(false)
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
+  const [hoveredCompanyId, setHoveredCompanyId] = useState<string | null>(null)
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null)
   const [hoveredDepartmentId, setHoveredDepartmentId] = useState<string | null>(null)
   const [transform, setTransform] = useState<MapTransform>(DEFAULT_TRANSFORM)
@@ -489,10 +583,33 @@ export default function OrganizationStructureMap({
   }, [accessToken, departmentRecordsVersion])
 
   const departmentRecords = fetchedDepartmentRecords.length ? fetchedDepartmentRecords : currentDepartmentRecords
-  const departments = useMemo(
+  const allDepartments = useMemo(
     () => buildDepartmentSeeds(departmentRecords, employees),
     [departmentRecords, employees]
   )
+  const companyNodes = useMemo(
+    () => buildCompanyNodes(departmentRecords, employees),
+    [departmentRecords, employees]
+  )
+  const selectedCompany = selectedCompanyId
+    ? companyNodes.find((company) => company.id === selectedCompanyId) || null
+    : null
+  const companyEmployees = useMemo(
+    () => selectedCompany
+      ? employees.filter((employee) => getEmployeeCompanyId(employee) === selectedCompany.id)
+      : [],
+    [employees, selectedCompany]
+  )
+  const departments = useMemo(
+    () => selectedCompany ? buildDepartmentSeeds(departmentRecords, companyEmployees) : [],
+    [companyEmployees, departmentRecords, selectedCompany]
+  )
+  useEffect(() => {
+    if (selectedCompanyId && !companyNodes.some((company) => company.id === selectedCompanyId)) {
+      setSelectedCompanyId(null)
+      setSelectedDepartmentId(null)
+    }
+  }, [companyNodes, selectedCompanyId])
   useEffect(() => {
     if (selectedDepartmentId && !departments.some((department) => department.id === selectedDepartmentId)) {
       setSelectedDepartmentId(null)
@@ -502,16 +619,19 @@ export default function OrganizationStructureMap({
   const layout = useMemo(() => {
     const departmentRingPlans = buildDepartmentRingPlans(departments.length)
     const maxDepartmentRadius = Math.max(...departmentRingPlans.map((plan) => plan.radius), 230)
+    const showCompanyNodes = companyLayerOpen && !selectedCompany
+    const maxCompanyRadius = showCompanyNodes ? COMPANY_RING_RADIUS : 0
     const stagePadding = DEPARTMENT_NODE_SIZE / 2 + 24
-    const hierarchyPadding = 540
-    const width = Math.ceil((maxDepartmentRadius + stagePadding + hierarchyPadding) * 2)
-    const height = Math.ceil((maxDepartmentRadius + stagePadding + hierarchyPadding) * 2)
+    const hierarchyPadding = selectedCompany ? 540 : 190
+    const activeRadius = Math.max(maxDepartmentRadius, maxCompanyRadius, 230)
+    const width = Math.ceil((activeRadius + stagePadding + hierarchyPadding) * 2)
+    const height = Math.ceil((activeRadius + stagePadding + hierarchyPadding) * 2)
     const centerX = width / 2
     const centerY = height / 2
     const densityScale = departments.length > 24 ? 0.82 : 0.94
     const visibleWidth = viewportSize.width || 1100
     const visibleHeight = viewportSize.height || 620
-    const departmentHalfExtent = maxDepartmentRadius + DEPARTMENT_NODE_SIZE / 2 + hierarchyPadding
+    const departmentHalfExtent = activeRadius + DEPARTMENT_NODE_SIZE / 2 + hierarchyPadding
     const fitScale = Math.min(
       Math.max(0.1, (visibleWidth - 28) / (departmentHalfExtent * 2)),
       Math.max(0.1, (visibleHeight - 28) / (departmentHalfExtent * 2))
@@ -537,20 +657,35 @@ export default function OrganizationStructureMap({
         y: centerY + Math.sin(angle) * ring.radius,
       }
     })
+    const positionedCompanies = showCompanyNodes
+      ? companyNodes.map<PositionedCompany>((company, index) => {
+        const angleOffset = -Math.PI / 2
+        const angle = companyNodes.length <= 1
+          ? angleOffset
+          : angleOffset + (Math.PI * 2 * index) / companyNodes.length
+        return {
+          ...company,
+          angle,
+          x: centerX + Math.cos(angle) * COMPANY_RING_RADIUS,
+          y: centerY + Math.sin(angle) * COMPANY_RING_RADIUS,
+        }
+      })
+      : []
 
     return {
       centerX,
       centerY,
       defaultScale,
       height,
+      positionedCompanies,
       positionedDepartments,
       width,
     }
-  }, [departments, viewportSize.height, viewportSize.width])
+  }, [companyLayerOpen, companyNodes, departments, selectedCompany, viewportSize.height, viewportSize.width])
 
   useEffect(() => {
     setTransform({ x: 0, y: 0, scale: layout.defaultScale })
-  }, [layout.defaultScale, departments.length])
+  }, [companyLayerOpen, departments.length, layout.defaultScale, selectedCompanyId])
 
   const selectedDepartment = selectedDepartmentId
     ? layout.positionedDepartments.find((department) => department.id === selectedDepartmentId) || null
@@ -561,19 +696,19 @@ export default function OrganizationStructureMap({
     }
 
     if (selectedDepartment.source === 'unassigned') {
-      return employees.filter((employee) => !getEmployeeDepartment(employee))
+      return companyEmployees.filter((employee) => !getEmployeeDepartment(employee))
     }
 
     const departmentKeys = [selectedDepartment.name, selectedDepartment.code]
       .filter(Boolean)
       .flatMap((value) => [normalizeKey(value), normalizeCompactKey(value)])
 
-    return employees.filter((employee) => {
+    return companyEmployees.filter((employee) => {
       const employeeDepartment = getEmployeeDepartment(employee)
       return departmentKeys.includes(normalizeKey(employeeDepartment)) ||
         departmentKeys.includes(normalizeCompactKey(employeeDepartment))
     })
-  }, [employees, selectedDepartment])
+  }, [companyEmployees, selectedDepartment])
   const selectedDepartmentAngle = selectedDepartment?.angle ?? null
 
   const hierarchyNodes = useMemo<HierarchyNode[]>(() => {
@@ -587,6 +722,11 @@ export default function OrganizationStructureMap({
       employeeByKey.set(normalizeCompactKey(getEmployeeName(employee)), employee)
       if (employee.emp_code) {
         employeeByKey.set(normalizeKey(employee.emp_code), employee)
+      }
+      const email = getEmployeeEmail(employee)
+      if (email) {
+        employeeByKey.set(normalizeKey(email), employee)
+        employeeByKey.set(normalizeCompactKey(email), employee)
       }
     })
     const managerOf = (employee: EmployeeRow) => {
@@ -680,8 +820,31 @@ export default function OrganizationStructureMap({
     }))
   }, [layout.centerX, layout.centerY, selectedDepartment, selectedDepartmentAngle, viewportSize.width])
 
-  const departmentCount = departments.length
-  const employeeCount = employees.length
+  const departmentCount = selectedCompany ? departments.length : allDepartments.length
+  const employeeCount = selectedCompany ? companyEmployees.length : employees.length
+  const selectedSummary = selectedDepartment
+    ? 'Dept'
+    : selectedCompany
+      ? selectedCompany.code
+      : companyLayerOpen
+        ? 'Companies'
+        : 'CMD'
+
+  const openCompanyLayer = () => {
+    setCompanyLayerOpen(true)
+    setSelectedCompanyId(null)
+    setSelectedDepartmentId(null)
+    setHoveredCompanyId(null)
+    setHoveredDepartmentId(null)
+  }
+
+  const selectCompany = (companyId: string) => {
+    setCompanyLayerOpen(true)
+    setSelectedCompanyId(companyId)
+    setSelectedDepartmentId(null)
+    setHoveredCompanyId(null)
+    setHoveredDepartmentId(null)
+  }
 
   const setZoom = (nextScale: ZoomInput) => {
     setTransform((current) => ({
@@ -695,6 +858,11 @@ export default function OrganizationStructureMap({
   }
 
   const resetView = () => {
+    setCompanyLayerOpen(false)
+    setSelectedCompanyId(null)
+    setSelectedDepartmentId(null)
+    setHoveredCompanyId(null)
+    setHoveredDepartmentId(null)
     setTransform({ x: 0, y: 0, scale: layout.defaultScale })
   }
 
@@ -761,7 +929,7 @@ export default function OrganizationStructureMap({
             Employees
           </span>
           <span>
-            <strong>{selectedDepartment ? '1' : '0'}</strong>
+            <strong>{selectedSummary}</strong>
             Selected
           </span>
         </div>
@@ -824,6 +992,19 @@ export default function OrganizationStructureMap({
             viewBox={`0 0 ${layout.width} ${layout.height}`}
             aria-hidden="true"
           >
+            {layout.positionedCompanies.map((company) => {
+              const isHovered = company.id === hoveredCompanyId
+              return (
+                <line
+                  key={company.id}
+                  className={`org-map__line org-map__line--company${isHovered ? ' is-hovered' : ''}`}
+                  x1={layout.centerX}
+                  y1={layout.centerY}
+                  x2={company.x}
+                  y2={company.y}
+                />
+              )
+            })}
             {layout.positionedDepartments.map((department) => {
               const isSelected = department.id === selectedDepartmentId
               const isHovered = department.id === hoveredDepartmentId
@@ -855,18 +1036,46 @@ export default function OrganizationStructureMap({
             })}
           </svg>
 
-          <div
-            className="org-map__root"
+          <button
+            className={`org-map__root${selectedCompany ? ` org-map__root--company org-map__company--${selectedCompany.tone}` : ''}`}
+            type="button"
+            onClick={openCompanyLayer}
             style={{
               height: ROOT_NODE_SIZE,
               left: layout.centerX,
               top: layout.centerY,
               width: ROOT_NODE_SIZE,
             }}
+            aria-label={selectedCompany ? `Back to company list from ${selectedCompany.name}` : 'Show companies under CMD'}
           >
-            <span>CMD</span>
-            <strong>Department Head</strong>
-          </div>
+            <span>{selectedCompany ? selectedCompany.code : 'CMD'}</span>
+            <strong>{selectedCompany ? `${selectedCompany.employeeCount} employees` : companyLayerOpen ? 'Companies' : 'Command'}</strong>
+          </button>
+
+          {layout.positionedCompanies.map((company, index) => (
+            <button
+              key={company.id}
+              className={`org-map__company org-map__company--${company.tone}`}
+              type="button"
+              style={{
+                height: COMPANY_NODE_SIZE,
+                left: company.x,
+                top: company.y,
+                width: COMPANY_NODE_SIZE,
+                '--node-delay': `${index * 70}ms`,
+              } as CSSProperties}
+              onClick={() => selectCompany(company.id)}
+              onMouseEnter={() => setHoveredCompanyId(company.id)}
+              onMouseLeave={() => setHoveredCompanyId(null)}
+              aria-label={`Select ${company.name}`}
+            >
+              <span className="org-map__company-code">{company.code}</span>
+              <strong>{company.name}</strong>
+              <em>
+                {company.departmentCount.toLocaleString()} dept{company.departmentCount === 1 ? '' : 's'} / {company.employeeCount.toLocaleString()} emp
+              </em>
+            </button>
+          ))}
 
           {layout.positionedDepartments.map((department) => {
             const isSelected = department.id === selectedDepartmentId
@@ -926,7 +1135,7 @@ export default function OrganizationStructureMap({
               <strong>Syncing structure</strong>
             </div>
           ) : null}
-          {!departmentLoading && departmentCount === 0 ? (
+          {!departmentLoading && selectedCompany && departmentCount === 0 ? (
             <div className="org-map__loading org-map__loading--empty" role="status">
               <strong>No departments found</strong>
             </div>

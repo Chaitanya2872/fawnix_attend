@@ -6,6 +6,16 @@ type SidebarIconProps = {
 
 export default function SidebarIcon({ name }: SidebarIconProps) {
   const paths = {
+    key: (
+      <path
+        d="M15.5 8.5a3 3 0 1 1-6 0a3 3 0 0 1 6 0Zm-2.2 2.6L7 17.4V20h2.6v-2h2v-2h2l1.2-1.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    ),
     bug: (
       <path
         d="M8 10h8M8 14h5m-7 6 2.2-3H18a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2Z"

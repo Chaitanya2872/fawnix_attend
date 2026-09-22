@@ -6,6 +6,13 @@ JWT token validation
 from flask import g, request, jsonify
 from functools import wraps
 from services.auth_service import decode_jwt_token
+from services.service_account_service import (
+    authenticate_api_key,
+    check_service_account_request,
+    is_service_account,
+    is_service_account_key,
+    log_service_account_event,
+)
 from database.connection import get_db_connection
 from config import Config
 import jwt
@@ -130,6 +137,38 @@ def _authenticate_verse_token(token):
     return _finalize_current_user(user, payload, token, "verse")
 
 
+def _authenticate_service_account(token):
+    """
+    Authenticate an API key and apply the service account access policy.
+    Returns (current_user, None) or (None, (body, status)).
+    """
+    user_agent = request.headers.get('User-Agent')
+    current_user, auth_error = authenticate_api_key(token, request.remote_addr, user_agent)
+    if auth_error:
+        return None, auth_error
+
+    # Publish the actor so database_audit_logs and api_logs attribute every
+    # change and request to this service account.
+    g.current_emp_code = current_user['emp_code']
+    g.current_emp_name = current_user['emp_full_name']
+    g.service_account_id = current_user['service_account_id']
+
+    denied = check_service_account_request(current_user, request.method, request.path)
+    if denied:
+        body, _status = denied
+        log_service_account_event(
+            current_user['service_account_id'],
+            'access_denied',
+            actor=current_user['emp_code'],
+            details={'method': request.method, 'path': request.path, 'reason': body.get('message')},
+            ip_address=request.remote_addr,
+            user_agent=user_agent,
+        )
+        return None, denied
+
+    return current_user, None
+
+
 def _build_token_required_decorator(allow_verse=False):
     def decorator(f):
         @wraps(f)
@@ -138,6 +177,14 @@ def _build_token_required_decorator(allow_verse=False):
             if token_error:
                 body, status = token_error
                 return jsonify(body), status
+
+            if is_service_account_key(token):
+                # API keys never fall through to JWT or Verse decoding.
+                current_user, auth_error = _authenticate_service_account(token)
+                if auth_error:
+                    body, status = auth_error
+                    return jsonify(body), status
+                return f(current_user, *args, **kwargs)
 
             try:
                 current_user, auth_error = _authenticate_fawnix_token(token)

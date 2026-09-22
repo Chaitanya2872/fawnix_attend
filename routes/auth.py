@@ -30,8 +30,15 @@ ACCESS_TOKEN_EXPIRES_IN_SECONDS = Config.JWT_EXPIRE_MINUTES * 60
 REFRESH_TOKEN_EXPIRES_IN_SECONDS = Config.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
 
 
-def exchange_verse_session(fawnix_access_token: str):
-    """Exchange a Fawnix token for a Verse access token."""
+def exchange_verse_session(fawnix_access_token: str, with_refresh_token: bool = True):
+    """Exchange a Fawnix token for a Verse session.
+
+    ``with_refresh_token`` asks Verse for a renewable session rather than a bare access token.
+    Verse access tokens last 30 minutes while a Fawnix login lasts a day, so a session handed to a
+    client without a refresh token dies long before the login it came from. Server-side callers
+    that exchange on every request pass False: they hold the Fawnix token and can simply exchange
+    again, and a refresh token per request would leave a stored row behind each time.
+    """
     if not fawnix_access_token:
         return None
 
@@ -40,10 +47,12 @@ def exchange_verse_session(fawnix_access_token: str):
     if not exchange_path.startswith("/"):
         exchange_path = f"/{exchange_path}"
     exchange_url = f"{base_url}{exchange_path}"
+    params = {"withRefreshToken": "true"} if with_refresh_token else None
 
     try:
         response = requests.post(
             exchange_url,
+            params=params,
             headers={
                 "Authorization": f"Bearer {fawnix_access_token}",
                 "Content-Type": "application/json",
@@ -72,6 +81,8 @@ def exchange_verse_session(fawnix_access_token: str):
     return {
         "access_token": access_token,
         "access_token_expires_at": payload.get("accessTokenExpiresAt"),
+        "refresh_token": payload.get("refreshToken"),
+        "refresh_token_expires_at": payload.get("refreshTokenExpiresAt"),
         "user": payload.get("user"),
     }
 

@@ -1,13 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { RangeReportType } from './useReportsPanel'
+import type { EmployeeRow } from '../../../types/admin'
 
 const MONTH_OPTIONS = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
 
-const REPORT_TYPES: Array<{ value: 'attendance' | 'exceptions' | 'leaves' | 'missed-logins'; label: string; hint: string }> = [
+const REPORT_TYPES: Array<{ value: RangeReportType; label: string; hint: string }> = [
   { value: 'attendance', label: 'Attendance Report', hint: 'Daily clock-in / clock-out per employee' },
   { value: 'exceptions', label: 'Exceptions Report', hint: 'Late arrivals, early leaves and missed logins' },
   { value: 'leaves', label: 'Leaves Report', hint: 'Applied, approved and rejected leave' },
+  { value: 'overtime', label: 'Overtime Report', hint: 'Extra hours worked and the comp-off days earned' },
   { value: 'missed-logins', label: 'Missed Login Report', hint: 'Clock-ins after 10:05 AM or clock-outs before 6:00 PM' }
 ]
+
+/** How many matches the employee search drops down at once. */
+const EMPLOYEE_SUGGESTION_LIMIT = 8
 
 type ReportDownloadMenuProps = {
   reportDateMode: 'month' | 'custom'
@@ -20,9 +26,12 @@ type ReportDownloadMenuProps = {
   setReportStartDate: (value: string) => void
   reportEndDate: string
   setReportEndDate: (value: string) => void
+  reportEmpCode: string
+  setReportEmpCode: (value: string) => void
+  employees: EmployeeRow[]
   attendanceReportFormat: 'csv' | 'pdf' | 'xlsx'
   setAttendanceReportFormat: (value: 'csv' | 'pdf' | 'xlsx') => void
-  onDownload: (reportType: 'attendance' | 'exceptions' | 'leaves' | 'missed-logins') => void
+  onDownload: (reportType: RangeReportType) => void
   statusMessage: string
 }
 
@@ -43,13 +52,49 @@ export default function ReportDownloadMenu({
   setReportStartDate,
   reportEndDate,
   setReportEndDate,
+  reportEmpCode,
+  setReportEmpCode,
+  employees,
   attendanceReportFormat,
   setAttendanceReportFormat,
   onDownload,
   statusMessage
 }: ReportDownloadMenuProps) {
   const [open, setOpen] = useState(false)
+  const [employeeQuery, setEmployeeQuery] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
+
+  const selectedEmployee = useMemo(
+    () => employees.find((employee) => employee.emp_code === reportEmpCode) ?? null,
+    [employees, reportEmpCode]
+  )
+
+  // Typing filters; an empty box means the scope is still whoever is selected,
+  // so the list only appears once there is something to narrow by.
+  const employeeMatches = useMemo(() => {
+    const needle = employeeQuery.trim().toLowerCase()
+    if (!needle) {
+      return []
+    }
+    return employees
+      .filter((employee) => {
+        const haystack = [
+          employee.emp_code,
+          employee.emp_full_name,
+          employee.emp_email,
+          employee.emp_department
+        ]
+        return haystack.some((field) => (field || '').toLowerCase().includes(needle))
+      })
+      .slice(0, EMPLOYEE_SUGGESTION_LIMIT)
+  }, [employees, employeeQuery])
+
+  // Dismissing the popover also drops the half-typed search, so reopening it
+  // starts from the employee that is actually in scope.
+  const closeMenu = useCallback(() => {
+    setOpen(false)
+    setEmployeeQuery('')
+  }, [])
 
   useEffect(() => {
     if (!open) {
@@ -57,12 +102,12 @@ export default function ReportDownloadMenu({
     }
     const clickHandler = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setOpen(false)
+        closeMenu()
       }
     }
     const keyHandler = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setOpen(false)
+        closeMenu()
       }
     }
     document.addEventListener('mousedown', clickHandler)
@@ -71,7 +116,12 @@ export default function ReportDownloadMenu({
       document.removeEventListener('mousedown', clickHandler)
       document.removeEventListener('keydown', keyHandler)
     }
-  }, [open])
+  }, [closeMenu, open])
+
+  const selectEmployee = (empCode: string) => {
+    setReportEmpCode(empCode)
+    setEmployeeQuery('')
+  }
 
   return (
     <div className="rp-download" ref={containerRef}>
@@ -80,7 +130,7 @@ export default function ReportDownloadMenu({
         type="button"
         aria-expanded={open}
         aria-haspopup="dialog"
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => (open ? closeMenu() : setOpen(true))}
       >
         Download Report
         <span className={`rp-download-caret${open ? ' is-open' : ''}`} aria-hidden="true">▾</span>
@@ -160,6 +210,56 @@ export default function ReportDownloadMenu({
                 </label>
               </div>
             )}
+          </div>
+
+          <div className="rp-download-section">
+            <span className="rp-download-legend">Employee</span>
+            <div className="rp-download-employee">
+              <div className="rp-download-scope">
+                <span className="rp-download-scope-value">
+                  {selectedEmployee
+                    ? `${selectedEmployee.emp_full_name} (${selectedEmployee.emp_code})`
+                    : reportEmpCode || 'All employees'}
+                </span>
+                {reportEmpCode ? (
+                  <button
+                    className="rp-download-scope-clear"
+                    type="button"
+                    onClick={() => selectEmployee('')}
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+              <input
+                className="rp-download-employee-search"
+                id="report-employee-search"
+                type="search"
+                autoComplete="off"
+                placeholder="Search name, ID, email or department"
+                aria-label="Search for an employee to scope the report to"
+                value={employeeQuery}
+                onChange={(event) => setEmployeeQuery(event.target.value)}
+              />
+              {employeeQuery.trim() ? (
+                <ul className="rp-download-employee-list">
+                  {employeeMatches.length ? (
+                    employeeMatches.map((employee) => (
+                      <li key={employee.emp_code}>
+                        <button type="button" onClick={() => selectEmployee(employee.emp_code)}>
+                          <strong>{employee.emp_full_name || employee.emp_code}</strong>
+                          <span>
+                            {[employee.emp_code, employee.emp_department].filter(Boolean).join(' · ')}
+                          </span>
+                        </button>
+                      </li>
+                    ))
+                  ) : (
+                    <li className="rp-download-employee-empty">No matching employee.</li>
+                  )}
+                </ul>
+              ) : null}
+            </div>
           </div>
 
           <div className="rp-download-section">

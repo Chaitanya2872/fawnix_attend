@@ -21,6 +21,7 @@ import { useFieldVisitsPanel } from "../field-visits/useFieldVisitsPanel";
 import { useCalendarPanel } from "../calendar/useCalendarPanel";
 import { useReportsPanel } from "../reports/useReportsPanel";
 import { useApiTelemetryPanel } from "../api-telemetry/useApiTelemetryPanel";
+import { useServiceAccountsPanel } from "../service-accounts/useServiceAccountsPanel";
 import { useEmployeeMasterResource } from "../employee-master/useEmployeeMasterResource";
 import AdminLoginPage from "./AdminLoginPage";
 import AdminSidebar from "../components/AdminSidebar";
@@ -44,6 +45,7 @@ import AdminOvertimeRecordsPage from "../overtime-records/AdminOvertimeRecordsPa
 import AdminEmployeeMasterPage from "../employee-master/AdminEmployeeMasterPage";
 import AdminOverviewPage from "./sidebar/AdminOverviewPage";
 import AdminReportsPage from "../reports/AdminReportsPage";
+import AdminServiceAccountsPage from "../service-accounts/AdminServiceAccountsPage";
 /* Unified internal-application theme. Imported last so it wins on source
    order as well as specificity, normalising every admin page onto one palette. */
 import "../styles/admin-theme.css";
@@ -486,6 +488,12 @@ function FawnixApp() {
   } = useApiTelemetryPanel({
     isActive: activePanel === "api-telemetry",
     accessToken,
+    profile,
+    apiRequest,
+  });
+
+  const serviceAccountsPanel = useServiceAccountsPanel({
+    isActive: activePanel === "service-accounts",
     profile,
     apiRequest,
   });
@@ -1006,6 +1014,8 @@ function FawnixApp() {
     setReportStartDate,
     reportEndDate,
     setReportEndDate,
+    reportEmpCode,
+    setReportEmpCode,
     downloadRangeReport,
     downloadDailyAttendanceReport,
     downloadMonthlyAttendanceReport,
@@ -1261,6 +1271,9 @@ function FawnixApp() {
           setReportStartDate={setReportStartDate}
           reportEndDate={reportEndDate}
           setReportEndDate={setReportEndDate}
+          reportEmpCode={reportEmpCode}
+          setReportEmpCode={setReportEmpCode}
+          employees={employees}
           downloadRangeReport={downloadRangeReport}
           downloadDailyAttendanceReport={downloadDailyAttendanceReport}
           downloadMonthlyAttendanceReport={downloadMonthlyAttendanceReport}
@@ -1364,6 +1377,10 @@ function FawnixApp() {
           message="Inbox is empty."
         />
       );
+    }
+
+    if (activePanel === "service-accounts" && serviceAccountsPanel.canManage) {
+      return <AdminServiceAccountsPage panel={serviceAccountsPanel} />;
     }
 
     if (

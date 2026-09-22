@@ -18,6 +18,7 @@ export type SidebarIconName =
   | 'activity'
   | 'pin'
   | 'bug'
+  | 'key'
 
 export type SidebarItemDefinition = {
   /** Panel opened when the item is clicked. */

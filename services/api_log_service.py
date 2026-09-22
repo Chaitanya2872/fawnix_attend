@@ -15,7 +15,9 @@ from database.connection import get_db_connection, return_connection
 
 logger = logging.getLogger(__name__)
 
-_SENSITIVE_KEY_MARKERS = ("authorization", "token", "password", "otp", "secret")
+_SENSITIVE_KEY_MARKERS = ("authorization", "token", "password", "otp", "secret", "api_key", "apikey")
+# Service account API keys are redacted wherever they appear, not only under a known key.
+_SERVICE_ACCOUNT_KEY_PREFIX = "fxsa_"
 _MAX_STRING_LENGTH = 600
 _MAX_DICT_KEYS = 50
 _MAX_LIST_ITEMS = 25
@@ -51,6 +53,8 @@ def sanitize_payload(value):
         return [sanitize_payload(item) for item in list(value)[:_MAX_LIST_ITEMS]]
 
     if isinstance(value, str):
+        if _SERVICE_ACCOUNT_KEY_PREFIX in value:
+            return "[redacted]"
         if len(value) > _MAX_STRING_LENGTH:
             return f"{value[:_MAX_STRING_LENGTH]}..."
         return value

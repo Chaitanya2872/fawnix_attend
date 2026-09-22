@@ -388,6 +388,7 @@ GET /api/docs
 - `GET /api/admin/attendance/report`
 - `GET /api/admin/attendance/report/daily`
 - `GET /api/admin/attendance/report/monthly`
+- `GET /api/admin/reports/{report_type}` - range export for `attendance`, `exceptions`, `leaves`, `overtime` or `missed-logins`; takes `start_date`, `end_date`, `format` (csv/xlsx/pdf) and an optional `emp_code` to scope the export to one employee.
 - `GET /api/admin/attendance/summary`
 - `GET /api/admin/calendar-summary`
 - `GET /api/admin/overtime-records`

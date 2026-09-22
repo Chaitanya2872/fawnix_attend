@@ -12,6 +12,7 @@ from services import attendance_heatmap_service
 from services import attendance_insights_service
 from services import employee_master_service
 from services import field_visit_service
+import re
 import csv
 from io import StringIO, BytesIO
 try:
@@ -1151,6 +1152,27 @@ LEAVES_RANGE_REPORT_COLUMNS = [
     ('remarks', 'Manager Remarks', 'text'),
 ]
 
+OVERTIME_RANGE_REPORT_COLUMNS = [
+    ('work_date', 'Work Date', 'date'),
+    ('emp_code', 'Employee ID', 'text'),
+    ('employee_name', 'Employee Name', 'text'),
+    ('emp_email', 'Employee Email', 'text'),
+    ('emp_department', 'Department', 'text'),
+    ('emp_designation', 'Designation', 'text'),
+    ('day_of_week', 'Day', 'text'),
+    ('day_type', 'Day Type', 'code'),
+    ('standard_hours', 'Standard Hours', 'hours'),
+    ('actual_hours', 'Actual Hours', 'hours'),
+    ('extra_hours', 'Overtime Hours', 'hours'),
+    ('comp_off_days', 'Comp-off Days', 'number'),
+    ('status', 'Status', 'code'),
+    ('recording_deadline', 'Recording Deadline', 'date'),
+    ('expires_at', 'Expires On', 'date'),
+    ('approval_completed_at', 'Approved On', 'datetime'),
+    ('utilized_at', 'Utilized On', 'datetime'),
+    ('created_at', 'Recorded On', 'datetime'),
+]
+
 
 def _get_table_columns(cursor, table_name):
     """Available column names for a table, so exports survive schema drift."""
@@ -1162,7 +1184,7 @@ def _get_table_columns(cursor, table_name):
     return {row['column_name'] for row in cursor.fetchall()}
 
 
-def _build_exceptions_range_query(cursor):
+def _build_exceptions_range_query(cursor, employee_filter=''):
     """
     attendance_exceptions predates this repo's migrations and drifts between
     deployments, so resolve each column before selecting it.
@@ -1213,7 +1235,56 @@ def _build_exceptions_range_query(cursor):
         FROM attendance_exceptions ae
         LEFT JOIN employees e ON e.emp_code = ae.emp_code
         WHERE ae.exception_date BETWEEN %s AND %s
+        {employee_filter}
         ORDER BY ae.exception_date DESC, ae.emp_code
+    """
+
+
+def _build_overtime_range_query(cursor, employee_filter=''):
+    """
+    overtime_records gained its comp-off lifecycle columns across several
+    migrations, so resolve each one before selecting it — older deployments
+    still export, just with the missing columns blank.
+    """
+    columns = _get_table_columns(cursor, 'overtime_records')
+
+    def pick(column_name, alias=None):
+        alias = alias or column_name
+        if column_name in columns:
+            return f"o.{column_name} AS {alias}"
+        return f"NULL AS {alias}"
+
+    employee_name = "COALESCE(NULLIF(TRIM(e.emp_full_name), ''), o.emp_name)"         if 'emp_name' in columns else "e.emp_full_name"
+
+    select_parts = [
+        pick('work_date'),
+        pick('emp_code'),
+        f"{employee_name} AS employee_name",
+        "COALESCE(NULLIF(TRIM(e.emp_email), ''), o.emp_email) AS emp_email"
+        if 'emp_email' in columns else "e.emp_email AS emp_email",
+        "e.emp_department AS emp_department",
+        "e.emp_designation AS emp_designation",
+        pick('day_of_week'),
+        pick('day_type'),
+        pick('standard_hours'),
+        pick('actual_hours'),
+        pick('extra_hours'),
+        pick('comp_off_days'),
+        pick('status'),
+        pick('recording_deadline'),
+        pick('expires_at'),
+        pick('approval_completed_at'),
+        pick('utilized_at'),
+        pick('created_at'),
+    ]
+
+    return f"""
+        SELECT {', '.join(select_parts)}
+        FROM overtime_records o
+        LEFT JOIN employees e ON e.emp_code = o.emp_code
+        WHERE o.work_date BETWEEN %s AND %s
+        {employee_filter}
+        ORDER BY o.work_date DESC, o.emp_code
     """
 
 
@@ -1237,13 +1308,23 @@ RANGE_REPORT_CONFIG = {
             LEFT JOIN attendance a
                 ON LOWER(a.employee_email) = LOWER(e.emp_email)
                AND a.date = d.report_date
+            WHERE TRUE
+            {employee_filter}
             ORDER BY d.report_date DESC, employee_name ASC, a.login_time ASC NULLS LAST
         """,
+        'employee_filter': 'AND e.emp_code = %s',
     },
     'exceptions': {
         'title': 'Attendance Exceptions Report',
         'columns': EXCEPTIONS_RANGE_REPORT_COLUMNS,
         'query_builder': _build_exceptions_range_query,
+        'employee_filter': 'AND ae.emp_code = %s',
+    },
+    'overtime': {
+        'title': 'Overtime Report',
+        'columns': OVERTIME_RANGE_REPORT_COLUMNS,
+        'query_builder': _build_overtime_range_query,
+        'employee_filter': 'AND o.emp_code = %s',
     },
     'missed-logins': {
         'title': 'Missed Login Report',
@@ -1264,8 +1345,10 @@ RANGE_REPORT_CONFIG = {
               AND a.login_time IS NOT NULL
               AND (a.login_time::time > TIME '10:05:00'
                    OR (a.logout_time IS NOT NULL AND a.logout_time::time < TIME '18:00:00'))
+            {employee_filter}
             ORDER BY a.date DESC, employee_name ASC, a.login_time ASC
         """,
+        'employee_filter': 'AND e.emp_code = %s',
     },
     'leaves': {
         'title': 'Leave Report',
@@ -1280,8 +1363,10 @@ RANGE_REPORT_CONFIG = {
             FROM leaves l
             LEFT JOIN employees e ON e.emp_code = l.emp_code
             WHERE l.from_date <= %s AND l.to_date >= %s
+            {employee_filter}
             ORDER BY l.from_date DESC, l.emp_code
         """,
+        'employee_filter': 'AND l.emp_code = %s',
         'reverse_params': True,
     },
 }
@@ -1315,12 +1400,25 @@ def _proportional_col_widths(columns, values, available_width):
     return [available_width * weight / total_weight for weight in weights]
 
 
-def _export_range_report(report_type, report_format, start_date, end_date, rows, config):
+def _sanitise_filename_part(value):
+    """Keep a name safe for a Content-Disposition filename."""
+    cleaned = re.sub(r'[^A-Za-z0-9]+', '_', str(value or '')).strip('_')
+    return cleaned[:40]
+
+
+def _export_range_report(report_type, report_format, start_date, end_date, rows, config,
+                         emp_code=None, employee_name=None):
     column_specs = config['columns']
     report_title = config.get('title', f"{report_type.title()} Report")
+    # An employee-scoped export says whose it is, both on the PDF cover line and
+    # in the filename, so a folder of downloads stays tellable apart.
+    employee_label = ''
+    if emp_code:
+        employee_label = f"{employee_name} ({emp_code})" if employee_name else str(emp_code)
     columns, values = _build_report_rows(column_specs, rows)
+    employee_slug = f"_{_sanitise_filename_part(employee_name or emp_code)}" if emp_code else ''
     filename = (
-        f"{report_title.replace(' ', '_')}"
+        f"{report_title.replace(' ', '_')}{employee_slug}"
         f"_{_format_report_date(start_date)}_to_{_format_report_date(end_date)}.{report_format}"
     )
 
@@ -1371,8 +1469,10 @@ def _export_range_report(report_type, report_format, start_date, end_date, rows,
     styles = getSampleStyleSheet()
     story = [
         Paragraph(f"{report_title}: {_format_report_date(start_date)} to {_format_report_date(end_date)}", styles['Title']),
-        Spacer(1, 12),
     ]
+    if employee_label:
+        story.append(Paragraph(f"Employee: {employee_label}", styles['Heading3']))
+    story.append(Spacer(1, 12))
     table_data = [[Paragraph(f"<b>{column}</b>", styles['BodyText']) for column in columns]]
     for row in values:
         table_data.append([Paragraph(str(value if value is not None else ''), styles['BodyText']) for value in row])
@@ -1388,7 +1488,11 @@ def _export_range_report(report_type, report_format, start_date, end_date, rows,
         ]))
         story.append(table)
     else:
-        story.append(Paragraph('No records found for this date range.', styles['BodyText']))
+        empty_message = (
+            f'No records found for {employee_label} in this date range.'
+            if employee_label else 'No records found for this date range.'
+        )
+        story.append(Paragraph(empty_message, styles['BodyText']))
     document.build(story)
     output.seek(0)
     return send_file(output, mimetype='application/pdf', as_attachment=True, download_name=filename)
@@ -1398,9 +1502,18 @@ def _export_range_report(report_type, report_format, start_date, end_date, rows,
 @token_required
 @hr_or_devtester_required
 def download_range_report(current_user, report_type):
+    """
+    Range export for any report in RANGE_REPORT_CONFIG.
+
+    Query params:
+    - start_date / end_date (YYYY-MM-DD, required)
+    - format (csv | xlsx | pdf, defaults to csv)
+    - emp_code (optional — scopes the export to one employee)
+    """
     config = RANGE_REPORT_CONFIG.get(report_type)
     if not config:
-        return jsonify({'success': False, 'message': 'Report type must be attendance, exceptions, leaves, or missed-logins.'}), 400
+        allowed = ', '.join(sorted(RANGE_REPORT_CONFIG))
+        return jsonify({'success': False, 'message': f'Report type must be one of: {allowed}.'}), 400
     report_format = (request.args.get('format') or 'csv').lower()
     if report_format not in {'csv', 'xlsx', 'pdf'}:
         return jsonify({'success': False, 'message': 'Format must be csv, xlsx, or pdf.'}), 400
@@ -1412,18 +1525,44 @@ def download_range_report(current_user, report_type):
     if start_date > end_date:
         return jsonify({'success': False, 'message': 'start_date cannot be after end_date.'}), 400
 
+    emp_code = (request.args.get('emp_code') or '').strip()
+
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        params = (end_date, start_date) if config.get('reverse_params') else (start_date, end_date)
+        employee_name = None
+        if emp_code:
+            cursor.execute(
+                "SELECT emp_code, emp_full_name FROM employees WHERE emp_code = %s",
+                (emp_code,),
+            )
+            employee = cursor.fetchone()
+            if not employee:
+                return jsonify({'success': False, 'message': f'No employee found with code {emp_code}.'}), 404
+            emp_code = employee['emp_code']
+            employee_name = employee['emp_full_name']
+
+        # Every report puts its employee predicate after the date predicate, so
+        # the bound emp_code always trails the date params.
+        employee_filter = config.get('employee_filter', '') if emp_code else ''
+        date_params = (end_date, start_date) if config.get('reverse_params') else (start_date, end_date)
+        params = date_params + ((emp_code,) if employee_filter else ())
+
         query_builder = config.get('query_builder')
-        query = query_builder(cursor) if query_builder else config['query']
+        query = (
+            query_builder(cursor, employee_filter)
+            if query_builder
+            else config['query'].format(employee_filter=employee_filter)
+        )
         cursor.execute(query, params)
         rows = cursor.fetchall()
     finally:
         cursor.close()
         return_connection(conn)
-    return _export_range_report(report_type, report_format, start_date, end_date, rows, config)
+    return _export_range_report(
+        report_type, report_format, start_date, end_date, rows, config,
+        emp_code=emp_code or None, employee_name=employee_name,
+    )
 
 @admin_bp.route('/field-visits/<int:field_visit_id>/tracking', methods=['GET'])
 @token_required

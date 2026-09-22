@@ -30,6 +30,7 @@ type PositionedDepartment = DepartmentSeed & {
 
 type HierarchyNode = {
   key: string
+  parentKey: string
   name: string
   designation: string
   initials: string
@@ -216,17 +217,8 @@ function getEmployeeKey(employee: EmployeeRow, index: number) {
   )
 }
 
-function employeeMatchesValue(employee: EmployeeRow, value: string) {
-  const normalized = normalizeKey(value)
-  const compact = normalizeCompactKey(value)
-  return [
-    employee.emp_code,
-    employee.emp_full_name,
-    employee.manager_code,
-    employee.manager_name,
-  ].some((candidate) => candidate && (
-    normalizeKey(candidate) === normalized || normalizeCompactKey(candidate) === compact
-  ))
+function getEmployeeManagerValue(employee: EmployeeRow) {
+  return getEmployeeField(employee, ['emp_manager', 'manager_code', 'manager_name'])
 }
 
 function isLeadEmployee(employee: EmployeeRow) {
@@ -589,19 +581,34 @@ export default function OrganizationStructureMap({
       return []
     }
 
-    const manager = selectedEmployees.find((employee) => {
-      return selectedEmployees.some((candidate) => {
-        const managerValue = getEmployeeField(candidate, ['emp_manager', 'manager_code', 'manager_name'])
-        return candidate !== employee && managerValue && employeeMatchesValue(employee, managerValue)
-      }) || /manager|head|director/i.test(getEmployeeDesignation(employee))
+    const employeeByKey = new Map<string, EmployeeRow>()
+    selectedEmployees.forEach((employee) => {
+      employeeByKey.set(normalizeKey(getEmployeeName(employee)), employee)
+      employeeByKey.set(normalizeCompactKey(getEmployeeName(employee)), employee)
+      if (employee.emp_code) {
+        employeeByKey.set(normalizeKey(employee.emp_code), employee)
+      }
     })
-    const leads = selectedEmployees.filter((employee) => employee !== manager && isLeadEmployee(employee))
+    const managerOf = (employee: EmployeeRow) => {
+      const value = getEmployeeManagerValue(employee)
+      return value
+        ? employeeByKey.get(normalizeKey(value)) || employeeByKey.get(normalizeCompactKey(value))
+        : undefined
+    }
+    const topLevelEmployees = selectedEmployees.filter((employee) => !managerOf(employee))
+    const manager = topLevelEmployees.find((employee) =>
+      /manager|head|director/i.test(getEmployeeDesignation(employee))
+    ) || topLevelEmployees[0]
+    const leads = selectedEmployees.filter((employee) =>
+      employee !== manager && isLeadEmployee(employee) && managerOf(employee) === manager
+    )
     const members = selectedEmployees.filter((employee) => employee !== manager && !leads.includes(employee))
     const branchAngle = selectedDepartment.angle
-    const makeNode = (employee: EmployeeRow, level: HierarchyNode['level'], x: number, y: number, index: number): HierarchyNode => {
+    const makeNode = (employee: EmployeeRow, level: HierarchyNode['level'], parentKey: string, x: number, y: number, index: number): HierarchyNode => {
       const name = getEmployeeName(employee)
       return {
         key: getEmployeeKey(employee, index),
+        parentKey,
         name,
         designation: getEmployeeDesignation(employee),
         initials: getInitials(name),
@@ -612,23 +619,53 @@ export default function OrganizationStructureMap({
         y,
       }
     }
-    const placeRing = (items: EmployeeRow[], level: HierarchyNode['level'], distance: number, spread: number) =>
+    const placeRing = (items: EmployeeRow[], level: HierarchyNode['level'], distance: number, spread: number, parentKey: string) =>
       items.map((employee, index) => {
         const angle = branchAngle + (items.length === 1 ? 0 : -spread / 2 + (spread * index) / (items.length - 1))
         return makeNode(
           employee,
           level,
+          parentKey,
           selectedDepartment.x + Math.cos(angle) * distance,
           selectedDepartment.y + Math.sin(angle) * distance,
           index
         )
       })
 
-    return [
-      ...(manager ? placeRing([manager], 'manager', HIERARCHY_MANAGER_DISTANCE, 0) : []),
-      ...placeRing(leads, 'lead', HIERARCHY_LEAD_DISTANCE, Math.min(Math.PI * 0.72, Math.max(0.3, leads.length * 0.22))),
-      ...placeRing(members, 'member', HIERARCHY_MEMBER_DISTANCE, Math.min(Math.PI * 0.94, Math.max(0.4, members.length * 0.18))),
+    const leadNames = new Set(leads.map((employee) => normalizeCompactKey(getEmployeeName(employee))))
+    const managerKey = manager ? getEmployeeKey(manager, 0) : selectedDepartment.id
+    const nodes = [
+      ...(manager ? placeRing([manager], 'manager', HIERARCHY_MANAGER_DISTANCE, 0, selectedDepartment.id) : []),
+      ...placeRing(
+        leads,
+        'lead',
+        HIERARCHY_LEAD_DISTANCE,
+        Math.min(Math.PI * 0.72, Math.max(0.3, leads.length * 0.22)),
+        manager ? getEmployeeKey(manager, 0) : selectedDepartment.id
+      ),
+      ...placeRing(
+        members,
+        'member',
+        HIERARCHY_MEMBER_DISTANCE,
+        Math.min(Math.PI * 0.94, Math.max(0.4, members.length * 0.18)),
+        selectedDepartment.id
+      ),
     ]
+    return nodes.map((node) => {
+      if (node.level !== 'member') {
+        return node
+      }
+
+      const employee = selectedEmployees.find((candidate) => getEmployeeName(candidate) === node.name)
+      const reportingManager = employee ? managerOf(employee) : undefined
+      const reportingManagerKey = reportingManager
+        ? getEmployeeKey(reportingManager, 0)
+        : managerKey
+      const parentKey = reportingManager && leadNames.has(normalizeCompactKey(getEmployeeName(reportingManager)))
+        ? reportingManagerKey
+        : managerKey
+      return { ...node, parentKey }
+    })
   }, [selectedDepartment, selectedEmployees])
 
   useEffect(() => {
@@ -802,17 +839,9 @@ export default function OrganizationStructureMap({
               )
             })}
             {hierarchyNodes.map((node, index) => {
-              const managers = hierarchyNodes.filter((item) => item.level === 'manager')
-              const leads = hierarchyNodes.filter((item) => item.level === 'lead')
-              const members = hierarchyNodes.filter((item) => item.level === 'member')
-              const memberIndex = members.indexOf(node)
-              const parent = node.level === 'manager'
+              const parent = node.parentKey === selectedDepartment?.id
                 ? selectedDepartment
-                : node.level === 'lead'
-                  ? managers[0] || selectedDepartment
-                  : leads.length
-                    ? leads[memberIndex % leads.length]
-                    : managers[0] || selectedDepartment
+                : hierarchyNodes.find((item) => item.key === node.parentKey)
               return parent ? (
                 <line
                   key={`hierarchy-line-${node.key}-${index}`}

@@ -1,94 +1,422 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDialogFocus } from '../hooks/useDialogFocus'
+import { AlertIcon, ChevronIcon, ClockIcon, CloseIcon, KebabIcon } from './icons'
+import {
+  blankTrigger, buildCron, cronWords, dayWords, endpoint, errorText, nextRuns, parseCron, snake, splitRecipients, stamp,
+  type ApiRequest, type EmailAudience, type EmailEvent, type EmailTrigger, type TriggerType,
+} from './emailAutomation'
 
-type ApiRequest = (path: string, options?: RequestInit, tokenOverride?: string) => Promise<any>
-type TriggerType = 'manual' | 'event' | 'schedule'
-type EmailTrigger = { id?: number | string; trigger_key: string; trigger_name: string; template_key: string; trigger_type: TriggerType; event_name?: string | null; schedule_cron?: string | null; to_recipients: string[]; cc_recipients: string[]; bcc_recipients: string[]; variables: Record<string, unknown>; audience?: string | null; active: boolean; next_run_at?: string | null; last_run_at?: string | null; last_status?: string | null; last_error?: string | null }
-type EmailEvent = { eventName: string; label: string; variables: string[] }
-type EmailAudience = { audience: string; label: string; variables: string[] }
-type Props = { apiRequest: ApiRequest; templateKeys: string[] }
-const endpoint = '/api/admin/email'
-const errorText = (e: unknown) => e instanceof Error ? e.message : 'Something went wrong. Please try again.'
-const splitRecipients = (value: string) => value.split(/[\n,]+/).map(item => item.trim()).filter(Boolean)
-const typeLabel: Record<TriggerType, string> = { manual: 'Manual', event: 'Automatic · event', schedule: 'Automatic · schedule' }
-const blank: EmailTrigger = { trigger_key: '', trigger_name: '', template_key: '', trigger_type: 'event', event_name: '', schedule_cron: '0 9 * * 1-5', to_recipients: [], cc_recipients: [], bcc_recipients: [], variables: {}, audience: null, active: true }
+const TABS: { key: 'all' | TriggerType; label: string }[] = [
+  { key: 'all', label: 'All' }, { key: 'schedule', label: 'Scheduled' }, { key: 'event', label: 'App event' }, { key: 'manual', label: 'Manual' },
+]
+const MODES: { key: TriggerType; label: string; hint: string }[] = [
+  { key: 'schedule', label: 'On a schedule', hint: 'Days and a time' },
+  { key: 'event', label: 'On an app event', hint: 'e.g. leave approved' },
+  { key: 'manual', label: 'Manually', hint: 'Only via Run now' },
+]
+const DAY_BUTTONS: { short: string; full: string; value: number }[] = [
+  { short: 'Mon', full: 'Monday', value: 1 }, { short: 'Tue', full: 'Tuesday', value: 2 }, { short: 'Wed', full: 'Wednesday', value: 3 },
+  { short: 'Thu', full: 'Thursday', value: 4 }, { short: 'Fri', full: 'Friday', value: 5 }, { short: 'Sat', full: 'Saturday', value: 6 },
+  { short: 'Sun', full: 'Sunday', value: 0 },
+]
+const PRESETS: { label: string; days: number[] }[] = [
+  { label: 'Weekdays', days: [1, 2, 3, 4, 5] }, { label: 'Mon–Sat', days: [1, 2, 3, 4, 5, 6] }, { label: 'Every day', days: [0, 1, 2, 3, 4, 5, 6] },
+]
+const sameDays = (a: number[], b: number[]) => a.length === b.length && a.every(day => b.includes(day))
 
-export default function EmailTriggersPanel({ apiRequest, templateKeys }: Props) {
-  const [items, setItems] = useState<EmailTrigger[]>([]); const [events, setEvents] = useState<EmailEvent[]>([]); const [audiences, setAudiences] = useState<EmailAudience[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState('')
-  const [editing, setEditing] = useState<EmailTrigger | null>(null); const [running, setRunning] = useState<EmailTrigger | null>(null)
-  const apiRequestRef = useRef(apiRequest)
-  useEffect(() => { apiRequestRef.current = apiRequest }, [apiRequest])
-  const load = useCallback(async () => { setLoading(true); setError(''); try { const [t, e, a] = await Promise.all([apiRequestRef.current(`${endpoint}/triggers`), apiRequestRef.current(`${endpoint}/events`), apiRequestRef.current(`${endpoint}/audiences`)]); setItems(Array.isArray(t?.data) ? t.data : []); setEvents(Array.isArray(e?.data) ? e.data : []); setAudiences(Array.isArray(a?.data) ? a.data : []) } catch (err) { setError(errorText(err)) } finally { setLoading(false) } }, [])
-  useEffect(() => { void load() }, [load])
-  const act = async (path: string, method = 'POST') => { try { await apiRequestRef.current(path, { method, body: method === 'DELETE' ? undefined : '{}' }); await load() } catch (e) { setError(errorText(e)) } }
-  const when = (item: EmailTrigger) => item.trigger_type === 'event' ? <code className="et-key">{item.event_name}</code> : item.trigger_type === 'schedule' ? <><code className="et-key">{item.schedule_cron}</code>{item.audience && <div className="adm-cell-secondary">each: {item.audience}</div>}{item.next_run_at && <div className="adm-cell-secondary">next {new Date(item.next_run_at).toLocaleString()}</div>}</> : <span className="adm-cell-secondary">On demand</span>
-  return <section className="adm-table-card table-card">
-    <div className="adm-table-toolbar"><div className="adm-table-title"><strong>{items.length} {items.length === 1 ? 'trigger' : 'triggers'}</strong><span>Manual triggers send on demand; automatic triggers fire on app events or a schedule</span></div><div className="adm-header__actions"><button className="adm-btn adm-btn--icon" onClick={() => void load()} aria-label="Reload triggers">↻</button><button className="adm-btn adm-btn--primary" onClick={() => setEditing({ ...blank, template_key: templateKeys[0] || '' })} disabled={!templateKeys.length}>+ New trigger</button></div></div>
-    {error && <div className="et-notice" role="alert">{error}</div>}
-    {loading ? <div className="adm-empty empty-state"><strong>Loading triggers…</strong></div> : items.length ? <div className="adm-table-scroll table-scroll"><table className="adm-table dashboard-table"><thead><tr><th>Trigger</th><th>Type</th><th>When</th><th>Template</th><th>Last run</th><th>Status</th><th>Actions</th></tr></thead><tbody>{items.map(item => <tr key={item.trigger_key}>
-      <td><span className="adm-cell-primary">{item.trigger_name}</span><div className="adm-cell-secondary">{item.trigger_key}</div></td>
-      <td>{typeLabel[item.trigger_type]}</td><td>{when(item)}</td><td><code className="et-key">{item.template_key}</code></td>
-      <td className="adm-cell-secondary" title={item.last_error || undefined}>{item.last_run_at ? `${new Date(item.last_run_at).toLocaleString()} · ${item.last_status}` : '—'}</td>
-      <td><span className={`adm-pill table-pill adm-pill--${item.active ? 'active' : 'inactive'}`}>{item.active ? 'Enabled' : 'Disabled'}</span></td>
-      <td><div className="adm-actions"><button className="adm-action-btn adm-action-btn--view" onClick={() => setRunning(item)}>Run now</button><button className="adm-action-btn" onClick={() => setEditing(item)}>Edit</button><button className="adm-action-btn" onClick={() => void act(`${endpoint}/triggers/${encodeURIComponent(item.trigger_key)}/${item.active ? 'disable' : 'enable'}`)}>{item.active ? 'Disable' : 'Enable'}</button><button className="adm-action-btn" onClick={() => void act(`${endpoint}/triggers/${encodeURIComponent(item.trigger_key)}`, 'DELETE')}>Delete</button></div></td>
-    </tr>)}</tbody></table></div> : <div className="adm-empty empty-state"><strong>No triggers yet</strong><span>{templateKeys.length ? 'Bind a template to an event, a schedule, or a manual send.' : 'Create a template first, then add a trigger for it.'}</span></div>}
-    {editing && createPortal(<TriggerEditor trigger={editing} events={events} audiences={audiences} templateKeys={templateKeys} apiRequest={apiRequest} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void load() }}/>, document.body)}
-    {running && createPortal(<RunDialog trigger={running} apiRequest={apiRequest} onClose={() => { setRunning(null); void load() }}/>, document.body)}
+/** Whatever else the backend reports, only an explicit success should read as a clean send. */
+const sentOk = (status?: string | null) => ['sent', 'success', 'ok'].includes((status || '').toLowerCase())
+
+function whenLines(trigger: EmailTrigger) {
+  if (trigger.trigger_type === 'schedule') return { main: cronWords(trigger.schedule_cron) || 'Custom schedule', sub: trigger.schedule_cron || '' }
+  if (trigger.trigger_type === 'event') return { main: 'On an app event', sub: trigger.event_name || '' }
+  return { main: 'Manual only', sub: 'Sends when you run it' }
+}
+
+type CardProps = {
+  triggers: EmailTrigger[]
+  loading: boolean
+  canCreate: boolean
+  onCreate: () => void
+  onEdit: (trigger: EmailTrigger) => void
+  onRun: (trigger: EmailTrigger) => void
+  onToggle: (trigger: EmailTrigger) => void
+  onDuplicate: (trigger: EmailTrigger) => void
+  onDelete: (trigger: EmailTrigger) => void
+  onOpenTemplate: (templateKey: string) => void
+}
+
+export function TriggersCard({ triggers, loading, canCreate, onCreate, onEdit, onRun, onToggle, onDuplicate, onDelete, onOpenTemplate }: CardProps) {
+  const [tab, setTab] = useState<'all' | TriggerType>('all')
+  const [menuFor, setMenuFor] = useState<string | null>(null)
+
+  // A row menu should not survive a click anywhere else on the page.
+  useEffect(() => {
+    if (!menuFor) return
+    const dismiss = (event: Event) => {
+      const target = event.target as HTMLElement | null
+      if (target?.closest?.('.ea-cell--actions')) return
+      setMenuFor(null)
+    }
+    document.addEventListener('pointerdown', dismiss)
+    return () => document.removeEventListener('pointerdown', dismiss)
+  }, [menuFor])
+
+  const shown = triggers.filter(item => tab === 'all' || item.trigger_type === tab)
+  const count = (key: 'all' | TriggerType) => (key === 'all' ? triggers.length : triggers.filter(item => item.trigger_type === key).length)
+
+  return <section className="ea-card ea-enter ea-enter--3">
+    <div className="ea-card__head">
+      <div className="ea-card__title">
+        <h2>Triggers</h2>
+        <span>When each email is sent. Recipients and variables are resolved at run time.</span>
+      </div>
+      <div role="tablist" aria-label="Filter triggers" className="ea-tabs">
+        {TABS.map(item => <button key={item.key} type="button" role="tab" aria-selected={tab === item.key} className="ea-tab ea-ease ea-press" onClick={() => { setTab(item.key); setMenuFor(null) }}>{item.label} · {count(item.key)}</button>)}
+      </div>
+    </div>
+
+    <div className="ea-grid-head"><span>TRIGGER</span><span>SCHEDULE</span><span>SENDS TEMPLATE</span><span>NEXT RUN</span><span>LAST RUN</span><span>ACTIVE</span></div>
+
+    {loading
+      ? <div className="ea-empty"><strong>Loading triggers…</strong></div>
+      : shown.length === 0
+        ? <div className="ea-empty">
+            <strong>{triggers.length ? 'Nothing of this type yet' : 'No triggers yet'}</strong>
+            <span>{canCreate ? 'Bind a template to an event, a schedule, or a manual send.' : 'Create a template first, then add a trigger for it.'}</span>
+            {canCreate && <button type="button" className="ea-btn ea-btn--sm ea-ease ea-press" onClick={onCreate}>New trigger</button>}
+          </div>
+        : shown.map(item => {
+            const when = whenLines(item)
+            const next = stamp(item.next_run_at)
+            const last = stamp(item.last_run_at)
+            const open = menuFor === item.trigger_key
+            const name = item.trigger_name || item.trigger_key
+            return <div key={item.trigger_key} className={`ea-row ea-ease${item.active ? '' : ' ea-row--off'}${open ? ' ea-row--menu' : ''}`}>
+              <div className="ea-cell ea-cell--name">
+                <button type="button" className="ea-rowlink ea-ease" onClick={() => onEdit(item)}>{name}</button>
+                <span className="ea-key">{item.trigger_key}</span>
+              </div>
+              <div className="ea-cell" data-label="SCHEDULE">
+                <span className="ea-cell__main">{when.main}</span>
+                {when.sub && <span className="ea-key">{when.sub}</span>}
+              </div>
+              <div className="ea-cell" data-label="SENDS TEMPLATE">
+                <button type="button" className="ea-chipkey ea-ease" title={`Open ${item.template_key}`} onClick={() => onOpenTemplate(item.template_key)}>{item.template_key}</button>
+              </div>
+              <div className="ea-cell" data-label="NEXT RUN">
+                <span className="ea-cell__main">{!item.active ? 'Paused' : next ? next.main : '—'}</span>
+                <span className="ea-cell__sub">{!item.active ? 'Resume to schedule' : next ? next.day : item.trigger_type === 'manual' ? 'On demand' : 'Not scheduled'}</span>
+              </div>
+              <div className="ea-cell" data-label="LAST RUN">
+                <span className="ea-cell__main">{sentOk(item.last_status) && <span className="ea-dot"/>}{last ? last.main : 'Never run'}</span>
+                <span className={`ea-cell__sub${last && !sentOk(item.last_status) ? ' ea-cell__sub--bad' : ''}`} title={item.last_error || undefined}>{item.last_status || ''}</span>
+              </div>
+              <div className="ea-cell ea-cell--actions">
+                <button type="button" role="switch" aria-checked={item.active} aria-label={`${name} active`} className="ea-switch" onClick={() => onToggle(item)}><i/></button>
+                <button type="button" className="ea-btn ea-btn--sm ea-ease ea-press" onClick={() => onRun(item)}>Run now</button>
+                <button type="button" className="ea-btn ea-btn--sm ea-btn--square ea-more ea-ease ea-press" aria-haspopup="menu" aria-expanded={open} aria-label={`More actions for ${name}`} onClick={() => setMenuFor(open ? null : item.trigger_key)}><KebabIcon/></button>
+                {open && <div role="menu" aria-label="Trigger actions" className="ea-menu">
+                  <button type="button" role="menuitem" onClick={() => { setMenuFor(null); onEdit(item) }}>Edit trigger</button>
+                  <button type="button" role="menuitem" onClick={() => { setMenuFor(null); onDuplicate(item) }}>Duplicate</button>
+                  <hr/>
+                  <button type="button" role="menuitem" className="ea-menu__danger" onClick={() => { setMenuFor(null); onDelete(item) }}>Delete trigger</button>
+                </div>}
+              </div>
+            </div>
+          })}
   </section>
 }
 
-function TriggerEditor({ trigger, events, audiences, templateKeys, apiRequest, onClose, onSaved }: { trigger: EmailTrigger; events: EmailEvent[]; audiences: EmailAudience[]; templateKeys: string[]; apiRequest: ApiRequest; onClose: () => void; onSaved: () => void }) {
-  const dialogRef = useRef<HTMLElement | null>(null); useDialogFocus({ containerRef: dialogRef, open: true, onClose })
-  const [form, setForm] = useState<EmailTrigger>({ ...blank, ...trigger, event_name: trigger.event_name || events[0]?.eventName || '', schedule_cron: trigger.schedule_cron || blank.schedule_cron })
-  const [to, setTo] = useState(trigger.to_recipients.join('\n')); const [cc, setCc] = useState(trigger.cc_recipients.join('\n')); const [bcc, setBcc] = useState(trigger.bcc_recipients.join('\n'))
-  const [varsText, setVarsText] = useState(JSON.stringify(trigger.variables || {}, null, 2)); const [saving, setSaving] = useState(false); const [error, setError] = useState('')
-  const change = <K extends keyof EmailTrigger>(key: K, value: EmailTrigger[K]) => setForm(old => ({ ...old, [key]: value }))
-  const selectedEvent = events.find(e => e.eventName === form.event_name); const selectedAudience = audiences.find(a => a.audience === form.audience)
-  const save = async () => {
-    let variables: Record<string, unknown>; try { variables = JSON.parse(varsText || '{}') } catch { return setError('Default variables must be valid JSON.') }
-    setSaving(true); setError('')
-    try { const isNew = !trigger.id; await apiRequest(`${endpoint}/triggers${isNew ? '' : `/${encodeURIComponent(trigger.trigger_key)}`}`, { method: isNew ? 'POST' : 'PUT', body: JSON.stringify({ triggerKey: form.trigger_key, triggerName: form.trigger_name, templateKey: form.template_key, triggerType: form.trigger_type, eventName: form.event_name, scheduleCron: form.schedule_cron, toRecipients: splitRecipients(to), ccRecipients: splitRecipients(cc), bccRecipients: splitRecipients(bcc), variables, audience: form.trigger_type === 'schedule' ? form.audience || null : null, active: form.active }) }); onSaved() } catch (e) { setError(errorText(e)) } finally { setSaving(false) }
-  }
-  return <div className="et-overlay" role="dialog" aria-modal="true" aria-label="Email trigger editor"><section className="et-drawer" ref={dialogRef}><header className="et-drawer-head"><div><p className="et-eyebrow">Trigger setup</p><h2>{trigger.id ? 'Edit trigger' : 'New trigger'}</h2></div><button className="et-close" onClick={onClose} aria-label="Close">×</button></header>{error && <div className="et-notice" role="alert">{error}</div>}
-    <div className="et-editor-grid"><form className="et-form" onSubmit={e => { e.preventDefault(); void save() }}>
-      <label>Trigger key<input value={form.trigger_key} disabled={Boolean(trigger.id)} onChange={e => change('trigger_key', e.target.value)} placeholder="leave_applied_manager"/></label>
-      <label>Trigger name<input value={form.trigger_name} onChange={e => change('trigger_name', e.target.value)}/></label>
-      <label>Template<select value={form.template_key} onChange={e => change('template_key', e.target.value)}>{templateKeys.map(k => <option key={k} value={k}>{k}</option>)}</select></label>
-      <label>Type<select value={form.trigger_type} onChange={e => change('trigger_type', e.target.value as TriggerType)}><option value="event">Automatic — when an app event happens</option><option value="schedule">Automatic — on a schedule</option><option value="manual">Manual — only when I click Run now</option></select></label>
-      {form.trigger_type === 'event' && <label>Event<select value={form.event_name || ''} onChange={e => change('event_name', e.target.value)}>{events.map(ev => <option key={ev.eventName} value={ev.eventName}>{ev.label} ({ev.eventName})</option>)}</select></label>}
-      {form.trigger_type === 'schedule' && <label>Cron schedule<input value={form.schedule_cron || ''} onChange={e => change('schedule_cron', e.target.value)} placeholder="0 9 * * 1-5"/><span className="et-muted">minute hour day month weekday — e.g. <code>0 9 * * 1-5</code> = 9:00 on weekdays</span></label>}
-      {form.trigger_type === 'schedule' && <label>Send to<select value={form.audience || ''} onChange={e => change('audience', e.target.value || null)}><option value="">One email per run</option>{audiences.map(a => <option key={a.audience} value={a.audience}>One email per person — {a.label}</option>)}</select></label>}
-      <label>To {form.trigger_type === 'manual' && <span className="et-muted">optional default</span>}<textarea value={to} onChange={e => setTo(e.target.value)} rows={2} placeholder={form.trigger_type === 'event' ? '{{employee_email}}' : 'team@example.com'}/></label>
-      <label>CC <span className="et-muted">optional</span><textarea value={cc} onChange={e => setCc(e.target.value)} rows={2}/></label>
-      <label>BCC <span className="et-muted">optional</span><textarea value={bcc} onChange={e => setBcc(e.target.value)} rows={2}/></label>
-      <label>Default variables JSON<textarea value={varsText} onChange={e => setVarsText(e.target.value)} rows={4}/></label>
-      <label className="et-toggle"><input type="checkbox" checked={form.active} onChange={e => change('active', e.target.checked)}/><span>Trigger is enabled</span></label>
-      <footer><button type="button" className="adm-btn" onClick={onClose}>Cancel</button><button className="adm-btn adm-btn--primary" disabled={saving}>{saving ? 'Saving…' : 'Save trigger'}</button></footer>
-    </form><aside className="et-preview"><div><p className="et-eyebrow">Available variables</p><h3>{form.trigger_type === 'event' ? selectedEvent?.label || 'Event' : form.trigger_type === 'schedule' ? 'Scheduled run' : 'Manual run'}</h3><p>Use these in the template and in recipient fields, e.g. <code>{'{{manager_email}}'}</code>. Blank recipients are skipped. <code>designation:CMD</code> sends to every active employee with that designation.</p></div>
-      <div className="et-mail"><pre>{form.trigger_type === 'event' ? (selectedEvent?.variables || []).map(v => `{{${v}}}`).join('\n') : form.trigger_type === 'schedule' ? (selectedAudience ? [...selectedAudience.variables].map(v => `{{${v}}}`).join('\n') : '{{run_date}}\n{{run_time}}\n+ default variables') : 'Default variables, plus any\nsupplied when you click Run now'}</pre></div></aside></div></section></div>
+type EditorProps = {
+  trigger: EmailTrigger
+  events: EmailEvent[]
+  audiences: EmailAudience[]
+  templates: { template_key: string; template_name: string }[]
+  apiRequest: ApiRequest
+  onClose: () => void
+  onSaved: (message: string) => void
 }
 
-function RunDialog({ trigger, apiRequest, onClose }: { trigger: EmailTrigger; apiRequest: ApiRequest; onClose: () => void }) {
-  const dialogRef = useRef<HTMLElement | null>(null); useDialogFocus({ containerRef: dialogRef, open: true, onClose })
-  // Only literal addresses are pre-filled: placeholders and designation: lists would reach real people in a test.
-  const literal = (list: string[]) => list.filter(v => !v.includes('{{') && !v.toLowerCase().startsWith('designation:')).join('\n')
-  const dynamic = [...trigger.to_recipients, ...trigger.cc_recipients, ...trigger.bcc_recipients].filter(v => v.includes('{{') || v.toLowerCase().startsWith('designation:'))
-  const [to, setTo] = useState(literal(trigger.to_recipients)); const [cc, setCc] = useState(literal(trigger.cc_recipients)); const [bcc, setBcc] = useState(literal(trigger.bcc_recipients)); const [variables, setVariables] = useState('{}')
-  const [state, setState] = useState<{ error?: string; message?: string }>({}); const [busy, setBusy] = useState(false)
-  const run = async () => {
-    let parsed: Record<string, unknown>; try { parsed = JSON.parse(variables || '{}') } catch { return setState({ error: 'Variables must be valid JSON.' }) }
-    setBusy(true); setState({})
-    try { const r = await apiRequest(`${endpoint}/triggers/${encodeURIComponent(trigger.trigger_key)}/run`, { method: 'POST', body: JSON.stringify({ to: splitRecipients(to), cc: splitRecipients(cc), bcc: splitRecipients(bcc), variables: parsed }) }); setState(r?.success ? { message: `Sent${r.messageId ? ` (id ${r.messageId})` : ''}.` } : { error: r?.message || 'Not sent.' }) } catch (e) { setState({ error: errorText(e) }) } finally { setBusy(false) }
+export function TriggerEditor({ trigger, events, audiences, templates, apiRequest, onClose, onSaved }: EditorProps) {
+  const dialogRef = useRef<HTMLElement | null>(null)
+  useDialogFocus({ containerRef: dialogRef, open: true, onClose })
+  const isNew = !trigger.id
+
+  const [form, setForm] = useState<EmailTrigger>({
+    ...blankTrigger, ...trigger,
+    template_key: trigger.template_key || templates[0]?.template_key || '',
+    event_name: trigger.event_name || events[0]?.eventName || '',
+    schedule_cron: trigger.schedule_cron || blankTrigger.schedule_cron,
+  })
+  const initial = parseCron(form.schedule_cron)
+  const [cron, setCron] = useState(form.schedule_cron || '')
+  const [days, setDays] = useState<number[]>(initial?.days ?? [])
+  const [time, setTime] = useState(initial?.time ?? '09:00')
+  // A cron we cannot round-trip through the day/time picker is still a valid schedule — the text field owns it.
+  const [custom, setCustom] = useState(!initial)
+  const [advOpen, setAdvOpen] = useState(!initial)
+  const [keyTouched, setKeyTouched] = useState(!isNew)
+  const [to, setTo] = useState(trigger.to_recipients.join('\n'))
+  const [cc, setCc] = useState(trigger.cc_recipients.join('\n'))
+  const [bcc, setBcc] = useState(trigger.bcc_recipients.join('\n'))
+  const [varsText, setVarsText] = useState(JSON.stringify(trigger.variables || {}, null, 2))
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const touch = () => setDirty(true)
+  const change = <K extends keyof EmailTrigger>(key: K, value: EmailTrigger[K]) => { touch(); setForm(old => ({ ...old, [key]: value })) }
+  const triggerKey = keyTouched ? form.trigger_key : snake(form.trigger_name)
+
+  const applySchedule = (nextDays: number[], nextTime: string) => {
+    touch(); setDays(nextDays); setTime(nextTime); setCustom(false)
+    if (nextDays.length) setCron(buildCron(nextDays, nextTime))
   }
-  return <div className="et-overlay" role="dialog" aria-modal="true" aria-label="Run trigger"><section className="et-dialog" ref={dialogRef}><header className="et-drawer-head"><div><p className="et-eyebrow">Manual trigger</p><h2>Run “{trigger.trigger_name}”</h2></div><button className="et-close" onClick={onClose} aria-label="Close">×</button></header>
-    {state.message ? <div className="et-success" role="status">{state.message}</div> : <div className="et-form">
-      <label>To<textarea value={to} onChange={e => setTo(e.target.value)} rows={2} placeholder="Separate addresses with commas or new lines"/></label>
-      <label>CC <span className="et-muted">optional</span><textarea value={cc} onChange={e => setCc(e.target.value)} rows={2}/></label>
-      <label>BCC <span className="et-muted">optional</span><textarea value={bcc} onChange={e => setBcc(e.target.value)} rows={2}/></label>
-      {dynamic.length > 0 && <p className="et-help">Test send: automatic recipients ({dynamic.join(', ')}) are not used here, so only the addresses above receive it. Placeholders are filled with {trigger.audience ? 'the first matching employee' : 'your own employee record'}.</p>}
-      <label>Override variables JSON <span className="et-muted">optional — real data and the trigger's defaults are filled in automatically</span><textarea value={variables} onChange={e => setVariables(e.target.value)} rows={4}/></label>
-      {state.error && <div className="et-notice" role="alert">{state.error}</div>}
-      <footer><button className="adm-btn" onClick={onClose}>Cancel</button><button className="adm-btn adm-btn--primary" onClick={() => void run()} disabled={busy}>{busy ? 'Sending…' : 'Send now'}</button></footer>
-    </div>}</section></div>
+  const onCronText = (value: string) => {
+    touch(); setCron(value)
+    const parsed = parseCron(value)
+    if (parsed) { setDays(parsed.days); setTime(parsed.time); setCustom(false) } else setCustom(true)
+  }
+
+  const isSchedule = form.trigger_type === 'schedule'
+  const noDays = isSchedule && !custom && days.length === 0
+  const badCron = isSchedule && custom && !cron.trim()
+  const runs = useMemo(() => (isSchedule && !custom && days.length ? nextRuns(days, time, 3) : []), [isSchedule, custom, days, time])
+  const clock = cronWords(cron)?.split(' at ')[1] || ''
+  const selectedEvent = events.find(item => item.eventName === form.event_name)
+  const selectedAudience = audiences.find(item => item.audience === form.audience)
+  const available = form.trigger_type === 'event'
+    ? selectedEvent?.variables || []
+    : isSchedule
+      ? selectedAudience?.variables || ['run_date', 'run_time']
+      : []
+
+  const headline = isSchedule
+    ? noDays ? 'No days selected' : custom ? 'Custom schedule' : `${dayWords(days)} · ${clock}`
+    : form.trigger_type === 'event' ? 'Fires on an app event' : 'Manual only'
+
+  const save = async () => {
+    let variables: Record<string, unknown>
+    try { variables = JSON.parse(varsText || '{}') } catch { return setError('Default variables must be valid JSON.') }
+    if (!triggerKey.trim() || !form.trigger_name.trim()) return setError('Trigger key and name are required.')
+    if (!form.template_key) return setError('Pick the template this trigger sends.')
+    setSaving(true); setError('')
+    try {
+      await apiRequest(`${endpoint}/triggers${isNew ? '' : `/${encodeURIComponent(trigger.trigger_key)}`}`, {
+        method: isNew ? 'POST' : 'PUT',
+        body: JSON.stringify({
+          triggerKey, triggerName: form.trigger_name, templateKey: form.template_key, triggerType: form.trigger_type,
+          eventName: form.event_name, scheduleCron: cron,
+          toRecipients: splitRecipients(to), ccRecipients: splitRecipients(cc), bccRecipients: splitRecipients(bcc),
+          variables, audience: isSchedule ? form.audience || null : null, active: form.active,
+        }),
+      })
+      onSaved(isNew ? 'Trigger created' : 'Trigger saved')
+    } catch (e) { setError(errorText(e)) } finally { setSaving(false) }
+  }
+
+  return <div className="ea-scrim ea-fade" role="dialog" aria-modal="true" aria-label="Email trigger editor">
+    <section className="ea-drawer" ref={dialogRef}>
+      <header className="ea-drawer__head">
+        <div>
+          <p className="ea-eyebrow">{isNew ? 'New trigger' : 'Edit trigger'}</p>
+          <h2>{form.trigger_name || 'Untitled trigger'}</h2>
+          <span className={`ea-badge${noDays || badCron ? ' ea-badge--warn' : ''}`}>{headline}</span>
+        </div>
+        <button type="button" className="ea-btn ea-btn--square-lg ea-ease ea-press" onClick={onClose} aria-label="Close"><CloseIcon/></button>
+      </header>
+
+      <form className="ea-drawer__body" id="ea-trigger-form" onSubmit={event => { event.preventDefault(); void save() }}>
+        {error && <div className="ea-notice" role="alert"><AlertIcon/>{error}</div>}
+
+        <div className="ea-pair">
+          <label className="ea-field"><span>Name</span>
+            <input className="ea-input" value={form.trigger_name} onChange={event => change('trigger_name', event.target.value)} placeholder="Late arrival to manager"/>
+          </label>
+          <label className="ea-field"><span>Key {isNew ? <em>· auto from name</em> : <em>· used in code, locked</em>}</span>
+            <input className="ea-input ea-input--mono" value={triggerKey} readOnly={!isNew} onChange={event => { setKeyTouched(true); change('trigger_key', event.target.value) }}/>
+          </label>
+        </div>
+
+        <fieldset className="ea-fieldset">
+          <legend className="ea-legend">Fires</legend>
+          <div className="ea-modes">
+            {MODES.map(mode => <button key={mode.key} type="button" aria-pressed={form.trigger_type === mode.key} className="ea-mode ea-ease ea-press" onClick={() => change('trigger_type', mode.key)}>
+              <span className="ea-mode__top"><b>{mode.label}</b><i/></span>
+              <small>{mode.hint}</small>
+            </button>)}
+          </div>
+        </fieldset>
+
+        {isSchedule && <div className="ea-panel ea-fade">
+          <div className="ea-field">
+            <div className="ea-days-head">
+              <span className="ea-legend">Days</span>
+              <div className="ea-presets">
+                {PRESETS.map(preset => <button key={preset.label} type="button" aria-pressed={!custom && sameDays(days, preset.days)} className="ea-preset ea-ease ea-press" onClick={() => applySchedule(preset.days.slice(), time)}>{preset.label}</button>)}
+              </div>
+            </div>
+            <div role="group" aria-label="Days of week" className="ea-days">
+              {DAY_BUTTONS.map(day => {
+                const on = !custom && days.includes(day.value)
+                return <button key={day.value} type="button" aria-pressed={on} aria-label={day.full} disabled={custom} className="ea-day ea-ease ea-press"
+                  onClick={() => applySchedule(on ? days.filter(value => value !== day.value) : [...days, day.value], time)}>{day.short}</button>
+              })}
+            </div>
+          </div>
+
+          <div className="ea-pair">
+            <label className="ea-field"><span>Time</span>
+              <input className="ea-input" type="time" value={time} disabled={custom} onChange={event => { if (event.target.value) applySchedule(days, event.target.value) }}/>
+            </label>
+          </div>
+
+          <div className={`ea-summary${noDays ? ' ea-summary--warn' : ''}`}>
+            <div className="ea-summary__line"><ClockIcon/><span>
+              {noDays ? 'Pick at least one day'
+                : custom ? 'Custom expression — the picker above cannot show it, so the cron field below is what runs.'
+                  : `Runs ${dayWords(days)} at ${clock}, server time`}
+            </span></div>
+            {runs.length > 0 && <div className="ea-runs">
+              {runs.map(run => <div key={run.date} className="ea-run"><b>{run.date}</b><span>{run.rel}</span></div>)}
+            </div>}
+          </div>
+
+          <div className="ea-field">
+            <button type="button" className="ea-disclose" aria-expanded={advOpen} onClick={() => setAdvOpen(open => !open)}><ChevronIcon/>Advanced: cron expression</button>
+            {advOpen && <div className="ea-field ea-fade">
+              <input aria-label="Cron expression" className={`ea-input ea-input--mono${badCron ? ' ea-input--bad' : ''}`} value={cron} onChange={event => onCronText(event.target.value)} placeholder="0 9 * * 1-5"/>
+              <span className={`ea-hint${badCron ? ' ea-hint--bad' : custom ? ' ea-hint--warn' : ''}`}>
+                {badCron ? 'A schedule needs a cron expression.'
+                  : custom ? 'Kept exactly as written — minute hour day month weekday.'
+                    : 'Stays in sync with the days and time above. Editing it updates them.'}
+              </span>
+            </div>}
+          </div>
+        </div>}
+
+        {form.trigger_type === 'event' && <div className="ea-panel ea-fade">
+          <label className="ea-field"><span>When this happens</span>
+            <select className="ea-select" value={form.event_name || ''} onChange={event => change('event_name', event.target.value)}>
+              {events.map(item => <option key={item.eventName} value={item.eventName}>{item.label} ({item.eventName})</option>)}
+            </select>
+            <span className="ea-hint">The event carries its own variables into the template.</span>
+          </label>
+        </div>}
+
+        {form.trigger_type === 'manual' && <div className="ea-panel ea-panel--dashed ea-fade">This trigger only sends when someone presses <strong>Run now</strong> on the overview.</div>}
+
+        <div className="ea-pair">
+          <label className="ea-field"><span>Template to send</span>
+            <select className="ea-select" value={form.template_key} onChange={event => change('template_key', event.target.value)}>
+              {!form.template_key && <option value="">Choose a template…</option>}
+              {templates.map(item => <option key={item.template_key} value={item.template_key}>{item.template_name || item.template_key}</option>)}
+            </select>
+            {form.template_key && <span className="ea-hint"><code>{form.template_key}</code></span>}
+          </label>
+          {isSchedule && <label className="ea-field"><span>Send to</span>
+            <select className="ea-select" value={form.audience || ''} onChange={event => change('audience', event.target.value || null)}>
+              <option value="">One email per run</option>
+              {audiences.map(item => <option key={item.audience} value={item.audience}>One email per person — {item.label}</option>)}
+            </select>
+            <span className="ea-hint">Resolved at run time; skipped if nobody matches.</span>
+          </label>}
+        </div>
+
+        <div className="ea-panel">
+          <label className="ea-field"><span>To {form.trigger_type === 'manual' && <em>· optional default</em>}</span>
+            <textarea className="ea-textarea" rows={2} value={to} onChange={event => { touch(); setTo(event.target.value) }} placeholder={form.trigger_type === 'event' ? '{{employee_email}}' : 'team@example.com'}/>
+          </label>
+          <div className="ea-pair">
+            <label className="ea-field"><span>CC <em>· optional</em></span><textarea className="ea-textarea" rows={2} value={cc} onChange={event => { touch(); setCc(event.target.value) }}/></label>
+            <label className="ea-field"><span>BCC <em>· optional</em></span><textarea className="ea-textarea" rows={2} value={bcc} onChange={event => { touch(); setBcc(event.target.value) }}/></label>
+          </div>
+          <span className="ea-hint">One address per line. Placeholders such as <code>{'{{manager_email}}'}</code> are filled at send time, and <code>designation:CMD</code> expands to every active employee with that designation.</span>
+          {available.length > 0 && <div className="ea-varchips">
+            {available.map(name => <span key={name} className="ea-varchip ea-varchip--used"><i/>{`{{${name}}}`}</span>)}
+          </div>}
+        </div>
+
+        <label className="ea-field"><span>Default variables <em>· JSON</em></span>
+          <textarea className="ea-textarea ea-textarea--mono" rows={4} value={varsText} onChange={event => { touch(); setVarsText(event.target.value) }}/>
+          <span className="ea-hint">Merged under the values the event or schedule supplies.</span>
+        </label>
+      </form>
+
+      <footer className="ea-drawer__foot">
+        <div>
+          <button type="button" role="switch" aria-checked={form.active} aria-label="Trigger active" className="ea-switch" onClick={() => change('active', !form.active)}><i/></button>
+          <span className="ea-legend">{form.active ? 'Active' : 'Paused'}</span>
+          {dirty && !saving && <span className="ea-unsaved ea-fade"><i/>Unsaved changes</span>}
+        </div>
+        <div>
+          <button type="button" className="ea-btn ea-ease ea-press" onClick={onClose}>Cancel</button>
+          <button type="submit" form="ea-trigger-form" className="ea-btn ea-btn--primary ea-ease ea-press" disabled={saving || noDays || badCron}>
+            {saving && <span className="ea-spinner ea-spinner--on-brand"/>}{saving ? 'Saving…' : 'Save trigger'}
+          </button>
+        </div>
+      </footer>
+    </section>
+  </div>
+}
+
+export function RunDialog({ trigger, apiRequest, onClose }: { trigger: EmailTrigger; apiRequest: ApiRequest; onClose: () => void }) {
+  const dialogRef = useRef<HTMLElement | null>(null)
+  useDialogFocus({ containerRef: dialogRef, open: true, onClose })
+  // Only literal addresses are pre-filled: placeholders and designation: lists would reach real people in a test.
+  const literal = (list: string[]) => list.filter(value => !value.includes('{{') && !value.toLowerCase().startsWith('designation:')).join('\n')
+  const dynamic = [...trigger.to_recipients, ...trigger.cc_recipients, ...trigger.bcc_recipients].filter(value => value.includes('{{') || value.toLowerCase().startsWith('designation:'))
+  const [to, setTo] = useState(literal(trigger.to_recipients))
+  const [cc, setCc] = useState(literal(trigger.cc_recipients))
+  const [bcc, setBcc] = useState(literal(trigger.bcc_recipients))
+  const [variables, setVariables] = useState('{}')
+  const [state, setState] = useState<{ error?: string; message?: string }>({})
+  const [busy, setBusy] = useState(false)
+
+  const run = async () => {
+    let parsed: Record<string, unknown>
+    try { parsed = JSON.parse(variables || '{}') } catch { return setState({ error: 'Variables must be valid JSON.' }) }
+    setBusy(true); setState({})
+    try {
+      const response = await apiRequest(`${endpoint}/triggers/${encodeURIComponent(trigger.trigger_key)}/run`, {
+        method: 'POST', body: JSON.stringify({ to: splitRecipients(to), cc: splitRecipients(cc), bcc: splitRecipients(bcc), variables: parsed }),
+      })
+      setState(response?.success ? { message: `Sent${response.messageId ? ` (id ${response.messageId})` : ''}.` } : { error: response?.message || 'Not sent.' })
+    } catch (e) { setState({ error: errorText(e) }) } finally { setBusy(false) }
+  }
+
+  return <div className="ea-scrim ea-scrim--center ea-fade" role="dialog" aria-modal="true" aria-label="Run trigger">
+    <section className="ea-modal" ref={dialogRef}>
+      <header className="ea-drawer__head">
+        <div><p className="ea-eyebrow">Manual run</p><h2>Run “{trigger.trigger_name || trigger.trigger_key}”</h2></div>
+        <button type="button" className="ea-btn ea-btn--square-lg ea-ease ea-press" onClick={onClose} aria-label="Close"><CloseIcon/></button>
+      </header>
+      <div className="ea-drawer__body">
+        {state.message
+          ? <div className="ea-notice ea-notice--ok" role="status">{state.message}</div>
+          : <>
+              {state.error && <div className="ea-notice" role="alert"><AlertIcon/>{state.error}</div>}
+              <label className="ea-field"><span>To</span><textarea className="ea-textarea" rows={2} value={to} onChange={event => setTo(event.target.value)} placeholder="Separate addresses with commas or new lines"/></label>
+              <div className="ea-pair">
+                <label className="ea-field"><span>CC <em>· optional</em></span><textarea className="ea-textarea" rows={2} value={cc} onChange={event => setCc(event.target.value)}/></label>
+                <label className="ea-field"><span>BCC <em>· optional</em></span><textarea className="ea-textarea" rows={2} value={bcc} onChange={event => setBcc(event.target.value)}/></label>
+              </div>
+              {dynamic.length > 0 && <p className="ea-hint">Test send: automatic recipients ({dynamic.join(', ')}) are not used here, so only the addresses above receive it. Placeholders are filled with {trigger.audience ? 'the first matching employee' : 'your own employee record'}.</p>}
+              <label className="ea-field"><span>Override variables <em>· optional JSON, real data and the trigger&rsquo;s defaults are filled in automatically</em></span>
+                <textarea className="ea-textarea ea-textarea--mono" rows={4} value={variables} onChange={event => setVariables(event.target.value)}/>
+              </label>
+            </>}
+      </div>
+      <footer className="ea-drawer__foot">
+        <div/>
+        <div>
+          <button type="button" className="ea-btn ea-ease ea-press" onClick={onClose}>{state.message ? 'Close' : 'Cancel'}</button>
+          {!state.message && <button type="button" className="ea-btn ea-btn--primary ea-ease ea-press" onClick={() => void run()} disabled={busy}>
+            {busy && <span className="ea-spinner ea-spinner--on-brand"/>}{busy ? 'Sending…' : 'Send now'}
+          </button>}
+        </div>
+      </footer>
+    </section>
+  </div>
 }

@@ -137,3 +137,34 @@ def test_lazy_event_context_is_only_built_when_a_trigger_listens(monkeypatch):
     monkeypatch.setattr(service, "_query", lambda sql, params=(): [_trigger()])
     assert service.dispatch_event("compoff.requested", lambda: {"manager_email": "m@example.com"}) == 1
     assert fake.requests[0].to == ["m@example.com"]
+
+
+def test_blank_event_values_fall_back_to_trigger_defaults(monkeypatch):
+    service, fake, _ = _service(monkeypatch)
+    service.run(_trigger(variables={"planned_time": "not specified"}), {"manager_email": "m@example.com", "planned_time": None})
+    assert fake.requests[0].variables["planned_time"] == "not specified"
+
+
+def test_designation_recipients_expand_to_employee_emails(monkeypatch):
+    from services import email_trigger_service as mod
+    lookups = {"CMD": [{"emp_email": "cmd@example.com"}], "HR MANAGER": [{"emp_email": "hrm@example.com"}]}
+    monkeypatch.setattr(mod.EmailTriggerService, "_query", staticmethod(lambda sql, params=(): lookups.get(params[0], [])))
+    assert mod._expand_designations(["{{employee_email}}", "designation:CMD", "designation:hr manager"]) == [
+        "{{employee_email}}", "cmd@example.com"]
+    assert mod._expand_designations(["designation:HR MANAGER"]) == ["hrm@example.com"]
+
+
+def test_audience_schedule_sends_one_email_per_person(monkeypatch):
+    from services import email_trigger_service as mod
+    service, fake, _ = _service(monkeypatch)
+    monkeypatch.setitem(mod.AUDIENCE_LOADERS, "employees_not_clocked_in", lambda run_date: [
+        {"employee_code": "E1", "employee_email": "e1@example.com"}, {"employee_code": "E2", "employee_email": "e2@example.com"}])
+    monkeypatch.setattr(mod, "_expand_designations", lambda entries: [
+        {"designation:CMD": "cmd@example.com", "designation:HR MANAGER": "hrm@example.com"}.get(e, e) for e in entries or []])
+    trigger = _trigger(trigger_type="schedule", audience="employees_not_clocked_in", to_recipients=["{{employee_email}}"],
+                       cc_recipients=["designation:CMD"], bcc_recipients=["designation:HR MANAGER"])
+    assert service._run_scheduled(trigger) == (2, 0)
+    assert [(r.to, r.cc, r.bcc) for r in fake.requests] == [
+        (["e1@example.com"], ["cmd@example.com"], ["hrm@example.com"]),
+        (["e2@example.com"], ["cmd@example.com"], ["hrm@example.com"])]
+    assert fake.requests[0].reference_id.startswith("E1:")

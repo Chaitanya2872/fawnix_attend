@@ -56,6 +56,15 @@ EMAIL_EVENTS: dict[str, dict[str, Any]] = {
     "compoff_avail.rejected": {"label": "Comp-off avail rejected", "variables": _COMPOFF_AVAIL + _REVIEW},
 }
 
+# Audiences let a schedule trigger send one email per matching person on each run.
+AUDIENCES: dict[str, dict[str, Any]] = {
+    "employees_not_clocked_in": {
+        "label": "Employees not clocked in yet (skips leave, late-arrival requests, holidays)",
+        "variables": _PEOPLE + ["employee_designation", "run_date", "run_time"],
+    },
+}
+
+_DESIGNATION_PREFIX = "designation:"
 _PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="email-trigger")
 
@@ -95,6 +104,63 @@ def _resolve_recipients(entries: Any, variables: dict[str, Any]) -> list[str]:
         resolved = _PLACEHOLDER.sub(lambda m: str(variables.get(m.group(1)) or ""), str(entry or ""))
         result.extend(part.strip() for part in re.split(r"[,;]", resolved) if part.strip())
     return result
+
+
+def _expand_designations(entries: Any) -> list[str]:
+    """Replace 'designation:CMD' entries with the emails of active employees holding that designation."""
+    result: list[str] = []
+    for entry in entries or []:
+        text = str(entry or "").strip()
+        if not text.lower().startswith(_DESIGNATION_PREFIX):
+            result.append(text)
+            continue
+        designation = text[len(_DESIGNATION_PREFIX):].strip()
+        rows = EmailTriggerService._query("""
+            SELECT e.emp_email FROM employees e LEFT JOIN users u ON u.emp_code = e.emp_code
+            WHERE UPPER(TRIM(e.emp_designation)) = UPPER(%s) AND COALESCE(u.is_active, TRUE)
+              AND COALESCE(TRIM(e.emp_email), '') <> ''
+            ORDER BY e.emp_email""", (designation,))
+        if not rows:
+            logger.warning("No active employee has designation %r for email recipients", designation)
+        result.extend(row["emp_email"] for row in rows)
+    return result
+
+
+def employees_not_clocked_in(run_date: date) -> list[dict[str, Any]]:
+    """Active employees with no attendance today who are not on leave and have no late-arrival request."""
+    from services.CompLeaveService import is_working_day  # local import: CompLeaveService imports this module
+
+    rows = EmailTriggerService._query("""
+        SELECT e.emp_code, e.emp_full_name, e.emp_email, e.emp_designation, e.emp_manager,
+               m.emp_full_name AS manager_name, m.emp_email AS manager_email
+        FROM employees e
+        LEFT JOIN users u ON u.emp_code = e.emp_code
+        LEFT JOIN employees m ON m.emp_code = e.emp_manager
+        WHERE COALESCE(u.is_active, TRUE)
+          AND COALESCE(TRIM(e.emp_email), '') <> ''
+          AND NOT EXISTS (SELECT 1 FROM attendance a WHERE a.employee_email = e.emp_email AND a.date = %s)
+          AND NOT EXISTS (SELECT 1 FROM leaves l WHERE l.emp_code = e.emp_code
+                          AND l.status IN ('pending', 'approved') AND %s BETWEEN l.from_date AND l.to_date)
+          AND NOT EXISTS (SELECT 1 FROM attendance_exceptions ae WHERE ae.emp_code = e.emp_code
+                          AND ae.exception_type = 'late_arrival' AND ae.exception_date = %s
+                          AND ae.status IN ('pending', 'approved'))
+        ORDER BY e.emp_full_name""", (run_date, run_date, run_date))
+    people = []
+    for row in rows:
+        try:
+            working, _ = is_working_day(run_date, row["emp_code"])
+        except Exception:
+            logger.exception("Working-day check failed for %s; including them", row["emp_code"])
+            working = True
+        if working:
+            people.append({"employee_code": row["emp_code"], "employee_name": row["emp_full_name"],
+                           "employee_email": row["emp_email"], "employee_designation": row["emp_designation"],
+                           "manager_code": row["emp_manager"], "manager_name": row["manager_name"],
+                           "manager_email": row["manager_email"]})
+    return people
+
+
+AUDIENCE_LOADERS = {"employees_not_clocked_in": employees_not_clocked_in}
 
 
 def _as_list(value: Any) -> list[str]:
@@ -151,6 +217,7 @@ class EmailTriggerService:
         cc = _as_list(pick("ccRecipients", "cc_recipients"))
         bcc = _as_list(pick("bccRecipients", "bcc_recipients"))
         variables = pick("variables", "variables") or {}
+        audience = str(pick("audience", "audience") or "").strip() or None
         active = bool(pick("active", "active", True))
 
         if not key or not name or not template_key:
@@ -163,22 +230,25 @@ class EmailTriggerService:
             raise EmailTemplateError("eventName must be one of: " + ", ".join(sorted(EMAIL_EVENTS)) + ".")
         if trigger_type == "schedule" and not cron:
             raise EmailTemplateError("scheduleCron is required for schedule triggers.")
+        if audience and (trigger_type != "schedule" or audience not in AUDIENCES):
+            raise EmailTemplateError("audience is only for schedule triggers and must be one of: " + ", ".join(AUDIENCES) + ".")
         if trigger_type != "manual" and not to:
             raise EmailTemplateError("Automatic triggers need at least one To recipient or placeholder.")
         self.email_service.templates.get(template_key, require_active=False)
 
         next_run = next_cron_run(cron) if trigger_type == "schedule" and active else None
         values = (name, template_key, trigger_type, event_name if trigger_type == "event" else None,
-                  cron if trigger_type == "schedule" else None, Json(to), Json(cc), Json(bcc), Json(variables), active, next_run)
+                  cron if trigger_type == "schedule" else None, Json(to), Json(cc), Json(bcc), Json(variables), active, next_run,
+                  audience if trigger_type == "schedule" else None)
         try:
             if creating:
                 self._execute("""INSERT INTO email_triggers (trigger_name, template_key, trigger_type, event_name, schedule_cron,
-                                     to_recipients, cc_recipients, bcc_recipients, variables, active, next_run_at, trigger_key)
-                                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", values + (key,))
+                                     to_recipients, cc_recipients, bcc_recipients, variables, active, next_run_at, audience, trigger_key)
+                                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", values + (key,))
             else:
                 self._execute("""UPDATE email_triggers SET trigger_name=%s, template_key=%s, trigger_type=%s, event_name=%s,
                                      schedule_cron=%s, to_recipients=%s, cc_recipients=%s, bcc_recipients=%s, variables=%s,
-                                     active=%s, next_run_at=%s, updated_at=NOW()
+                                     active=%s, next_run_at=%s, audience=%s, updated_at=NOW()
                                  WHERE trigger_key=%s""", values + (key,))
         except Exception as exc:
             if "duplicate key" in str(exc).lower():
@@ -192,11 +262,11 @@ class EmailTriggerService:
         """Send one trigger now. Used by manual runs, events, and the scheduler."""
         overrides = overrides or {}
         variables = {**(trigger.get("variables") or {}),
-                     **{k: _stringify(v) for k, v in (context or {}).items()},
+                     **{k: _stringify(v) for k, v in (context or {}).items() if v is not None},  # blanks fall back to defaults
                      **(overrides.get("variables") or {})}
-        to = _resolve_recipients(_as_list(overrides.get("to")) or trigger.get("to_recipients"), variables)
-        cc = _resolve_recipients(_as_list(overrides.get("cc")) or trigger.get("cc_recipients"), variables)
-        bcc = _resolve_recipients(_as_list(overrides.get("bcc")) or trigger.get("bcc_recipients"), variables)
+        to = _resolve_recipients(_expand_designations(_as_list(overrides.get("to")) or trigger.get("to_recipients")), variables)
+        cc = _resolve_recipients(_expand_designations(_as_list(overrides.get("cc")) or trigger.get("cc_recipients")), variables)
+        bcc = _resolve_recipients(_expand_designations(_as_list(overrides.get("bcc")) or trigger.get("bcc_recipients")), variables)
 
         if not to:
             self._record(trigger["trigger_key"], "skipped", "No To recipient resolved for this run.")
@@ -252,11 +322,35 @@ class EmailTriggerService:
         sent = failed = 0
         for trigger in claimed:
             try:
-                sent += 1 if self.run(trigger, {"run_date": datetime.now(trigger_timezone()).date()}).get("success") else 0
+                ok, bad = self._run_scheduled(trigger)
+                sent += ok; failed += bad
             except Exception:
                 failed += 1
                 logger.exception("Scheduled email trigger %s failed", trigger["trigger_key"])
         return {"success": failed == 0, "claimed": len(claimed), "sent": sent, "failed": failed}
+
+    def _run_scheduled(self, trigger: dict[str, Any]) -> tuple[int, int]:
+        now = datetime.now(trigger_timezone())
+        base = {"run_date": now.date(), "run_time": now.strftime("%H:%M")}
+        audience = trigger.get("audience")
+        if not audience:
+            return (1, 0) if self.run(trigger, base).get("success") else (0, 0)
+        people = AUDIENCE_LOADERS[audience](now.date())
+        if not people:
+            self._record(trigger["trigger_key"], "skipped", "Audience was empty for this run.")
+            return 0, 0
+        # Resolve designation recipients once for the whole fan-out.
+        expanded = {**trigger, **{k: _expand_designations(trigger.get(k)) for k in ("to_recipients", "cc_recipients", "bcc_recipients")}}
+        sent = failed = 0
+        for person in people:
+            try:
+                result = self.run(expanded, {**base, **person}, reference_id=f"{person['employee_code']}:{now.date().isoformat()}")
+                sent += 1 if result.get("success") else 0
+            except Exception:
+                failed += 1
+                logger.exception("Email trigger %s failed for %s", trigger["trigger_key"], person.get("employee_code"))
+        logger.info("Email trigger %s audience %s: %s sent, %s failed", trigger["trigger_key"], audience, sent, failed)
+        return sent, failed
 
     # ---------- helpers ----------
     def _record(self, trigger_key: str, status: str, error: str | None) -> None:

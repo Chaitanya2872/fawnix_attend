@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request
 from middleware.auth_middleware import token_required
 from middleware.admin_middleware import hr_or_devtester_required
 from services.email_template_service import DynamicEmailRequest, EmailService, EmailTemplateError, EmailTemplateService
-from services.email_trigger_service import EMAIL_EVENTS, EmailTriggerService
+from services.email_trigger_service import AUDIENCES, EMAIL_EVENTS, EmailTriggerService
 
 email_templates_bp = Blueprint("email_templates", __name__)
 templates = EmailTemplateService()
@@ -64,6 +64,12 @@ def send_email(current_user):
 @hr_or_devtester_required
 def list_events(current_user):
     return _result([{"eventName": name, **meta} for name, meta in sorted(EMAIL_EVENTS.items())])
+
+@email_templates_bp.route("/audiences", methods=["GET"])
+@token_required
+@hr_or_devtester_required
+def list_audiences(current_user):
+    return _result([{"audience": name, **meta} for name, meta in AUDIENCES.items()])
 
 @email_templates_bp.route("/triggers", methods=["GET"])
 @token_required

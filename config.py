@@ -87,6 +87,13 @@ class Config:
 
     # Generic outbound email.  These settings intentionally live here rather than in any
     # workflow service so every module shares one provider configuration.
+    # EMAIL_PROVIDER: 'resend' or 'smtp'. When unset, Resend is used if RESEND_API_KEY is present.
+    RESEND_API_KEY = os.getenv('RESEND_API_KEY', '').strip()
+    RESEND_FROM = os.getenv('RESEND_FROM', os.getenv('EMAIL_FROM', '')).strip()
+    RESEND_REPLY_TO = os.getenv('RESEND_REPLY_TO', '').strip()
+    RESEND_API_URL = os.getenv('RESEND_API_URL', 'https://api.resend.com/emails').strip()
+    EMAIL_PROVIDER = (os.getenv('EMAIL_PROVIDER', '').strip().lower()
+                      or ('resend' if RESEND_API_KEY else 'smtp'))
     SMTP_HOST = os.getenv('SMTP_HOST', '').strip()
     SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
     SMTP_USERNAME = os.getenv('SMTP_USERNAME', '').strip()

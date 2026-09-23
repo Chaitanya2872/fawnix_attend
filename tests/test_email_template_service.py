@@ -60,7 +60,7 @@ class _Templates:
 def test_email_service_does_not_send_when_template_is_disabled_or_missing(monkeypatch):
     service = EmailService(_Templates())
     monkeypatch.setattr(service, "_audit", lambda *args, **kwargs: None)
-    monkeypatch.setattr(service, "_send_smtp", lambda *args, **kwargs: pytest.fail("must not send"))
+    monkeypatch.setattr(service, "_deliver", lambda *args, **kwargs: pytest.fail("must not send"))
     for key in ("disabled", "missing"):
         with pytest.raises(EmailTemplateError):
             service.send(DynamicEmailRequest(template_key=key, to=["to@example.com"]))
@@ -70,7 +70,7 @@ def test_email_service_passes_separate_to_cc_and_bcc_to_provider(monkeypatch):
     service = EmailService(_Templates())
     captured = {}
     monkeypatch.setattr(service, "_audit", lambda *args, **kwargs: None)
-    monkeypatch.setattr(service, "_send_smtp", lambda subject, html, text, to, cc, bcc: captured.update(subject=subject, html=html, text=text, to=to, cc=cc, bcc=bcc))
+    monkeypatch.setattr(service, "_deliver", lambda subject, html, text, to, cc, bcc: captured.update(subject=subject, html=html, text=text, to=to, cc=cc, bcc=bcc) or "msg_1")
     result = service.send(DynamicEmailRequest(
         template_key="generic", to=["to@example.com"], cc=["cc@example.com"], bcc=["bcc@example.com"],
         variables={"title": "Alert", "name": "User", "message": "<unsafe>"},
@@ -87,7 +87,7 @@ def test_email_service_surfaces_provider_failure_without_sending_response_detail
     service = EmailService(_Templates())
     audit = []
     monkeypatch.setattr(service, "_audit", lambda *args: audit.append(args))
-    monkeypatch.setattr(service, "_send_smtp", lambda *args: (_ for _ in ()).throw(OSError("connection refused")))
+    monkeypatch.setattr(service, "_deliver", lambda *args: (_ for _ in ()).throw(OSError("connection refused")))
     with pytest.raises(RuntimeError, match="provider delivery failed"):
         service.send(DynamicEmailRequest(
             template_key="generic", to=["to@example.com"],

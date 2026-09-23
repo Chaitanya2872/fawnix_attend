@@ -12,6 +12,7 @@ from database.connection import get_db_connection
 from typing import Tuple, Dict, List, Optional
 import logging
 from config import Config
+from services.email_trigger_service import emit_email_event, employee_contacts
 
 logger = logging.getLogger(__name__)
 
@@ -969,6 +970,11 @@ def get_my_compoff_requests(emp_code: str, status: Optional[str] = None, limit: 
 # GET: Employee Details
 # =========================
 
+def _emit_compoff_email(event: str, emp_code: str, reference_id, **fields) -> None:
+    """Queue comp-off emails; manager contacts are looked up only if a trigger listens."""
+    emit_email_event(event, lambda: {**employee_contacts(emp_code), **fields}, reference_id=reference_id)
+
+
 def get_employee_details(emp_code: str) -> Optional[Dict]:
     """
     Get employee details including manager and designation
@@ -1848,6 +1854,9 @@ def request_compoff(
             [request_id] + overtime_record_ids,
         )
         conn.commit()
+        _emit_compoff_email("compoff.requested", emp_code, request_id, request_id=request_id,
+                            total_comp_days=total_comp_days, approval_level=approval_level,
+                            reason=reason or '', notes=notes or '', status=COMPOFF_STATUS_PENDING)
 
         return ({
             "success": True,
@@ -1980,6 +1989,11 @@ def approve_compoff_request(
             message = "Comp-off request rejected successfully"
 
         conn.commit()
+        _emit_compoff_email("compoff.approved" if action == 'approved' else "compoff.rejected", request['emp_code'], request_id,
+                            request_id=request_id, total_comp_days=request.get('total_comp_days'),
+                            approval_level=approval_level, reason=request.get('reason') or '',
+                            notes=request.get('notes') or '', status=result_status,
+                            reviewer_code=approver_emp_code, reviewer_remarks=remarks or '')
         return ({
             "success": True,
             "message": message,
@@ -2034,6 +2048,9 @@ def cancel_compoff_request(request_id: int, emp_code: str) -> Tuple[Dict, int]:
         )
         _reset_overtime_records_for_reuse(cursor, request.get('overtime_record_ids') or [])
         conn.commit()
+        _emit_compoff_email("compoff.cancelled", emp_code, request_id, request_id=request_id,
+                            total_comp_days=request.get('total_comp_days'), approval_level=request.get('approval_level'),
+                            reason=request.get('reason') or '', notes=request.get('notes') or '', status='cancelled')
 
         return ({
             "success": True,
@@ -2111,8 +2128,12 @@ def request_avail_compoff(
         created = cursor.fetchone()
         avail_request_id = created['avail_request_id']
 
+        avail_fields = dict(avail_request_id=avail_request_id, avail_date=avail_date, avail_type=avail_type,
+                            requested_days=requested_days, remarks=remarks or '')
         if approval_required:
             conn.commit()
+            _emit_compoff_email("compoff_avail.requested", emp_code, avail_request_id,
+                                status=COMPOFF_STATUS_PENDING, **avail_fields)
             return ({
                 "success": True,
                 "message": "Comp-off avail request submitted for approval",
@@ -2135,6 +2156,7 @@ def request_avail_compoff(
             (avail_request_id,),
         )
         conn.commit()
+        _emit_compoff_email("compoff_avail.approved", emp_code, avail_request_id, status='approved', **avail_fields)
         return ({
             "success": True,
             "message": "Comp-off avail request approved and consumed successfully",
@@ -2249,6 +2271,11 @@ def approve_avail_compoff_request(
             message = "Comp-off avail request rejected successfully"
 
         conn.commit()
+        _emit_compoff_email("compoff_avail.approved" if action == 'approved' else "compoff_avail.rejected",
+                            request['emp_code'], avail_request_id, avail_request_id=avail_request_id,
+                            avail_date=request.get('avail_date'), avail_type=request.get('avail_type'),
+                            requested_days=request.get('requested_days'), remarks=request.get('remarks') or '',
+                            status=result_status, reviewer_code=approver_emp_code, reviewer_remarks=remarks or '')
         return ({
             "success": True,
             "message": message,

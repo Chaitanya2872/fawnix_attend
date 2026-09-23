@@ -1,4 +1,4 @@
-"""Generic, database-backed email templates and SMTP delivery.
+"""Generic, database-backed email templates and Resend/SMTP delivery.
 
 Template syntax is deliberately limited to ``{{variable_name}}``. It is not a
 programming language: values cannot invoke methods or evaluate expressions. HTML
@@ -15,6 +15,8 @@ import html
 import logging
 import re
 import smtplib
+
+import requests
 from typing import Any, Iterable
 
 from config import Config
@@ -195,16 +197,48 @@ class EmailService:
             text_body = self.renderer.render(template["text_body"], request.variables, html_output=False)
             if not text_body and html_body:
                 text_body = re.sub(r"<[^>]+>", "", html_body)
-            self._send_smtp(subject, html_body, text_body, to, cc, bcc)
-            self._audit(request, len(to), len(cc), len(bcc), "sent")
-            return {"success": True, "status": "sent", "templateKey": request.template_key,
-                    "recipientCount": len(to), "ccCount": len(cc), "sentAt": datetime.now(timezone.utc).isoformat()}
+            message_id = self._deliver(subject, html_body, text_body, to, cc, bcc)
+            self._audit(request, len(to), len(cc), len(bcc), "sent", message_id=message_id)
+            return {"success": True, "status": "sent", "templateKey": request.template_key, "provider": Config.EMAIL_PROVIDER,
+                    "messageId": message_id, "recipientCount": len(to), "ccCount": len(cc),
+                    "sentAt": datetime.now(timezone.utc).isoformat()}
         except Exception as exc:
             self._audit(request, len(to), len(cc), len(bcc), "failed", str(exc))
             if isinstance(exc, EmailTemplateError):
                 raise
             logger.exception("Generic email delivery failed template_key=%s recipients=%s cc=%s bcc_count=%s", request.template_key, len(to), len(cc), len(bcc))
             raise RuntimeError("Email provider delivery failed.") from exc
+
+    def _deliver(self, subject: str, html_body: str | None, text_body: str | None, to: list[str], cc: list[str], bcc: list[str]) -> str | None:
+        """Send through the configured provider and return its message id, if any."""
+        if Config.EMAIL_PROVIDER == "resend":
+            return self._send_resend(subject, html_body, text_body, to, cc, bcc)
+        if Config.EMAIL_PROVIDER == "smtp":
+            self._send_smtp(subject, html_body, text_body, to, cc, bcc)
+            return None
+        raise RuntimeError(f"Unsupported EMAIL_PROVIDER {Config.EMAIL_PROVIDER!r}; use 'resend' or 'smtp'.")
+
+    def _send_resend(self, subject: str, html_body: str | None, text_body: str | None, to: list[str], cc: list[str], bcc: list[str]) -> str | None:
+        if not Config.RESEND_API_KEY or not Config.RESEND_FROM:
+            raise RuntimeError("RESEND_API_KEY and RESEND_FROM must be configured.")
+        payload: dict[str, Any] = {"from": Config.RESEND_FROM, "to": to, "subject": subject}
+        if cc: payload["cc"] = cc
+        if bcc: payload["bcc"] = bcc
+        if html_body: payload["html"] = html_body
+        if text_body: payload["text"] = text_body
+        if Config.RESEND_REPLY_TO: payload["reply_to"] = Config.RESEND_REPLY_TO
+        response = requests.post(Config.RESEND_API_URL, json=payload, timeout=30,
+                                 headers={"Authorization": f"Bearer {Config.RESEND_API_KEY}"})
+        if response.status_code >= 400:
+            try:
+                detail = response.json().get("message") or response.text
+            except ValueError:
+                detail = response.text
+            raise RuntimeError(f"Resend rejected the email ({response.status_code}): {detail}")
+        try:
+            return response.json().get("id")
+        except ValueError:
+            return None
 
     def _send_smtp(self, subject: str, html_body: str | None, text_body: str | None, to: list[str], cc: list[str], bcc: list[str]) -> None:
         if not Config.SMTP_HOST or not Config.SMTP_FROM:
@@ -221,12 +255,12 @@ class EmailService:
             if Config.SMTP_USERNAME: client.login(Config.SMTP_USERNAME, Config.SMTP_PASSWORD)
             client.send_message(message, from_addr=Config.SMTP_FROM, to_addrs=recipients)
 
-    def _audit(self, request: DynamicEmailRequest, recipients: int, cc: int, bcc: int, status: str, reason: str | None = None) -> None:
+    def _audit(self, request: DynamicEmailRequest, recipients: int, cc: int, bcc: int, status: str, reason: str | None = None, message_id: str | None = None) -> None:
         try:
             conn = get_db_connection(); cursor = conn.cursor()
             try:
-                cursor.execute("""INSERT INTO email_delivery_audit (template_key, source_service, reference_id, recipient_count, cc_count, bcc_count, status, sent_at, failure_reason)
-                                  VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""", (request.template_key, request.source_service, request.reference_id, recipients, cc, bcc, status, datetime.now(timezone.utc) if status == "sent" else None, (reason or "")[:1000] or None))
+                cursor.execute("""INSERT INTO email_delivery_audit (template_key, source_service, reference_id, recipient_count, cc_count, bcc_count, status, sent_at, failure_reason, provider, provider_message_id)
+                                  VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", (request.template_key, request.source_service, request.reference_id, recipients, cc, bcc, status, datetime.now(timezone.utc) if status == "sent" else None, (reason or "")[:1000] or None, Config.EMAIL_PROVIDER, message_id))
                 conn.commit()
             finally:
                 cursor.close(); return_connection(conn)

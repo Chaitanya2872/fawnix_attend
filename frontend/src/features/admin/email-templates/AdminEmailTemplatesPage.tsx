@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import './AdminEmailTemplatesPage.css'
 import { useDialogFocus } from '../hooks/useDialogFocus'
+import EmailTriggersPanel from './EmailTriggersPanel'
 
 type ApiRequest = (path: string, options?: RequestInit, tokenOverride?: string) => Promise<any>
 type EmailTemplate = { id?: number | string; template_key: string; template_name: string; subject_template: string; html_body: string; text_body?: string; active: boolean; updated_at?: string }
@@ -25,6 +26,7 @@ export default function AdminEmailTemplatesPage({ apiRequest }: { apiRequest: Ap
     {error && <div className="et-notice" role="alert">{error}</div>}
     <section className="adm-table-card table-card"><div className="adm-table-toolbar"><div className="adm-table-title"><strong>{items.length} {items.length === 1 ? 'template' : 'templates'}</strong><span>Template keys are used by all modules</span></div></div>
     {loading ? <div className="adm-empty empty-state"><strong>Loading templates…</strong></div> : items.length ? <div className="adm-table-scroll table-scroll"><table className="adm-table dashboard-table"><thead><tr><th>Template</th><th>Key</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead><tbody>{items.map(item => <tr key={item.template_key}><td><span className="adm-cell-primary">{item.template_name}</span></td><td><code className="et-key">{item.template_key}</code></td><td><span className={`adm-pill table-pill adm-pill--${item.active ? 'active' : 'inactive'}`}>{item.active ? 'Enabled' : 'Disabled'}</span></td><td className="adm-cell-secondary">{item.updated_at ? new Date(item.updated_at).toLocaleString() : '—'}</td><td><div className="adm-actions"><button className="adm-action-btn" onClick={() => setEditing(item)}>Edit</button><button className="adm-action-btn" onClick={() => void toggle(item)}>{item.active ? 'Disable' : 'Enable'}</button><button className="adm-action-btn adm-action-btn--view" onClick={() => setSending(item)}>Send</button></div></td></tr>)}</tbody></table></div> : <div className="adm-empty empty-state"><strong>No templates yet</strong><span>Create a reusable message for any application module.</span><button className="adm-btn adm-btn--primary" onClick={() => setEditing({ ...blank })}>New template</button></div>}</section>
+    <EmailTriggersPanel apiRequest={apiRequest} templateKeys={items.map(item => item.template_key)}/>
     {editing && createPortal(<Editor template={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void load() }} apiRequest={apiRequest}/>, document.body)}
     {sending && createPortal(<SendDialog template={sending} onClose={() => setSending(null)} apiRequest={apiRequest}/>, document.body)}
   </div>

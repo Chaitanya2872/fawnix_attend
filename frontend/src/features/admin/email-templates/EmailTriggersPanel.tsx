@@ -74,7 +74,7 @@ function RunDialog({ trigger, apiRequest, onClose }: { trigger: EmailTrigger; ap
   // Only literal addresses are pre-filled: placeholders and designation: lists would reach real people in a test.
   const literal = (list: string[]) => list.filter(v => !v.includes('{{') && !v.toLowerCase().startsWith('designation:')).join('\n')
   const dynamic = [...trigger.to_recipients, ...trigger.cc_recipients, ...trigger.bcc_recipients].filter(v => v.includes('{{') || v.toLowerCase().startsWith('designation:'))
-  const [to, setTo] = useState(literal(trigger.to_recipients)); const [cc, setCc] = useState(literal(trigger.cc_recipients)); const [bcc, setBcc] = useState(literal(trigger.bcc_recipients)); const [variables, setVariables] = useState(JSON.stringify(trigger.variables || {}, null, 2))
+  const [to, setTo] = useState(literal(trigger.to_recipients)); const [cc, setCc] = useState(literal(trigger.cc_recipients)); const [bcc, setBcc] = useState(literal(trigger.bcc_recipients)); const [variables, setVariables] = useState('{}')
   const [state, setState] = useState<{ error?: string; message?: string }>({}); const [busy, setBusy] = useState(false)
   const run = async () => {
     let parsed: Record<string, unknown>; try { parsed = JSON.parse(variables || '{}') } catch { return setState({ error: 'Variables must be valid JSON.' }) }
@@ -87,7 +87,7 @@ function RunDialog({ trigger, apiRequest, onClose }: { trigger: EmailTrigger; ap
       <label>CC <span className="et-muted">optional</span><textarea value={cc} onChange={e => setCc(e.target.value)} rows={2}/></label>
       <label>BCC <span className="et-muted">optional</span><textarea value={bcc} onChange={e => setBcc(e.target.value)} rows={2}/></label>
       {dynamic.length > 0 && <p className="et-help">Test send: automatic recipients ({dynamic.join(', ')}) are not used here, so only the addresses above receive it. Placeholders are filled with {trigger.audience ? 'the first matching employee' : 'your own employee record'}.</p>}
-      <label>Variables JSON<textarea value={variables} onChange={e => setVariables(e.target.value)} rows={6}/></label>
+      <label>Override variables JSON <span className="et-muted">optional — real data and the trigger's defaults are filled in automatically</span><textarea value={variables} onChange={e => setVariables(e.target.value)} rows={4}/></label>
       {state.error && <div className="et-notice" role="alert">{state.error}</div>}
       <footer><button className="adm-btn" onClick={onClose}>Cancel</button><button className="adm-btn adm-btn--primary" onClick={() => void run()} disabled={busy}>{busy ? 'Sending…' : 'Send now'}</button></footer>
     </div>}</section></div>

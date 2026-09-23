@@ -71,17 +71,22 @@ function TriggerEditor({ trigger, events, audiences, templateKeys, apiRequest, o
 
 function RunDialog({ trigger, apiRequest, onClose }: { trigger: EmailTrigger; apiRequest: ApiRequest; onClose: () => void }) {
   const dialogRef = useRef<HTMLElement | null>(null); useDialogFocus({ containerRef: dialogRef, open: true, onClose })
-  const [to, setTo] = useState(trigger.to_recipients.join('\n')); const [cc, setCc] = useState(trigger.cc_recipients.join('\n')); const [variables, setVariables] = useState(JSON.stringify(trigger.variables || {}, null, 2))
+  // Only literal addresses are pre-filled: placeholders and designation: lists would reach real people in a test.
+  const literal = (list: string[]) => list.filter(v => !v.includes('{{') && !v.toLowerCase().startsWith('designation:')).join('\n')
+  const dynamic = [...trigger.to_recipients, ...trigger.cc_recipients, ...trigger.bcc_recipients].filter(v => v.includes('{{') || v.toLowerCase().startsWith('designation:'))
+  const [to, setTo] = useState(literal(trigger.to_recipients)); const [cc, setCc] = useState(literal(trigger.cc_recipients)); const [bcc, setBcc] = useState(literal(trigger.bcc_recipients)); const [variables, setVariables] = useState(JSON.stringify(trigger.variables || {}, null, 2))
   const [state, setState] = useState<{ error?: string; message?: string }>({}); const [busy, setBusy] = useState(false)
   const run = async () => {
     let parsed: Record<string, unknown>; try { parsed = JSON.parse(variables || '{}') } catch { return setState({ error: 'Variables must be valid JSON.' }) }
     setBusy(true); setState({})
-    try { const r = await apiRequest(`${endpoint}/triggers/${encodeURIComponent(trigger.trigger_key)}/run`, { method: 'POST', body: JSON.stringify({ to: splitRecipients(to), cc: splitRecipients(cc), variables: parsed }) }); setState(r?.success ? { message: `Sent${r.messageId ? ` (id ${r.messageId})` : ''}.` } : { error: r?.message || 'Not sent.' }) } catch (e) { setState({ error: errorText(e) }) } finally { setBusy(false) }
+    try { const r = await apiRequest(`${endpoint}/triggers/${encodeURIComponent(trigger.trigger_key)}/run`, { method: 'POST', body: JSON.stringify({ to: splitRecipients(to), cc: splitRecipients(cc), bcc: splitRecipients(bcc), variables: parsed }) }); setState(r?.success ? { message: `Sent${r.messageId ? ` (id ${r.messageId})` : ''}.` } : { error: r?.message || 'Not sent.' }) } catch (e) { setState({ error: errorText(e) }) } finally { setBusy(false) }
   }
   return <div className="et-overlay" role="dialog" aria-modal="true" aria-label="Run trigger"><section className="et-dialog" ref={dialogRef}><header className="et-drawer-head"><div><p className="et-eyebrow">Manual trigger</p><h2>Run “{trigger.trigger_name}”</h2></div><button className="et-close" onClick={onClose} aria-label="Close">×</button></header>
     {state.message ? <div className="et-success" role="status">{state.message}</div> : <div className="et-form">
       <label>To<textarea value={to} onChange={e => setTo(e.target.value)} rows={2} placeholder="Separate addresses with commas or new lines"/></label>
       <label>CC <span className="et-muted">optional</span><textarea value={cc} onChange={e => setCc(e.target.value)} rows={2}/></label>
+      <label>BCC <span className="et-muted">optional</span><textarea value={bcc} onChange={e => setBcc(e.target.value)} rows={2}/></label>
+      {dynamic.length > 0 && <p className="et-help">Test send: automatic recipients ({dynamic.join(', ')}) are not used here, so only the addresses above receive it. Placeholders are filled with {trigger.audience ? 'the first matching employee' : 'your own employee record'}.</p>}
       <label>Variables JSON<textarea value={variables} onChange={e => setVariables(e.target.value)} rows={6}/></label>
       {state.error && <div className="et-notice" role="alert">{state.error}</div>}
       <footer><button className="adm-btn" onClick={onClose}>Cancel</button><button className="adm-btn adm-btn--primary" onClick={() => void run()} disabled={busy}>{busy ? 'Sending…' : 'Send now'}</button></footer>

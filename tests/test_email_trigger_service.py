@@ -168,3 +168,23 @@ def test_audience_schedule_sends_one_email_per_person(monkeypatch):
         (["e1@example.com"], ["cmd@example.com"], ["hrm@example.com"]),
         (["e2@example.com"], ["cmd@example.com"], ["hrm@example.com"])]
     assert fake.requests[0].reference_id.startswith("E1:")
+
+
+def test_manual_test_run_uses_sample_employee_and_only_dialog_recipients(monkeypatch):
+    from services import email_trigger_service as mod
+    service, fake, _ = _service(monkeypatch)
+    monkeypatch.setitem(mod.AUDIENCE_LOADERS, "employees_not_clocked_in", lambda run_date: [
+        {"employee_code": "E1", "employee_name": "Asha", "employee_email": "asha@example.com"}])
+    monkeypatch.setattr(mod, "_expand_designations", lambda entries: pytest.fail("designations must not expand in a test run")
+                        if any(str(e).startswith("designation:") for e in entries or []) else list(entries or []))
+    trigger = _trigger(trigger_type="schedule", audience="employees_not_clocked_in", to_recipients=["{{employee_email}}"],
+                       cc_recipients=["designation:CMD"], bcc_recipients=["designation:HR MANAGER"])
+    service.run_manual(trigger, {"to": ["me@example.com"], "cc": [], "bcc": []}, admin_emp_code="ADMIN")
+    request = fake.requests[0]
+    assert (request.to, request.cc, request.bcc) == (["me@example.com"], [], [])
+    assert request.variables["employee_name"] == "Asha"
+
+
+def test_skip_message_names_the_unresolved_recipient(monkeypatch):
+    service, _, _ = _service(monkeypatch)
+    assert "{{employee_email}}" in service.run(_trigger(to_recipients=["{{employee_email}}"]), {})["message"]

@@ -264,13 +264,18 @@ class EmailTriggerService:
         variables = {**(trigger.get("variables") or {}),
                      **{k: _stringify(v) for k, v in (context or {}).items() if v is not None},  # blanks fall back to defaults
                      **(overrides.get("variables") or {})}
-        to = _resolve_recipients(_expand_designations(_as_list(overrides.get("to")) or trigger.get("to_recipients")), variables)
-        cc = _resolve_recipients(_expand_designations(_as_list(overrides.get("cc")) or trigger.get("cc_recipients")), variables)
-        bcc = _resolve_recipients(_expand_designations(_as_list(overrides.get("bcc")) or trigger.get("bcc_recipients")), variables)
+        # A recipient list present in overrides is used exactly as given (even empty), so a manual
+        # test run never falls back to the trigger's CC/BCC without the admin seeing it.
+        def recipients(field: str) -> list[str]:
+            entries = _as_list(overrides[field]) if field in overrides else trigger.get(f"{field}_recipients")
+            return _resolve_recipients(_expand_designations(entries), variables)
+        to, cc, bcc = recipients("to"), recipients("cc"), recipients("bcc")
 
         if not to:
-            self._record(trigger["trigger_key"], "skipped", "No To recipient resolved for this run.")
-            return {"success": False, "status": "skipped", "message": "No To recipient resolved for this run."}
+            configured = ", ".join(_as_list(overrides["to"]) if "to" in overrides else trigger.get("to_recipients") or []) or "nothing"
+            message = f"No To recipient resolved for this run (To was: {configured}). Enter an email address in To."
+            self._record(trigger["trigger_key"], "skipped", message)
+            return {"success": False, "status": "skipped", "message": message}
         try:
             result = self.email_service.send(DynamicEmailRequest(
                 template_key=trigger["template_key"], to=to, cc=cc, bcc=bcc, variables=variables,
@@ -281,6 +286,23 @@ class EmailTriggerService:
             raise
         self._record(trigger["trigger_key"], "sent", None)
         return result
+
+    def run_manual(self, trigger: dict[str, Any], overrides: dict[str, Any], *, admin_emp_code: str | None = None,
+                   reference_id: str | None = None) -> dict[str, Any]:
+        """'Run now': fill placeholders with realistic sample data so a test run renders like a real one.
+
+        Audience triggers use the first matching employee as the sample; other triggers use the
+        admin's own employee record. Recipients still come only from the run dialog / overrides.
+        """
+        now = datetime.now(trigger_timezone())
+        sample: dict[str, Any] = {"run_date": now.date(), "run_time": now.strftime("%H:%M")}
+        if trigger.get("audience") in AUDIENCE_LOADERS:
+            people = AUDIENCE_LOADERS[trigger["audience"]](now.date())
+            if people:
+                sample.update(people[0])
+        if "employee_code" not in sample and admin_emp_code:
+            sample.update(employee_contacts(admin_emp_code))
+        return self.run(trigger, sample, overrides=overrides, reference_id=reference_id or "manual-test")
 
     def dispatch_event(self, event_name: str, context: dict[str, Any] | Callable[[], dict[str, Any]],
                        reference_id: str | None = None) -> int:

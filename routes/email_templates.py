@@ -114,6 +114,8 @@ def run_trigger(current_user, trigger_key):
     body = request.get_json(silent=True) or {}
     try:
         trigger = triggers.get(trigger_key)
-        return jsonify(triggers.run(trigger, overrides=body, reference_id=body.get("referenceId")))
+        overrides = {k: body[k] for k in ("to", "cc", "bcc", "variables") if k in body}
+        return jsonify(triggers.run_manual(trigger, overrides, admin_emp_code=current_user.get("emp_code"),
+                                           reference_id=body.get("referenceId")))
     except EmailTemplateError as exc: return jsonify({"success": False, "message": str(exc)}), 400
     except RuntimeError as exc: return jsonify({"success": False, "message": str(exc)}), 502

@@ -24,6 +24,7 @@ export type SidebarId =
   | 'field-visits'
   | 'api-telemetry'
   | 'service-accounts'
+  | 'email-templates'
 
 export type EmployeeMasterResourceKey =
   | 'workingUnits'

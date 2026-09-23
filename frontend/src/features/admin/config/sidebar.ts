@@ -39,6 +39,7 @@ export const sidebarSections: SidebarSectionDefinition[] = [
       },
       { id: 'reports', label: 'Insights & reports', icon: 'chart' },
       { id: 'service-accounts', label: 'Service accounts', icon: 'key' },
+      { id: 'email-templates', label: 'Email templates', icon: 'inbox' },
       { id: 'inbox', label: 'Inbox', icon: 'inbox' }
     ]
   }

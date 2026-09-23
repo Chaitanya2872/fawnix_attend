@@ -27,6 +27,7 @@ export const adminPanelPathMap: Record<SidebarId, string> = {
   "field-visits": "field-visits",
   "api-telemetry": "api-telemetry",
   "service-accounts": "service-accounts",
+  "email-templates": "email-templates",
 };
 
 export function getAdminPanelPath(panel: SidebarId) {

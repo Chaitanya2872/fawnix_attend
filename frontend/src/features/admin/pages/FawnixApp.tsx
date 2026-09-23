@@ -46,6 +46,7 @@ import AdminEmployeeMasterPage from "../employee-master/AdminEmployeeMasterPage"
 import AdminOverviewPage from "./sidebar/AdminOverviewPage";
 import AdminReportsPage from "../reports/AdminReportsPage";
 import AdminServiceAccountsPage from "../service-accounts/AdminServiceAccountsPage";
+import AdminEmailTemplatesPage from "../email-templates/AdminEmailTemplatesPage";
 /* Unified internal-application theme. Imported last so it wins on source
    order as well as specificity, normalising every admin page onto one palette. */
 import "../styles/admin-theme.css";
@@ -1381,6 +1382,10 @@ function FawnixApp() {
 
     if (activePanel === "service-accounts" && serviceAccountsPanel.canManage) {
       return <AdminServiceAccountsPage panel={serviceAccountsPanel} />;
+    }
+
+    if (activePanel === "email-templates") {
+      return <AdminEmailTemplatesPage apiRequest={apiRequest} />;
     }
 
     if (

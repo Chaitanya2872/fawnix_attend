@@ -58,6 +58,7 @@ def test_build_exception_notification_payload_uses_actual_late_minutes_and_notes
             "status": "pending",
             "manager_code": "M001",
             "manager_email": "manager@example.com",
+            "employee_email": "vaishnavi@acstechnologies.in",
             "login_time": datetime(2026, 5, 15, 9, 15),
             "logout_time": None,
             "attendance_date": datetime(2026, 5, 15).date(),
@@ -78,6 +79,16 @@ def test_build_exception_notification_payload_uses_actual_late_minutes_and_notes
     assert payload["data"]["calculated_minutes"] == 15
     assert payload["data"]["reason"] == "Personal emergency"
     assert payload["data"]["status_label"] == "Pending your review"
+    assert payload["data"]["exception_type_label"] == "late arrival"
+    assert payload["data"]["exception_date"] == "2026-05-15"
+    assert payload["data"]["employee_name"] == "Vaishnavi Palepu"
+    assert payload["data"]["employee_code"] == "EMP001"
+    assert payload["data"]["manager_name"] == "Raja Shekhar Perepa"
+    assert payload["data"]["planned_time"] == "09:00"
+    assert payload["data"]["notes"] == "Personal emergency"
+    assert payload["data"]["company"] == "ACS"
+    assert payload["template_variables"]["exception_type_label"] == "late arrival"
+    assert payload["template_variables"]["company"] == "ACS"
     assert payload["template_parameters"] == [
         "Raja Shekhar Perepa",
         "Vaishnavi Palepu",

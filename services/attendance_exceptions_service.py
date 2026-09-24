@@ -572,6 +572,25 @@ def _format_time_for_display(value) -> Optional[str]:
     return normalized.strftime('%H:%M') if normalized else None
 
 
+def _format_date_for_template(value) -> str:
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value or '').strip()
+
+
+def _infer_company_from_email(email: Optional[str]) -> str:
+    normalized = (email or '').strip().lower()
+    if 'iotiq' in normalized:
+        return 'IOTIQ'
+    if 'amos' in normalized:
+        return 'AMOS'
+    if 'acstechnologies' in normalized or '@acs' in normalized or '.acs' in normalized:
+        return 'ACS'
+    return ''
+
+
 def _build_exception_detail_line(exception_type: str, calculated_minutes: Optional[int]) -> str:
     label = 'Late by' if exception_type == 'late_arrival' else 'Early by'
     if calculated_minutes is None:
@@ -639,11 +658,13 @@ def build_exception_notification_payload(
                 ae.status,
                 ae.manager_code,
                 ae.manager_email,
+                e.emp_email AS employee_email,
                 a.login_time,
                 a.logout_time,
                 a.date AS attendance_date,
                 m.emp_full_name AS manager_name
             FROM attendance_exceptions ae
+            LEFT JOIN employees e ON e.emp_code = ae.emp_code
             LEFT JOIN attendance a ON a.id = ae.attendance_id
             LEFT JOIN employees m ON m.emp_code = ae.manager_code
             WHERE ae.id = %s
@@ -682,17 +703,24 @@ def build_exception_notification_payload(
         resolved_status_label = status_label or _format_exception_status_label(exception.get('status'))
         reason_text = (exception.get('notes') or exception.get('reason') or '').strip() or '-'
         exception_label = _format_exception_type_label(exception_type)
+        employee_name = exception.get('emp_name') or 'Employee'
+        employee_code = exception.get('emp_code') or ''
+        manager_name = resolved_recipient_name
+        exception_date = _format_date_for_template(exception.get('exception_date') or exception.get('attendance_date'))
         intro_line = f"{exception.get('emp_name') or 'Employee'} has raised a {exception_label} exception."
         detail_line = _build_exception_detail_line(exception_type, effective_minutes)
         reason_line = f"Reason: {reason_text}"
         status_line = f"Status: {resolved_status_label}"
         auto_line = "This is an automated message. Please do not reply here."
+        planned_time_display = _format_time_for_display(reference_time)
         expected_time_display = _format_time_for_display(selected_time)
+        actual_time_display = _format_time_for_display(actual_time)
+        company = _infer_company_from_email(exception.get('employee_email') or exception.get('manager_email'))
         whatsapp_template_parameters = []
         if effective_minutes is not None and expected_time_display:
             whatsapp_template_parameters = [
                 resolved_recipient_name,
-                exception.get('emp_name') or 'Employee',
+                employee_name,
                 exception_label,
                 str(effective_minutes),
                 _format_exception_reason_context(exception_type),
@@ -708,38 +736,70 @@ def build_exception_notification_payload(
             f"{status_line}\n\n"
             f"{auto_line}"
         )
+        template_variables = {
+            "exception_type": exception_type,
+            "exception_type_label": exception_label,
+            "exception_date": exception_date,
+            "employee_name": employee_name,
+            "employee_code": employee_code,
+            "manager_name": manager_name,
+            "planned_time": planned_time_display or '',
+            "actual_time": actual_time_display or '',
+            "selected_time": expected_time_display or '',
+            "calculated_minutes": effective_minutes,
+            "reason": reason_text,
+            "notes": (exception.get('notes') or '').strip(),
+            "company": company,
+            "status": exception.get('status') or '',
+            "status_label": resolved_status_label,
+        }
 
         return {
             "title": "Attendance Exception",
             "body": body,
             "template_parameters": whatsapp_template_parameters,
+            "template_variables": template_variables,
             "data": {
                 "type": "attendance_exception_submitted",
                 "exception_id": exception.get('id'),
                 "attendance_id": exception.get('attendance_id'),
                 "exception_type": exception_type,
-                "employee_name": exception.get('emp_name'),
+                "exception_type_label": exception_label,
+                "exception_date": exception_date,
+                "employee_name": employee_name,
+                "employee_code": employee_code,
+                "manager_name": manager_name,
                 "manager_code": exception.get('manager_code'),
                 "manager_email": exception.get('manager_email'),
-                "planned_time": _format_time_for_display(reference_time),
-                "actual_time": _format_time_for_display(actual_time),
-                "selected_time": _format_time_for_display(selected_time),
+                "planned_time": planned_time_display,
+                "actual_time": actual_time_display,
+                "selected_time": expected_time_display,
                 "calculated_minutes": effective_minutes,
                 "detail": detail_line,
                 "reason": reason_text,
+                "notes": (exception.get('notes') or '').strip(),
+                "company": company,
                 "status": exception.get('status'),
                 "status_label": resolved_status_label,
+                "template_variables": template_variables,
             },
             "debug": {
-                "employee_name": exception.get('emp_name'),
+                "employee_name": employee_name,
+                "employee_code": employee_code,
                 "exception_type": exception_type,
-                "planned_time": _format_time_for_display(reference_time),
-                "actual_time": _format_time_for_display(actual_time),
-                "selected_time": _format_time_for_display(selected_time),
+                "exception_type_label": exception_label,
+                "exception_date": exception_date,
+                "manager_name": manager_name,
+                "planned_time": planned_time_display,
+                "actual_time": actual_time_display,
+                "selected_time": expected_time_display,
                 "calculated_minutes": effective_minutes,
                 "reason": reason_text,
+                "notes": (exception.get('notes') or '').strip(),
+                "company": company,
                 "status": resolved_status_label,
                 "template_parameters": whatsapp_template_parameters,
+                "template_variables": template_variables,
             },
         }
     finally:

@@ -110,11 +110,13 @@ def set_trigger_state(current_user, trigger_key, state):
 @token_required
 @hr_or_devtester_required
 def run_trigger(current_user, trigger_key):
-    """Manual trigger: send now. Body may override to/cc/bcc and add variables."""
+    """Run now. An empty body fires the trigger live as configured; to/cc/bcc/variables make it a test send."""
     body = request.get_json(silent=True) or {}
     try:
         trigger = triggers.get(trigger_key)
         overrides = {k: body[k] for k in ("to", "cc", "bcc", "variables") if k in body}
+        if not overrides:
+            return jsonify(triggers.run_now(trigger, admin_emp_code=current_user.get("emp_code")))
         return jsonify(triggers.run_manual(trigger, overrides, admin_emp_code=current_user.get("emp_code"),
                                            reference_id=body.get("referenceId")))
     except EmailTemplateError as exc: return jsonify({"success": False, "message": str(exc)}), 400

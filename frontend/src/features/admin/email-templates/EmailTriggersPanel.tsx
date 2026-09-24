@@ -364,32 +364,29 @@ export function TriggerEditor({ trigger, events, audiences, templates, apiReques
 export function RunDialog({ trigger, apiRequest, onClose }: { trigger: EmailTrigger; apiRequest: ApiRequest; onClose: () => void }) {
   const dialogRef = useRef<HTMLElement | null>(null)
   useDialogFocus({ containerRef: dialogRef, open: true, onClose })
-  // Only literal addresses are pre-filled: placeholders and designation: lists would reach real people in a test.
-  const literal = (list: string[]) => list.filter(value => !value.includes('{{') && !value.toLowerCase().startsWith('designation:')).join('\n')
-  const dynamic = [...trigger.to_recipients, ...trigger.cc_recipients, ...trigger.bcc_recipients].filter(value => value.includes('{{') || value.toLowerCase().startsWith('designation:'))
-  const [to, setTo] = useState(literal(trigger.to_recipients))
-  const [cc, setCc] = useState(literal(trigger.cc_recipients))
-  const [bcc, setBcc] = useState(literal(trigger.bcc_recipients))
-  const [variables, setVariables] = useState('{}')
+  const [testMode, setTestMode] = useState(false)
+  const [testTo, setTestTo] = useState('')
   const [state, setState] = useState<{ error?: string; message?: string }>({})
   const [busy, setBusy] = useState(false)
+  const list = (values: string[]) => values.length ? values.join(', ') : '—'
 
+  // Live: an empty body fires the trigger exactly as configured. Test: only the typed address receives it.
   const run = async () => {
-    let parsed: Record<string, unknown>
-    try { parsed = JSON.parse(variables || '{}') } catch { return setState({ error: 'Variables must be valid JSON.' }) }
+    const recipients = splitRecipients(testTo)
+    if (testMode && !recipients.length) return setState({ error: 'Enter an address for the test email.' })
     setBusy(true); setState({})
     try {
       const response = await apiRequest(`${endpoint}/triggers/${encodeURIComponent(trigger.trigger_key)}/run`, {
-        method: 'POST', body: JSON.stringify({ to: splitRecipients(to), cc: splitRecipients(cc), bcc: splitRecipients(bcc), variables: parsed }),
+        method: 'POST', body: JSON.stringify(testMode ? { to: recipients, cc: [], bcc: [] } : {}),
       })
-      setState(response?.success ? { message: `Sent${response.messageId ? ` (id ${response.messageId})` : ''}.` } : { error: response?.message || 'Not sent.' })
+      setState(response?.success ? { message: response.message || 'Sent.' } : { error: response?.message || 'Not sent.' })
     } catch (e) { setState({ error: errorText(e) }) } finally { setBusy(false) }
   }
 
   return <div className="ea-scrim ea-scrim--center ea-fade" role="dialog" aria-modal="true" aria-label="Run trigger">
     <section className="ea-modal" ref={dialogRef}>
       <header className="ea-drawer__head">
-        <div><p className="ea-eyebrow">Manual run</p><h2>Run “{trigger.trigger_name || trigger.trigger_key}”</h2></div>
+        <div><p className="ea-eyebrow">Run now</p><h2>Run “{trigger.trigger_name || trigger.trigger_key}”</h2></div>
         <button type="button" className="ea-btn ea-btn--square-lg ea-ease ea-press" onClick={onClose} aria-label="Close"><CloseIcon/></button>
       </header>
       <div className="ea-drawer__body">
@@ -397,15 +394,16 @@ export function RunDialog({ trigger, apiRequest, onClose }: { trigger: EmailTrig
           ? <div className="ea-notice ea-notice--ok" role="status">{state.message}</div>
           : <>
               {state.error && <div className="ea-notice" role="alert"><AlertIcon/>{state.error}</div>}
-              <label className="ea-field"><span>To</span><textarea className="ea-textarea" rows={2} value={to} onChange={event => setTo(event.target.value)} placeholder="Separate addresses with commas or new lines"/></label>
-              <div className="ea-pair">
-                <label className="ea-field"><span>CC <em>· optional</em></span><textarea className="ea-textarea" rows={2} value={cc} onChange={event => setCc(event.target.value)}/></label>
-                <label className="ea-field"><span>BCC <em>· optional</em></span><textarea className="ea-textarea" rows={2} value={bcc} onChange={event => setBcc(event.target.value)}/></label>
-              </div>
-              {dynamic.length > 0 && <p className="ea-hint">Test send: automatic recipients ({dynamic.join(', ')}) are not used here, so only the addresses above receive it. Placeholders are filled with {trigger.audience ? 'the first matching employee' : 'your own employee record'}.</p>}
-              <label className="ea-field"><span>Override variables <em>· optional JSON, real data and the trigger&rsquo;s defaults are filled in automatically</em></span>
-                <textarea className="ea-textarea ea-textarea--mono" rows={4} value={variables} onChange={event => setVariables(event.target.value)}/>
-              </label>
+              {testMode
+                ? <label className="ea-field"><span>Send a test to</span><textarea className="ea-textarea" rows={2} value={testTo} onChange={event => setTestTo(event.target.value)} placeholder="you@example.com"/>
+                    <span className="ea-hint">Only this address receives it. Placeholders are filled with {trigger.audience ? 'the first matching employee' : 'your own employee record'}.</span></label>
+                : <>
+                    <p className="ea-hint">This sends now, exactly as the automatic {trigger.trigger_type === 'schedule' ? 'scheduled' : trigger.trigger_type} run would{trigger.audience ? ': one email to each matching employee' : ''}.</p>
+                    <p className="ea-hint"><strong>To</strong> {list(trigger.to_recipients)}<br/><strong>CC</strong> {list(trigger.cc_recipients)}<br/><strong>BCC</strong> {list(trigger.bcc_recipients)}</p>
+                  </>}
+              <button type="button" className="ea-btn ea-ease ea-press" onClick={() => { setTestMode(mode => !mode); setState({}) }}>
+                {testMode ? 'Send to the configured recipients instead' : 'Send a test to one address instead'}
+              </button>
             </>}
       </div>
       <footer className="ea-drawer__foot">
@@ -413,7 +411,7 @@ export function RunDialog({ trigger, apiRequest, onClose }: { trigger: EmailTrig
         <div>
           <button type="button" className="ea-btn ea-ease ea-press" onClick={onClose}>{state.message ? 'Close' : 'Cancel'}</button>
           {!state.message && <button type="button" className="ea-btn ea-btn--primary ea-ease ea-press" onClick={() => void run()} disabled={busy}>
-            {busy && <span className="ea-spinner ea-spinner--on-brand"/>}{busy ? 'Sending…' : 'Send now'}
+            {busy && <span className="ea-spinner ea-spinner--on-brand"/>}{busy ? 'Sending…' : testMode ? 'Send test' : 'Send now'}
           </button>}
         </div>
       </footer>

@@ -201,3 +201,27 @@ def test_resend_retries_when_rate_limited(monkeypatch):
         r.headers = {}
     monkeypatch.setattr(ets.requests, "post", lambda *a, **k: responses.pop(0))
     assert EmailService(templates=object())._deliver("Hi", None, "x", ["t@example.com"], [], []) == "msg_2"
+
+
+def test_run_now_fires_audience_trigger_live_with_configured_recipients(monkeypatch):
+    from services import email_trigger_service as mod
+    service, fake, _ = _service(monkeypatch)
+    monkeypatch.setattr(mod.time, "sleep", lambda seconds: None)
+    monkeypatch.setitem(mod.AUDIENCE_LOADERS, "employees_not_clocked_in", lambda run_date: [
+        {"employee_code": "E1", "employee_email": "e1@example.com", "manager_email": "m1@example.com"}])
+    monkeypatch.setattr(mod, "_expand_designations", lambda entries: [
+        {"designation:CMD": "cmd@example.com", "designation:HR MANAGER": "hrm@example.com"}.get(e, e) for e in entries or []])
+    trigger = _trigger(trigger_type="schedule", audience="employees_not_clocked_in", to_recipients=["{{employee_email}}"],
+                       cc_recipients=["{{manager_email}}", "designation:CMD"], bcc_recipients=["designation:HR MANAGER"])
+    result = service.run_now(trigger)
+    assert result["sent"] == 1 and result["message"] == "Sent 1 email(s)."
+    request = fake.requests[0]
+    assert (request.to, request.cc, request.bcc) == (["e1@example.com"], ["m1@example.com", "cmd@example.com"], ["hrm@example.com"])
+
+
+def test_run_now_reports_when_nobody_matches(monkeypatch):
+    from services import email_trigger_service as mod
+    service, fake, _ = _service(monkeypatch)
+    monkeypatch.setitem(mod.AUDIENCE_LOADERS, "employees_not_clocked_in", lambda run_date: [])
+    result = service.run_now(_trigger(trigger_type="schedule", audience="employees_not_clocked_in"))
+    assert result["status"] == "skipped" and not fake.requests

@@ -288,6 +288,20 @@ class EmailTriggerService:
         self._record(trigger["trigger_key"], "sent", None)
         return result
 
+    def run_now(self, trigger: dict[str, Any], *, admin_emp_code: str | None = None) -> dict[str, Any]:
+        """'Run now': fire the trigger live, exactly as configured (same recipients as an automatic run)."""
+        if trigger.get("audience") in AUDIENCE_LOADERS:
+            sent, failed = self._run_scheduled(trigger)
+            if not sent and not failed:
+                return {"success": True, "status": "skipped", "sent": 0, "failed": 0,
+                        "message": "Nobody matched right now, so no email was sent."}
+            return {"success": failed == 0, "status": "sent" if sent else "failed", "sent": sent, "failed": failed,
+                    "message": f"Sent {sent} email(s)" + (f", {failed} failed (see server log)." if failed else ".")}
+        result = self.run_manual(trigger, {}, admin_emp_code=admin_emp_code, reference_id="manual-run")
+        if result.get("success"):
+            result["message"] = "Sent 1 email."
+        return result
+
     def run_manual(self, trigger: dict[str, Any], overrides: dict[str, Any], *, admin_emp_code: str | None = None,
                    reference_id: str | None = None) -> dict[str, Any]:
         """'Run now': fill placeholders with realistic sample data so a test run renders like a real one.

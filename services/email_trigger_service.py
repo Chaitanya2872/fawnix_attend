@@ -15,6 +15,7 @@ from decimal import Decimal
 import logging
 import os
 import re
+import time
 from typing import Any, Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -364,7 +365,9 @@ class EmailTriggerService:
         # Resolve designation recipients once for the whole fan-out.
         expanded = {**trigger, **{k: _expand_designations(trigger.get(k)) for k in ("to_recipients", "cc_recipients", "bcc_recipients")}}
         sent = failed = 0
-        for person in people:
+        for index, person in enumerate(people):
+            if index:
+                time.sleep(0.6)  # stay under the provider's per-second rate limit
             try:
                 result = self.run(expanded, {**base, **person}, reference_id=f"{person['employee_code']}:{now.date().isoformat()}")
                 sent += 1 if result.get("success") else 0

@@ -15,6 +15,7 @@ import html
 import logging
 import re
 import smtplib
+import time
 
 import requests
 from typing import Any, Iterable
@@ -227,8 +228,18 @@ class EmailService:
         if html_body: payload["html"] = html_body
         if text_body: payload["text"] = text_body
         if Config.RESEND_REPLY_TO: payload["reply_to"] = Config.RESEND_REPLY_TO
-        response = requests.post(Config.RESEND_API_URL, json=payload, timeout=30,
-                                 headers={"Authorization": f"Bearer {Config.RESEND_API_KEY}"})
+        # Resend rate-limits per API key (2 req/s by default); back off and retry on 429 so
+        # bulk runs such as the per-employee 10:10 alert don't drop emails.
+        for attempt in range(5):
+            response = requests.post(Config.RESEND_API_URL, json=payload, timeout=30,
+                                     headers={"Authorization": f"Bearer {Config.RESEND_API_KEY}"})
+            if response.status_code != 429 or attempt == 4:
+                break
+            try:
+                delay = float(response.headers.get("retry-after") or 0)
+            except (TypeError, ValueError):
+                delay = 0
+            time.sleep(min(max(delay, 1.0 * (attempt + 1)), 10))
         if response.status_code >= 400:
             try:
                 detail = response.json().get("message") or response.text

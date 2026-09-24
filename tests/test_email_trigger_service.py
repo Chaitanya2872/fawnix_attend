@@ -163,6 +163,7 @@ def test_audience_schedule_sends_one_email_per_person(monkeypatch):
         {"designation:CMD": "cmd@example.com", "designation:HR MANAGER": "hrm@example.com"}.get(e, e) for e in entries or []])
     trigger = _trigger(trigger_type="schedule", audience="employees_not_clocked_in", to_recipients=["{{employee_email}}"],
                        cc_recipients=["designation:CMD"], bcc_recipients=["designation:HR MANAGER"])
+    monkeypatch.setattr(mod.time, "sleep", lambda seconds: None)
     assert service._run_scheduled(trigger) == (2, 0)
     assert [(r.to, r.cc, r.bcc) for r in fake.requests] == [
         (["e1@example.com"], ["cmd@example.com"], ["hrm@example.com"]),
@@ -188,3 +189,15 @@ def test_manual_test_run_uses_sample_employee_and_only_dialog_recipients(monkeyp
 def test_skip_message_names_the_unresolved_recipient(monkeypatch):
     service, _, _ = _service(monkeypatch)
     assert "{{employee_email}}" in service.run(_trigger(to_recipients=["{{employee_email}}"]), {})["message"]
+
+
+def test_resend_retries_when_rate_limited(monkeypatch):
+    monkeypatch.setattr(Config, "EMAIL_PROVIDER", "resend")
+    monkeypatch.setattr(Config, "RESEND_API_KEY", "re_test")
+    monkeypatch.setattr(Config, "RESEND_FROM", "noreply@example.com")
+    monkeypatch.setattr(ets.time, "sleep", lambda seconds: None)
+    responses = [_Response(429, {"message": "Too many requests"}), _Response(200, {"id": "msg_2"})]
+    for r in responses:
+        r.headers = {}
+    monkeypatch.setattr(ets.requests, "post", lambda *a, **k: responses.pop(0))
+    assert EmailService(templates=object())._deliver("Hi", None, "x", ["t@example.com"], [], []) == "msg_2"

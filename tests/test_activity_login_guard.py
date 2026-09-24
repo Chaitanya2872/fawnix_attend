@@ -65,3 +65,39 @@ def test_start_break_requires_clock_in(monkeypatch):
     assert status_code == 400
     assert result["success"] is False
     assert result["message"] == activity_service.CLOCK_IN_REQUIRED_ACTIVITY_MESSAGE
+
+
+class _ImmediateExecutor:
+    def submit(self, fn):
+        fn()
+
+
+def test_field_visit_without_clock_in_sends_one_push_per_cooldown(monkeypatch):
+    import services.notification_service as notification_service
+
+    pushes = []
+    monkeypatch.setattr(activity_service, "get_db_connection", lambda: ActivityGuardConnection())
+    monkeypatch.setattr(activity_service, "_push_executor", _ImmediateExecutor())
+    monkeypatch.setattr(activity_service, "_clock_in_push_sent_at", {})
+    monkeypatch.setattr(notification_service, "send_push_notification_to_employee",
+                        lambda emp_code, title, body, data=None, **kwargs: pushes.append((emp_code, title, data)) or {"success": True})
+
+    for _ in range(2):
+        result, status_code = activity_service.start_activity(
+            "alice@example.com", "Alice", "field_visit", "17.38", "78.48", emp_code="E100")
+        assert status_code == 400
+
+    assert pushes == [("E100", "Clock in required", {"type": "clock_in_required", "activity_type": "field_visit"})]
+
+
+def test_break_without_clock_in_does_not_push(monkeypatch):
+    import services.notification_service as notification_service
+
+    monkeypatch.setattr(activity_service, "get_db_connection", lambda: ActivityGuardConnection())
+    monkeypatch.setattr(activity_service, "_push_executor", _ImmediateExecutor())
+    monkeypatch.setattr(activity_service, "_clock_in_push_sent_at", {})
+    monkeypatch.setattr(notification_service, "send_push_notification_to_employee",
+                        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not push")))
+
+    _, status_code = activity_service.start_activity("alice@example.com", "Alice", "tea_break", "", "", emp_code="E100")
+    assert status_code == 400

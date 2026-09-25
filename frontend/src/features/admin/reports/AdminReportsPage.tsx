@@ -5,7 +5,7 @@ import AttendanceEfficiencyCard from './AttendanceEfficiencyCard'
 import ReportDownloadMenu from './ReportDownloadMenu'
 import WeeklyTrendChart from './WeeklyTrendChart'
 import type { AttendanceTrendSeriesPoint } from './useReportsPanel'
-import type { AttendanceHeatmapMatrix, AttendanceInsights, AttendanceStatusCode } from '../../../types/admin'
+import type { AttendanceHeatmapMatrix, AttendanceInsights, AttendanceStatusCode, EmployeeRow } from '../../../types/admin'
 import './AdminReportsPage.css'
 
 type Props = any
@@ -25,6 +25,7 @@ type ReportsAnalyticsProps = {
   attendanceTrendSeries: AttendanceTrendSeriesPoint[]
   isAttendanceTrendPercentage: boolean
   canWriteAdminData: boolean
+  employees: EmployeeRow[]
 }
 
 const MONTH_LABELS = [
@@ -71,6 +72,8 @@ export default function AdminReportsPage(props: Props) {
     setReportStartDate,
     reportEndDate,
     setReportEndDate,
+    reportEmpCode,
+    setReportEmpCode,
     downloadRangeReport,
     loadDashboard,
     maxWeeklyAttendance,
@@ -92,7 +95,8 @@ export default function AdminReportsPage(props: Props) {
     fetchAttendanceInsights,
     attendanceTrendSeries,
     isAttendanceTrendPercentage,
-    canWriteAdminData
+    canWriteAdminData,
+    employees
   }: ReportsAnalyticsProps = props
 
   const heatmapMonth = Number(attendanceReportMonth)
@@ -163,6 +167,9 @@ export default function AdminReportsPage(props: Props) {
             setReportStartDate={setReportStartDate}
             reportEndDate={reportEndDate}
             setReportEndDate={setReportEndDate}
+            reportEmpCode={reportEmpCode}
+            setReportEmpCode={setReportEmpCode}
+            employees={employees}
             attendanceReportFormat={attendanceReportFormat}
             setAttendanceReportFormat={setAttendanceReportFormat}
             onDownload={(reportType) => void downloadRangeReport(reportType)}

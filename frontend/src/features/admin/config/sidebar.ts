@@ -3,6 +3,9 @@ import type { SidebarId } from '../../../types/admin'
 
 export const API_TELEMETRY_EMP_CODE = '8888'
 
+/** Nav items only a DevTester (super admin) may see. */
+export const DEVTESTER_ONLY_ITEM_IDS: SidebarId[] = ['service-accounts']
+
 export const sidebarSections: SidebarSectionDefinition[] = [
   {
     items: [{ id: 'dashboard', label: 'Dashboard', icon: 'home' }]
@@ -35,6 +38,8 @@ export const sidebarSections: SidebarSectionDefinition[] = [
         hasAddAction: true,
       },
       { id: 'reports', label: 'Insights & reports', icon: 'chart' },
+      { id: 'service-accounts', label: 'Service accounts', icon: 'key' },
+      { id: 'email-templates', label: 'Email templates', icon: 'inbox' },
       { id: 'inbox', label: 'Inbox', icon: 'inbox' }
     ]
   }

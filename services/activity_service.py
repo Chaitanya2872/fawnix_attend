@@ -9,6 +9,8 @@ from config import ActivityType
 import logging
 import json
 import math
+import threading
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,43 @@ LEAD_LOOKUP_BUDGET_SECONDS = 8.0
 
 DEFAULT_DESTINATION_RADIUS_METERS = 100.0
 CLOCK_IN_REQUIRED_ACTIVITY_MESSAGE = "Clock-in first, heroics later — please clock in before starting your work."
+CLOCK_IN_REQUIRED_PUSH_COOLDOWN_SECONDS = 300
+_clock_in_push_sent_at = {}
+_clock_in_push_lock = threading.Lock()
+_push_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="clock-in-push")
+
+
+def _notify_visit_without_clock_in(emp_code, activity_type):
+    """Push a clock-in reminder when a visit is attempted before clock-in (at most once per cooldown)."""
+    if not emp_code:
+        return
+    now = time.monotonic()
+    with _clock_in_push_lock:
+        last_sent = _clock_in_push_sent_at.get(emp_code)
+        if last_sent is not None and now - last_sent < CLOCK_IN_REQUIRED_PUSH_COOLDOWN_SECONDS:
+            return
+        _clock_in_push_sent_at[emp_code] = now
+
+    visit_label = activity_type.replace('_', ' ')
+
+    def _send():
+        try:
+            from services.notification_service import send_push_notification_to_employee
+            result = send_push_notification_to_employee(
+                emp_code,
+                "Clock in required",
+                f"You tried to start a {visit_label} without clocking in. Please clock in first, then start your {visit_label}.",
+                {"type": "clock_in_required", "activity_type": activity_type},
+            )
+            if not result.get("success"):
+                logger.warning("Clock-in reminder push not delivered for %s: %s", emp_code, result.get("message"))
+        except Exception:
+            logger.exception("Clock-in reminder push failed for %s", emp_code)
+
+    try:
+        _push_executor.submit(_send)
+    except Exception:
+        logger.exception("Could not queue clock-in reminder push for %s", emp_code)
 
 
 def _safe_float(value):
@@ -250,6 +289,8 @@ def start_activity(emp_email: str, emp_name: str, activity_type: str,
         attendance = cursor.fetchone()
         
         if not attendance:
+            if activity_type in ('field_visit', 'branch_visit'):
+                _notify_visit_without_clock_in(emp_code or (current_user or {}).get('emp_code'), activity_type)
             return ({
                 "success": False,
                 "message": CLOCK_IN_REQUIRED_ACTIVITY_MESSAGE

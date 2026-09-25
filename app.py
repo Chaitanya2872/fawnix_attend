@@ -86,6 +86,7 @@ from routes.attendance import attendance_bp
 from routes.activities import activities_bp
 from routes.leaves import leaves_bp
 from routes.admin import admin_bp
+from routes.service_accounts import service_accounts_bp
 from routes.tracking import tracking_bp
 from routes.compoff import compoff_bp
 from routes.attendance_exceptions import exceptions_bp
@@ -93,6 +94,7 @@ from routes.holidays import holidays_bp
 from routes.leads import leads_bp
 from routes.devices import devices_bp
 from routes.meeting_notes import meeting_notes_bp
+from routes.email_templates import email_templates_bp
 
 # ✨ NEW ROUTES - Location Reports, Distance Monitoring, Approvals
 from routes.location import location_report_bp
@@ -110,6 +112,7 @@ app.register_blueprint(users_bp, url_prefix="/api/users")
 app.register_blueprint(attendance_bp, url_prefix="/api/attendance")
 app.register_blueprint(activities_bp, url_prefix="/api/activities")
 app.register_blueprint(admin_bp, url_prefix="/api/admin")
+app.register_blueprint(service_accounts_bp, url_prefix="/api/admin/service-accounts")
 app.register_blueprint(leaves_bp, url_prefix="/api/leaves")
 app.register_blueprint(tracking_bp, url_prefix="/api/tracking")
 app.register_blueprint(compoff_bp, url_prefix="/api/compoff")
@@ -117,6 +120,7 @@ app.register_blueprint(leads_bp, url_prefix="/api/leads")
 app.register_blueprint(devices_bp, url_prefix="/api/devices")
 app.register_blueprint(exceptions_bp, url_prefix="/api/attendance-exceptions")
 app.register_blueprint(meeting_notes_bp, url_prefix="/api/meeting-notes")
+app.register_blueprint(email_templates_bp, url_prefix="/api/admin/email")
 
 # ✨ Register new blueprints
 app.register_blueprint(location_report_bp, url_prefix="/api/reports")

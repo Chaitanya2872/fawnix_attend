@@ -6,6 +6,7 @@ Leave management business logic with cumulative monthly accrual
 from datetime import datetime, timedelta, date
 from database.connection import get_db_connection
 from config import Config
+from services.email_trigger_service import emit_email_event
 from typing import List, Tuple, Dict
 import logging
 
@@ -478,6 +479,13 @@ def apply_leave(emp_code: str, from_date: str, to_date: str, leave_type: str,
         leave_id = result['id'] if hasattr(result, 'keys') else result[0]
         conn.commit()
 
+        emit_email_event("leave.applied", {
+            "leave_id": leave_id, "employee_code": emp_code, "employee_name": emp['emp_full_name'],
+            "employee_email": emp['emp_email'], "manager_name": approver_name, "manager_email": approver_email,
+            "leave_type": LEAVE_TYPES[leave_type]['name'], "duration": duration, "from_date": start_date,
+            "to_date": end_date, "leave_count": leave_count, "notes": notes or '',
+        }, reference_id=leave_id)
+
         return ({
             "success": True,
             "message": "Leave request submitted successfully",
@@ -501,6 +509,19 @@ def apply_leave(emp_code: str, from_date: str, to_date: str, leave_type: str,
     finally:
         cursor.close()
         conn.close()
+
+
+def _leave_email_context(leave, **extra) -> Dict:
+    """Variables exposed to email triggers for a leaves row."""
+    leave_type = leave.get('leave_type')
+    return {
+        "leave_id": leave.get('id'), "employee_code": leave.get('emp_code'), "employee_name": leave.get('emp_name'),
+        "employee_email": leave.get('emp_email'), "manager_code": leave.get('manager_code'),
+        "manager_email": leave.get('manager_email'),
+        "leave_type": LEAVE_TYPES.get(leave_type, {}).get('name', leave_type), "duration": leave.get('duration'),
+        "from_date": leave.get('from_date'), "to_date": leave.get('to_date'), "leave_count": leave.get('leave_count'),
+        **extra,
+    }
 
 
 # =========================
@@ -538,6 +559,9 @@ def approve_leave(leave_id: int, manager_code: str, action: str, remarks: str = 
         conn.commit()
         
         emp_name = leave['emp_name'] if hasattr(leave, 'keys') else leave[2]
+        if hasattr(leave, 'keys'):
+            emit_email_event(f"leave.{action}", _leave_email_context(leave, status=action, remarks=remarks or ''),
+                             reference_id=leave_id)
         
         return ({
             "success": True,
@@ -683,6 +707,8 @@ def cancel_leave(leave_id: int, emp_code: str) -> Tuple[Dict, int]:
         """, (datetime.now(), leave_id))
         
         conn.commit()
+        if hasattr(leave, 'keys'):
+            emit_email_event("leave.cancelled", _leave_email_context(leave, status='cancelled'), reference_id=leave_id)
         
         return ({"success": True, "message": "Leave request cancelled"}, 200)
         

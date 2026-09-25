@@ -14,6 +14,7 @@ from services.notification_service import (
     send_lunch_reminder_notifications,
 )
 from services.CompLeaveService import process_compoff_expirations
+from services.email_trigger_service import EmailTriggerService
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,14 @@ def compoff_expiry_job():
         logger.warning("Comp-off expiry job completed with issues: %s", payload.get("message"))
 
     return payload
+
+
+def scheduled_email_trigger_job():
+    """Scheduled wrapper that sends due cron-based email triggers."""
+    result = EmailTriggerService().process_due_schedules()
+    if result.get("claimed"):
+        logger.info("Scheduled email triggers processed: %s", result)
+    return result
 
 
 def register_attendance_reminder_job(scheduler, scheduler_timezone, misfire_grace_time: int):
@@ -128,6 +137,14 @@ def register_attendance_reminder_job(scheduler, scheduler_timezone, misfire_grac
     logger.debug(
         "Scheduled notification processor job scheduled every minute (%s)",
         scheduler_timezone,
+    )
+
+    scheduler.add_job(
+        scheduled_email_trigger_job,
+        CronTrigger(minute="*", timezone=scheduler_timezone),
+        id="scheduled_email_trigger_job",
+        replace_existing=True,
+        misfire_grace_time=misfire_grace_time,
     )
 
     scheduler.add_job(

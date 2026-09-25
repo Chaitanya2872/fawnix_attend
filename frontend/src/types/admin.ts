@@ -23,6 +23,8 @@ export type SidebarId =
   | 'activities'
   | 'field-visits'
   | 'api-telemetry'
+  | 'service-accounts'
+  | 'email-templates'
 
 export type EmployeeMasterResourceKey =
   | 'workingUnits'

@@ -16,6 +16,7 @@ from services.leaves_service import (
     is_employee_on_leave,
 )
 from services.notification_service import send_push_notification_to_employee
+from services.email_trigger_service import emit_email_event
 from typing import Dict, Tuple, Optional, List
 from utils.time_utils import now_local_naive
 import logging
@@ -525,6 +526,27 @@ def _calculate_exception_minutes(
     if normalized_type == 'early_leave':
         return max(_calculate_early_by_minutes(actual_time, planned_time), 0)
     return None
+
+
+def _emit_exception_email(event: str, row: Dict, emp_info: Optional[Dict] = None, **extra) -> None:
+    """Queue exception emails; event context uses the same variable names as other modules."""
+    emp_info = emp_info or {}
+    exception_type = row.get('exception_type')
+    emit_email_event(event, {
+        "exception_id": row.get('id'), "exception_type": exception_type,
+        "exception_type_label": _format_exception_type_label(exception_type).title(),
+        "employee_code": row.get('emp_code') or emp_info.get('emp_code'),
+        "employee_name": row.get('emp_name') or emp_info.get('emp_name'),
+        "employee_email": row.get('emp_email') or emp_info.get('emp_email'),
+        "manager_code": row.get('manager_code') or emp_info.get('approver_code'),
+        "manager_name": emp_info.get('approver_name'),
+        "manager_email": row.get('manager_email') or emp_info.get('approver_email'),
+        "exception_date": row.get('exception_date'),
+        "planned_time": _format_time_for_display(row.get('planned_arrival_time') or row.get('planned_leave_time')),
+        "minutes": row.get('late_by_minutes') if row.get('late_by_minutes') is not None else row.get('early_by_minutes'),
+        "reason": row.get('reason') or '', "notes": row.get('notes') or '', "status": row.get('status'),
+        **extra,
+    }, reference_id=row.get('id'))
 
 
 def _format_exception_type_label(exception_type: str) -> str:
@@ -1109,6 +1131,11 @@ def request_late_arrival_exception(emp_code: str, reason: str,
         exception_id = cursor.fetchone()['id']
         conn.commit()
         
+        _emit_exception_email("attendance_exception.requested", {
+            "id": exception_id, "exception_type": "late_arrival", "exception_date": current_date,
+            "planned_arrival_time": planned_arrival_time_obj, "late_by_minutes": late_by_minutes,
+            "reason": reason, "notes": normalized_notes, "status": "pending",
+        }, emp_info)
         logger.info(f"✅ Late arrival exception submitted: ID={exception_id}, Employee={emp_code}")
         
         return ({
@@ -1277,6 +1304,11 @@ def request_early_leave_exception(emp_code: str, attendance_id: int,
         exception_id = cursor.fetchone()['id']
         conn.commit()
         
+        _emit_exception_email("attendance_exception.requested", {
+            "id": exception_id, "exception_type": "early_leave", "exception_date": attendance['date'],
+            "planned_leave_time": planned_leave_time_obj, "early_by_minutes": early_by_minutes,
+            "reason": reason, "notes": notes, "status": "pending",
+        }, emp_info)
         logger.info(f"✅ Early leave exception submitted: ID={exception_id}, Employee={emp_code}")
         
         return ({
@@ -1370,6 +1402,7 @@ def cancel_early_leave_exception(emp_code: str, exception_id: int) -> Tuple[Dict
             exception_id,
         ))
         conn.commit()
+        _emit_exception_email("attendance_exception.cancelled", {**exception, "status": "cancelled"}, emp_info)
 
         return ({
             "success": True,
@@ -1454,6 +1487,7 @@ def cancel_late_arrival_exception(emp_code: str, exception_id: int) -> Tuple[Dic
             exception_id,
         ))
         conn.commit()
+        _emit_exception_email("attendance_exception.cancelled", {**exception, "status": "cancelled"}, emp_info)
 
         return ({
             "success": True,
@@ -1541,6 +1575,8 @@ def approve_exception(exception_id: int, manager_code: str,
         
         exception_type = exception['exception_type']
         emp_name = exception['emp_name']
+        _emit_exception_email(f"attendance_exception.{action}", {**exception, "status": action},
+                              reviewer_code=manager_code, reviewer_remarks=remarks or '')
         
         logger.info(f"✅ {exception_type} {action}: Exception={exception_id}, Manager={manager_code}")
         

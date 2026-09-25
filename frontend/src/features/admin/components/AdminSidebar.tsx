@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import SidebarIcon from './navigation/SidebarIcon'
 import { getAdminPanelPath } from '../config/adminPanelPaths'
-import { API_TELEMETRY_EMP_CODE, SIDEBAR_LIVE_ITEM_IDS, sidebarSections } from '../config/sidebar'
+import { canManageServiceAccounts } from '../service-accounts/useServiceAccountsPanel'
+import { API_TELEMETRY_EMP_CODE, DEVTESTER_ONLY_ITEM_IDS, SIDEBAR_LIVE_ITEM_IDS, sidebarSections } from '../config/sidebar'
 import type { AdminProfile, SidebarId } from '../../../types/admin'
 import './AdminSidebar.css'
 
@@ -122,7 +123,9 @@ export default function AdminSidebar({
     .map((section) => ({
       ...section,
       items: section.items.filter(
-        (item) => item.id !== 'api-telemetry' || profile?.emp_code === API_TELEMETRY_EMP_CODE
+        (item) =>
+          (item.id !== 'api-telemetry' || profile?.emp_code === API_TELEMETRY_EMP_CODE) &&
+          (!DEVTESTER_ONLY_ITEM_IDS.includes(item.id) || canManageServiceAccounts(profile))
       )
     }))
     .filter((section) => section.items.length > 0)

@@ -14,6 +14,7 @@ from flask import g, request
 
 from config import Config
 from services.api_log_service import record_api_log
+from services.service_account_service import is_service_account_key, parse_api_key, service_account_actor
 
 
 # Marker on the root logger so setup_logging is a no-op the second time it
@@ -151,6 +152,11 @@ def setup_logging(app):
 
 def _extract_emp_code_from_request():
     """Best-effort, non-fatal decode of the bearer token to attach emp_code to a log row."""
+    # Prefer the identity the auth middleware actually verified for this request.
+    authenticated_emp_code = str(getattr(g, 'current_emp_code', '') or '').strip()
+    if authenticated_emp_code:
+        return authenticated_emp_code
+
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('Bearer '):
         return None
@@ -158,6 +164,11 @@ def _extract_emp_code_from_request():
     token = auth_header.split(' ', 1)[1].strip()
     if not token:
         return None
+
+    if is_service_account_key(token):
+        # Record only the public key id, never the key itself.
+        key_id = parse_api_key(token)
+        return service_account_actor(key_id) if key_id else None
 
     try:
         import jwt

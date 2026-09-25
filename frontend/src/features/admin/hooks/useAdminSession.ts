@@ -25,8 +25,14 @@ function redactSensitiveValue(key: string, value: unknown): unknown {
     normalizedKey.includes('token') ||
     normalizedKey.includes('password') ||
     normalizedKey.includes('otp') ||
-    normalizedKey.includes('secret')
+    normalizedKey.includes('secret') ||
+    normalizedKey.includes('api_key')
   ) {
+    return '[redacted]'
+  }
+
+  // Service account API keys never belong in telemetry, whatever field holds them.
+  if (typeof value === 'string' && value.includes('fxsa_')) {
     return '[redacted]'
   }
 

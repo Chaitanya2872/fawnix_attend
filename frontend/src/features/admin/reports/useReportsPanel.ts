@@ -15,6 +15,9 @@ import type {
 
 type WeeklyTrendPoint = { dateKey: string; count: number; label: string }
 
+/** Every export the Reports download menu can request. */
+export type RangeReportType = 'attendance' | 'exceptions' | 'leaves' | 'overtime' | 'missed-logins'
+
 /**
  * One plotted day on the trend chart. `ratio` is what the line is drawn from
  * (0-1); `valueLabel` is what the axis label shows, which is a percentage when
@@ -237,6 +240,8 @@ export function useReportsPanel({
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
   })
   const [reportEndDate, setReportEndDate] = useState(() => toDateInputValue(new Date()))
+  /** Empty means every employee — the export is scoped to one person otherwise. */
+  const [reportEmpCode, setReportEmpCode] = useState('')
   const [attendanceHeatmapData, setAttendanceHeatmapData] = useState<AttendanceHeatmapMatrix | null>(null)
   const [attendanceHeatmapLoading, setAttendanceHeatmapLoading] = useState(false)
   const [attendanceHeatmapStatus, setAttendanceHeatmapStatus] = useState('')
@@ -255,7 +260,7 @@ export function useReportsPanel({
   const heatmapRequestRef = useRef(0)
   const insightsRequestRef = useRef(0)
 
-  const downloadRangeReport = async (reportType: 'attendance' | 'exceptions' | 'leaves' | 'missed-logins') => {
+  const downloadRangeReport = async (reportType: RangeReportType) => {
     try {
       let startDate = reportStartDate
       let endDate = reportEndDate
@@ -269,7 +274,10 @@ export function useReportsPanel({
         throw new Error('Choose a valid start and end date.')
       }
       setAttendanceReportStatus(`Preparing ${reportType} report...`)
-      const isMonthlyAttendance = reportType === 'attendance' && reportDateMode === 'month'
+      // The monthly attendance workbook is an all-staff matrix with no
+      // per-employee variant, so scoping to one person falls back to the range
+      // export — which does take emp_code.
+      const isMonthlyAttendance = reportType === 'attendance' && reportDateMode === 'month' && !reportEmpCode
       const params = isMonthlyAttendance
         ? new URLSearchParams({
             month: attendanceReportMonth,
@@ -281,6 +289,9 @@ export function useReportsPanel({
             end_date: endDate,
             format: attendanceReportFormat,
           })
+      if (!isMonthlyAttendance && reportEmpCode) {
+        params.set('emp_code', reportEmpCode)
+      }
       const endpoint = isMonthlyAttendance
         ? '/api/admin/attendance/report/monthly'
         : `/api/admin/reports/${reportType}`
@@ -294,9 +305,10 @@ export function useReportsPanel({
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
+      const employeeSlug = reportEmpCode ? `${reportEmpCode}_` : ''
       const fallbackFilename = isMonthlyAttendance
         ? `monthly_attendance_report_${attendanceReportYear}_${attendanceReportMonth.padStart(2, '0')}.${attendanceReportFormat}`
-        : `${reportType}_report_${startDate}_${endDate}.${attendanceReportFormat}`
+        : `${reportType}_report_${employeeSlug}${startDate}_${endDate}.${attendanceReportFormat}`
       link.download = resolveDownloadFilename(response, fallbackFilename)
       document.body.appendChild(link)
       link.click()
@@ -621,6 +633,8 @@ export function useReportsPanel({
     setReportStartDate,
     reportEndDate,
     setReportEndDate,
+    reportEmpCode,
+    setReportEmpCode,
     downloadRangeReport,
     downloadDailyAttendanceReport,
     downloadMonthlyAttendanceReport,
